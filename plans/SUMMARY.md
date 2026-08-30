@@ -114,8 +114,10 @@ FastAPI, PostgreSQL, Redis, gRPC или Dramatiq; application работает �
 
 Корневой [`docker-compose.yml`](../docker-compose.yml) поднимает:
 
-`postgres:5432` → `redis:6379` → `backend-migrate` → `backend-http:8000`,
-`backend-grpc:50051`, `worker`, `scheduler` и `frontend:3000`.
+`postgres:5432` → `redis:6379` → `backend-migrate` → `backend-http:8100`,
+`backend-grpc:51051`, `worker`, `scheduler` и `frontend:80`. По умолчанию на
+host опубликованы frontend `3100`, HTTP `8100`, gRPC `51051`, PostgreSQL `55432`
+и Redis `56379`; значения можно переопределить через `.env`.
 
 Frontend image проксирует `/api` в `backend-http`. Windows-клиент подключается к
 опубликованному host-порту gRPC, а не к Docker-имени `backend-grpc`.
@@ -124,13 +126,13 @@ Frontend image проксирует `/api` в `backend-http`. Windows-клиен
 
 ```text
 Browser
-  -> frontend/nginx :3000
-  -> /api -> backend-http/FastAPI :8000
+  -> host :3100 -> frontend/nginx :80
+  -> /api -> backend-http/FastAPI :8100
   -> application use case / public module port
   -> PostgreSQL (facts, ledgers, settings) + Redis (technical state/cache)
 
 Windows client
-  -> configured gRPC endpoint :50051
+  -> configured host gRPC endpoint :51051
   -> auth metadata / device identity
   -> Workstation, Session, Catalog, Reservation, Billing, Analytics services
 
@@ -281,7 +283,9 @@ production-scale UI для тяжёлых отчётов и native Windows flows
   idle relock, relock при auth 401/403;
 - `Ctrl+Alt+P`, session locked/zero-balance handling и controlled restart после
   подтверждённого stop;
-- installer/publish/kiosk preview scripts с backup/restore и явным `-Apply`.
+- installer/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
+  `build-portable-exe.ps1` собирает single-file self-contained EXE для передачи
+  на клиентский ПК без установки .NET/Visual Studio.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
@@ -322,6 +326,10 @@ Windows-клиент не хранит баланс и не выполняет �
     - stale permissions при BFF `403` обновляются через refresh;
     - в Settings добавлен CRUD payment methods;
     - analytics BFF/live flow проверен после исправления authorization path.
+11. Deployment-подготовка Windows-клиента:
+    - внешние host-порты Compose разделены с системными default-портами;
+    - добавлен unpackaged single-file self-contained publish для одного EXE;
+    - endpoint defaults клиента синхронизированы с новым HTTP/gRPC-профилем.
 
 Детальные задачи и решения: [`plans/README.md`](README.md) и таблица
 проверок ниже. В README есть небольшое расхождение: Product Sales уже имеет
@@ -374,6 +382,11 @@ Windows-клиент не хранит баланс и не выполняет �
 
    После этого вручную проверить access-gate, обычного пользователя,
    reconnect, theme, session stop/restart и отсутствие секретов в файлах/логах.
+   Для передачи на клиентский ПК собрать portable-файл:
+
+   ```powershell
+   .\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
+   ```
 3. Проверить основной browser flow в поддерживаемых браузерах и определить
    порог нагрузки/частоту polling; при необходимости перейти от polling к
    согласованному realtime transport.

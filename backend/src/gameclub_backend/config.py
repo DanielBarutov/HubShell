@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     postgres_dsn: str | None = None
     redis_url: str | None = None
     http_host: str = "127.0.0.1"
-    http_port: int = 8000
+    http_port: int = 8100
     grpc_host: str = "127.0.0.1"
-    grpc_port: int = 50051
+    grpc_port: int = 51051
     grpc_tls_cert_file: str | None = None
     grpc_tls_key_file: str | None = None
     grpc_tls_client_ca_file: str | None = None

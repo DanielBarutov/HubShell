@@ -312,7 +312,7 @@ def test_grpc_production_requires_explicit_tls_configuration() -> None:
         / "server.py"
     ).read_text()
     threat_model = (
-        PROJECT_ROOT / "backend" / "plans" / "04-auth-security" / "THREAT-MODEL.md"
+        PROJECT_ROOT / "plans" / "04-auth-security" / "THREAT-MODEL.md"
     ).read_text()
 
     assert "grpc_tls_cert_file" in config_source

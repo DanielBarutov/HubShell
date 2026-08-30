@@ -129,7 +129,7 @@ Read-only выручка за период доступна через защи�
 `GET /api/v1/audit/events?limit=20` с permission `audit.read`. Read-модель не
 содержит payload запросов и персональные данные, которых нет в audit event.
 
-gRPC-сервер запускается командой `make run-grpc` на `127.0.0.1:50051`. В dev
+gRPC-сервер запускается командой `make run-grpc` на `127.0.0.1:51051`. В dev
 insecure transport разрешён только для локальной разработки; в окружении `prod`
 или `production` сервер требует `GAMECLUB_GRPC_TLS_CERT_FILE` и
 `GAMECLUB_GRPC_TLS_KEY_FILE`. mTLS можно включить через

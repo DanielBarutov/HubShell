@@ -20,7 +20,7 @@
 ## Локальный запуск на Windows
 
 Требуются Visual Studio 2022 с workload **.NET desktop development** и Windows App
-SDK. После запуска backend gRPC на `127.0.0.1:50051`:
+SDK. После запуска backend gRPC на `127.0.0.1:51051`:
 
 ```text
 dotnet restore GameClub.Client.sln
@@ -39,36 +39,56 @@ dotnet test GameClub.Client.sln --configuration Debug -p:Platform=x64
 Он намеренно завершается с ошибкой вне Windows: Linux-проверка не заменяет сборку
 WinUI 3.
 
-## Получение EXE
+## Получение переносимого EXE
 
-На Windows можно собрать self-contained исполняемый клиент вместе с его
-зависимостями:
+Основной способ для проверки на клиентском ПК — один self-contained single-file
+EXE. На админском Windows-ПК выполните из каталога `win-client`:
+
+```powershell
+.\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
+```
+
+Единственный файл появится в
+`artifacts\portable\win-x64\Release\GameClub.Client.exe`. Его можно
+скопировать на клиентский ПК и запустить без Visual Studio, .NET SDK и отдельно
+установленного Windows App SDK. При первом запуске зависимости распаковываются
+во временный каталог Windows — это ожидаемое поведение single-file WinUI-клиента.
+
+Для обычной folder-публикации и диагностики также доступен скрипт:
 
 ```powershell
 .\scripts\publish-windows.ps1 -Architecture x64 -Configuration Release
 ```
 
-Результат появится в
-`win-client\artifacts\publish\win-x64\Release\GameClub.Client.exe`.
-По умолчанию это каталог публикации, а не только один файл: WinUI 3 и runtime
-должны поставляться рядом с EXE. Для unpackaged self-contained сборки можно
-попробовать single-file режим:
+Результат появится в каталоге
+`artifacts\publish\win-x64\Release`. Это folder-публикация: WinUI 3
+и runtime поставляются рядом с EXE.
+
+Секреты и настройки подключения в EXE не вшиваются — они задаются переменными
+окружения конкретного клиентского ПК или deployment policy.
+
+Одноразовая настройка окружения для запуска скопированного EXE:
 
 ```powershell
-.\scripts\publish-windows.ps1 -Architecture x64 -Configuration Release -SingleFile
+$env:GAMECLUB_ENVIRONMENT = "dev"
+$env:GAMECLUB_DEVICE_ID = "pc-001"
+$env:GAMECLUB_AUTH_ADDRESS = "http://127.0.0.1:8100"
+$env:GAMECLUB_GRPC_ADDRESS = "http://127.0.0.1:51051"
+$env:GAMECLUB_DEVICE_BOOTSTRAP_TOKEN = Read-Host "Device bootstrap token"
+& "C:\GameClub\GameClub.Client.exe"
 ```
 
-Single-file режим нужно проверить на чистой целевой Windows-машине. Секреты и
-настройки подключения в EXE не вшиваются — они задаются переменными окружения
-процесса или deployment policy.
+Эти переменные действуют только в текущем PowerShell-сеансе. Для запуска двойным
+кликом их нужно задать в deployment policy или установить для учётной записи
+Windows; сам EXE не содержит device token и пароль.
 
 Для локального подключения device-токена задайте переменные окружения процесса:
 
 ```text
 GAMECLUB_DEVICE_ID=pc-001
 GAMECLUB_DEVICE_BOOTSTRAP_TOKEN=значение-из-backend/.env
-GAMECLUB_AUTH_ADDRESS=http://127.0.0.1:8000
-GAMECLUB_GRPC_ADDRESS=http://127.0.0.1:50051
+GAMECLUB_AUTH_ADDRESS=http://127.0.0.1:8100
+GAMECLUB_GRPC_ADDRESS=http://127.0.0.1:51051
 ```
 
 До входа пользователя окно закрыто app-level access-gate. Для dev задайте
