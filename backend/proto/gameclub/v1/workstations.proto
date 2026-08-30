@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package gameclub.workstations.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Workstations.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service WorkstationService {
+  rpc Register(RegisterWorkstationRequest) returns (Workstation);
+  rpc Heartbeat(HeartbeatRequest) returns (Workstation);
+  rpc List(ListWorkstationsRequest) returns (ListWorkstationsResponse);
+  rpc Disable(DisableWorkstationRequest) returns (Workstation);
+  rpc DispatchCommand(DispatchCommandRequest) returns (WorkstationCommand);
+  rpc WatchCommands(WatchCommandsRequest) returns (stream WorkstationCommand);
+  rpc AcknowledgeCommand(AcknowledgeCommandRequest) returns (WorkstationCommand);
+  rpc ListGroups(ListWorkstationGroupsRequest) returns (ListWorkstationGroupsResponse);
+  rpc UpsertGroup(UpsertWorkstationGroupRequest) returns (WorkstationGroup);
+}
+
+enum WorkstationStatus {
+  WORKSTATION_STATUS_UNSPECIFIED = 0;
+  WORKSTATION_STATUS_UNKNOWN = 1;
+  WORKSTATION_STATUS_ONLINE = 2;
+  WORKSTATION_STATUS_STALE = 3;
+  WORKSTATION_STATUS_OFFLINE = 4;
+  WORKSTATION_STATUS_DISABLED = 5;
+}
+
+message Workstation {
+  string id = 1;
+  string device_id = 2;
+  string name = 3;
+  string group_id = 4;
+  int32 position = 5;
+  WorkstationStatus status = 6;
+  google.protobuf.Timestamp last_seen_at = 7;
+  string client_version = 8;
+  string disabled_reason = 9;
+  repeated string capabilities = 10;
+  string theme = 11;
+  string manager_password_verifier = 12;
+  WorkstationLockdownPolicy lockdown_policy = 13;
+}
+
+message WorkstationGroup {
+  string id = 1;
+  string name = 2;
+  string theme = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  WorkstationLockdownPolicy lockdown_policy = 5;
+}
+
+message WorkstationLockdownPolicy {
+  string deployment_mode = 1;
+  bool shell_enabled = 2;
+  bool user_self_login_enabled = 3;
+  bool lock_after_session = 4;
+  bool restart_after_session = 5;
+  repeated string hidden_drives = 6;
+  bool block_external_storage = 7;
+  bool disable_start_menu = 8;
+  bool disable_desktop_switching = 9;
+  repeated string blocked_window_rules = 10;
+  repeated string allowed_application_ids = 11;
+  int32 version = 12;
+}
+
+message ListWorkstationGroupsRequest {}
+
+message ListWorkstationGroupsResponse {
+  repeated WorkstationGroup groups = 1;
+}
+
+message UpsertWorkstationGroupRequest {
+  string id = 1;
+  string name = 2;
+  string theme = 3;
+  WorkstationLockdownPolicy lockdown_policy = 4;
+}
+
+message RegisterWorkstationRequest {
+  string device_id = 1;
+  string name = 2;
+  string group_id = 3;
+  int32 position = 4;
+  string client_version = 5;
+  repeated string capabilities = 6;
+}
+
+message HeartbeatRequest {
+  string device_id = 1;
+  string client_version = 2;
+  repeated string capabilities = 3;
+}
+
+message ListWorkstationsRequest {
+  string group_id = 1;
+}
+
+message ListWorkstationsResponse {
+  repeated Workstation workstations = 1;
+}
+
+message DisableWorkstationRequest {
+  string workstation_id = 1;
+  string reason = 2;
+}
+
+enum WorkstationCommandStatus {
+  WORKSTATION_COMMAND_STATUS_UNSPECIFIED = 0;
+  WORKSTATION_COMMAND_STATUS_QUEUED = 1;
+  WORKSTATION_COMMAND_STATUS_ACKNOWLEDGED = 2;
+  WORKSTATION_COMMAND_STATUS_FAILED = 3;
+  WORKSTATION_COMMAND_STATUS_EXPIRED = 4;
+}
+
+message WorkstationCommand {
+  string id = 1;
+  string workstation_id = 2;
+  string command_type = 3;
+  string payload_json = 4;
+  string idempotency_key = 5;
+  WorkstationCommandStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp acknowledged_at = 8;
+  string acknowledgement_message = 9;
+  google.protobuf.Timestamp expires_at = 10;
+}
+
+message DispatchCommandRequest {
+  string workstation_id = 1;
+  string command_type = 2;
+  string payload_json = 3;
+  string idempotency_key = 4;
+}
+
+message WatchCommandsRequest {
+  string device_id = 1;
+}
+
+message AcknowledgeCommandRequest {
+  string command_id = 1;
+  string device_id = 2;
+  bool success = 3;
+  string message = 4;
+}

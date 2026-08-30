@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package gameclub.reservations.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Reservations.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service ReservationService {
+  rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+  rpc Create(CreateReservationRequest) returns (Reservation);
+  rpc List(ListReservationsRequest) returns (ListReservationsResponse);
+  rpc Get(GetReservationRequest) returns (Reservation);
+  rpc Update(UpdateReservationRequest) returns (Reservation);
+  rpc Cancel(CancelReservationRequest) returns (Reservation);
+  rpc Activate(ActivateReservationRequest) returns (Reservation);
+  rpc Complete(CompleteReservationRequest) returns (Reservation);
+  rpc MarkNoShow(MarkNoShowReservationRequest) returns (Reservation);
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  RESERVATION_STATUS_CONFIRMED = 1;
+  RESERVATION_STATUS_ACTIVE = 2;
+  RESERVATION_STATUS_COMPLETED = 3;
+  RESERVATION_STATUS_CANCELLED = 4;
+  RESERVATION_STATUS_NO_SHOW = 5;
+}
+
+message Reservation {
+  string id = 1;
+  repeated string workstation_ids = 2;
+  string client_id = 3;
+  string guest_name = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  ReservationStatus status = 7;
+  string notes = 8;
+  string tariff_id = 9;
+  string created_by = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp cancelled_at = 12;
+  string guest_id = 13;
+}
+
+message CheckAvailabilityRequest {
+  repeated string workstation_ids = 1;
+  google.protobuf.Timestamp start_at = 2;
+  google.protobuf.Timestamp end_at = 3;
+}
+
+message CheckAvailabilityResponse {
+  bool available = 1;
+  repeated string conflicting_reservation_ids = 2;
+  string reason = 3;
+}
+
+message CreateReservationRequest {
+  repeated string workstation_ids = 1;
+  string client_id = 2;
+  string guest_name = 3;
+  google.protobuf.Timestamp start_at = 4;
+  google.protobuf.Timestamp end_at = 5;
+  string notes = 6;
+  string tariff_id = 7;
+  string idempotency_key = 8;
+  string guest_id = 9;
+}
+
+message ListReservationsRequest {
+  google.protobuf.Timestamp start_at = 1;
+  google.protobuf.Timestamp end_at = 2;
+}
+
+message ListReservationsResponse {
+  repeated Reservation reservations = 1;
+}
+
+message GetReservationRequest {
+  string reservation_id = 1;
+}
+
+message UpdateReservationRequest {
+  string reservation_id = 1;
+  repeated string workstation_ids = 2;
+  string client_id = 3;
+  string guest_name = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  string notes = 7;
+  string tariff_id = 8;
+  string guest_id = 9;
+}
+
+message CancelReservationRequest {
+  string reservation_id = 1;
+}
+
+message ActivateReservationRequest {
+  string reservation_id = 1;
+}
+
+message CompleteReservationRequest {
+  string reservation_id = 1;
+}
+
+message MarkNoShowReservationRequest {
+  string reservation_id = 1;
+}

@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package gameclub.analytics.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Analytics.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service AnalyticsService {
+  rpc GetOverview(GetAnalyticsOverviewRequest) returns (AnalyticsOverview);
+  rpc GetClient(GetClientAnalyticsRequest) returns (ClientAnalytics);
+}
+
+message GetAnalyticsOverviewRequest {
+  google.protobuf.Timestamp start_at = 1;
+  google.protobuf.Timestamp end_at = 2;
+  int32 limit = 3;
+}
+
+message GetClientAnalyticsRequest {
+  string client_id = 1;
+  google.protobuf.Timestamp start_at = 2;
+  google.protobuf.Timestamp end_at = 3;
+  int32 limit = 4;
+}
+
+message AnalyticsTopProduct {
+  string product_id = 1;
+  string product_name = 2;
+  int64 units = 3;
+  int64 revenue_cents = 4;
+  int64 gross_profit_cents = 5;
+}
+
+message AnalyticsTopClient {
+  string client_id = 1;
+  string nickname = 2;
+  int64 played_minutes = 3;
+  int64 session_spend_cents = 4;
+  int64 product_spend_cents = 5;
+  int64 product_units = 6;
+  int64 session_count = 7;
+}
+
+message AnalyticsBucket {
+  string key = 1;
+  string label = 2;
+  int64 session_revenue_cents = 3;
+  int64 product_revenue_cents = 4;
+  int64 total_revenue_cents = 5;
+  int64 session_count = 6;
+  int64 product_sale_count = 7;
+  int64 product_units = 8;
+  int64 played_minutes = 9;
+  int64 guest_session_count = 10;
+}
+
+message AnalyticsBreakdown {
+  string key = 1;
+  string label = 2;
+  int64 session_revenue_cents = 3;
+  int64 product_revenue_cents = 4;
+  int64 revenue_cents = 5;
+  int64 product_cost_cents = 6;
+  int64 gross_profit_cents = 7;
+  int64 session_count = 8;
+  int64 product_sale_count = 9;
+  int64 product_units = 10;
+  int64 played_minutes = 11;
+  int64 share_bps = 12;
+  int64 discount_cents = 13;
+}
+
+message AnalyticsPayment {
+  string key = 1;
+  string label = 2;
+  int64 revenue_cents = 3;
+  int64 operation_count = 4;
+  int64 share_bps = 5;
+}
+
+message AnalyticsOverview {
+  google.protobuf.Timestamp start_at = 1;
+  google.protobuf.Timestamp end_at = 2;
+  int64 session_revenue_cents = 3;
+  int64 product_revenue_cents = 4;
+  int64 total_revenue_cents = 5;
+  int64 session_count = 6;
+  int64 product_sale_count = 7;
+  int64 product_units = 8;
+  int64 played_minutes = 9;
+  int64 guest_session_count = 10;
+  int64 client_count = 11;
+  repeated AnalyticsTopProduct top_products = 12;
+  repeated AnalyticsTopClient top_clients = 13;
+  int64 product_cost_cents = 14;
+  int64 gross_profit_cents = 15;
+  int64 discount_cents = 16;
+  int64 active_client_count = 17;
+  int64 new_client_count = 18;
+  int64 returning_client_count = 19;
+  int64 unique_visitor_count = 20;
+  int64 workstation_count = 21;
+  double occupancy_percent = 22;
+  string peak_usage_hour = 23;
+  repeated AnalyticsBucket daily_activity = 24;
+  repeated AnalyticsBucket hourly_activity = 25;
+  repeated AnalyticsBreakdown zones = 26;
+  repeated AnalyticsBreakdown workstations = 27;
+  repeated AnalyticsBreakdown tariffs = 28;
+  repeated AnalyticsPayment payment_methods = 29;
+  repeated AnalyticsBreakdown product_categories = 30;
+}
+
+message ClientAnalytics {
+  string client_id = 1;
+  string nickname = 2;
+  string phone = 3;
+  google.protobuf.Timestamp start_at = 4;
+  google.protobuf.Timestamp end_at = 5;
+  int64 played_minutes = 6;
+  int64 session_count = 7;
+  int64 session_spend_cents = 8;
+  int64 product_spend_cents = 9;
+  int64 product_units = 10;
+  google.protobuf.Timestamp first_session_at = 11;
+  google.protobuf.Timestamp last_session_at = 12;
+  google.protobuf.Timestamp last_purchase_at = 13;
+  repeated AnalyticsTopProduct favorite_products = 14;
+  int64 product_cost_cents = 15;
+  repeated AnalyticsBucket daily_activity = 16;
+  repeated AnalyticsPayment payment_methods = 17;
+}

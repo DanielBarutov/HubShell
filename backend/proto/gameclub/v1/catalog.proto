@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package gameclub.catalog.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Catalog.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service CatalogService {
+  rpc CreateProduct(CreateProductRequest) returns (Product);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc CreateTariff(CreateTariffRequest) returns (Tariff);
+  rpc ListTariffs(ListTariffsRequest) returns (ListTariffsResponse);
+  rpc PublishTariff(PublishTariffRequest) returns (Tariff);
+  rpc ArchiveTariff(ArchiveTariffRequest) returns (Tariff);
+  rpc CreateDiscountRule(CreateDiscountRuleRequest) returns (DiscountRule);
+  rpc ListDiscountRules(ListDiscountRulesRequest) returns (ListDiscountRulesResponse);
+  rpc GetCatalogSnapshot(GetCatalogSnapshotRequest) returns (CatalogSnapshot);
+  rpc Quote(QuoteRequest) returns (QuoteResponse);
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string category = 3;
+  int64 price_cents = 4;
+  bool active = 5;
+  int64 cost_price_cents = 6;
+  int64 stock_quantity = 7;
+}
+
+message CreateProductRequest {
+  string name = 1;
+  string category = 2;
+  int64 price_cents = 3;
+  int64 cost_price_cents = 4;
+  int64 stock_quantity = 5;
+  optional bool active = 6;
+}
+
+message ListProductsRequest {}
+
+message ListProductsResponse {
+  repeated Product products = 1;
+}
+
+message Tariff {
+  string id = 1;
+  string name = 2;
+  string group_id = 3;
+  int32 duration_minutes = 4;
+  int64 price_cents = 5;
+  google.protobuf.Timestamp valid_from = 6;
+  google.protobuf.Timestamp valid_to = 7;
+  bool active = 8;
+  string tariff_key = 9;
+  int32 version = 10;
+  TariffLifecycle lifecycle = 11;
+  BillingMode billing_mode = 12;
+  int64 price_per_minute_cents = 13;
+  int32 free_minutes = 14;
+}
+
+enum BillingMode {
+  BILLING_MODE_UNSPECIFIED = 0;
+  BILLING_MODE_BLOCK = 1;
+  BILLING_MODE_PER_MINUTE = 2;
+}
+
+enum TariffLifecycle {
+  TARIFF_LIFECYCLE_UNSPECIFIED = 0;
+  TARIFF_LIFECYCLE_DRAFT = 1;
+  TARIFF_LIFECYCLE_PUBLISHED = 2;
+  TARIFF_LIFECYCLE_ARCHIVED = 3;
+}
+
+message CreateTariffRequest {
+  string name = 1;
+  string group_id = 2;
+  int32 duration_minutes = 3;
+  int64 price_cents = 4;
+  google.protobuf.Timestamp valid_from = 5;
+  google.protobuf.Timestamp valid_to = 6;
+  string tariff_key = 7;
+  TariffLifecycle lifecycle = 8;
+  BillingMode billing_mode = 9;
+  int64 price_per_minute_cents = 10;
+  int32 free_minutes = 11;
+}
+
+message ListTariffsRequest {}
+
+message ListTariffsResponse {
+  repeated Tariff tariffs = 1;
+}
+
+message PublishTariffRequest {
+  string tariff_id = 1;
+}
+
+message ArchiveTariffRequest {
+  string tariff_id = 1;
+}
+
+message DiscountRule {
+  string id = 1;
+  string category = 2;
+  int32 percent_bps = 3;
+  int32 priority = 4;
+  google.protobuf.Timestamp valid_from = 5;
+  google.protobuf.Timestamp valid_to = 6;
+  bool active = 7;
+}
+
+message CreateDiscountRuleRequest {
+  string category = 1;
+  int32 percent_bps = 2;
+  int32 priority = 3;
+  google.protobuf.Timestamp valid_from = 4;
+  google.protobuf.Timestamp valid_to = 5;
+}
+
+message ListDiscountRulesRequest {}
+
+message ListDiscountRulesResponse {
+  repeated DiscountRule rules = 1;
+}
+
+message GetCatalogSnapshotRequest {}
+
+message CatalogSnapshot {
+  repeated Tariff tariffs = 1;
+  repeated DiscountRule discount_rules = 2;
+}
+
+message QuoteRequest {
+  int32 duration_minutes = 1;
+  string group_id = 2;
+  google.protobuf.Timestamp moment = 3;
+  string discount_category = 4;
+}
+
+message QuoteResponse {
+  string tariff_id = 1;
+  int32 duration_minutes = 2;
+  int64 price_cents = 3;
+  int64 price_before_discount_cents = 4;
+  int64 discount_amount_cents = 5;
+  int32 discount_percent_bps = 6;
+  string discount_category = 7;
+}

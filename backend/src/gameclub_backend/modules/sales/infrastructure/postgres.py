@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import datetime
+import uuid
+
+from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.sales.domain import (
+    ProductPaymentMethod,
+    ProductSale,
+    ProductSaleStatus,
+)
+
+
+class SalesBase(DeclarativeBase):
+    pass
+
+
+class ProductSaleModel(SalesBase):
+    __tablename__ = "product_sales"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    product_name: Mapped[str] = mapped_column(String(128))
+    product_category: Mapped[str] = mapped_column(String(64))
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    guest_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer())
+    unit_price_cents: Mapped[int] = mapped_column()
+    unit_cost_price_cents: Mapped[int] = mapped_column()
+    total_price_cents: Mapped[int] = mapped_column()
+    total_cost_price_cents: Mapped[int] = mapped_column()
+    payment_method: Mapped[str] = mapped_column(String(16))
+    cash_shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    sold_by: Mapped[str] = mapped_column(String(128))
+    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def to_domain(self) -> ProductSale:
+        return ProductSale(
+            id=self.id,
+            product_id=self.product_id,
+            product_name=self.product_name,
+            product_category=self.product_category,
+            client_id=self.client_id,
+            guest_name=self.guest_name,
+            quantity=self.quantity,
+            unit_price_cents=self.unit_price_cents,
+            unit_cost_price_cents=self.unit_cost_price_cents,
+            total_price_cents=self.total_price_cents,
+            total_cost_price_cents=self.total_cost_price_cents,
+            payment_method=ProductPaymentMethod(self.payment_method),
+            cash_shift_id=self.cash_shift_id,
+            status=ProductSaleStatus(self.status),
+            sold_by=self.sold_by,
+            idempotency_key=self.idempotency_key,
+            created_at=self.created_at,
+            completed_at=self.completed_at,
+        )
+
+    @classmethod
+    def from_domain(cls, sale: ProductSale) -> ProductSaleModel:
+        return cls(
+            **{
+                key: value
+                for key, value in {
+                    "id": sale.id,
+                    "product_id": sale.product_id,
+                    "product_name": sale.product_name,
+                    "product_category": sale.product_category,
+                    "client_id": sale.client_id,
+                    "guest_name": sale.guest_name,
+                    "quantity": sale.quantity,
+                    "unit_price_cents": sale.unit_price_cents,
+                    "unit_cost_price_cents": sale.unit_cost_price_cents,
+                    "total_price_cents": sale.total_price_cents,
+                    "total_cost_price_cents": sale.total_cost_price_cents,
+                    "payment_method": sale.payment_method.value,
+                    "cash_shift_id": sale.cash_shift_id,
+                    "status": sale.status.value,
+                    "sold_by": sale.sold_by,
+                    "idempotency_key": sale.idempotency_key,
+                    "created_at": sale.created_at,
+                    "completed_at": sale.completed_at,
+                }.items()
+            }
+        )
+
+
+class PostgresProductSaleRepository:
+    def __init__(self, engine_provider: EngineProvider) -> None:
+        self._engine_provider = engine_provider
+
+    async def get_by_idempotency_key(self, idempotency_key: str) -> ProductSale | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(
+                select(ProductSaleModel).where(ProductSaleModel.idempotency_key == idempotency_key)
+            )
+            return model.to_domain() if model else None
+
+    async def create_pending(self, sale: ProductSale) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                await session.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                    {"lock_key": f"product-sale:{sale.idempotency_key}"},
+                )
+                existing = await session.scalar(
+                    select(ProductSaleModel).where(
+                        ProductSaleModel.idempotency_key == sale.idempotency_key
+                    )
+                )
+                if existing is not None:
+                    return existing.to_domain()
+                product = (
+                    (
+                        await session.execute(
+                            text(
+                                "SELECT price_cents, cost_price_cents, stock_quantity, active "
+                                "FROM products WHERE id = :product_id FOR UPDATE"
+                            ),
+                            {"product_id": sale.product_id},
+                        )
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+                if product is None:
+                    raise ValueError("Product not found")
+                if not product["active"]:
+                    raise ValueError("Product is inactive")
+                if product["stock_quantity"] < sale.quantity:
+                    raise ValueError("Insufficient product stock")
+                if (
+                    product["price_cents"] != sale.unit_price_cents
+                    or product["cost_price_cents"] != sale.unit_cost_price_cents
+                ):
+                    raise ValueError("Product price changed, retry the sale")
+                session.add(ProductSaleModel.from_domain(sale))
+                await session.execute(
+                    text(
+                        "UPDATE products SET stock_quantity = stock_quantity - :quantity "
+                        "WHERE id = :product_id"
+                    ),
+                    {"quantity": sale.quantity, "product_id": sale.product_id},
+                )
+                return sale
+
+    async def complete(self, sale: ProductSale) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
+                if model is None:
+                    raise ValueError("Product sale not found")
+                if model.status == ProductSaleStatus.COMPLETED.value:
+                    return model.to_domain()
+                if model.status != ProductSaleStatus.PENDING.value:
+                    raise ValueError("Product sale is not pending")
+                model.status = ProductSaleStatus.COMPLETED.value
+                model.completed_at = sale.completed_at
+                return model.to_domain()
+
+    async def cancel(self, sale: ProductSale) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
+                if model is None:
+                    raise ValueError("Product sale not found")
+                if model.status == ProductSaleStatus.CANCELLED.value:
+                    return model.to_domain()
+                if model.status == ProductSaleStatus.COMPLETED.value:
+                    return model.to_domain()
+                await session.execute(
+                    text(
+                        "UPDATE products SET stock_quantity = stock_quantity + :quantity "
+                        "WHERE id = :product_id"
+                    ),
+                    {"quantity": model.quantity, "product_id": model.product_id},
+                )
+                model.status = ProductSaleStatus.CANCELLED.value
+                return model.to_domain()
+
+    async def list_sales(
+        self,
+        start_at: datetime.datetime | None = None,
+        end_at: datetime.datetime | None = None,
+        client_id: uuid.UUID | None = None,
+        limit: int = 100,
+    ) -> list[ProductSale]:
+        filters = [ProductSaleModel.status == ProductSaleStatus.COMPLETED.value]
+        if start_at is not None:
+            filters.append(ProductSaleModel.created_at >= start_at)
+        if end_at is not None:
+            filters.append(ProductSaleModel.created_at < end_at)
+        if client_id is not None:
+            filters.append(ProductSaleModel.client_id == client_id)
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(ProductSaleModel)
+                .where(*filters)
+                .order_by(ProductSaleModel.created_at.desc())
+                .limit(max(1, min(limit, 500)))
+            )
+            return [model.to_domain() for model in result]

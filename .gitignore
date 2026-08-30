@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+win-client/artifacts/
+frontend/node_modules/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Generated/local runtime files
+backend/.generated/
+backend/logs/
+.playwright-cli/
+.playwright-mcp/
+output/

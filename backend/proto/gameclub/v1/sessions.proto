@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package gameclub.sessions.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Sessions.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service SessionService {
+  rpc Start(StartSessionRequest) returns (Session);
+  rpc Get(GetSessionRequest) returns (Session);
+  rpc List(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc Stop(StopSessionRequest) returns (Session);
+}
+
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_ACTIVE = 1;
+  SESSION_STATUS_COMPLETED = 2;
+}
+
+message Session {
+  string id = 1;
+  string workstation_id = 2;
+  string client_id = 3;
+  string guest_name = 4;
+  SessionStatus status = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  string source = 8;
+  string created_by = 9;
+  string reservation_id = 10;
+  string idempotency_key = 11;
+  string guest_id = 12;
+  string tariff_id = 13;
+  int32 tariff_quantity = 14;
+}
+
+message StartSessionRequest {
+  string workstation_id = 1;
+  string client_id = 2;
+  string guest_name = 3;
+  string source = 4;
+  string reservation_id = 5;
+  string idempotency_key = 6;
+  string device_id = 7;
+  string guest_id = 8;
+  string tariff_id = 9;
+  int32 tariff_quantity = 10;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message ListSessionsRequest {
+  string workstation_id = 1;
+  bool active_only = 2;
+}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message StopSessionRequest {
+  string session_id = 1;
+  string device_id = 2;
+}

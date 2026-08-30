@@ -1,0 +1,25 @@
+<Application
+    x:Class="GameClub.Client.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#11141B" />
+                    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#191D26" />
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F1F3F7" />
+                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#8E95A6" />
+                    <SolidColorBrush x:Key="AccentBrush" Color="#A8ED62" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#F4F5F8" />
+                    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#171A22" />
+                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#858C99" />
+                    <SolidColorBrush x:Key="AccentBrush" Color="#8FD854" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

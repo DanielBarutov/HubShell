@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dgSpecHash": "vJaS+k/Vo2M=",
+  "success": true,
+  "projectFilePath": "/home/daniel/HubShell/win-client/tests/GameClub.Client.Tests.csproj",
+  "expectedPackageFiles": [
+    "/home/daniel/.nuget/packages/google.protobuf/3.28.2/google.protobuf.3.28.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/grpc.core.api/2.66.0/grpc.core.api.2.66.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/grpc.net.client/2.66.0/grpc.net.client.2.66.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/grpc.net.common/2.66.0/grpc.net.common.2.66.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.codecoverage/17.11.1/microsoft.codecoverage.17.11.1.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.extensions.logging.abstractions/6.0.0/microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.net.test.sdk/17.11.1/microsoft.net.test.sdk.17.11.1.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.testplatform.objectmodel/17.11.1/microsoft.testplatform.objectmodel.17.11.1.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.testplatform.testhost/17.11.1/microsoft.testplatform.testhost.17.11.1.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.web.webview2/1.0.2651.64/microsoft.web.webview2.1.0.2651.64.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.windows.sdk.buildtools/10.0.26100.3916/microsoft.windows.sdk.buildtools.10.0.26100.3916.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.windowsappsdk/1.6.240829007/microsoft.windowsappsdk.1.6.240829007.nupkg.sha512",
+    "/home/daniel/.nuget/packages/newtonsoft.json/13.0.1/newtonsoft.json.13.0.1.nupkg.sha512",
+    "/home/daniel/.nuget/packages/system.reflection.metadata/1.6.0/system.reflection.metadata.1.6.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit/2.9.2/xunit.2.9.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.abstractions/2.0.3/xunit.abstractions.2.0.3.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.analyzers/1.16.0/xunit.analyzers.1.16.0.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.assert/2.9.2/xunit.assert.2.9.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.core/2.9.2/xunit.core.2.9.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.extensibility.core/2.9.2/xunit.extensibility.core.2.9.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.extensibility.execution/2.9.2/xunit.extensibility.execution.2.9.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/xunit.runner.visualstudio/2.8.2/xunit.runner.visualstudio.2.8.2.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.windowsdesktop.app.ref/8.0.30/microsoft.windowsdesktop.app.ref.8.0.30.nupkg.sha512",
+    "/home/daniel/.nuget/packages/microsoft.windows.sdk.net.ref/10.0.19041.56/microsoft.windows.sdk.net.ref.10.0.19041.56.nupkg.sha512"
+  ],
+  "logs": []
+}

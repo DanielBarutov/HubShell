@@ -1,0 +1,1 @@
+"""Cash shift bounded context."""

@@ -1,0 +1,1 @@
+"""Club payment-method configuration."""

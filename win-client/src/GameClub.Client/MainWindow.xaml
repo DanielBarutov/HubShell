@@ -1,0 +1,177 @@
+<Window
+    x:Class="GameClub.Client.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:GameClub.Client"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Grid
+        x:Name="ContentRoot"
+        Background="{ThemeResource PageBackgroundBrush}"
+        KeyDown="RecordKeyActivity"
+        PointerPressed="RecordPointerActivity">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="P" Modifiers="Control,Menu" Invoked="OpenManagerLoginHotkey" />
+        </Grid.KeyboardAccelerators>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid
+            Padding="22,18,18,14"
+            ColumnSpacing="12"
+            Visibility="{Binding SecuredContentVisibility}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="3">
+                <TextBlock Text="GAMESHELL" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" />
+                <TextBlock Text="Ваше игровое место" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
+            </StackPanel>
+            <Button
+                Grid.Column="1"
+                Click="ToggleWindowMode"
+                Padding="10,7"
+                Background="{ThemeResource CardBackgroundBrush}"
+                AutomationProperties.Name="{Binding WindowModeActionLabel}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="↗" FontSize="16" />
+                    <TextBlock Text="{Binding WindowModeActionLabel}" FontSize="11" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Grid>
+        <ScrollViewer
+            Grid.Row="1"
+            Padding="18,0,18,18"
+            Visibility="{Binding SecuredContentVisibility}">
+            <StackPanel Spacing="13">
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Width="9" Height="9" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="Состояние соединения" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                                <TextBlock Text="{Binding ConnectionMessage}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="13" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding BackendVersion}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock Text="{Binding DeviceStatus}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="11">
+                        <TextBlock Text="Тема зоны" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        <ComboBox
+                            SelectedValue="{Binding ThemeName, Mode=TwoWay}"
+                            SelectedValuePath="Content"
+                            Foreground="{ThemeResource PrimaryTextBrush}">
+                            <ComboBoxItem Content="VIP-зона" />
+                            <ComboBoxItem Content="Обычный зал" />
+                        </ComboBox>
+                        <TextBlock Text="Тема назначается клубом для группы ПК." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="Ближайшая бронь" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding NextBooking}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="Место будет доступно после окончания текущей сессии." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15" Visibility="{Binding ActiveSessionVisibility}">
+                    <StackPanel Spacing="9">
+                        <TextBlock Text="Активная сессия" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <Button Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Завершить сессию и перезапустить ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+                <Button Click="RefreshConnection" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
+                    <TextBlock Text="Проверить соединение" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
+        <Grid
+            Grid.RowSpan="2"
+            Padding="18"
+            Background="#E90B111B"
+            Visibility="{Binding AccessGateVisibility}">
+            <Border
+                MaxWidth="390"
+                Padding="24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{ThemeResource CardBackgroundBrush}"
+                CornerRadius="18">
+                <StackPanel Spacing="14">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="GAMESHELL ACCESS" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccessTitle}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="23" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding AccessSubtitle}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Spacing="10" Visibility="{Binding UserLoginVisibility}">
+                        <PasswordBox
+                            x:Name="UserAccessCodeBox"
+                            Header="Код доступа"
+                            PasswordChanged="UserAccessCodeChanged"
+                            PlaceholderText="Введите персональный код"
+                            MaxLength="32" />
+                        <Button
+                            Click="UnlockUser"
+                            IsEnabled="{Binding CanUnlockUser}"
+                            HorizontalAlignment="Stretch"
+                            Padding="0,11"
+                            Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Войти" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                        </Button>
+                        <Button
+                            Click="OpenManagerLogin"
+                            Visibility="{Binding ManagerEntryVisibility}"
+                            HorizontalAlignment="Center"
+                            Padding="6,4"
+                            Background="Transparent">
+                            <TextBlock Text="Режим обслуживания" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Spacing="10" Visibility="{Binding ManagerLoginVisibility}">
+                        <PasswordBox
+                            x:Name="ManagerPasswordBox"
+                            Header="Пароль менеджера"
+                            PasswordChanged="ManagerPasswordChanged"
+                            PlaceholderText="Только для обслуживания"
+                            MaxLength="128" />
+                        <Button
+                            Click="EnterMaintenance"
+                            IsEnabled="{Binding CanEnterMaintenance}"
+                            HorizontalAlignment="Stretch"
+                            Padding="0,11"
+                            Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Открыть обслуживание" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Click="CancelManagerLogin" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
+                            <TextBlock Text="Назад ко входу пользователя" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Spacing="10" Visibility="{Binding MaintenanceVisibility}">
+                        <Border Background="#2A3B28" CornerRadius="10" Padding="12">
+                            <TextBlock Text="Доступ менеджера подтверждён. Рабочие действия клиента приостановлены." Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
+                        </Border>
+                        <Button Click="LockClient" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Закрыть обслуживание" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                        </Button>
+                    </StackPanel>
+                    <TextBlock Text="{Binding AccessMessage}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                    <TextBlock Text="Код и пароль не сохраняются на компьютере." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
