@@ -26,20 +26,25 @@ restore/build, запуск окна, access-gate и системный kiosk.
 Это самый простой вариант для первого smoke-теста. Клиент использует:
 
 ```text
-GAMECLUB_AUTH_ADDRESS=http://127.0.0.1:8000
-GAMECLUB_GRPC_ADDRESS=http://127.0.0.1:50051
+GAMECLUB_AUTH_ADDRESS=http://127.0.0.1:8100
+GAMECLUB_GRPC_ADDRESS=http://127.0.0.1:51051
 ```
 
 ### Backend на отдельном Linux-компьютере
 
 Вместо `127.0.0.1` укажите LAN-адрес backend-хоста, например
-`http://192.168.1.20:8000` и `http://192.168.1.20:50051`.
+`https://192.168.1.20:8100` и `https://192.168.1.20:51051`,
+если на backend настроен TLS/reverse proxy.
 
 Важно: текущий dev Compose по умолчанию публикует HTTP и gRPC только на
 `127.0.0.1` хоста. Для подключения с другого компьютера нужно осознанно
 изменить сетевую публикацию/прокси и правила firewall. Для production
 используйте TLS и `https://`/защищённый gRPC endpoint; не переносите dev
 bootstrap-токен в постоянную установку.
+
+Dev HTTP разрешён только для loopback. Для client PC на отдельном хосте нужен
+защищённый HTTPS/gRPC endpoint либо backend и клиент следует временно запускать
+на одной машине для локального smoke-теста.
 
 ## 3. Запустите dev backend
 
@@ -49,7 +54,7 @@ bootstrap-токен в постоянную установку.
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up -d --build
 docker compose ps
-(Invoke-WebRequest http://127.0.0.1:8000/health/ready).StatusCode
+(Invoke-WebRequest http://127.0.0.1:8100/health/ready).StatusCode
 ```
 
 Ожидаемый код readiness — `200`. Если backend запущен на другом хосте,
@@ -62,7 +67,7 @@ docker compose ps
 
 ## 4. Зарегистрируйте workstation
 
-1. Откройте operator UI: `http://127.0.0.1:3000`.
+1. Откройте operator UI: `http://127.0.0.1:3100`.
 2. Войдите оператором dev-окружения.
 3. В настройках добавьте или найдите workstation и задайте:
    - `device_id`, например `pc-001`;
@@ -87,8 +92,8 @@ Set-Location .\win-client
 
 $env:GAMECLUB_ENVIRONMENT = "dev"
 $env:GAMECLUB_DEVICE_ID = "pc-001"
-$env:GAMECLUB_AUTH_ADDRESS = "http://127.0.0.1:8000"
-$env:GAMECLUB_GRPC_ADDRESS = "http://127.0.0.1:50051"
+$env:GAMECLUB_AUTH_ADDRESS = "http://127.0.0.1:8100"
+$env:GAMECLUB_GRPC_ADDRESS = "http://127.0.0.1:51051"
 
 $deviceTokenLine = Get-Content ..\.env |
     Where-Object { $_ -match '^GAMECLUB_DEVICE_BOOTSTRAP_TOKEN=' } |
@@ -251,7 +256,16 @@ App-level access-gate не является границей безопасно�
 
 ## 10. Release-проверка (после Debug smoke)
 
-Публикация и installer выполняются только после успешного Debug smoke:
+Для передачи одного EXE на клиентский ПК после успешного Debug smoke выполните:
+
+```powershell
+.\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
+```
+
+Файл для передачи:
+`artifacts\portable\win-x64\Release\GameClub.Client.exe`.
+Проверьте его запуск на чистом тестовом профиле. Публикация и installer для
+folder-варианта выполняются отдельно:
 
 ```powershell
 .\scripts\publish-windows.ps1 -Architecture x64 -Configuration Release

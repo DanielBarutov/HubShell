@@ -79,8 +79,9 @@
     Assigned Access/Shell Launcher, отдельная учётная запись ПК и ручная Windows
     проверка под ограниченным пользователем.
 18. [x] Добавить воспроизводимый self-contained publish-скрипт для `win-x64`,
-    `win-x86` и `win-arm64` с опциональным single-file режимом; native publish
-    остаётся требующим Windows-проверки.
+    `win-x86` и `win-arm64`, а также `build-portable-exe.ps1` с single-file
+    режимом по умолчанию для передачи одного EXE; native publish остаётся
+    требующим Windows-проверки.
 19. [x] Добавить явную горячую клавишу `Ctrl+Alt+P` для manager maintenance
     login, lock действий до входа, обработку завершения/исчерпания баланса и
     контролируемый restart после подтверждённой сервером остановки сессии.

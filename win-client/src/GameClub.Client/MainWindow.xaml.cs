@@ -28,11 +28,11 @@ public sealed partial class MainWindow : Window
         var environment = Environment.GetEnvironmentVariable("GAMECLUB_ENVIRONMENT")?.Trim() ?? "dev";
         var authAddress = EndpointPolicy.GetEnvironmentEndpoint(
             "GAMECLUB_AUTH_ADDRESS",
-            "http://127.0.0.1:8000",
+            "http://127.0.0.1:8100",
             environment);
         var grpcAddress = EndpointPolicy.GetEnvironmentEndpoint(
             "GAMECLUB_GRPC_ADDRESS",
-            "http://127.0.0.1:50051",
+            "http://127.0.0.1:51051",
             environment);
         var tokenProvider = CreateTokenProvider(authAddress, environment);
         var accessCredentials = new EnvironmentAccessCredentialVerifier(environment);

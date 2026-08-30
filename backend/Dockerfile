@@ -16,4 +16,4 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev
 
-EXPOSE 8000 50051
+EXPOSE 8100 51051

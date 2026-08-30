@@ -16,6 +16,7 @@
 | Режим окна | компактный виджет / full-window | `MainWindow` resize flow |
 | Access gate | Locked до кода пользователя, отдельный Maintenance для менеджера | `AccessGateCoordinator` + PBKDF2 verifier |
 | Kiosk boundary | Assigned Access/Shell Launcher для запрета выхода в Windows desktop | deployment policy, не WinUI-код |
+| Portable delivery | unpackaged self-contained single-file `GameClub.Client.exe` | `scripts/build-portable-exe.ps1`; native publish/runtime требуют Windows |
 
 ## Что проверено в текущей Linux-среде
 
@@ -53,6 +54,12 @@ PowerShell в каталоге `win-client`:
 
 ```powershell
 .\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
+```
+
+Для передачи одного EXE после native smoke используйте:
+
+```powershell
+.\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
 ```
 
 Скрипт передаёт архитектуру как `-p:Platform`, потому что `--arch` для solution

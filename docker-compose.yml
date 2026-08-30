@@ -5,9 +5,9 @@ x-backend-environment: &backend-environment
   GAMECLUB_POSTGRES_DSN: ${GAMECLUB_POSTGRES_DSN:-postgresql+asyncpg://gameclub:${GAMECLUB_DB_PASSWORD:-gameclub-local-only}@postgres:5432/gameclub}
   GAMECLUB_REDIS_URL: ${GAMECLUB_REDIS_URL:-redis://redis:6379/0}
   GAMECLUB_HTTP_HOST: 0.0.0.0
-  GAMECLUB_HTTP_PORT: 8000
+  GAMECLUB_HTTP_PORT: 8100
   GAMECLUB_GRPC_HOST: 0.0.0.0
-  GAMECLUB_GRPC_PORT: 50051
+  GAMECLUB_GRPC_PORT: 51051
   GAMECLUB_GRPC_TLS_CERT_FILE: ${GAMECLUB_GRPC_TLS_CERT_FILE:-}
   GAMECLUB_GRPC_TLS_KEY_FILE: ${GAMECLUB_GRPC_TLS_KEY_FILE:-}
   GAMECLUB_GRPC_TLS_CLIENT_CA_FILE: ${GAMECLUB_GRPC_TLS_CLIENT_CA_FILE:-}
@@ -35,7 +35,7 @@ services:
       POSTGRES_USER: gameclub
       POSTGRES_PASSWORD: ${GAMECLUB_DB_PASSWORD:-gameclub-local-only}
     ports:
-      - "127.0.0.1:${GAMECLUB_POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${GAMECLUB_POSTGRES_PORT:-55432}:5432"
     volumes:
       - gameclub-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -50,7 +50,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:${GAMECLUB_REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${GAMECLUB_REDIS_PORT:-56379}:6379"
     volumes:
       - gameclub-redis-data:/data
     healthcheck:
@@ -77,11 +77,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8000", "gameclub_backend.presentation.http.app:app"]
+    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "gameclub_backend.presentation.http.app:app"]
     environment:
       <<: *backend-environment
     ports:
-      - "127.0.0.1:${GAMECLUB_HTTP_PORT:-8000}:8000"
+      - "127.0.0.1:${GAMECLUB_HTTP_PORT:-8100}:8100"
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
@@ -90,7 +90,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live', timeout=2)"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -105,7 +105,7 @@ services:
     environment:
       <<: *backend-environment
     ports:
-      - "127.0.0.1:${GAMECLUB_GRPC_PORT:-50051}:50051"
+      - "127.0.0.1:${GAMECLUB_GRPC_PORT:-51051}:51051"
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
@@ -114,7 +114,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 50051), 2).close()"]
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 51051), 2).close()"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -161,7 +161,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
         VITE_GAMECLUB_DATA_MODE: ${VITE_GAMECLUB_DATA_MODE:-live}
     ports:
-      - "127.0.0.1:${GAMECLUB_FRONTEND_PORT:-3000}:80"
+      - "127.0.0.1:${GAMECLUB_FRONTEND_PORT:-3100}:80"
     depends_on:
       backend-http:
         condition: service_healthy

@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: gameclub
       POSTGRES_PASSWORD: ${GAMECLUB_DB_PASSWORD:?Set GAMECLUB_DB_PASSWORD for local development}
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - gameclub-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "56379:6379"
     volumes:
       - gameclub-redis-data:/data
     healthcheck:

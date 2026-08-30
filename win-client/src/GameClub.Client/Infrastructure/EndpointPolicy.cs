@@ -40,7 +40,5 @@ public static class EndpointPolicy
             $"{endpointName} must use HTTPS outside dev loopback configuration");
     }
 
-    private static bool IsLoopback(Uri endpoint) =>
-        endpoint.IsLoopback
-        && (endpoint.Port == -1 || endpoint.Port is 80 or 8000 or 50051);
+    private static bool IsLoopback(Uri endpoint) => endpoint.IsLoopback;
 }
