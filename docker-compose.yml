@@ -1,0 +1,178 @@
+name: gameshell
+
+x-backend-environment: &backend-environment
+  GAMECLUB_ENVIRONMENT: ${GAMECLUB_ENVIRONMENT:-dev}
+  GAMECLUB_POSTGRES_DSN: ${GAMECLUB_POSTGRES_DSN:-postgresql+asyncpg://gameclub:${GAMECLUB_DB_PASSWORD:-gameclub-local-only}@postgres:5432/gameclub}
+  GAMECLUB_REDIS_URL: ${GAMECLUB_REDIS_URL:-redis://redis:6379/0}
+  GAMECLUB_HTTP_HOST: 0.0.0.0
+  GAMECLUB_HTTP_PORT: 8000
+  GAMECLUB_GRPC_HOST: 0.0.0.0
+  GAMECLUB_GRPC_PORT: 50051
+  GAMECLUB_GRPC_TLS_CERT_FILE: ${GAMECLUB_GRPC_TLS_CERT_FILE:-}
+  GAMECLUB_GRPC_TLS_KEY_FILE: ${GAMECLUB_GRPC_TLS_KEY_FILE:-}
+  GAMECLUB_GRPC_TLS_CLIENT_CA_FILE: ${GAMECLUB_GRPC_TLS_CLIENT_CA_FILE:-}
+  GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE: ${GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE:-false}
+  GAMECLUB_JWT_SECRET: ${GAMECLUB_JWT_SECRET:-gameclub-local-jwt-secret-change-me}
+  GAMECLUB_JWT_ISSUER: ${GAMECLUB_JWT_ISSUER:-gameclub-backend}
+  GAMECLUB_JWT_AUDIENCE: ${GAMECLUB_JWT_AUDIENCE:-gameclub-clients}
+  GAMECLUB_JWT_ACCESS_TTL_SECONDS: ${GAMECLUB_JWT_ACCESS_TTL_SECONDS:-900}
+  GAMECLUB_JWT_REFRESH_TTL_SECONDS: ${GAMECLUB_JWT_REFRESH_TTL_SECONDS:-7776000}
+  GAMECLUB_DEV_OPERATOR_USERNAME: ${GAMECLUB_DEV_OPERATOR_USERNAME:-operator}
+  GAMECLUB_DEV_OPERATOR_PASSWORD: ${GAMECLUB_DEV_OPERATOR_PASSWORD:-change-me-locally}
+  GAMECLUB_DEVICE_BOOTSTRAP_TOKEN: ${GAMECLUB_DEVICE_BOOTSTRAP_TOKEN:-change-me-locally}
+  GAMECLUB_WORKSTATION_STALE_AFTER_SECONDS: ${GAMECLUB_WORKSTATION_STALE_AFTER_SECONDS:-45}
+  GAMECLUB_WORKSTATION_OFFLINE_AFTER_SECONDS: ${GAMECLUB_WORKSTATION_OFFLINE_AFTER_SECONDS:-120}
+  GAMECLUB_WORKSTATION_COMMAND_TTL_SECONDS: ${GAMECLUB_WORKSTATION_COMMAND_TTL_SECONDS:-120}
+  GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES: ${GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES:-15}
+  GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS: ${GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS:-60}
+  GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS: ${GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS:-60}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gameclub
+      POSTGRES_USER: gameclub
+      POSTGRES_PASSWORD: ${GAMECLUB_DB_PASSWORD:-gameclub-local-only}
+    ports:
+      - "127.0.0.1:${GAMECLUB_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - gameclub-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameclub -d gameclub"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${GAMECLUB_REDIS_PORT:-6379}:6379"
+    volumes:
+      - gameclub-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  backend-migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend-http:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8000", "gameclub_backend.presentation.http.app:app"]
+    environment:
+      <<: *backend-environment
+    ports:
+      - "127.0.0.1:${GAMECLUB_HTTP_PORT:-8000}:8000"
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  backend-grpc:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "gameclub_backend.main"]
+    environment:
+      <<: *backend-environment
+    ports:
+      - "127.0.0.1:${GAMECLUB_GRPC_PORT:-50051}:50051"
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 50051), 2).close()"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["dramatiq", "gameclub_backend.jobs.reservations", "gameclub_backend.jobs.billing", "gameclub_backend.jobs.cash_shifts", "--processes", "1", "--threads", "4"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "gameclub_backend.jobs.scheduler"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_GAMECLUB_DATA_MODE: ${VITE_GAMECLUB_DATA_MODE:-live}
+    ports:
+      - "127.0.0.1:${GAMECLUB_FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend-http:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  gameclub-postgres-data:
+  gameclub-redis-data:

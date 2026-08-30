@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package gameclub.cash_shifts.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.CashShifts.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service CashShiftService {
+  rpc Open(OpenCashShiftRequest) returns (CashShift);
+  rpc Get(GetCashShiftRequest) returns (CashShift);
+  rpc List(ListCashShiftsRequest) returns (ListCashShiftsResponse);
+  rpc ListMovements(ListCashMovementsRequest) returns (ListCashMovementsResponse);
+  rpc RecordMovement(RecordCashMovementRequest) returns (CashMovement);
+  rpc Close(CloseCashShiftRequest) returns (CashShift);
+  rpc Approve(CreateCashApprovalRequest) returns (CashApproval);
+}
+
+enum CashShiftStatus {
+  CASH_SHIFT_STATUS_UNSPECIFIED = 0;
+  CASH_SHIFT_STATUS_OPEN = 1;
+  CASH_SHIFT_STATUS_CLOSED = 2;
+}
+
+enum CashMovementDirection {
+  CASH_MOVEMENT_DIRECTION_UNSPECIFIED = 0;
+  CASH_MOVEMENT_DIRECTION_CASH_IN = 1;
+  CASH_MOVEMENT_DIRECTION_CASH_OUT = 2;
+  CASH_MOVEMENT_DIRECTION_CORRECTION = 3;
+}
+
+message CashShift {
+  string id = 1;
+  string register_id = 2;
+  string opened_by = 3;
+  google.protobuf.Timestamp opened_at = 4;
+  int64 opening_balance_cents = 5;
+  int64 expected_close_cents = 6;
+  CashShiftStatus status = 7;
+  string closed_by = 8;
+  google.protobuf.Timestamp closed_at = 9;
+  int64 actual_close_cents = 10;
+  int64 difference_cents = 11;
+}
+
+message CashMovement {
+  string id = 1;
+  string shift_id = 2;
+  CashMovementDirection direction = 3;
+  int64 amount_cents = 4;
+  string reason = 5;
+  string actor_id = 6;
+  string idempotency_key = 7;
+  google.protobuf.Timestamp created_at = 8;
+  string reference_type = 9;
+  string reference_id = 10;
+}
+
+message CashApproval {
+  string id = 1;
+  string shift_id = 2;
+  string kind = 3;
+  string target_key = 4;
+  string approved_by = 5;
+  string reason = 6;
+  string idempotency_key = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message OpenCashShiftRequest {
+  string register_id = 1;
+  int64 opening_balance_cents = 2;
+  string idempotency_key = 3;
+}
+
+message GetCashShiftRequest {
+  string shift_id = 1;
+}
+
+message ListCashShiftsRequest {
+  int32 limit = 1;
+}
+
+message ListCashShiftsResponse {
+  repeated CashShift shifts = 1;
+}
+
+message ListCashMovementsRequest {
+  string shift_id = 1;
+  int32 limit = 2;
+}
+
+message ListCashMovementsResponse {
+  repeated CashMovement movements = 1;
+}
+
+message RecordCashMovementRequest {
+  string shift_id = 1;
+  CashMovementDirection direction = 2;
+  int64 amount_cents = 3;
+  string reason = 4;
+  string reference_type = 5;
+  string reference_id = 6;
+  string idempotency_key = 7;
+  string approval_id = 8;
+}
+
+message CloseCashShiftRequest {
+  string shift_id = 1;
+  int64 actual_close_cents = 2;
+  string idempotency_key = 3;
+  string approval_id = 4;
+}
+
+message CreateCashApprovalRequest {
+  string shift_id = 1;
+  string kind = 2;
+  string target_key = 3;
+  string reason = 4;
+  string idempotency_key = 5;
+}

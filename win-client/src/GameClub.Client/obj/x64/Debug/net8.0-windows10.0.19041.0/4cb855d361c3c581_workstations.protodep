@@ -1,0 +1,3 @@
+obj/x64/Debug/net8.0-windows10.0.19041.0/Workstations.cs \
+obj/x64/Debug/net8.0-windows10.0.19041.0/WorkstationsGrpc.cs: /home/daniel/.nuget/packages/grpc.tools/2.66.0/build/native/include/google/protobuf/timestamp.proto\
+ ../../../backend/proto/gameclub/v1/workstations.proto

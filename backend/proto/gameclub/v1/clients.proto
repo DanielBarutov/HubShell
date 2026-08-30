@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package gameclub.clients.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Clients.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service ClientService {
+  rpc Create(CreateClientRequest) returns (Client);
+  rpc Search(SearchClientsRequest) returns (SearchClientsResponse);
+  rpc Get(GetClientRequest) returns (Client);
+  rpc TopUp(TopUpRequest) returns (TopUpResponse);
+  rpc ListBalanceOperations(ListBalanceOperationsRequest) returns (ListBalanceOperationsResponse);
+  rpc CreateGuest(CreateGuestRequest) returns (Guest);
+  rpc SearchGuests(SearchGuestsRequest) returns (SearchGuestsResponse);
+  rpc GetGuest(GetGuestRequest) returns (Guest);
+  rpc ListGuests(ListGuestsRequest) returns (ListGuestsResponse);
+}
+
+message Client {
+  string id = 1;
+  string nickname = 2;
+  string phone = 3;
+  string discount_category = 4;
+  int64 balance_cents = 5;
+  int64 balance_bonus = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp blocked_at = 9;
+}
+
+message CreateClientRequest {
+  string nickname = 1;
+  string phone = 2;
+  string discount_category = 3;
+}
+
+message SearchClientsRequest {
+  string query = 1;
+  enum Field {
+    FIELD_UNSPECIFIED = 0;
+    FIELD_NICKNAME = 1;
+    FIELD_PHONE = 2;
+  }
+  Field field = 2;
+}
+
+message SearchClientsResponse {
+  repeated Client clients = 1;
+}
+
+message GetClientRequest {
+  string client_id = 1;
+}
+
+message TopUpRequest {
+  string client_id = 1;
+  int64 amount_cents = 2;
+  int64 bonus_amount = 3;
+  string reason = 4;
+  string idempotency_key = 5;
+}
+
+message TopUpResponse {
+  Client client = 1;
+  string operation_id = 2;
+  string idempotency_key = 3;
+}
+
+message BalanceOperation {
+  string id = 1;
+  string client_id = 2;
+  string operation_type = 3;
+  int64 amount_cents = 4;
+  int64 bonus_amount = 5;
+  string reason = 6;
+  string actor_id = 7;
+  string idempotency_key = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ListBalanceOperationsRequest {
+  string client_id = 1;
+  int32 limit = 2;
+}
+
+message ListBalanceOperationsResponse {
+  repeated BalanceOperation operations = 1;
+}
+
+message Guest {
+  string id = 1;
+  string nickname = 2;
+  string phone = 3;
+  string discount_category = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message CreateGuestRequest {
+  string nickname = 1;
+  string phone = 2;
+  string discount_category = 3;
+}
+
+message SearchGuestsRequest {
+  string query = 1;
+  enum Field {
+    FIELD_UNSPECIFIED = 0;
+    FIELD_NICKNAME = 1;
+    FIELD_PHONE = 2;
+  }
+  Field field = 2;
+}
+
+message SearchGuestsResponse {
+  repeated Guest guests = 1;
+}
+
+message GetGuestRequest {
+  string guest_id = 1;
+}
+
+message ListGuestsRequest {}
+
+message ListGuestsResponse {
+  repeated Guest guests = 1;
+}

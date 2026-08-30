@@ -1,0 +1,1 @@
+"""Workstations bounded context."""

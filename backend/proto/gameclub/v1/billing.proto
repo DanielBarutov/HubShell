@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package gameclub.billing.v1;
+
+option csharp_namespace = "GameClub.Client.Contracts.Billing.V1";
+
+import "google/protobuf/timestamp.proto";
+
+service BillingService {
+  rpc ChargeSession(ChargeSessionRequest) returns (SessionCharge);
+  rpc GetSessionCharge(GetSessionChargeRequest) returns (SessionCharge);
+  rpc GetRevenue(GetRevenueRequest) returns (RevenueSummary);
+}
+
+message SessionCharge {
+  string id = 1;
+  string session_id = 2;
+  string client_id = 3;
+  string balance_operation_id = 4;
+  string tariff_id = 5;
+  int32 duration_minutes = 6;
+  int64 amount_cents = 7;
+  int64 amount_before_discount_cents = 8;
+  int64 discount_amount_cents = 9;
+  int32 discount_percent_bps = 10;
+  string discount_category = 11;
+  string charged_by = 12;
+  string idempotency_key = 13;
+  google.protobuf.Timestamp created_at = 14;
+}
+
+message ChargeSessionRequest {
+  string session_id = 1;
+  string idempotency_key = 2;
+}
+
+message GetSessionChargeRequest {
+  string session_id = 1;
+}
+
+message GetRevenueRequest {
+  google.protobuf.Timestamp start_at = 1;
+  google.protobuf.Timestamp end_at = 2;
+}
+
+message RevenueSummary {
+  google.protobuf.Timestamp start_at = 1;
+  google.protobuf.Timestamp end_at = 2;
+  int64 amount_cents = 3;
+  int64 charge_count = 4;
+}

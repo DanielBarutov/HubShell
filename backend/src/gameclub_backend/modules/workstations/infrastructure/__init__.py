@@ -1,0 +1,1 @@
+"""Workstations infrastructure adapters."""
