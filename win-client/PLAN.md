@@ -5,7 +5,7 @@
 Владелец: `win-client/`  
 Зависимости: `backend/PLAN.md`, Workstations и Auth
 
-Детальный план lockdown и Windows provisioning: [`plans/22-windows-lockdown/PLAN.md`](plans/22-windows-lockdown/PLAN.md).
+Детальный план lockdown и Windows provisioning: [`plans/22-windows-lockdown/PLAN.md`](../plans/22-windows-lockdown/PLAN.md).
 
 ## Цель
 
@@ -94,7 +94,7 @@
     аутентифицированный heartbeat, а клиент держит verifier только в памяти.
     Для production остаются отдельные enrollment/rotation и Windows Credential
     Manager hardening; dev fallback — PBKDF2-verifier базового `password`.
-22. [ ] Выполнить план [`plans/22-windows-lockdown/PLAN.md`](plans/22-windows-lockdown/PLAN.md):
+22. [ ] Выполнить план [`plans/22-windows-lockdown/PLAN.md`](../plans/22-windows-lockdown/PLAN.md):
     разделить app-level shell lock и Windows security boundary, добавить
     декларативную policy группы, безопасный session lock и обратимый provisioning
     Assigned Access/Shell Launcher.

@@ -94,7 +94,7 @@ reconciliation record; при сбое после debit запись получ�
 а worker повторяет charge с тем же ledger key. Оператор может посмотреть такие
 записи через `GET /api/v1/billing/reconciliation`. Дизайн следующего финансового
 среза для бонусов, кассы, возвратов и внешних платежей описан в
-[`plans/07-billing/FUTURE-FINANCE.md`](plans/07-billing/FUTURE-FINANCE.md).
+[`plans/07-billing/FUTURE-FINANCE.md`](../plans/07-billing/FUTURE-FINANCE.md).
 Read-only выручка за период доступна через защищённый
 `GET /api/v1/billing/revenue?start_at=...&end_at=...`; она агрегирует только
 сохранённые `SessionCharge` в полуоткрытом UTC-интервале и возвращает сумму в
@@ -139,7 +139,7 @@ insecure transport разрешён только для локальной ра�
 versioned файлы в `proto/gameclub/v1/`; Python-типы генерируются командой `make proto`.
 
 Threat model, JWT policy, secret handling и границы доверия описаны в
-[`plans/04-auth-security/THREAT-MODEL.md`](plans/04-auth-security/THREAT-MODEL.md).
+[`plans/04-auth-security/THREAT-MODEL.md`](../plans/04-auth-security/THREAT-MODEL.md).
 
 Фоновый worker запускается командой `make worker`. Сейчас он предоставляет
 идемпотентные async-срезы массового no-show и billing reconciliation для

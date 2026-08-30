@@ -223,7 +223,7 @@ DTO через application boundary и не получают прямого до
 
 Cash Shifts не изменяет `Clients.balance`, не создаёт `SessionCharge` и не
 читает сырые таблицы Reports. Provider-neutral граница связи с Billing и
-внешними платежами зафиксирована в `backend/plans/09-cash-shifts/PRODUCER-CONTRACT.md`;
+внешними платежами зафиксирована в `plans/09-cash-shifts/PRODUCER-CONTRACT.md`;
 реальные producer-адаптеры добавляются отдельно.
 Application service повторно проверяет approval для correction и закрытия с
 расхождением; transport-level permission check не считается единственной
@@ -454,15 +454,25 @@ pytest
 AGENTS.md
 plans/
   README.md
+  SUMMARY.md
+  VERIFICATION.md
+  00-foundation/
+  01-workstations/
+  02-clients-guests/
+  03-catalog-time-tariffs/
+  04-auth-security/
+  05-reservations/
+  06-sessions/
+  07-billing/
+  08-reports-dashboard/
+  09-cash-shifts/
+  10-product-sales/
+  11-analytics/
+  12-live-metered-billing/
+  13-payment-methods/
+  22-windows-lockdown/
 backend/
   PLAN.md
-  plans/
-    00-foundation/
-    01-workstations/
-    02-clients-guests/
-    03-catalog-time-tariffs/
-    04-auth-security/
-    05-reservations/
 frontend/
   PLAN.md
 win-client/
@@ -471,7 +481,12 @@ win-client/
 
 Фактическая внутренняя структура может уточняться планом, но границы трёх частей должны сохраняться. Proto-контракты размещаются в одном явно обозначенном месте и не копируются вручную в разные части проекта.
 
-`plans/README.md` хранит общий индекс и зависимости. План backend находится в `backend/PLAN.md`, планы backend-модулей — в отдельных папках `backend/plans/<module>/`, план web — в `frontend/PLAN.md`, план Windows-клиента — в `win-client/PLAN.md`. План должен содержать цель, границы, решения, задачи, критерии готовности, проверки, риски и открытые вопросы. Завершённые пункты отмечаются явно; документация не должна описывать нереализованное как готовое.
+`plans/README.md` хранит общий индекс и зависимости. Детальные планы модулей
+находятся в отдельных папках `plans/<module>/`; обзорные owner-level планы
+остаются в `backend/PLAN.md`, `frontend/PLAN.md` и `win-client/PLAN.md`. План
+должен содержать цель, границы, решения, задачи, критерии готовности, проверки,
+риски и открытые вопросы. Завершённые пункты отмечаются явно; документация не
+должна описывать нереализованное как готовое.
 
 ## 13. Рабочий процесс агента
 

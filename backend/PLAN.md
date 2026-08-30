@@ -25,19 +25,19 @@
 
 ## Порядок реализации
 
-1. `backend/plans/00-foundation` — каркас, инструменты, инфраструктура и общие контракты.
-2. `backend/plans/04-auth-security` — базовая identity/auth policy параллельно с foundation.
-3. `backend/plans/01-workstations` — ПК, группы, heartbeat и команды.
-4. `backend/plans/02-clients-guests` — клиенты, поиск, ledger баланса.
-5. `backend/plans/03-catalog-time-tariffs` — товары, время и расчёт тарифов.
-6. `backend/plans/05-reservations` — доступность и бронирование мест.
-7. `backend/plans/06-sessions` — фактические игровые сессии и lifecycle.
-8. `backend/plans/07-billing` — списание за завершённую сессию и financial snapshot.
-9. `backend/plans/08-reports-dashboard` — read-only показатели и отчётная выручка.
-10. `backend/plans/09-cash-shifts` — кассовые смены и наличный ledger.
-11. `backend/plans/10-product-sales` — продажи товаров, snapshots и settlement.
-12. `backend/plans/11-analytics` — клиентская и клубная read-only аналитика.
-13. `backend/plans/13-payment-methods` — настройки способов оплаты клуба.
+1. `../plans/00-foundation` — каркас, инструменты, инфраструктура и общие контракты.
+2. `../plans/04-auth-security` — базовая identity/auth policy параллельно с foundation.
+3. `../plans/01-workstations` — ПК, группы, heartbeat и команды.
+4. `../plans/02-clients-guests` — клиенты, поиск, ledger баланса.
+5. `../plans/03-catalog-time-tariffs` — товары, время и расчёт тарифов.
+6. `../plans/05-reservations` — доступность и бронирование мест.
+7. `../plans/06-sessions` — фактические игровые сессии и lifecycle.
+8. `../plans/07-billing` — списание за завершённую сессию и financial snapshot.
+9. `../plans/08-reports-dashboard` — read-only показатели и отчётная выручка.
+10. `../plans/09-cash-shifts` — кассовые смены и наличный ledger.
+11. `../plans/10-product-sales` — продажи товаров, snapshots и settlement.
+12. `../plans/11-analytics` — клиентская и клубная read-only аналитика.
+13. `../plans/13-payment-methods` — настройки способов оплаты клуба.
 
 Frontend и Windows-клиент начинают интеграцию после фиксации нужных контрактов, но их UI-каркас может разрабатываться параллельно.
 

@@ -52,7 +52,7 @@
 
 Первый рабочий срез выполнен для Python backend: зависимости установлены через `uv`, FastAPI health endpoints и gRPC `GetHealth` работают. PostgreSQL/Redis прошли локальную проверку, protobuf source-of-truth проверен для Python/C# consumers, Windows/C# runtime-сборка ещё не проверялась. Dramatiq worker проверен на stub broker и в полном Docker Compose dev-стеке с PostgreSQL/Redis; scheduler и Alembic migration также проверены в compose-запуске.
 
-Общий transport-контракт зафиксирован в [`backend/docs/ERRORS.md`](../../docs/ERRORS.md):
+Общий transport-контракт зафиксирован в [`backend/docs/ERRORS.md`](../../backend/docs/ERRORS.md):
 application codes, HTTP/gRPC statuses, request ID, deadline и cancellation policy.
 
 ## Критерии готовности

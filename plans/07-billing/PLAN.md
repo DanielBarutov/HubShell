@@ -2,7 +2,7 @@
 
 Статус: `in_progress`  
 Приоритет: `P0`  
-Владелец: `backend/plans/07-billing/`  
+Владелец: `plans/07-billing/`
 Зависимости: Clients, Catalog, Sessions, Auth/Security
 
 ## Цель
