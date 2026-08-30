@@ -52,7 +52,7 @@
 12. [x] Добавить versioned декларативную lockdown policy группы: режим
     `app_gate`/`assigned_access`/`shell_launcher`, app-shell поведение после
     сессии и allowlist ограничений Windows; native применение остаётся планом
-    `win-client/plans/22-windows-lockdown`.
+    `plans/22-windows-lockdown`.
 
 Текущий транспортный срез: gRPC handlers для workstations, clients, catalog и reservations
 подключены к общим Application-сервисам. Для workstations добавлены `DispatchCommand`,

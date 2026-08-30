@@ -23,6 +23,9 @@
 | Live metered sessions | per-minute tariff, free grace minutes, delta debit, insufficient-balance stop, sequential block quantity и session meter persistence | успешно | Unit suite и PostgreSQL-backed suite; guest без client ledger остаётся cashier flow |
 | Operator map quick operations | карта как главный экран, PC context menu, tariff mini-cards, guest/client selection, inline product sale and top-up | успешно | Playwright headed smoke на локальном Compose; device command runtime требует Windows |
 
+Подробная последовательность проверки физического Windows-ПК находится в
+[../win-client/docs/REAL-PC-VERIFICATION.md](../win-client/docs/REAL-PC-VERIFICATION.md).
+
 ## Повторяемые команды
 
 Backend:

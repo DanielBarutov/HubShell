@@ -1,6 +1,6 @@
 # План 10 — Product Sales / Продажи товаров
 
-Статус: `completed`  
+Статус: `done`
 Приоритет: `P0`  
 Владелец: `backend/`  
 Зависимости: `02-clients-guests`, `03-catalog-time-tariffs`, `09-cash-shifts`

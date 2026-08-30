@@ -2,7 +2,7 @@
 
 Статус: `in_progress`  
 Приоритет: `P1`  
-Владелец: `backend/plans/09-cash-shifts/`  
+Владелец: `plans/09-cash-shifts/`
 Зависимости: `07-billing`, `08-reports-dashboard`, `04-auth-security`
 
 ## Цель

@@ -1,5 +1,8 @@
 # GameClub Windows client
 
+Пошаговая проверка на реальном Windows-ПК находится в
+[docs/REAL-PC-VERIFICATION.md](docs/REAL-PC-VERIFICATION.md).
+
 Целевая платформа и границы проверок описаны в
 [`docs/SUPPORT-MATRIX.md`](docs/SUPPORT-MATRIX.md).
 
