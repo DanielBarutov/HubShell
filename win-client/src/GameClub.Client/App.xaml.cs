@@ -1,10 +1,11 @@
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using XamlApplication = Microsoft.UI.Xaml.Application;
 
 namespace GameClub.Client;
 
-public partial class App : Application
+public partial class App : XamlApplication
 {
     public static MainWindow? MainWindow { get; private set; }
 

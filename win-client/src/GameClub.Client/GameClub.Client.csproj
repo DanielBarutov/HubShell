@@ -15,6 +15,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />
+
+    <!--
+      WinUI XAML Pass1 inspects the C# project before the regular C# compile.
+      Generate protobuf consumers first so the XAML compiler can resolve the
+      GameClub.Client.Contracts namespace on a clean publish.
+    -->
+    <MarkupCompilePass1DependsOn>
+      Protobuf_Compile;
+      $(MarkupCompilePass1DependsOn)
+    </MarkupCompilePass1DependsOn>
   </PropertyGroup>
 
   <ItemGroup>

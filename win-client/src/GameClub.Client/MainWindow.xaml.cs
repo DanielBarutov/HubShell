@@ -1,5 +1,6 @@
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
+using GameClub.Client.Domain;
 using GameClub.Client.Infrastructure;
 using GameClub.Client.Presentation;
 using Microsoft.UI;
@@ -8,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using WinRT.Interop;
+using XamlApplication = Microsoft.UI.Xaml.Application;
 
 namespace GameClub.Client;
 
@@ -235,7 +237,7 @@ public sealed partial class MainWindow : Window
     private void ApplyTheme(string theme)
     {
         _viewModel.ApplyTheme(theme);
-        ((App)Application.Current).ApplyWorkstationTheme(theme);
+        ((App)XamlApplication.Current).ApplyWorkstationTheme(theme);
     }
 
 }
