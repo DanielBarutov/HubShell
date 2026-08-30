@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using WinRT.Interop;
+using Windows.Graphics;
 using XamlApplication = Microsoft.UI.Xaml.Application;
 
 namespace GameClub.Client;
@@ -17,6 +18,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly AppWindow _appWindow;
+    private readonly IWorkstationPowerController _powerController;
 
     public MainWindow()
     {
@@ -38,7 +40,7 @@ public sealed partial class MainWindow : Window
             environment);
         var tokenProvider = CreateTokenProvider(authAddress, environment);
         var accessCredentials = new EnvironmentAccessCredentialVerifier(environment);
-        var powerController = new WindowsWorkstationPowerController();
+        _powerController = new WindowsWorkstationPowerController();
         var deviceId = Environment.GetEnvironmentVariable("GAMECLUB_DEVICE_ID")?.Trim();
         _viewModel = new MainViewModel(
             new ClientSessionCoordinator(
@@ -49,7 +51,7 @@ public sealed partial class MainWindow : Window
             deviceId,
             "0.1.0",
             new[] { "commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1" },
-            powerController);
+            _powerController);
         ContentRoot.DataContext = _viewModel;
         _ = StartClientAsync();
     }
@@ -72,7 +74,7 @@ public sealed partial class MainWindow : Window
                         _viewModel.DeviceId,
                         _viewModel.BackendClient,
                         ApplyThemeFromCommand,
-                        powerController,
+                        _powerController,
                         RegisterSessionStartedFromCommand,
                         RegisterSessionStoppedFromCommand,
                         LockClientFromCommand)));
@@ -231,7 +233,7 @@ public sealed partial class MainWindow : Window
 
     private void LockClientFromCommand()
     {
-        DispatcherQueue.TryEnqueue(_viewModel.LockClient);
+        DispatcherQueue.TryEnqueue(() => _viewModel.LockClient());
     }
 
     private void ApplyTheme(string theme)
