@@ -13,6 +13,10 @@ export type BackendWorkstation = {
   capabilities?: string[];
   theme: "standard" | "vip" | "neon" | "minimal";
   archived_at?: string | null;
+  active_session_id?: string | null;
+  active_session_status?: string | null;
+  session_server_time?: string | null;
+  session_snapshot?: BackendSessionSnapshot | null;
 };
 
 export function normalizePhoneQuery(value: string): string {
@@ -118,9 +122,12 @@ export type BackendGuestSessionPayment = {
   total_price_cents: number;
   payment_parts: BackendPaymentPart[];
   cash_shift_id: string;
-  status: "confirmed";
+  status: "pending" | "confirmed" | "needs_review";
   idempotency_key: string;
   created_at: string;
+  attempts: number;
+  next_attempt_at: string;
+  settlement_error: string | null;
 };
 
 export type BackendAuditEvent = {
@@ -128,7 +135,7 @@ export type BackendAuditEvent = {
   actor_id: string | null;
   action: string;
   resource_path: string;
-  outcome: "success" | "failure";
+  outcome: "success" | "failure" | "retryable" | "needs_review" | "cancelled" | "pending";
   status_code: number;
   request_id: string | null;
   created_at: string;
@@ -223,6 +230,8 @@ export type BackendProductSale = {
   completed_at: string | null;
   payment_parts: BackendPaymentPart[];
   settlement_error: string | null;
+  attempts: number;
+  next_attempt_at: string;
 };
 
 export type BackendTopProduct = {
@@ -424,6 +433,7 @@ export type BackendSessionSnapshot = {
   entitlements: BackendSnapshotEntitlement[];
   meter: BackendSessionMeter | null;
   allowed_actions: string[];
+  device_id?: string;
 };
 
 export type BackendSnapshotEntitlement = {
@@ -753,6 +763,10 @@ export class GameClubApi {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
     });
+  }
+
+  async getTransferRestartStatus(offerId: string): Promise<BackendCommand> {
+    return this.request<BackendCommand>(`/session-transfers/offers/${offerId}/restart`);
   }
 
   async checkEntry(
@@ -1108,6 +1122,16 @@ export class GameClubApi {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
+    });
+  }
+
+  async reconcileSale(saleId: string): Promise<BackendProductSale> {
+    return this.request<BackendProductSale>(`/sales/${saleId}/reconcile`, { method: "POST" });
+  }
+
+  async retryGuestPayment(paymentId: string): Promise<BackendGuestSessionPayment> {
+    return this.request<BackendGuestSessionPayment>(`/guest-payments/${paymentId}/retry`, {
+      method: "POST",
     });
   }
 

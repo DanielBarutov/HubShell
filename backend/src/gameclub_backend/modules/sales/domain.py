@@ -41,6 +41,8 @@ class ProductSale:
     product_category: str = ""
     payment_parts: tuple[PaymentPart, ...] = ()
     settlement_error: str | None = None
+    attempts: int = 0
+    next_attempt_at: datetime.datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.product_name.strip():
@@ -78,7 +80,13 @@ class ProductSale:
             raise ValueError("Multiple payment parts require mixed payment")
         if not self.sold_by.strip() or not self.idempotency_key.strip():
             raise ValueError("Product sale author and idempotency key are required")
+        if self.attempts < 0:
+            raise ValueError("Product sale attempts cannot be negative")
+        next_attempt_at = self.next_attempt_at or self.created_at
+        if next_attempt_at.tzinfo is None:
+            raise ValueError("Product sale retry timestamp must include timezone")
         object.__setattr__(self, "payment_parts", parts)
+        object.__setattr__(self, "next_attempt_at", next_attempt_at)
 
     def complete(self, now: datetime.datetime) -> "ProductSale":
         if self.status is not ProductSaleStatus.PENDING:
@@ -88,9 +96,14 @@ class ProductSale:
             status=ProductSaleStatus.COMPLETED,
             completed_at=now,
             settlement_error=None,
+            next_attempt_at=now,
         )
 
-    def needs_review(self, error: str) -> "ProductSale":
+    def needs_review(
+        self,
+        error: str,
+        now: datetime.datetime | None = None,
+    ) -> "ProductSale":
         if self.status is ProductSaleStatus.COMPLETED:
             return self
         normalized_error = error.strip()
@@ -100,6 +113,46 @@ class ProductSale:
             self,
             status=ProductSaleStatus.NEEDS_REVIEW,
             settlement_error=normalized_error[:1_000],
+            attempts=self.attempts + 1,
+            next_attempt_at=now or self.next_attempt_at,
+        )
+
+    def schedule_retry(self, error: str, now: datetime.datetime) -> "ProductSale":
+        if now.tzinfo is None:
+            raise ValueError("Product sale retry time must include timezone")
+        normalized_error = error.strip()
+        if not normalized_error:
+            raise ValueError("Product sale retry reason is required")
+        attempt = self.attempts + 1
+        delay_seconds = min(300, 2 ** min(attempt, 8))
+        return dataclasses.replace(
+            self,
+            status=ProductSaleStatus.PENDING,
+            attempts=attempt,
+            next_attempt_at=now + datetime.timedelta(seconds=delay_seconds),
+            settlement_error=normalized_error[:1_000],
+        )
+
+    def is_due(self, now: datetime.datetime) -> bool:
+        return (
+            self.status is ProductSaleStatus.PENDING
+            and self.next_attempt_at is not None
+            and self.next_attempt_at <= now
+        )
+
+    def reopen_for_review(
+        self,
+        now: datetime.datetime | None = None,
+    ) -> "ProductSale":
+        if self.status is ProductSaleStatus.COMPLETED:
+            return self
+        if self.status is not ProductSaleStatus.NEEDS_REVIEW:
+            return self
+        return dataclasses.replace(
+            self,
+            status=ProductSaleStatus.PENDING,
+            settlement_error=None,
+            next_attempt_at=now or self.created_at,
         )
 
     def cancel(self) -> "ProductSale":

@@ -23,9 +23,10 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from gameclub.v1 import sessions_pb2 as gameclub_dot_v1_dot_sessions__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1egameclub/v1/workstations.proto\x12\x18gameclub.workstations.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x03\n\x0bWorkstation\x12\n\n\x02id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x10\n\x08group_id\x18\x04 \x01(\t\x12\x10\n\x08position\x18\x05 \x01(\x05\x12;\n\x06status\x18\x06 \x01(\x0e\x32+.gameclub.workstations.v1.WorkstationStatus\x12\x30\n\x0clast_seen_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x0e\x63lient_version\x18\x08 \x01(\t\x12\x17\n\x0f\x64isabled_reason\x18\t \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\n \x03(\t\x12\r\n\x05theme\x18\x0b \x01(\t\x12!\n\x19manager_password_verifier\x18\x0c \x01(\t\x12L\n\x0flockdown_policy\x18\r \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\"\xb9\x01\n\x10WorkstationGroup\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\r\n\x05theme\x18\x03 \x01(\t\x12.\n\nupdated_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12L\n\x0flockdown_policy\x18\x05 \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\"\xed\x02\n\x19WorkstationLockdownPolicy\x12\x17\n\x0f\x64\x65ployment_mode\x18\x01 \x01(\t\x12\x15\n\rshell_enabled\x18\x02 \x01(\x08\x12\x1f\n\x17user_self_login_enabled\x18\x03 \x01(\x08\x12\x1a\n\x12lock_after_session\x18\x04 \x01(\x08\x12\x1d\n\x15restart_after_session\x18\x05 \x01(\x08\x12\x15\n\rhidden_drives\x18\x06 \x03(\t\x12\x1e\n\x16\x62lock_external_storage\x18\x07 \x01(\x08\x12\x1a\n\x12\x64isable_start_menu\x18\x08 \x01(\x08\x12!\n\x19\x64isable_desktop_switching\x18\t \x01(\x08\x12\x1c\n\x14\x62locked_window_rules\x18\n \x03(\t\x12\x1f\n\x17\x61llowed_application_ids\x18\x0b \x03(\t\x12\x0f\n\x07version\x18\x0c \x01(\x05\"\x1e\n\x1cListWorkstationGroupsRequest\"[\n\x1dListWorkstationGroupsResponse\x12:\n\x06groups\x18\x01 \x03(\x0b\x32*.gameclub.workstations.v1.WorkstationGroup\"\x96\x01\n\x1dUpsertWorkstationGroupRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\r\n\x05theme\x18\x03 \x01(\t\x12L\n\x0flockdown_policy\x18\x04 \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\"\x8f\x01\n\x1aRegisterWorkstationRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08group_id\x18\x03 \x01(\t\x12\x10\n\x08position\x18\x04 \x01(\x05\x12\x16\n\x0e\x63lient_version\x18\x05 \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\x06 \x03(\t\"S\n\x10HeartbeatRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x16\n\x0e\x63lient_version\x18\x02 \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\x03 \x03(\t\"+\n\x17ListWorkstationsRequest\x12\x10\n\x08group_id\x18\x01 \x01(\t\"W\n\x18ListWorkstationsResponse\x12;\n\x0cworkstations\x18\x01 \x03(\x0b\x32%.gameclub.workstations.v1.Workstation\"C\n\x19\x44isableWorkstationRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\xf7\x02\n\x12WorkstationCommand\x12\n\n\x02id\x18\x01 \x01(\t\x12\x16\n\x0eworkstation_id\x18\x02 \x01(\t\x12\x14\n\x0c\x63ommand_type\x18\x03 \x01(\t\x12\x14\n\x0cpayload_json\x18\x04 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x05 \x01(\t\x12\x42\n\x06status\x18\x06 \x01(\x0e\x32\x32.gameclub.workstations.v1.WorkstationCommandStatus\x12.\n\ncreated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x33\n\x0f\x61\x63knowledged_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1f\n\x17\x61\x63knowledgement_message\x18\t \x01(\t\x12.\n\nexpires_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"u\n\x16\x44ispatchCommandRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x14\n\x0c\x63ommand_type\x18\x02 \x01(\t\x12\x14\n\x0cpayload_json\x18\x03 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x04 \x01(\t\")\n\x14WatchCommandsRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\"d\n\x19\x41\x63knowledgeCommandRequest\x12\x12\n\ncommand_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x0f\n\x07message\x18\x04 \x01(\t*\xd5\x01\n\x11WorkstationStatus\x12\"\n\x1eWORKSTATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n\x1aWORKSTATION_STATUS_UNKNOWN\x10\x01\x12\x1d\n\x19WORKSTATION_STATUS_ONLINE\x10\x02\x12\x1c\n\x18WORKSTATION_STATUS_STALE\x10\x03\x12\x1e\n\x1aWORKSTATION_STATUS_OFFLINE\x10\x04\x12\x1f\n\x1bWORKSTATION_STATUS_DISABLED\x10\x05*\xe9\x01\n\x18WorkstationCommandStatus\x12*\n&WORKSTATION_COMMAND_STATUS_UNSPECIFIED\x10\x00\x12%\n!WORKSTATION_COMMAND_STATUS_QUEUED\x10\x01\x12+\n\'WORKSTATION_COMMAND_STATUS_ACKNOWLEDGED\x10\x02\x12%\n!WORKSTATION_COMMAND_STATUS_FAILED\x10\x03\x12&\n\"WORKSTATION_COMMAND_STATUS_EXPIRED\x10\x04\x32\x83\x08\n\x12WorkstationService\x12g\n\x08Register\x12\x34.gameclub.workstations.v1.RegisterWorkstationRequest\x1a%.gameclub.workstations.v1.Workstation\x12^\n\tHeartbeat\x12*.gameclub.workstations.v1.HeartbeatRequest\x1a%.gameclub.workstations.v1.Workstation\x12m\n\x04List\x12\x31.gameclub.workstations.v1.ListWorkstationsRequest\x1a\x32.gameclub.workstations.v1.ListWorkstationsResponse\x12\x65\n\x07\x44isable\x12\x33.gameclub.workstations.v1.DisableWorkstationRequest\x1a%.gameclub.workstations.v1.Workstation\x12q\n\x0f\x44ispatchCommand\x12\x30.gameclub.workstations.v1.DispatchCommandRequest\x1a,.gameclub.workstations.v1.WorkstationCommand\x12o\n\rWatchCommands\x12..gameclub.workstations.v1.WatchCommandsRequest\x1a,.gameclub.workstations.v1.WorkstationCommand0\x01\x12w\n\x12\x41\x63knowledgeCommand\x12\x33.gameclub.workstations.v1.AcknowledgeCommandRequest\x1a,.gameclub.workstations.v1.WorkstationCommand\x12}\n\nListGroups\x12\x36.gameclub.workstations.v1.ListWorkstationGroupsRequest\x1a\x37.gameclub.workstations.v1.ListWorkstationGroupsResponse\x12r\n\x0bUpsertGroup\x12\x37.gameclub.workstations.v1.UpsertWorkstationGroupRequest\x1a*.gameclub.workstations.v1.WorkstationGroupB,\xaa\x02)GameClub.Client.Contracts.Workstations.V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1egameclub/v1/workstations.proto\x12\x18gameclub.workstations.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1agameclub/v1/sessions.proto\"\xc8\x04\n\x0bWorkstation\x12\n\n\x02id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x10\n\x08group_id\x18\x04 \x01(\t\x12\x10\n\x08position\x18\x05 \x01(\x05\x12;\n\x06status\x18\x06 \x01(\x0e\x32+.gameclub.workstations.v1.WorkstationStatus\x12\x30\n\x0clast_seen_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x0e\x63lient_version\x18\x08 \x01(\t\x12\x17\n\x0f\x64isabled_reason\x18\t \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\n \x03(\t\x12\r\n\x05theme\x18\x0b \x01(\t\x12!\n\x19manager_password_verifier\x18\x0c \x01(\t\x12L\n\x0flockdown_policy\x18\r \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\x12\x19\n\x11\x61\x63tive_session_id\x18\x0e \x01(\t\x12\x1d\n\x15\x61\x63tive_session_status\x18\x0f \x01(\t\x12\x37\n\x13session_server_time\x18\x10 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12?\n\x10session_snapshot\x18\x11 \x01(\x0b\x32%.gameclub.sessions.v1.SessionSnapshot\"\xb9\x01\n\x10WorkstationGroup\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\r\n\x05theme\x18\x03 \x01(\t\x12.\n\nupdated_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12L\n\x0flockdown_policy\x18\x05 \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\"\xed\x02\n\x19WorkstationLockdownPolicy\x12\x17\n\x0f\x64\x65ployment_mode\x18\x01 \x01(\t\x12\x15\n\rshell_enabled\x18\x02 \x01(\x08\x12\x1f\n\x17user_self_login_enabled\x18\x03 \x01(\x08\x12\x1a\n\x12lock_after_session\x18\x04 \x01(\x08\x12\x1d\n\x15restart_after_session\x18\x05 \x01(\x08\x12\x15\n\rhidden_drives\x18\x06 \x03(\t\x12\x1e\n\x16\x62lock_external_storage\x18\x07 \x01(\x08\x12\x1a\n\x12\x64isable_start_menu\x18\x08 \x01(\x08\x12!\n\x19\x64isable_desktop_switching\x18\t \x01(\x08\x12\x1c\n\x14\x62locked_window_rules\x18\n \x03(\t\x12\x1f\n\x17\x61llowed_application_ids\x18\x0b \x03(\t\x12\x0f\n\x07version\x18\x0c \x01(\x05\"\x1e\n\x1cListWorkstationGroupsRequest\"[\n\x1dListWorkstationGroupsResponse\x12:\n\x06groups\x18\x01 \x03(\x0b\x32*.gameclub.workstations.v1.WorkstationGroup\"\x96\x01\n\x1dUpsertWorkstationGroupRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\r\n\x05theme\x18\x03 \x01(\t\x12L\n\x0flockdown_policy\x18\x04 \x01(\x0b\x32\x33.gameclub.workstations.v1.WorkstationLockdownPolicy\"\x8f\x01\n\x1aRegisterWorkstationRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08group_id\x18\x03 \x01(\t\x12\x10\n\x08position\x18\x04 \x01(\x05\x12\x16\n\x0e\x63lient_version\x18\x05 \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\x06 \x03(\t\"S\n\x10HeartbeatRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\x12\x16\n\x0e\x63lient_version\x18\x02 \x01(\t\x12\x14\n\x0c\x63\x61pabilities\x18\x03 \x03(\t\"+\n\x17ListWorkstationsRequest\x12\x10\n\x08group_id\x18\x01 \x01(\t\"W\n\x18ListWorkstationsResponse\x12;\n\x0cworkstations\x18\x01 \x03(\x0b\x32%.gameclub.workstations.v1.Workstation\"C\n\x19\x44isableWorkstationRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"\xf7\x02\n\x12WorkstationCommand\x12\n\n\x02id\x18\x01 \x01(\t\x12\x16\n\x0eworkstation_id\x18\x02 \x01(\t\x12\x14\n\x0c\x63ommand_type\x18\x03 \x01(\t\x12\x14\n\x0cpayload_json\x18\x04 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x05 \x01(\t\x12\x42\n\x06status\x18\x06 \x01(\x0e\x32\x32.gameclub.workstations.v1.WorkstationCommandStatus\x12.\n\ncreated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x33\n\x0f\x61\x63knowledged_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1f\n\x17\x61\x63knowledgement_message\x18\t \x01(\t\x12.\n\nexpires_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"u\n\x16\x44ispatchCommandRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x14\n\x0c\x63ommand_type\x18\x02 \x01(\t\x12\x14\n\x0cpayload_json\x18\x03 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x04 \x01(\t\")\n\x14WatchCommandsRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\t\"d\n\x19\x41\x63knowledgeCommandRequest\x12\x12\n\ncommand_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\x0f\n\x07success\x18\x03 \x01(\x08\x12\x0f\n\x07message\x18\x04 \x01(\t*\xd5\x01\n\x11WorkstationStatus\x12\"\n\x1eWORKSTATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n\x1aWORKSTATION_STATUS_UNKNOWN\x10\x01\x12\x1d\n\x19WORKSTATION_STATUS_ONLINE\x10\x02\x12\x1c\n\x18WORKSTATION_STATUS_STALE\x10\x03\x12\x1e\n\x1aWORKSTATION_STATUS_OFFLINE\x10\x04\x12\x1f\n\x1bWORKSTATION_STATUS_DISABLED\x10\x05*\xe9\x01\n\x18WorkstationCommandStatus\x12*\n&WORKSTATION_COMMAND_STATUS_UNSPECIFIED\x10\x00\x12%\n!WORKSTATION_COMMAND_STATUS_QUEUED\x10\x01\x12+\n\'WORKSTATION_COMMAND_STATUS_ACKNOWLEDGED\x10\x02\x12%\n!WORKSTATION_COMMAND_STATUS_FAILED\x10\x03\x12&\n\"WORKSTATION_COMMAND_STATUS_EXPIRED\x10\x04\x32\x83\x08\n\x12WorkstationService\x12g\n\x08Register\x12\x34.gameclub.workstations.v1.RegisterWorkstationRequest\x1a%.gameclub.workstations.v1.Workstation\x12^\n\tHeartbeat\x12*.gameclub.workstations.v1.HeartbeatRequest\x1a%.gameclub.workstations.v1.Workstation\x12m\n\x04List\x12\x31.gameclub.workstations.v1.ListWorkstationsRequest\x1a\x32.gameclub.workstations.v1.ListWorkstationsResponse\x12\x65\n\x07\x44isable\x12\x33.gameclub.workstations.v1.DisableWorkstationRequest\x1a%.gameclub.workstations.v1.Workstation\x12q\n\x0f\x44ispatchCommand\x12\x30.gameclub.workstations.v1.DispatchCommandRequest\x1a,.gameclub.workstations.v1.WorkstationCommand\x12o\n\rWatchCommands\x12..gameclub.workstations.v1.WatchCommandsRequest\x1a,.gameclub.workstations.v1.WorkstationCommand0\x01\x12w\n\x12\x41\x63knowledgeCommand\x12\x33.gameclub.workstations.v1.AcknowledgeCommandRequest\x1a,.gameclub.workstations.v1.WorkstationCommand\x12}\n\nListGroups\x12\x36.gameclub.workstations.v1.ListWorkstationGroupsRequest\x1a\x37.gameclub.workstations.v1.ListWorkstationGroupsResponse\x12r\n\x0bUpsertGroup\x12\x37.gameclub.workstations.v1.UpsertWorkstationGroupRequest\x1a*.gameclub.workstations.v1.WorkstationGroupB,\xaa\x02)GameClub.Client.Contracts.Workstations.V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,40 +34,40 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gameclub.v1.workstations_pb
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\252\002)GameClub.Client.Contracts.Workstations.V1'
-  _globals['_WORKSTATIONSTATUS']._serialized_start=2411
-  _globals['_WORKSTATIONSTATUS']._serialized_end=2624
-  _globals['_WORKSTATIONCOMMANDSTATUS']._serialized_start=2627
-  _globals['_WORKSTATIONCOMMANDSTATUS']._serialized_end=2860
-  _globals['_WORKSTATION']._serialized_start=94
-  _globals['_WORKSTATION']._serialized_end=498
-  _globals['_WORKSTATIONGROUP']._serialized_start=501
-  _globals['_WORKSTATIONGROUP']._serialized_end=686
-  _globals['_WORKSTATIONLOCKDOWNPOLICY']._serialized_start=689
-  _globals['_WORKSTATIONLOCKDOWNPOLICY']._serialized_end=1054
-  _globals['_LISTWORKSTATIONGROUPSREQUEST']._serialized_start=1056
-  _globals['_LISTWORKSTATIONGROUPSREQUEST']._serialized_end=1086
-  _globals['_LISTWORKSTATIONGROUPSRESPONSE']._serialized_start=1088
-  _globals['_LISTWORKSTATIONGROUPSRESPONSE']._serialized_end=1179
-  _globals['_UPSERTWORKSTATIONGROUPREQUEST']._serialized_start=1182
-  _globals['_UPSERTWORKSTATIONGROUPREQUEST']._serialized_end=1332
-  _globals['_REGISTERWORKSTATIONREQUEST']._serialized_start=1335
-  _globals['_REGISTERWORKSTATIONREQUEST']._serialized_end=1478
-  _globals['_HEARTBEATREQUEST']._serialized_start=1480
-  _globals['_HEARTBEATREQUEST']._serialized_end=1563
-  _globals['_LISTWORKSTATIONSREQUEST']._serialized_start=1565
-  _globals['_LISTWORKSTATIONSREQUEST']._serialized_end=1608
-  _globals['_LISTWORKSTATIONSRESPONSE']._serialized_start=1610
-  _globals['_LISTWORKSTATIONSRESPONSE']._serialized_end=1697
-  _globals['_DISABLEWORKSTATIONREQUEST']._serialized_start=1699
-  _globals['_DISABLEWORKSTATIONREQUEST']._serialized_end=1766
-  _globals['_WORKSTATIONCOMMAND']._serialized_start=1769
-  _globals['_WORKSTATIONCOMMAND']._serialized_end=2144
-  _globals['_DISPATCHCOMMANDREQUEST']._serialized_start=2146
-  _globals['_DISPATCHCOMMANDREQUEST']._serialized_end=2263
-  _globals['_WATCHCOMMANDSREQUEST']._serialized_start=2265
-  _globals['_WATCHCOMMANDSREQUEST']._serialized_end=2306
-  _globals['_ACKNOWLEDGECOMMANDREQUEST']._serialized_start=2308
-  _globals['_ACKNOWLEDGECOMMANDREQUEST']._serialized_end=2408
-  _globals['_WORKSTATIONSERVICE']._serialized_start=2863
-  _globals['_WORKSTATIONSERVICE']._serialized_end=3890
+  _globals['_WORKSTATIONSTATUS']._serialized_start=2619
+  _globals['_WORKSTATIONSTATUS']._serialized_end=2832
+  _globals['_WORKSTATIONCOMMANDSTATUS']._serialized_start=2835
+  _globals['_WORKSTATIONCOMMANDSTATUS']._serialized_end=3068
+  _globals['_WORKSTATION']._serialized_start=122
+  _globals['_WORKSTATION']._serialized_end=706
+  _globals['_WORKSTATIONGROUP']._serialized_start=709
+  _globals['_WORKSTATIONGROUP']._serialized_end=894
+  _globals['_WORKSTATIONLOCKDOWNPOLICY']._serialized_start=897
+  _globals['_WORKSTATIONLOCKDOWNPOLICY']._serialized_end=1262
+  _globals['_LISTWORKSTATIONGROUPSREQUEST']._serialized_start=1264
+  _globals['_LISTWORKSTATIONGROUPSREQUEST']._serialized_end=1294
+  _globals['_LISTWORKSTATIONGROUPSRESPONSE']._serialized_start=1296
+  _globals['_LISTWORKSTATIONGROUPSRESPONSE']._serialized_end=1387
+  _globals['_UPSERTWORKSTATIONGROUPREQUEST']._serialized_start=1390
+  _globals['_UPSERTWORKSTATIONGROUPREQUEST']._serialized_end=1540
+  _globals['_REGISTERWORKSTATIONREQUEST']._serialized_start=1543
+  _globals['_REGISTERWORKSTATIONREQUEST']._serialized_end=1686
+  _globals['_HEARTBEATREQUEST']._serialized_start=1688
+  _globals['_HEARTBEATREQUEST']._serialized_end=1771
+  _globals['_LISTWORKSTATIONSREQUEST']._serialized_start=1773
+  _globals['_LISTWORKSTATIONSREQUEST']._serialized_end=1816
+  _globals['_LISTWORKSTATIONSRESPONSE']._serialized_start=1818
+  _globals['_LISTWORKSTATIONSRESPONSE']._serialized_end=1905
+  _globals['_DISABLEWORKSTATIONREQUEST']._serialized_start=1907
+  _globals['_DISABLEWORKSTATIONREQUEST']._serialized_end=1974
+  _globals['_WORKSTATIONCOMMAND']._serialized_start=1977
+  _globals['_WORKSTATIONCOMMAND']._serialized_end=2352
+  _globals['_DISPATCHCOMMANDREQUEST']._serialized_start=2354
+  _globals['_DISPATCHCOMMANDREQUEST']._serialized_end=2471
+  _globals['_WATCHCOMMANDSREQUEST']._serialized_start=2473
+  _globals['_WATCHCOMMANDSREQUEST']._serialized_end=2514
+  _globals['_ACKNOWLEDGECOMMANDREQUEST']._serialized_start=2516
+  _globals['_ACKNOWLEDGECOMMANDREQUEST']._serialized_end=2616
+  _globals['_WORKSTATIONSERVICE']._serialized_start=3071
+  _globals['_WORKSTATIONSERVICE']._serialized_end=4098
 # @@protoc_insertion_point(module_scope)

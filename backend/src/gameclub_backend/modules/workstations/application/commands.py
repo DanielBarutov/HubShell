@@ -134,6 +134,10 @@ class WorkstationCommandService:
             command = await self._repository.expire(command.id, self._clock.now())
         return command
 
+    async def get_by_idempotency_key(self, idempotency_key: str) -> WorkstationCommand | None:
+        """Return a durable command for recovery/status inspection by its key."""
+        return await self._repository.get_by_idempotency_key(idempotency_key.strip())
+
     async def pending_for_device(self, device_id: str) -> list[WorkstationCommand]:
         workstation = await self._workstations.get_by_device_id(device_id.strip())
         if workstation is None:

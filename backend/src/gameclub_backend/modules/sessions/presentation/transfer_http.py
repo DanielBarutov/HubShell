@@ -8,6 +8,10 @@ from pydantic import BaseModel
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
 from gameclub_backend.modules.sessions.domain import SessionTransferOffer
+from gameclub_backend.modules.workstations.domain_commands import (
+    WorkstationCommand,
+    WorkstationCommandStatus,
+)
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("sessions.manage"))]
@@ -44,6 +48,22 @@ class ConfirmTransferResponse(BaseModel):
     status: str
 
 
+class RestartCommandResponse(BaseModel):
+    id: uuid.UUID
+    workstation_id: uuid.UUID
+    command_type: str
+    status: WorkstationCommandStatus
+    idempotency_key: str
+    created_at: datetime.datetime
+    expires_at: datetime.datetime
+    acknowledged_at: datetime.datetime | None
+    acknowledgement_message: str | None
+
+    @classmethod
+    def from_domain(cls, command: WorkstationCommand) -> "RestartCommandResponse":
+        return cls.model_validate(command, from_attributes=True)
+
+
 def create_router(service: SessionTransferService) -> APIRouter:
     router = APIRouter(prefix="/api/v1/session-transfers", tags=["session-transfers"])
 
@@ -65,6 +85,17 @@ def create_router(service: SessionTransferService) -> APIRouter:
     async def get_offer(offer_id: uuid.UUID, principal: Operator) -> TransferOfferResponse:
         del principal
         return TransferOfferResponse.from_domain(await service.get(offer_id))
+
+    @router.get(
+        "/offers/{offer_id}/restart",
+        response_model=RestartCommandResponse,
+    )
+    async def get_restart_command(
+        offer_id: uuid.UUID,
+        principal: Operator,
+    ) -> RestartCommandResponse:
+        del principal
+        return RestartCommandResponse.from_domain(await service.restart_status(offer_id))
 
     @router.post("/offers/{offer_id}/confirm", response_model=ConfirmTransferResponse)
     async def confirm_offer(

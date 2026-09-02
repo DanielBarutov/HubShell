@@ -41,6 +41,9 @@ class GuestSessionPaymentResponse(BaseModel):
     status: str
     idempotency_key: str
     created_at: str
+    attempts: int
+    next_attempt_at: str
+    settlement_error: str | None
 
     @classmethod
     def from_domain(cls, payment: GuestSessionPayment) -> "GuestSessionPaymentResponse":
@@ -64,6 +67,9 @@ class GuestSessionPaymentResponse(BaseModel):
             status=payment.status.value,
             idempotency_key=payment.idempotency_key,
             created_at=payment.created_at.isoformat(),
+            attempts=payment.attempts,
+            next_attempt_at=payment.next_attempt_at.isoformat(),
+            settlement_error=payment.settlement_error,
         )
 
 
@@ -100,5 +106,20 @@ def create_router(service: GuestSessionPaymentService) -> APIRouter:
             idempotency_key=idempotency_key,
         )
         return GuestSessionPaymentResponse.from_domain(payment)
+
+    @router.post(
+        "/{payment_id}/retry",
+        response_model=GuestSessionPaymentResponse,
+    )
+    async def retry_payment(
+        payment_id: uuid.UUID,
+        principal: typing.Annotated[
+            Principal,
+            Depends(require_permissions("sales.manage", "cashier.supervise")),
+        ],
+    ) -> GuestSessionPaymentResponse:
+        return GuestSessionPaymentResponse.from_domain(
+            await service.retry_reconciliation(payment_id, principal.subject_id)
+        )
 
     return router

@@ -6,6 +6,7 @@ import dramatiq
 
 from gameclub_backend.application.errors import ApplicationError
 from gameclub_backend.config import get_settings
+from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
 from gameclub_backend.infrastructure.broker import configure_broker
 from gameclub_backend.infrastructure.resources import create_resources
 from gameclub_backend.modules.billing.application.service import BillingService
@@ -14,14 +15,26 @@ from gameclub_backend.modules.billing.infrastructure.postgres import (
     PostgresChargeRepository,
     PostgresMeterRepository,
 )
+from gameclub_backend.modules.cash_shifts.application.service import CashShiftService
+from gameclub_backend.modules.cash_shifts.infrastructure.postgres import PostgresCashShiftRepository
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.postgres import PostgresClientRepository
+from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
+from gameclub_backend.modules.direct_payments.infrastructure.cash import (
+    CashShiftGuestPaymentSettlement,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.postgres import (
+    PostgresGuestSessionPaymentRepository,
+)
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
 )
+from gameclub_backend.modules.sales.application.service import ProductSaleService
+from gameclub_backend.modules.sales.infrastructure.cash import CashShiftSaleSettlement
+from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
@@ -200,5 +213,74 @@ async def meter_active_sessions() -> None:
                         )
                 stopped += 1
         logger.info("session_meter_completed stopped_count=%s", stopped)
+    finally:
+        await resources.close()
+
+
+@dramatiq.actor(queue_name="billing", max_retries=3)
+async def reconcile_pending_settlements(
+    now_iso: str | None = None,
+    limit: int = 100,
+) -> None:
+    """Recover durable pending cash/sale facts without touching review rows.
+
+    A pending row is the only state safe for automatic replay. Rows marked
+    needs_review stay operator-visible until the supervisor retry endpoint is
+    called explicitly.
+    """
+    settings = get_settings()
+    if not settings.postgres_dsn:
+        raise RuntimeError("GAMECLUB_POSTGRES_DSN is required for settlement workers")
+    resources = create_resources(settings)
+    try:
+        engine = _engine_provider_or_raise(resources)
+
+        def engine_provider():
+            return engine
+
+        audit = PostgresAuditRepository(engine_provider)
+
+        cash_shifts = CashShiftService(
+            PostgresCashShiftRepository(engine_provider),
+        )
+        catalog = CatalogService(PostgresCatalogRepository(engine_provider))
+        guest_repository = PostgresGuestSessionPaymentRepository(engine_provider)
+        guest_payments = GuestSessionPaymentService(
+            guest_repository,
+            tariffs=catalog,
+            cash=CashShiftGuestPaymentSettlement(cash_shifts),
+            audit=audit,
+        )
+        clients = ClientService(PostgresClientRepository(engine_provider))
+        sales_repository = PostgresProductSaleRepository(engine_provider)
+        sales = ProductSaleService(
+            sales_repository,
+            products=catalog,
+            clients=clients,
+            cash=CashShiftSaleSettlement(cash_shifts),
+            audit=audit,
+        )
+        sweep_now = _parse_sweep_time(now_iso)
+        recovered_payments = 0
+        for payment in await guest_repository.list_recoverable(limit, now=sweep_now):
+            try:
+                await guest_payments.retry_pending(payment.id)
+            except Exception:
+                logger.exception("guest_payment_reconciliation_failed payment_id=%s", payment.id)
+            else:
+                recovered_payments += 1
+        recovered_sales = 0
+        for sale in await sales_repository.list_recoverable(limit, now=sweep_now):
+            try:
+                await sales.reconcile(sale.id)
+            except Exception:
+                logger.exception("product_sale_reconciliation_failed sale_id=%s", sale.id)
+            else:
+                recovered_sales += 1
+        logger.info(
+            "pending_settlements_completed guest_payments=%s product_sales=%s",
+            recovered_payments,
+            recovered_sales,
+        )
     finally:
         await resources.close()

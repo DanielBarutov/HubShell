@@ -32,6 +32,19 @@ public sealed class ClientSessionCoordinatorTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new WorkstationHeartbeatSnapshot(deviceId, string.Empty, string.Empty));
 
+        public Task<EntryDecisionSnapshot> CheckEntryAsync(
+            string workstationId,
+            string? clientId,
+            string? guestId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EntryDecisionSnapshot(
+                true,
+                "allowed",
+                null,
+                clientId,
+                null,
+                null));
+
         public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
             string deviceId,
             CancellationToken cancellationToken = default)

@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends, Header, status
 from pydantic import BaseModel, Field
 
 from gameclub_backend.modules.auth.domain import Principal
+from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.domain import SessionSnapshot
+from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
 from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
@@ -97,9 +100,17 @@ class WorkstationResponse(BaseModel):
     archived_at: str | None
     mac_address: str | None
     installation_bound: bool
+    active_session_id: uuid.UUID | None = None
+    active_session_status: str | None = None
+    session_server_time: str | None = None
+    session_snapshot: SessionSnapshotResponse | None = None
 
     @classmethod
-    def from_domain(cls, workstation: Workstation) -> "WorkstationResponse":
+    def from_domain(
+        cls,
+        workstation: Workstation,
+        session_snapshot: SessionSnapshot | None = None,
+    ) -> "WorkstationResponse":
         return cls(
             id=workstation.id,
             device_id=workstation.device_id,
@@ -115,12 +126,23 @@ class WorkstationResponse(BaseModel):
             archived_at=workstation.archived_at.isoformat() if workstation.archived_at else None,
             mac_address=workstation.mac_address,
             installation_bound=workstation.installation_id is not None,
+            active_session_id=session_snapshot.session.id if session_snapshot else None,
+            active_session_status=(
+                session_snapshot.session.status.value if session_snapshot else None
+            ),
+            session_server_time=(
+                session_snapshot.server_time.isoformat() if session_snapshot else None
+            ),
+            session_snapshot=(
+                SessionSnapshotResponse.from_domain(session_snapshot) if session_snapshot else None
+            ),
         )
 
 
 def create_router(
     service: WorkstationService,
     command_service: WorkstationCommandService | None = None,
+    session_service: SessionService | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/workstations", tags=["workstations"])
     operator = Depends(require_permissions("workstations.manage"))
@@ -149,7 +171,15 @@ def create_router(
             body.client_version,
             capabilities=body.capabilities,
         )
-        return WorkstationResponse.from_domain(workstation)
+        snapshot = None
+        if session_service is not None:
+            active_sessions = await session_service.list(
+                workstation_id=workstation.id,
+                active_only=True,
+            )
+            if active_sessions:
+                snapshot = await session_service.snapshot(active_sessions[0].id)
+        return WorkstationResponse.from_domain(workstation, snapshot)
 
     @router.post("/{workstation_id}/disable", response_model=WorkstationResponse)
     async def disable(

@@ -1,4 +1,4 @@
-export type PcStatus = "online" | "busy" | "offline" | "maintenance";
+export type PcStatus = "online" | "busy" | "stale" | "offline" | "maintenance";
 
 export type Section = "dashboard" | "map" | "bookings" | "clients" | "catalog" | "analytics" | "cash" | "settings";
 

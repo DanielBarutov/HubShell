@@ -492,6 +492,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> LoginPortalAsync()
     {
+        if (!IsOnline)
+        {
+            _portalMessage = _connection.State == ClientConnectionState.Reconnecting
+                ? "Восстанавливаем соединение с сервером"
+                : "Нет связи с сервером. Вход временно недоступен";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
         if (string.IsNullOrWhiteSpace(DeviceId))
         {
             _portalMessage = "ПК ещё не привязан администратором";
@@ -506,6 +514,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 PortalPin,
                 DeviceId,
                 _lifetime.Token);
+            if (!await EnsureEntryAllowedAsync(authentication.Snapshot.ClientId))
+            {
+                return false;
+            }
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _portalMessage = string.Empty;
@@ -527,6 +539,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> RegisterPortalAsync()
     {
+        if (!IsOnline)
+        {
+            _portalMessage = _connection.State == ClientConnectionState.Reconnecting
+                ? "Восстанавливаем соединение с сервером"
+                : "Нет связи с сервером. Регистрация временно недоступна";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
         if (string.IsNullOrWhiteSpace(DeviceId))
         {
             _portalMessage = "ПК ещё не привязан администратором";
@@ -542,6 +562,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 PortalRegistrationPin,
                 DeviceId,
                 _lifetime.Token);
+            if (!await EnsureEntryAllowedAsync(authentication.Snapshot.ClientId))
+            {
+                return false;
+            }
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _isPortalRegistrationRequested = false;
@@ -557,6 +581,53 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         catch (Exception)
         {
             _portalMessage = "Не удалось зарегистрироваться. Проверьте данные";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
+    }
+
+    private async Task<bool> EnsureEntryAllowedAsync(string clientId)
+    {
+        var deviceId = DeviceId;
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            _portalMessage = "ПК ещё не привязан администратором";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
+
+        try
+        {
+            var decision = await _session.BackendClient.CheckEntryAsync(
+                deviceId,
+                clientId,
+                guestId: null,
+                cancellationToken: _lifetime.Token);
+            if (decision.Allowed)
+            {
+                return true;
+            }
+
+            _clientPortal.Logout();
+            _portalMessage = decision.Reason switch
+            {
+                "workstation_disabled" => "Это место отключено администратором",
+                "reservation_client_mismatch" => "Место забронировано другим клиентом",
+                "reservation_client_required" => "Для этого места требуется клиент из бронирования",
+                "guest_reservation_protected" => "Место защищено активным бронированием",
+                _ => $"Вход запрещён: {decision.Reason}",
+            };
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception)
+        {
+            _clientPortal.Logout();
+            _portalMessage = "Не удалось проверить доступ к этому месту";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
@@ -765,7 +836,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public Task RunWorkstationHeartbeatLoopAsync(
         Action<string>? onThemeReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
-        Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null) =>
+        Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
+        Action<SessionSnapshot>? onSessionSnapshotReceived = null,
+        Action<ClientConnectionState>? onConnectionStateChanged = null) =>
         string.IsNullOrWhiteSpace(DeviceId)
             ? Task.CompletedTask
             : _session.RunWorkstationHeartbeatLoopAsync(
@@ -775,8 +848,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 onThemeReceived,
                 onManagerPasswordVerifierReceived,
                 onLockdownPolicyReceived,
+                onSessionSnapshotReceived,
+                onConnectionStateChanged,
                 RefreshActiveSessionSnapshotAsync,
                 _lifetime.Token);
+
+    public void ApplyHeartbeatConnectionState(ClientConnectionState state)
+    {
+        var message = state switch
+        {
+            ClientConnectionState.Online => "Соединение установлено",
+            ClientConnectionState.Reconnecting => "Восстанавливаем соединение с сервером",
+            _ => _connection.Message,
+        };
+        _connection = _connection with
+        {
+            State = state,
+            Message = message,
+            LastSuccessfulContact = state == ClientConnectionState.Online
+                ? DateTimeOffset.UtcNow
+                : _connection.LastSuccessfulContact,
+        };
+        OnPropertyChanged(nameof(ConnectionMessage));
+        OnPropertyChanged(nameof(IsOnline));
+        OnPropertyChanged(nameof(ConnectionColor));
+        OnPropertyChanged(nameof(UserLoginVisibility));
+        OnPropertyChanged(nameof(PortalRegistrationVisibility));
+        OnPropertyChanged(nameof(ManagerEntryVisibility));
+        OnPropertyChanged(nameof(AccessMessage));
+    }
+
+    public void ApplySessionSnapshotFromHeartbeat(SessionSnapshot snapshot)
+    {
+        if (snapshot.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase)
+            || snapshot.Status.Equals("SESSION_STATUS_COMPLETED", StringComparison.OrdinalIgnoreCase))
+        {
+            RegisterSessionStopped(snapshot);
+            return;
+        }
+
+        if (_activeSession is null
+            || _activeSession.Id.Equals(snapshot.Id, StringComparison.Ordinal))
+        {
+            ApplyActiveSessionSnapshot(snapshot);
+        }
+    }
 
     private async Task RefreshActiveSessionSnapshotAsync()
     {

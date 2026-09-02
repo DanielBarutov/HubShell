@@ -421,3 +421,113 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
                     {"workstation_id": workstation_id},
                 )
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_transfer_to_two_targets_commits_only_one_owner(
+    postgres_dsn: str,
+) -> None:
+    engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
+    workstation_ids: list[uuid.UUID] = []
+    offer_ids: list[uuid.UUID] = []
+    client_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
+    try:
+        workstation_repository = PostgresWorkstationRepository(lambda: engine)
+        workstations = WorkstationService(workstation_repository)
+        source = await workstations.register(
+            f"pg-transfer-two-source-{uuid.uuid4().hex[:8]}",
+            "PG Transfer Two Source",
+            group_id="pg-transfer-two-zone",
+        )
+        target_a = await workstations.register(
+            f"pg-transfer-two-a-{uuid.uuid4().hex[:8]}",
+            "PG Transfer Two A",
+            group_id="pg-transfer-two-zone",
+        )
+        target_b = await workstations.register(
+            f"pg-transfer-two-b-{uuid.uuid4().hex[:8]}",
+            "PG Transfer Two B",
+            group_id="pg-transfer-two-zone",
+        )
+        workstation_ids.extend((source.id, target_a.id, target_b.id))
+        client_repository = PostgresClientRepository(lambda: engine)
+        client = await ClientService(client_repository).create(
+            f"PgTransferTwoClient{uuid.uuid4().hex[:8]}"
+        )
+        client_id = client.id
+        session_repository = PostgresSessionRepository(lambda: engine)
+        sessions = SessionService(
+            session_repository,
+            workstations=workstation_repository,
+            clients=client_repository,
+        )
+        session = await sessions.start(
+            source.id,
+            created_by="integration-test",
+            client_id=client.id,
+            idempotency_key=f"pg-transfer-two-session-{uuid.uuid4()}",
+        )
+        session_id = session.id
+        transfer_repository = PostgresSessionTransferRepository(lambda: engine)
+        transfer = SessionTransferService(
+            transfer_repository,
+            sessions=session_repository,
+            workstations=workstation_repository,
+        )
+        offer_a = await transfer.create_offer(
+            session.id,
+            target_a.id,
+            f"pg-transfer-two-offer-a-{uuid.uuid4()}",
+        )
+        offer_b = await transfer.create_offer(
+            session.id,
+            target_b.id,
+            f"pg-transfer-two-offer-b-{uuid.uuid4()}",
+        )
+        offer_ids.extend((offer_a.id, offer_b.id))
+
+        results = await asyncio.gather(
+            transfer.confirm(offer_a.id, "pg-transfer-two-confirm-a"),
+            transfer.confirm(offer_b.id, "pg-transfer-two-confirm-b"),
+            return_exceptions=True,
+        )
+
+        successful = [item for item in results if not isinstance(item, Exception)]
+        failures = [item for item in results if isinstance(item, Exception)]
+        assert len(successful) == 1
+        assert len(failures) == 1
+        assert isinstance(failures[0], ApplicationError)
+        assert failures[0].code is ErrorCode.CONFLICT
+        _, transferred = successful[0]
+        assert transferred.workstation_id in {target_a.id, target_b.id}
+        assert await session_repository.get_active_for_workstation(source.id) is None
+        active_target_ids = {
+            workstation_id
+            for workstation_id in (target_a.id, target_b.id)
+            if await session_repository.get_active_for_workstation(workstation_id) is not None
+        }
+        assert active_target_ids == {transferred.workstation_id}
+    finally:
+        async with engine.begin() as connection:
+            for offer_id in offer_ids:
+                await connection.execute(
+                    text("DELETE FROM session_transfer_offers WHERE id = :offer_id"),
+                    {"offer_id": offer_id},
+                )
+            if session_id is not None:
+                await connection.execute(
+                    text("DELETE FROM gaming_sessions WHERE id = :session_id"),
+                    {"session_id": session_id},
+                )
+            if client_id is not None:
+                await connection.execute(
+                    text("DELETE FROM clients WHERE id = :client_id"),
+                    {"client_id": client_id},
+                )
+            for workstation_id in workstation_ids:
+                await connection.execute(
+                    text("DELETE FROM workstations WHERE id = :workstation_id"),
+                    {"workstation_id": workstation_id},
+                )
+        await engine.dispose()

@@ -55,6 +55,17 @@ class SessionTransferService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer offer not found")
         return offer
 
+    async def restart_status(self, offer_id: uuid.UUID):
+        if self._commands is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Workstation command service is not configured",
+            )
+        command = await self._commands.get_by_idempotency_key(f"transfer-restart:{offer_id}")
+        if command is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer restart command not found")
+        return command
+
     async def create_offer(
         self,
         session_id: uuid.UUID,

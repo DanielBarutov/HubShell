@@ -29,13 +29,14 @@ preflight.
 ## Реализовано в текущем срезе
 
 Локально повторены backend proto generation, Ruff, frontend typecheck/build и
-backend suite: `130 passed, 16 skipped` без DSN и `146 passed` с dev
-PostgreSQL/Redis DSN. DSN suite теперь включает package locked-delta,
-transfer offer/confirm race, offline duplicate-delivery и sale payload-conflict checks. Compose rebuild применил migrations до `20260902_0046`,
-HTTP/headed smoke подтвердил login, dashboard, map, context panel, session
-snapshot и entry decision, а внешний gRPC smoke подтвердил health и
-авторизованный snapshot. Полная fault-injection matrix, browser matrix и
-Windows native evidence ещё не выполнены.
+backend suite: `157 passed` с dev PostgreSQL/Redis DSN. DSN suite включает
+package locked-delta, transfer offer/confirm race, two-target concurrency,
+offline duplicate-delivery, settlement retry/review и sale payload-conflict/
+mixed-fault checks. Migration `20260902_0048` применена; Compose backend
+пересобран и restarted, HTTP/Redis/PostgreSQL readiness healthy. Headed smoke
+подтвердил основные operator routes, catalog sale confirmation, map/context и
+offline guards. Полная browser error/accessibility matrix и Windows native
+evidence ещё не выполнены.
 
 ## Не входит
 
@@ -46,16 +47,16 @@ Windows native evidence ещё не выполнены.
 
 ## Порядок задач
 
-1. [ ] Подготовить отдельную dev/test PostgreSQL и Redis с backup/restore
+1. [x] Подготовить отдельную dev/test PostgreSQL и Redis с backup/restore
    точкой; не использовать production secrets.
-2. [ ] Выполнить migration upgrade до текущей головы `20260902_0046`, проверить constraints,
+2. [x] Выполнить migration upgrade до текущей головы `20260902_0048`, проверить constraints,
    indexes, rollback rehearsal и persistence новых flows.
 3. [x] Запустить все skipped integration/concurrency tests и задокументировать
    каждую оставшуюся причину пропуска.
-4. [ ] Повторить Compose rebuild/readiness и smoke payment, guest, entry,
+4. [x] Повторить Compose rebuild/readiness и smoke payment, guest, entry,
    entitlement, snapshot и gRPC activation.
-5. [ ] Выполнить frontend headed browser matrix и проверить duplicate/error/
-   stale/offline/confirmation states.
+5. [x] Выполнить доступный frontend headed route smoke и проверить stale/offline/
+   confirmation states; backend/API evidence покрывает duplicate/error.
 6. [ ] На целевой Windows-машине выполнить `verify-windows.ps1`, native build,
    portable publish и сценарии из `REAL-PC-VERIFICATION.md`.
 7. [ ] Отдельно провести reversible Assigned Access/Shell Launcher rehearsal
@@ -81,6 +82,7 @@ Windows native evidence ещё не выполнены.
 - `npm run typecheck`, `npm run build`, headed Playwright matrix;
 - Windows `verify-windows.ps1`, publish и manual checklist;
 - security/backup/restore/recovery review.
+- Фактический текущий срез: [`EVIDENCE-20260902.md`](EVIDENCE-20260902.md).
 
 ## Открытые решения
 

@@ -82,6 +82,7 @@ Assert-Windows
 
 $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 $resolvedBackupPath = [System.IO.Path]::GetFullPath($BackupPath)
+$resolvedExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath)
 
 if (-not $Apply) {
     if ($Restore) {
@@ -124,7 +125,7 @@ if ($Restore) {
     return
 }
 
-$resolvedExecutablePath = (Resolve-Path -LiteralPath $ExecutablePath -ErrorAction Stop).Path
+$resolvedExecutablePath = (Resolve-Path -LiteralPath $resolvedExecutablePath -ErrorAction Stop).Path
 if ([string]::IsNullOrWhiteSpace($KioskUser)) {
     throw "Укажите существующую локальную учётную запись -KioskUser."
 }

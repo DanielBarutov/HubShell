@@ -64,6 +64,8 @@ class ProductSaleResponse(BaseModel):
     completed_at: datetime.datetime | None
     payment_parts: list[PaymentPartResponse]
     settlement_error: str | None
+    attempts: int
+    next_attempt_at: datetime.datetime
 
     @classmethod
     def from_domain(cls, sale: ProductSale) -> "ProductSaleResponse":
@@ -88,6 +90,8 @@ class ProductSaleResponse(BaseModel):
             completed_at=sale.completed_at,
             payment_parts=[PaymentPartResponse.from_domain(part) for part in sale.payment_parts],
             settlement_error=sale.settlement_error,
+            attempts=sale.attempts,
+            next_attempt_at=sale.next_attempt_at,
         )
 
 
@@ -123,5 +127,16 @@ def create_router(service: ProductSaleService) -> APIRouter:
         del principal
         sales = await service.list_sales(start_at, end_at, client_id, limit)
         return [ProductSaleResponse.from_domain(sale) for sale in sales]
+
+    @router.post("/{sale_id}/reconcile", response_model=ProductSaleResponse)
+    async def reconcile_sale(
+        sale_id: uuid.UUID,
+        principal: typing.Annotated[
+            Principal,
+            Depends(require_permissions("sales.manage", "cashier.supervise")),
+        ],
+    ) -> ProductSaleResponse:
+        del principal
+        return ProductSaleResponse.from_domain(await service.reconcile(sale_id))
 
     return router

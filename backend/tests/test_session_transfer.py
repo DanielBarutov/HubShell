@@ -11,7 +11,12 @@ from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySess
 from gameclub_backend.modules.sessions.infrastructure.transfers_memory import (
     InMemorySessionTransferRepository,
 )
+from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.infrastructure.commands_memory import (
+    InMemoryCommandNotifier,
+    InMemoryWorkstationCommandRepository,
+)
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
@@ -86,3 +91,46 @@ async def test_transfer_rejects_target_with_active_session() -> None:
 
     with pytest.raises(ApplicationError, match="target already has an active session"):
         await transfer.create_offer(session.id, occupied.id, "transfer-conflict")
+
+
+@pytest.mark.asyncio
+async def test_transfer_publishes_duplicate_safe_restart_command_status() -> None:
+    workstation_repository = InMemoryWorkstationRepository()
+    workstations = WorkstationService(workstation_repository)
+    source = await workstations.register("restart-source", "Restart source", group_id="vip")
+    target = await workstations.register("restart-target", "Restart target", group_id="vip")
+    client_repository = InMemoryClientRepository()
+    client = await ClientService(client_repository).create("RestartClient")
+    session_repository = InMemorySessionRepository()
+    sessions = SessionService(
+        session_repository,
+        workstations=workstation_repository,
+        clients=client_repository,
+    )
+    session = await sessions.start(
+        source.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="restart-session",
+    )
+    command_service = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=workstation_repository,
+        notifier=InMemoryCommandNotifier(),
+    )
+    transfer = SessionTransferService(
+        InMemorySessionTransferRepository(),
+        sessions=session_repository,
+        workstations=workstation_repository,
+        commands=command_service,
+    )
+
+    offer = await transfer.create_offer(session.id, target.id, "restart-offer")
+    await transfer.confirm(offer.id, "restart-confirm")
+
+    command = await transfer.restart_status(offer.id)
+    repeated = await transfer.restart_status(offer.id)
+    assert command.id == repeated.id
+    assert command.command_type == "system.restart"
+    assert command.idempotency_key == f"transfer-restart:{offer.id}"
+    assert command.status.value == "queued"

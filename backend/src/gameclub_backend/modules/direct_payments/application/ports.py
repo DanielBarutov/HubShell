@@ -13,7 +13,14 @@ class GuestSessionPaymentRepository(typing.Protocol):
         """Return the payment created by the same request."""
 
     async def save(self, payment: GuestSessionPayment) -> GuestSessionPayment:
-        """Persist a confirmed payment idempotently."""
+        """Persist a payment state idempotently."""
+
+    async def list_recoverable(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[GuestSessionPayment]:
+        """Return pending payments eligible for durable reconciliation."""
 
 
 class TariffLookup(typing.Protocol):

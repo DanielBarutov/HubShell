@@ -100,7 +100,9 @@ public sealed partial class MainWindow : Window
             _viewModel.RunWorkstationHeartbeatLoopAsync(
                 ApplyThemeFromHeartbeat,
                 ApplyManagerPasswordVerifierFromHeartbeat,
-                ApplyLockdownPolicyFromHeartbeat));
+                ApplyLockdownPolicyFromHeartbeat,
+                _viewModel.ApplySessionSnapshotFromHeartbeat,
+                _viewModel.ApplyHeartbeatConnectionState));
         _viewModel.TrackBackgroundTask(
             _viewModel.RunCommandLoopAsync(
                 new WindowsCommandExecutor(

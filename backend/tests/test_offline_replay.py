@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.domain import MeterStatus
 from gameclub_backend.modules.billing.infrastructure.memory import (
@@ -205,3 +206,67 @@ async def test_offline_stop_is_replayed_and_gap_is_rejected() -> None:
         actor_device_id=workstation.device_id,
     )
     assert result.results[0].status is OfflineOperationStatus.CONFLICT
+
+
+@pytest.mark.asyncio
+async def test_offline_replay_uses_server_clock_when_device_clock_is_skewed() -> None:
+    clock = FixedClock()
+    workstation, client, tariff, sessions, billing, offline = await build_offline_services(clock)
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="offline-clock-skew-session",
+    )
+    clock.current += datetime.timedelta(minutes=7)
+    operation = OfflineOperation.create(
+        session_id=session.id,
+        device_id=workstation.device_id,
+        sequence=1,
+        kind=OfflineOperationKind.METER_DELTA,
+        payload={"minutes": 2},
+        snapshot_version=1,
+        idempotency_key="offline-clock-skew-meter",
+        created_at=clock.now() + datetime.timedelta(days=365),
+    )
+
+    result = await offline.replay(
+        OfflineBatch(1, workstation.device_id, session.id, (operation,)),
+        actor_device_id=workstation.device_id,
+    )
+
+    assert result.results[0].status is OfflineOperationStatus.APPLIED
+    meter = await billing.get_meter(session.id)
+    assert meter.billed_minutes == 2
+    assert meter.billed_cents == 20
+
+
+@pytest.mark.asyncio
+async def test_offline_replay_does_not_authorize_an_unknown_session() -> None:
+    clock = FixedClock()
+    (
+        workstation,
+        _client,
+        _tariff,
+        _sessions,
+        _billing,
+        offline,
+    ) = await build_offline_services(clock)
+    unknown_session_id = uuid.uuid4()
+    operation = make_operation(
+        unknown_session_id,
+        workstation.device_id,
+        1,
+        OfflineOperationKind.LOCK,
+        clock,
+        "offline-before-login-lock",
+    )
+
+    with pytest.raises(ApplicationError) as error:
+        await offline.replay(
+            OfflineBatch(1, workstation.device_id, unknown_session_id, (operation,)),
+            actor_device_id=workstation.device_id,
+        )
+    assert error.value.code is ErrorCode.NOT_FOUND

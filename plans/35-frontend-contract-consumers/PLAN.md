@@ -17,8 +17,9 @@ checkout и статусов ПК. Frontend не вычисляет reservation 
 
 Typed BFF DTO, guest payment confirmation и mixed product sale уже добавлены.
 Snapshot, queue, entry refusal, transfer confirmation, settlement review и
-offline/stale workstation fields уже подключены в основные operator consumers;
-headed browser evidence и часть map-level presentation ещё не закрыты.
+offline/stale workstation fields подключены в основные operator consumers;
+headed route smoke и sale-confirmation visual evidence добавлены в текущем
+срезе.
 
 ## Реализовано в текущем срезе
 
@@ -60,7 +61,9 @@ needs-review не показывается как успешная продаж�
 6. [x] Реализовать transfer modal с explicit confirm и duplicate-safe result.
 7. [x] Отобразить offline ПК и последний server snapshot без создания новых
    offline session/payment действий.
-8. [ ] Провести headed smoke основных маршрутов и обновить visual evidence.
+8. [x] Провести headed smoke основных маршрутов и обновить visual evidence;
+   подтверждены login/dashboard/map/PC context, catalog sale confirmation,
+   bookings, clients, analytics, cash, settings и offline action guards.
 
 ## Критерии готовности
 
@@ -72,10 +75,12 @@ needs-review не показывается как успешная продаж�
 
 ## Остаток и release blocker
 
-Нужно выполнить headed browser matrix, accessibility/focus checks и проверить
-map seat presentation на реальном backend после актуальных миграций. Полный
-realtime transport не входит в текущий срез; polling остаётся временной
-реализацией.
+После актуальной пересборки выполнен headed smoke основных маршрутов,
+catalog-sale confirmation и offline action guards; screenshot сохранён в
+`output/playwright/2026-09-02-map.png`. Полная matrix queue/entry/guest
+payment/duplicate retry/transfer и accessibility/focus checks всё ещё требует
+отдельного browser-run. Полный realtime transport не входит в текущий срез;
+polling остаётся временной реализацией.
 
 ## Проверки и evidence
 

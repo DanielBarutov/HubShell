@@ -5,6 +5,7 @@ package gameclub.workstations.v1;
 option csharp_namespace = "GameClub.Client.Contracts.Workstations.V1";
 
 import "google/protobuf/timestamp.proto";
+import "gameclub/v1/sessions.proto";
 
 service WorkstationService {
   rpc Register(RegisterWorkstationRequest) returns (Workstation);
@@ -41,6 +42,10 @@ message Workstation {
   string theme = 11;
   string manager_password_verifier = 12;
   WorkstationLockdownPolicy lockdown_policy = 13;
+  string active_session_id = 14;
+  string active_session_status = 15;
+  google.protobuf.Timestamp session_server_time = 16;
+  gameclub.sessions.v1.SessionSnapshot session_snapshot = 17;
 }
 
 message WorkstationGroup {

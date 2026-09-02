@@ -412,6 +412,7 @@ class AnalyticsGrpcService(analytics_pb2_grpc.AnalyticsServiceServicer):
 def to_proto(
     workstation: Workstation,
     include_manager_password_verifier: bool = False,
+    session_snapshot: SessionSnapshot | None = None,
 ) -> workstations_pb2.Workstation:
     response = workstations_pb2.Workstation(
         id=str(workstation.id),
@@ -431,12 +432,19 @@ def to_proto(
         capabilities=list(workstation.capabilities),
         theme=workstation.theme,
         lockdown_policy=to_lockdown_policy_proto(workstation.lockdown_policy),
+        active_session_id=str(session_snapshot.session.id) if session_snapshot else "",
+        active_session_status=session_snapshot.session.status.value if session_snapshot else "",
     )
     if include_manager_password_verifier and workstation.manager_password_verifier:
         response.manager_password_verifier = workstation.manager_password_verifier
     last_seen_at = to_timestamp(workstation.last_seen_at)
     if last_seen_at is not None:
         response.last_seen_at.CopyFrom(last_seen_at)
+    if session_snapshot is not None:
+        server_time = to_timestamp(session_snapshot.server_time)
+        if server_time is not None:
+            response.session_server_time.CopyFrom(server_time)
+        response.session_snapshot.CopyFrom(to_session_snapshot_proto(session_snapshot))
     return response
 
 
@@ -463,11 +471,13 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         token_service: JwtTokenService | None,
         command_service: WorkstationCommandService | None = None,
         group_service: WorkstationGroupService | None = None,
+        session_service: SessionService | None = None,
     ) -> None:
         self._service = service
         self._token_service = token_service
         self._command_service = command_service
         self._group_service = group_service
+        self._session_service = session_service
 
     async def Register(
         self,
@@ -500,9 +510,21 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
                 request.client_version or None,
                 request.capabilities,
             )
+            session_snapshot = None
+            if self._session_service is not None:
+                active_sessions = await self._session_service.list(
+                    workstation_id=workstation.id,
+                    active_only=True,
+                )
+                if active_sessions:
+                    session_snapshot = await self._session_service.snapshot(active_sessions[0].id)
         except ApplicationError as error:
             await abort_application_error(context, error)
-        return to_proto(workstation, include_manager_password_verifier=True)
+        return to_proto(
+            workstation,
+            include_manager_password_verifier=True,
+            session_snapshot=session_snapshot,
+        )
 
     async def List(
         self,
@@ -1518,7 +1540,7 @@ class ReservationGrpcService(reservations_pb2_grpc.ReservationServiceServicer):
         request: reservations_pb2.CheckEntryRequest,
         context: grpc.aio.ServicerContext,
     ) -> reservations_pb2.CheckEntryResponse:
-        await require_operator(context, self._token_service, "reservations.manage")
+        await require_session_actor(context, self._token_service, request.workstation_id)
         try:
             decision = await self._service.check_entry(
                 workstation_id=parse_uuid(request.workstation_id, "workstation_id"),

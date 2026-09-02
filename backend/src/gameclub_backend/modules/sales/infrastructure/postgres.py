@@ -49,6 +49,10 @@ class ProductSaleModel(SalesBase):
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
     settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
 
     def to_domain(self) -> ProductSale:
         return ProductSale(
@@ -72,6 +76,8 @@ class ProductSaleModel(SalesBase):
             completed_at=self.completed_at,
             payment_parts=tuple(PaymentPart.from_dict(part) for part in (self.payment_parts or [])),
             settlement_error=self.settlement_error,
+            attempts=self.attempts,
+            next_attempt_at=self.next_attempt_at,
         )
 
     @classmethod
@@ -100,6 +106,8 @@ class ProductSaleModel(SalesBase):
                     "completed_at": sale.completed_at,
                     "payment_parts": [part.as_dict() for part in sale.payment_parts],
                     "settlement_error": sale.settlement_error,
+                    "attempts": sale.attempts,
+                    "next_attempt_at": sale.next_attempt_at,
                 }.items()
             }
         )
@@ -114,6 +122,11 @@ class PostgresProductSaleRepository:
             model = await session.scalar(
                 select(ProductSaleModel).where(ProductSaleModel.idempotency_key == idempotency_key)
             )
+            return model.to_domain() if model else None
+
+    async def get_by_id(self, sale_id: uuid.UUID) -> ProductSale | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.get(ProductSaleModel, sale_id)
             return model.to_domain() if model else None
 
     async def create_pending(self, sale: ProductSale) -> ProductSale:
@@ -198,7 +211,12 @@ class PostgresProductSaleRepository:
                 model.status = ProductSaleStatus.CANCELLED.value
                 return model.to_domain()
 
-    async def mark_needs_review(self, sale: ProductSale, error: str) -> ProductSale:
+    async def mark_needs_review(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime | None = None,
+    ) -> ProductSale:
         async with open_session(self._engine_provider) as session:
             async with session.begin():
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
@@ -206,10 +224,50 @@ class PostgresProductSaleRepository:
                     raise ValueError("Product sale not found")
                 if model.status == ProductSaleStatus.COMPLETED.value:
                     return model.to_domain()
-                reviewed = model.to_domain().needs_review(error)
+                reviewed = model.to_domain().needs_review(error, now)
                 model.status = reviewed.status.value
                 model.settlement_error = reviewed.settlement_error
+                model.attempts = reviewed.attempts
+                model.next_attempt_at = reviewed.next_attempt_at
                 return reviewed
+
+    async def mark_retryable(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime,
+    ) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
+                if model is None:
+                    raise ValueError("Product sale not found")
+                if model.status == ProductSaleStatus.COMPLETED.value:
+                    return model.to_domain()
+                retryable = model.to_domain().schedule_retry(error, now)
+                model.status = retryable.status.value
+                model.attempts = retryable.attempts
+                model.next_attempt_at = retryable.next_attempt_at
+                model.settlement_error = retryable.settlement_error
+                return retryable
+
+    async def reopen_for_reconciliation(
+        self,
+        sale: ProductSale,
+        now: datetime.datetime,
+    ) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
+                if model is None:
+                    raise ValueError("Product sale not found")
+                if model.status == ProductSaleStatus.COMPLETED.value:
+                    return model.to_domain()
+                reopened = model.to_domain().reopen_for_review(now)
+                model.status = reopened.status.value
+                model.next_attempt_at = reopened.next_attempt_at
+                model.settlement_error = reopened.settlement_error
+                return reopened
 
     async def list_sales(
         self,
@@ -234,6 +292,24 @@ class PostgresProductSaleRepository:
                 select(ProductSaleModel)
                 .where(*filters)
                 .order_by(ProductSaleModel.created_at.desc())
+                .limit(max(1, min(limit, 500)))
+            )
+            return [model.to_domain() for model in result]
+
+    async def list_recoverable(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[ProductSale]:
+        moment = now or datetime.datetime.now(datetime.UTC)
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(ProductSaleModel)
+                .where(
+                    ProductSaleModel.status == ProductSaleStatus.PENDING.value,
+                    ProductSaleModel.next_attempt_at <= moment,
+                )
+                .order_by(ProductSaleModel.created_at)
                 .limit(max(1, min(limit, 500)))
             )
             return [model.to_domain() for model in result]

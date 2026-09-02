@@ -78,6 +78,7 @@ const navItems: { id: Section; label: string; icon: typeof LayoutDashboard }[] =
 const statusMeta: Record<PcStatus, { label: string; className: string }> = {
   online: { label: "Свободен", className: "status-online" },
   busy: { label: "Занят", className: "status-busy" },
+  stale: { label: "Нет свежего heartbeat", className: "status-stale" },
   offline: { label: "Не в сети", className: "status-offline" },
   maintenance: { label: "Сервис", className: "status-maintenance" },
 };
@@ -656,7 +657,7 @@ function MapView({ onPc, onSalePc, onBookPc, onEditPc, pcs, group, setGroup, zon
     }
   };
 
-  return <><div className="page-heading"><div><p className="eyebrow">Оборудование · Рабочая карта</p><h1>Карта клуба</h1><p className="subheading">{editMode ? "Перетащите места в нужные ячейки и сохраните планировку." : "Нажмите на место, чтобы сразу оформить продажу; управление ПК — через кнопку ⋯."}</p></div><div className="heading-actions"><button className={`secondary-button map-edit-toggle ${editMode ? "active" : ""}`} aria-pressed={editMode} onClick={() => { setEditMode((value) => !value); setContextPcId(null); }}><Edit3 size={15} /> {editMode ? "Завершить редактирование" : "Редактировать карту"}</button><button className="primary-button" disabled={!onNewWorkstation} onClick={onNewWorkstation}><Plus size={17} /> Добавить место</button></div></div><div className="map-toolbar"><Segmented value={group} onChange={setGroup} options={zoneOptions} />{editMode && onPositionsChange && <span className="map-arrange-hint">Перетащите карточку на нужное место</span>}<div className="legend"><span><i className="legend-dot online" /> Свободен</span><span><i className="legend-dot busy" /> Занят</span><span><i className="legend-dot offline" /> Не в сети</span><span><i className="legend-dot maintenance" /> Сервис</span></div></div>{positionError && <div className="form-error map-error" role="alert">{positionError}</div>}<div className="map-stage"><aside className="map-legend-panel"><div className="map-panel-title"><strong>Состояние мест</strong><span>{pcs.length}</span></div><div className="map-legend-item"><i className="legend-square online" /><span>Свободны</span><b>{pcs.filter((pc) => pc.status === "online").length}</b></div><div className="map-legend-item"><i className="legend-square busy" /><span>Активная сессия</span><b>{pcs.filter((pc) => pc.status === "busy").length}</b></div><div className="map-legend-item"><i className="legend-square offline" /><span>Нет связи</span><b>{pcs.filter((pc) => pc.status === "offline").length}</b></div><div className="map-legend-item"><i className="legend-square maintenance" /><span>Сервис</span><b>{pcs.filter((pc) => pc.status === "maintenance").length}</b></div><div className="map-panel-zone">{group === "Все зоны" ? "Все зоны" : group}</div></aside><div className="map-canvas" aria-label="Карта игровых мест">{pcs.length ? Array.from({ length: slotCount }, (_, slot) => { const placed = slotByIndex.get(slot); const showContext = placed && contextPcId === placed.pc.id && !editMode; return <div className={`map-slot ${placed ? "occupied" : ""} ${dropTargetSlot === slot ? "drop-target" : ""}`} key={slot} aria-label={`Место ${slot + 1}${placed ? `: ${placed.pc.name}` : ": свободно"}`} onDragOver={(event) => { if (editMode && onPositionsChange) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTargetSlot(slot); } }} onDragLeave={() => setDropTargetSlot((current) => current === slot ? null : current)} onDrop={(event) => void handleDrop(event, slot)}>{!placed && <span className="map-slot-number">#{slot + 1}</span>}{placed && <><button className={`map-seat ${placed.pc.status} ${draggedWorkstationId === placed.pc.id ? "is-dragging" : ""}`} draggable={editMode && Boolean(onPositionsChange)} onDragStart={(event) => { if (!editMode || !onPositionsChange) return; justDraggedRef.current = true; setPositionError(null); setDraggedWorkstationId(placed.pc.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", placed.pc.id); }} onDragEnd={() => { setDraggedWorkstationId(null); setDropTargetSlot(null); window.setTimeout(() => { justDraggedRef.current = false; }, 0); }} onClick={(event) => { event.stopPropagation(); if (justDraggedRef.current) { justDraggedRef.current = false; return; } if (editMode) { onEditPc(placed.pc); } else { onSalePc(placed.pc); } }} onContextMenu={(event) => { event.preventDefault(); setContextPcId(placed.pc.id); }} aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}><div className="map-seat-top"><span>{placed.pc.name}</span><span className="map-seat-state">{placed.pc.status === "busy" ? <Wifi size={12} /> : placed.pc.status === "maintenance" ? <Settings size={12} /> : placed.pc.status === "offline" ? <X size={12} /> : <Check size={12} />}</span></div><div className="map-seat-screen"><Computer size={20} /></div><div className="map-seat-bottom"><small>{placed.pc.client || statusMeta[placed.pc.status].label}</small>{placed.pc.tariff && <small>{placed.pc.tariff}</small>}{placed.pc.session && <small><Clock3 size={10} /> {placed.pc.session}</small>}{placed.pc.status === "offline" && placed.pc.lastSeen && <small>HB: {placed.pc.lastSeen}</small>}</div></button><button type="button" className="map-seat-manage" title="Открыть карточку места" aria-label={`Открыть карточку ${placed.pc.name}`} onClick={(event) => { event.stopPropagation(); onPc(placed.pc); }}><PanelRightClose size={12} /></button>{showContext && <div className="map-context-menu" role="menu" onClick={(event) => event.stopPropagation()}><strong>{placed.pc.name}</strong><button role="menuitem" onClick={() => { setContextPcId(null); onSalePc(placed.pc); }}><Receipt size={13} /> Оформить продажу</button><button role="menuitem" onClick={() => { setContextPcId(null); onPc(placed.pc); }}><PanelRightClose size={13} /> Открыть карточку</button><button role="menuitem" disabled={placed.pc.status === "busy" || placed.pc.status === "offline" || placed.pc.status === "maintenance"} onClick={() => { setContextPcId(null); onBookPc(placed.pc.id); }}><CalendarDays size={13} /> Забронировать</button><button role="menuitem" onClick={() => { setContextPcId(null); onEditPc(placed.pc); }}><Settings size={13} /> Настройки места</button></div>}</>}</div>; }) : <div className="map-empty">Зарегистрированных мест пока нет</div>}</div></div></>;
+  return <><div className="page-heading"><div><p className="eyebrow">Оборудование · Рабочая карта</p><h1>Карта клуба</h1><p className="subheading">{editMode ? "Перетащите места в нужные ячейки и сохраните планировку." : "Нажмите на свободное место, чтобы оформить продажу; управление ПК — через кнопку ⋯."}</p></div><div className="heading-actions"><button className={`secondary-button map-edit-toggle ${editMode ? "active" : ""}`} aria-pressed={editMode} onClick={() => { setEditMode((value) => !value); setContextPcId(null); }}><Edit3 size={15} /> {editMode ? "Завершить редактирование" : "Редактировать карту"}</button><button className="primary-button" disabled={!onNewWorkstation} onClick={onNewWorkstation}><Plus size={17} /> Добавить место</button></div></div><div className="map-toolbar"><Segmented value={group} onChange={setGroup} options={zoneOptions} />{editMode && onPositionsChange && <span className="map-arrange-hint">Перетащите карточку на нужное место</span>}<div className="legend"><span><i className="legend-dot online" /> Свободен</span><span><i className="legend-dot busy" /> Занят</span><span><i className="legend-dot offline" /> Не в сети</span><span><i className="legend-dot maintenance" /> Сервис</span></div></div>{positionError && <div className="form-error map-error" role="alert">{positionError}</div>}<div className="map-stage"><aside className="map-legend-panel"><div className="map-panel-title"><strong>Состояние мест</strong><span>{pcs.length}</span></div><div className="map-legend-item"><i className="legend-square online" /><span>Свободны</span><b>{pcs.filter((pc) => pc.status === "online").length}</b></div><div className="map-legend-item"><i className="legend-square busy" /><span>Активная сессия</span><b>{pcs.filter((pc) => pc.status === "busy").length}</b></div><div className="map-legend-item"><i className="legend-square offline" /><span>Нет связи</span><b>{pcs.filter((pc) => pc.status === "offline").length}</b></div><div className="map-legend-item"><i className="legend-square maintenance" /><span>Сервис</span><b>{pcs.filter((pc) => pc.status === "maintenance").length}</b></div><div className="map-panel-zone">{group === "Все зоны" ? "Все зоны" : group}</div></aside><div className="map-canvas" aria-label="Карта игровых мест">{pcs.length ? Array.from({ length: slotCount }, (_, slot) => { const placed = slotByIndex.get(slot); const showContext = placed && contextPcId === placed.pc.id && !editMode; return <div className={`map-slot ${placed ? "occupied" : ""} ${dropTargetSlot === slot ? "drop-target" : ""}`} key={slot} aria-label={`Место ${slot + 1}${placed ? `: ${placed.pc.name}` : ": свободно"}`} onDragOver={(event) => { if (editMode && onPositionsChange) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTargetSlot(slot); } }} onDragLeave={() => setDropTargetSlot((current) => current === slot ? null : current)} onDrop={(event) => void handleDrop(event, slot)}>{!placed && <span className="map-slot-number">#{slot + 1}</span>}{placed && <><button className={`map-seat ${placed.pc.status} ${draggedWorkstationId === placed.pc.id ? "is-dragging" : ""}`} draggable={editMode && Boolean(onPositionsChange)} onDragStart={(event) => { if (!editMode || !onPositionsChange) return; justDraggedRef.current = true; setPositionError(null); setDraggedWorkstationId(placed.pc.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", placed.pc.id); }} onDragEnd={() => { setDraggedWorkstationId(null); setDropTargetSlot(null); window.setTimeout(() => { justDraggedRef.current = false; }, 0); }} onClick={(event) => { event.stopPropagation(); if (justDraggedRef.current) { justDraggedRef.current = false; return; } if (editMode) { onEditPc(placed.pc); } else if (placed.pc.status === "online") { onSalePc(placed.pc); } else { onPc(placed.pc); } }} onContextMenu={(event) => { event.preventDefault(); setContextPcId(placed.pc.id); }} aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}><div className="map-seat-top"><span>{placed.pc.name}</span><span className="map-seat-state">{placed.pc.status === "busy" ? <Wifi size={12} /> : placed.pc.status === "maintenance" ? <Settings size={12} /> : placed.pc.status === "offline" ? <X size={12} /> : <Check size={12} />}</span></div><div className="map-seat-screen"><Computer size={20} /></div><div className="map-seat-bottom"><small>{placed.pc.client || statusMeta[placed.pc.status].label}</small>{placed.pc.tariff && <small>{placed.pc.tariff}</small>}{placed.pc.session && <small><Clock3 size={10} /> {placed.pc.session}</small>}{placed.pc.status === "offline" && placed.pc.lastSeen && <small>HB: {placed.pc.lastSeen}</small>}</div></button><button type="button" className="map-seat-manage" title="Открыть карточку места" aria-label={`Открыть карточку ${placed.pc.name}`} onClick={(event) => { event.stopPropagation(); onPc(placed.pc); }}><PanelRightClose size={12} /></button>{showContext && <div className="map-context-menu" role="menu" onClick={(event) => event.stopPropagation()}><strong>{placed.pc.name}</strong><button role="menuitem" disabled={placed.pc.status !== "online"} onClick={() => { setContextPcId(null); onSalePc(placed.pc); }}><Receipt size={13} /> Оформить продажу</button><button role="menuitem" onClick={() => { setContextPcId(null); onPc(placed.pc); }}><PanelRightClose size={13} /> Открыть карточку</button><button role="menuitem" disabled={placed.pc.status !== "online"} onClick={() => { setContextPcId(null); onBookPc(placed.pc.id); }}><CalendarDays size={13} /> Забронировать</button><button role="menuitem" onClick={() => { setContextPcId(null); onEditPc(placed.pc); }}><Settings size={13} /> Настройки места</button></div>}</>}</div>; }) : <div className="map-empty">Зарегистрированных мест пока нет</div>}</div></div></>;
 }
 
 function WorkstationTable({ pcs, onPc }: { pcs: Workstation[]; onPc: (pc: Workstation) => void }) {
@@ -1967,6 +1968,10 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       setError("Продажа времени доступна из карточки игрового места");
       return;
     }
+    if (timeLines.length && pc && pc.status !== "online") {
+      setError("Новую сессию нельзя открыть: игровое место не в сети");
+      return;
+    }
     if ((paymentMethod === "balance" || paymentMethod === "mixed") && !client) {
       setError("Для оплаты с баланса выберите зарегистрированного клиента");
       return;
@@ -2019,6 +2024,14 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
           },
           `guest-payment-${sessionIdempotencyKey.current}`,
         );
+        if (payment.status !== "confirmed") {
+          setError(
+            payment.status === "needs_review"
+              ? "Оплата гостя требует ручной сверки; сессия не запущена"
+              : "Оплата гостя ещё не подтверждена; сессия не запущена",
+          );
+          return;
+        }
         guestPaymentId = payment.id;
       }
       if (pc && timeLines[0] && !startedSession) {
@@ -2052,8 +2065,12 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
             cash_shift_id: paymentMethod === "cash" || paymentMethod === "mixed" ? activeShift?.id : undefined,
             payment_parts: linePaymentParts,
           }, operationKey);
-          if (sale.status === "needs_review") {
-            setError(`Продажа сохранена для ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`);
+          if (sale.status !== "completed") {
+            setError(
+              sale.status === "needs_review"
+                ? `Продажа сохранена для ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`
+                : "Продажа сохранена в ожидании подтверждения settlement; повторная отправка заблокирована",
+            );
             return;
           }
       }
@@ -2553,13 +2570,21 @@ function PcPanel({
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      await api.sellProduct({
+      const sale = await api.sellProduct({
         product_id: product.id,
         quantity,
         client_id: clientCandidate?.id,
         payment_method: salePaymentMethod,
         cash_shift_id: salePaymentMethod === "cash" ? openShiftId : undefined,
       }, "pc-product-sale-" + crypto.randomUUID());
+      if (sale.status !== "completed") {
+        setOperationState(
+          sale.status === "needs_review"
+            ? `Продажа требует ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`
+            : "Продажа ожидает подтверждения settlement; повторная отправка заблокирована",
+        );
+        return;
+      }
       setSaleQuantity("1");
       setOperationSuccess(true);
       setOperationState("Товар продан: " + product.name + " · " + quantity + " шт.");
@@ -2602,7 +2627,7 @@ function PcPanel({
     <PanelHeader title={pc.name} subtitle={pc.group} onClose={onClose} />
     <div className="panel-pc-hero">
       <div className={"large-pc-icon " + pc.status}><Computer size={50} strokeWidth={1.2} /></div>
-      <div><span className={"pill-status " + meta.className}><i /> {meta.label}</span><h2>{pc.client || "Место свободно"}</h2><p>{pc.session ? "Сессия началась " + pc.session + " назад" : pc.lastSeen || "Готово к новой сессии"}</p>{meter && <small className="meter-status">{meter.package_minutes > 0 ? `Пакет · использовано ${meter.package_minutes} мин` : "Поминутно"} · списано ${(meter.billed_cents / 100).toLocaleString("ru-RU")} ₽ · {meter.billed_minutes} мин · {meter.status === "exhausted" ? "баланс исчерпан" : "активно"}</small>}</div>
+      <div><span className={"pill-status " + meta.className}><i /> {meta.label}</span><h2>{pc.client || "Место свободно"}</h2><p>{pc.session ? "Сессия началась " + pc.session + " назад" : pc.status === "offline" ? "Нет актуального heartbeat; новые операции заблокированы" : pc.lastSeen || "Готово к новой сессии"}</p>{meter && <small className="meter-status">{meter.package_minutes > 0 ? `Пакет · использовано ${meter.package_minutes} мин` : "Поминутно"} · списано ${(meter.billed_cents / 100).toLocaleString("ru-RU")} ₽ · {meter.billed_minutes} мин · {meter.status === "exhausted" ? "баланс исчерпан" : "активно"}</small>}</div>
     </div>
     <div className="panel-section">
       <div className="detail-row"><span>Группа</span><strong>{pc.group}</strong></div>
@@ -2611,7 +2636,7 @@ function PcPanel({
       {sessionSnapshot?.active_entitlement && <div className="detail-row"><span>Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
     </div>
     {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="panel-section"><div className="card-heading"><div><h3>Очередь пакетов</h3><p>Решение об активации подтверждает backend</p></div></div>{sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="detail-row" key={item.id}><span>#{item.queue_position} · {item.remaining_minutes} мин</span><button className="text-button" onClick={() => void activatePackage(item.id)} disabled={submitting || Boolean(sessionSnapshot.active_entitlement)}>Активировать</button></div>)}</div>}
-    {pc.status !== "busy" && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
+    {pc.status === "online" && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
       <div className="sale-entry-icon"><Receipt size={20} /></div>
       <div><strong>Оформить продажу</strong><span>Время, товары и покупатель — в одном окне</span></div>
       <ChevronRight size={17} />
@@ -2619,7 +2644,7 @@ function PcPanel({
     <div className="panel-actions">
       <button className="secondary-button wide" onClick={() => onDeposit(clientCandidate)}><WalletCards size={15} /> Пополнить баланс</button>
       <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
-      {pc.status === "busy" ? <button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status === "offline" || pc.status === "maintenance"}><ShoppingCart size={15} /> Открыть продажи</button>}
+      {pc.status === "busy" ? <button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
       {stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
       {pc.status === "busy" && api && <>
         <label>Перенести на место<select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)} disabled={submitting}>
@@ -2629,7 +2654,7 @@ function PcPanel({
         <button className="secondary-button wide" onClick={() => void transferSession()} disabled={submitting || !transferTargetId}>Перенести сессию</button>
         {transferOffer && <small className="muted">Transfer offer: {transferOffer.status} · действует до {new Date(transferOffer.expires_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</small>}
       </>}
-      <button className="secondary-button wide" onClick={onBook}>Забронировать место</button>
+      <button className="secondary-button wide" onClick={onBook} disabled={pc.status !== "online"}>Забронировать место</button>
       {operationState && <div className={`${operationSuccess ? "form-success" : "form-error"} command-result`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
     </div>
     <button className="danger-button" onClick={() => void toggleAvailability()} disabled={!api || submitting} aria-disabled={!api}>{pc.status === "maintenance" ? "Включить место" : "Отключить место"} <ChevronRight size={15} /></button>

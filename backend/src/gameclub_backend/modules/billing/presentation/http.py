@@ -162,6 +162,21 @@ def create_router(service: BillingService) -> APIRouter:
         items = await service.list_reconciliation(limit)
         return [to_reconciliation_response(item) for item in items]
 
+    @router.post(
+        "/reconciliation/{session_id}/retry",
+        response_model=ReconciliationResponse,
+    )
+    async def retry_reconciliation(
+        session_id: uuid.UUID,
+        principal: typing.Annotated[
+            Principal,
+            Depends(require_permissions("billing.manage", "cashier.supervise")),
+        ],
+    ) -> ReconciliationResponse:
+        return to_reconciliation_response(
+            await service.retry_reconciliation(session_id, principal.subject_id)
+        )
+
     @router.get("/revenue", response_model=RevenueResponse)
     async def revenue(
         principal: typing.Annotated[

@@ -29,16 +29,18 @@ frontend и WinUI используют одни и те же DTO без лока
 
 `CheckEntry` уже существует в backend и вызывается из session start. HTTP/gRPC
 поверхности для entry и snapshot, server-owned snapshot builder и typed
-consumers добавлены; heartbeat/read-model и одинаковые transport fixtures ещё
-не закрыты.
+consumers добавлены; heartbeat теперь передаёт active session и nested snapshot
+в HTTP read model и gRPC response.
 
 ## Реализовано в текущем срезе
 
 Добавлены versioned `SessionSnapshot`/entry DTO, HTTP endpoints и protobuf RPC,
 snapshot с balance, active entitlement, queue, meter, login grant, server time и
 allowed actions. Frontend запрашивает snapshot при открытой карточке ПК, а
-WinUI обновляет snapshot через gateway/heartbeat callback. Добавлены проверки
-entry refusal в frontend и backend unit/API slice.
+WinUI обновляет snapshot через gateway/heartbeat callback. Workstation response
+теперь различает `online/stale/offline`, а transport fixture сравнивает HTTP,
+gRPC и heartbeat outputs; добавлены проверки entry refusal в frontend и
+backend unit/API slice.
 
 ## Входит в план
 
@@ -64,10 +66,10 @@ entry refusal в frontend и backend unit/API slice.
    исключить обход decision через legacy handler.
 3. [x] Собрать `SessionSnapshot`: identity, zone, tariff/package, meter,
    login grant, balance, queue, server timestamp и allowed actions.
-4. [ ] Расширить heartbeat response и workstation read model; snapshot не должен
+4. [x] Расширить heartbeat response и workstation read model; snapshot не должен
    становиться источником финансовой истины.
 5. [x] Добавить HTTP endpoints/BFF и gRPC RPC с auth/device/actor scope.
-6. [ ] Добавить contract tests, которые сравнивают HTTP/gRPC/device outputs на
+6. [x] Добавить contract tests, которые сравнивают HTTP/gRPC/device outputs на
    одинаковом fixture и проверяют stale/offline semantics.
 7. [x] Подготовить consumer fixtures для frontend и WinUI без UI-правил.
 
@@ -81,10 +83,10 @@ entry refusal в frontend и backend unit/API slice.
 
 ## Остаток и release blocker
 
-Нужно завершить heartbeat/read-model contract и сравнение HTTP/gRPC/device
-результатов на общих fixtures. PostgreSQL permission/concurrency и headed
-frontend/Windows smoke относятся к плану 37 и пока не являются доказательством
-готовности этого контура.
+Остаётся native Windows compile/runtime и проверка device login entry на
+целевой машине. Общая mapping-fixture и stale/offline semantics закрыты на
+backend source/unit уровне; PostgreSQL permission/concurrency и headed
+frontend/Windows smoke относятся к плану 37.
 
 ## Проверки и evidence
 
