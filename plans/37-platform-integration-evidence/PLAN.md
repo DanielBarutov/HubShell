@@ -29,7 +29,7 @@ preflight.
 ## Реализовано в текущем срезе
 
 Локально повторены backend proto generation, Ruff, frontend typecheck/build и
-backend suite: `128 passed, 12 skipped` без DSN и `141 passed` с dev
+backend suite: `128 passed, 13 skipped` без DSN и `141 passed` с dev
 PostgreSQL/Redis DSN. Compose rebuild применил migrations до `20260902_0046`,
 HTTP/headed smoke подтвердил login, dashboard, map, context panel, session
 snapshot и entry decision, а внешний gRPC smoke подтвердил health и
