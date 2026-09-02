@@ -101,6 +101,10 @@ class PostgresSessionTransferRepository:
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"session-transfer:{offer.id}"},
                 )
+                await session.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                    {"lock_key": f"session-transfer-key:{offer.idempotency_key}"},
+                )
                 existing = await session.scalar(
                     select(SessionTransferOfferModel)
                     .where(SessionTransferOfferModel.id == offer.id)
@@ -112,7 +116,14 @@ class PostgresSessionTransferRepository:
                     )
                 )
                 if existing_by_key is not None and existing_by_key.id != offer.id:
-                    raise ValueError("Transfer idempotency key belongs to another offer")
+                    if (
+                        existing_by_key.session_id != offer.session_id
+                        or existing_by_key.client_id != offer.client_id
+                        or existing_by_key.source_workstation_id != offer.source_workstation_id
+                        or existing_by_key.target_workstation_id != offer.target_workstation_id
+                    ):
+                        raise ValueError("Transfer idempotency key belongs to another offer")
+                    return existing_by_key.to_domain()
                 if existing is None:
                     session.add(SessionTransferOfferModel.from_domain(offer))
                     return offer
@@ -144,6 +155,8 @@ class PostgresSessionTransferRepository:
                 if current_session is None:
                     raise ValueError("Session not found")
                 if current_offer.status == TransferStatus.CONFIRMED.value:
+                    if current_offer.confirm_idempotency_key != offer.confirm_idempotency_key:
+                        raise ValueError("Transfer already confirmed")
                     return current_offer.to_domain(), current_session.to_domain()
 
                 for workstation_id in sorted(
