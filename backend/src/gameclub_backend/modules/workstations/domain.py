@@ -1,8 +1,19 @@
 import dataclasses
 import datetime
 import enum
+import re
 import typing
 import uuid
+
+
+def normalize_mac_address(value: str) -> str:
+    """Return a canonical colon-separated MAC address."""
+    compact = re.sub(r"[.:-]", "", value.strip())
+    if not re.fullmatch(r"[0-9a-fA-F]{12}", compact):
+        raise ValueError("MAC address must contain 12 hexadecimal characters")
+    hexadecimal = compact
+    normalized = hexadecimal.upper()
+    return ":".join(normalized[index : index + 2] for index in range(0, 12, 2))
 
 
 class WorkstationStatus(enum.StrEnum):
@@ -88,6 +99,21 @@ class Workstation:
     archived_at: datetime.datetime | None = None
     manager_password_verifier: str | None = None
     lockdown_policy: LockdownPolicy = dataclasses.field(default_factory=LockdownPolicy)
+    mac_address: str | None = None
+    installation_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.device_id.strip():
+            raise ValueError("Device identity cannot be empty")
+        if not self.name.strip():
+            raise ValueError("Workstation name cannot be empty")
+        if self.mac_address:
+            object.__setattr__(self, "mac_address", normalize_mac_address(self.mac_address))
+        if self.installation_id is not None:
+            installation_id = self.installation_id.strip()
+            if not installation_id or len(installation_id) > 128 or "\x00" in installation_id:
+                raise ValueError("Installation identity is invalid")
+            object.__setattr__(self, "installation_id", installation_id)
 
     def heartbeat(
         self,

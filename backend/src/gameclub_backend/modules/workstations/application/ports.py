@@ -27,6 +27,9 @@ class WorkstationRepository(typing.Protocol):
     async def get_by_device_id(self, device_id: str) -> Workstation | None:
         """Return a workstation by stable device identity."""
 
+    async def get_by_mac_address(self, mac_address: str) -> Workstation | None:
+        """Return a workstation assigned to a canonical MAC address."""
+
     async def list(self) -> list[Workstation]:
         """Return all workstations."""
 

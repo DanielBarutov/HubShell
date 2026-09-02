@@ -72,6 +72,15 @@ public sealed class AccessGateCoordinator
         return true;
     }
 
+    public void OpenUserSession(
+        string message = "Доступ открыт",
+        DateTimeOffset? now = null)
+    {
+        ResetFailures();
+        var timestamp = now ?? DateTimeOffset.UtcNow;
+        _snapshot = new AccessGateSnapshot(AccessMode.User, timestamp, message);
+    }
+
     public bool TryEnterMaintenance(string password, DateTimeOffset? now = null)
     {
         if (!IsLocked)

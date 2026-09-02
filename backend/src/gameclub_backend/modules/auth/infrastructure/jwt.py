@@ -31,6 +31,8 @@ class JwtTokenService:
             "exp": expires_at,
             "jti": secrets.token_urlsafe(16),
         }
+        if principal.device_id:
+            payload["device_id"] = principal.device_id
         token = jwt.encode(payload, self._settings.jwt_secret, algorithm="HS256")
         return token, self._settings.jwt_access_ttl_seconds
 
@@ -62,4 +64,5 @@ class JwtTokenService:
             subject_type=subject_type,
             roles=roles,
             permissions=permissions,
+            device_id=(str(payload["device_id"]) if payload.get("device_id") else None),
         )

@@ -4,12 +4,14 @@ import hashlib
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from gameclub_backend.modules.auth.application.ports import RefreshTokenRepository
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import InvalidTokenError, JwtTokenService
+from gameclub_backend.modules.workstations.domain import WorkstationStatus
 
 
 class TokenRequest(BaseModel):
@@ -31,6 +33,22 @@ class RefreshTokenRequest(BaseModel):
 class DeviceTokenRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
     bootstrap_token: str = Field(min_length=1)
+
+
+class DeviceEnrollmentRequest(BaseModel):
+    mac_addresses: list[str] = Field(min_length=1, max_length=16)
+    installation_id: str = Field(min_length=1, max_length=128)
+
+
+class DeviceEnrollmentResponse(BaseModel):
+    state: str
+    device_id: str | None = None
+    workstation_id: str | None = None
+    name: str | None = None
+    group_id: str | None = None
+    theme: str | None = None
+    access_token: str | None = None
+    expires_in: int | None = None
 
 
 class PrincipalResponse(BaseModel):
@@ -182,6 +200,58 @@ async def issue_device_token(request: Request, credentials: DeviceTokenRequest) 
     )
     token, expires_in = get_token_service(request).issue_access_token(principal)
     return TokenResponse(access_token=token, expires_in=expires_in)
+
+
+@router.post("/device-enrollment", response_model=DeviceEnrollmentResponse)
+async def enroll_device(
+    request: Request,
+    credentials: DeviceEnrollmentRequest,
+) -> DeviceEnrollmentResponse | JSONResponse:
+    """Find the workstation assigned by MAC and issue a device-scoped token.
+
+    This endpoint is intentionally limited to discovery. It never issues an
+    operator token; all workstation commands still require the device JWT.
+    """
+    workstation_service = getattr(request.app.state, "workstations", None)
+    token_service: JwtTokenService | None = getattr(request.app.state, "jwt_service", None)
+    if workstation_service is None or token_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Device enrollment is not configured",
+        )
+    workstation = await workstation_service.enroll_by_mac(
+        credentials.mac_addresses,
+        credentials.installation_id,
+    )
+    if workstation is None:
+        response = DeviceEnrollmentResponse(state="pending")
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response.model_dump())
+    if workstation.status is WorkstationStatus.DISABLED:
+        response = DeviceEnrollmentResponse(
+            state="disabled",
+            device_id=workstation.device_id,
+            workstation_id=str(workstation.id),
+            name=workstation.name,
+        )
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=response.model_dump())
+
+    principal = Principal(
+        subject_id=workstation.device_id,
+        subject_type=SubjectType.DEVICE,
+        roles=frozenset({"device"}),
+        permissions=frozenset({"workstations.connect"}),
+    )
+    token, expires_in = token_service.issue_access_token(principal)
+    return DeviceEnrollmentResponse(
+        state="approved",
+        device_id=workstation.device_id,
+        workstation_id=str(workstation.id),
+        name=workstation.name,
+        group_id=workstation.group_id,
+        theme=workstation.theme,
+        access_token=token,
+        expires_in=expires_in,
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

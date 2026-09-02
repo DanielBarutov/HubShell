@@ -11,8 +11,7 @@
 
 Порядок чтения для новой задачи:
 
-1. `AGENTS.md` — обязательные архитектурные и security-правила проекта
-   (если файл появится в checkout, его путь — корень репозитория).
+1. `CODEX.md` — обязательные архитектурные и security-правила проекта.
 2. Нужный раздел этой сводки — граница модуля, путь к коду и текущий статус.
 3. Детальный владеющий план: [`plans/`](./),
    [`frontend/PLAN.md`](../frontend/PLAN.md) или [`win-client/PLAN.md`](../win-client/PLAN.md).
@@ -43,7 +42,7 @@ GameClub — операторская система игрового клуба
 | Потребитель | Транспорт | Назначение |
 | --- | --- | --- |
 | Browser/operator UI | HTTP JSON через FastAPI BFF | dashboard, карта, CRM, каталог, продажи, касса, настройки, аналитика |
-| Windows client | gRPC + Protobuf | device auth, heartbeat, команды, session gateway, catalog/reservation/billing reads |
+| Windows client | gRPC + Protobuf | MAC enrollment, device auth, heartbeat, команды, user portal и session gateway |
 | Background workers | Dramatiq/Redis | billing reconciliation, reservation no-show, кассовое расписание |
 | PostgreSQL/Redis | infrastructure adapters | долговременные факты/настройки и технический кэш/брокер |
 
@@ -55,7 +54,7 @@ GameClub — операторская система игрового клуба
 | [`backend/src/gameclub_backend/`](../backend/src/gameclub_backend/) | composition root, application, modules, jobs, HTTP/gRPC | реализация backend |
 | [`backend/src/gameclub_backend/modules/`](../backend/src/gameclub_backend/modules/) | bounded contexts | домен, use cases, repositories, handlers |
 | [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) | source-of-truth `.proto` | native gRPC-контракты |
-| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0031` | схема PostgreSQL; текущая голова `20260830_0031` |
+| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0033` | схема PostgreSQL; текущая голова `20260830_0033` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
 | [`frontend/src/App.tsx`](../frontend/src/App.tsx) | текущий operator shell и основные flows | UI orchestration; бизнес-расчёты остаются в backend |
@@ -169,9 +168,9 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Модуль | Что уже есть | Контракт / следующий шаг |
 | --- | --- | --- |
 | Foundation | async app, config, health, resources, error contract, audit, migrations, generated proto | план помечен `in_progress`; закрыть интеграционные и deployment-вопросы |
-| Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment, token/key rotation, secret storage и сертификаты |
-| Workstations | registration, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD | Windows runtime, per-device enrollment и native kiosk checks |
-| Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow; guest profile без balance и guest links | завершить открытые domain/merge и production policy вопросы плана |
+| Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и сертификаты |
+| Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
+| Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
 | Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | расширение discount/version matrix и будущие entitlements/order semantics |
 | Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support | PostgreSQL concurrency matrix и дальнейшие reservation policies |
 | Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration | native device runtime и production enrollment |
@@ -197,7 +196,7 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 
 В [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) определены:
 
-`SystemService`, `WorkstationService`, `ClientService`, `CatalogService`,
+`SystemService`, `WorkstationService`, `ClientService`, `ClientPortalService`, `CatalogService`,
 `ReservationService`, `SessionService`, `BillingService`, `CashShiftService` и
 `AnalyticsService`.
 
@@ -265,14 +264,14 @@ production-scale UI для тяжёлых отчётов и native Windows flows
 | --- | --- |
 | `Domain` | connection state, heartbeat, command/session snapshots, lockdown policy |
 | `Application` | access-gate и session coordinators, ports для backend/token/executor |
-| `Infrastructure` | gRPC adapter, bearer metadata, health, device bootstrap, PBKDF2, Windows command/power adapters, endpoint policy |
-| `Presentation` | WinUI `MainWindow`, `App`, `MainViewModel`, compact/full-window state |
+| `Infrastructure` | gRPC adapter, bearer metadata, health, enrollment, token storage, Windows command/power adapters, endpoint policy |
+| `Presentation` | WinUI `MainWindow`, `App`, `MainViewModel`, fullscreen Locked shell |
 | `tests` | access-gate, session coordinator, password verifier, command executor |
 
 Уже реализовано в source-level срезе:
 
-- compact widget/full-window mode;
-- device JWT через dev bootstrap, bearer metadata и heartbeat;
+- borderless fullscreen locked shell; compact toggle убран из пользовательского flow;
+- MAC enrollment, installation identity в AppData, device JWT и bearer metadata;
 - server-streaming command receiver с `expires_at`, ACK/NACK, reconnect backoff
   и ограниченным in-memory duplicate guard;
 - allowlist `display.lock`, `theme.apply`, `session.start/stop` и структурный
@@ -284,13 +283,15 @@ production-scale UI для тяжёлых отчётов и native Windows flows
 - `Ctrl+Alt+P`, session locked/zero-balance handling и controlled restart после
   подтверждённого stop;
 - installer/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
-  `build-portable-exe.ps1` собирает single-file self-contained EXE для передачи
-  на клиентский ПК без установки .NET/Visual Studio.
+  `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
+  зашитыми non-secret HTTPS endpoint metadata для передачи на клиентский ПК.
+- server-backed register/login/profile/history screen показывает баланс,
+  операции, списания времени, товары, тарифы/сессии и доступное время.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
 
-Не закрыто: native `dotnet restore/build/test`, запуск под обычным пользователем,
+Не закрыто: production hardening enrollment/rebind/token rotation, native `dotnet restore/build/test`, запуск под обычным пользователем,
 реальный reconnect/theme/restart smoke и Assigned Access/Shell Launcher с
 ограничением Explorer/Alt+Tab/других приложений. App-level lock не считается
 заменой Windows security boundary. Детали — в
@@ -330,6 +331,19 @@ Windows-клиент не хранит баланс и не выполняет �
     - внешние host-порты Compose разделены с системными default-портами;
     - добавлен unpackaged single-file self-contained publish для одного EXE;
     - endpoint defaults клиента синхронизированы с новым HTTP/gRPC-профилем.
+12. Автоматическое подключение и user portal:
+    - MAC enrollment с installation binding, `pending/approved/disabled` и
+      миграциями `0032/0033`;
+    - `ClientPortalService` в gRPC с device-scoped registration/login и
+      client-scoped JWT, histories и available time;
+    - WinUI fullscreen shell и server-backed login/register/profile/history;
+    - portable publish получил baked HTTPS endpoint parameters и не требует
+      env/bootstrap/token/PIN setup на игровом ПК.
+    - enrollment получает понятный rejected-state при конфликте installation id;
+      уже привязанное место нельзя случайно изменить на другой MAC без отдельной
+      rebind-операции.
+    - добавлен in-process gRPC smoke для portal registration/snapshot с проверкой
+      client/device scope.
 
 Детальные задачи и решения: [`plans/README.md`](README.md) и таблица
 проверок ниже. В README есть небольшое расхождение: Product Sales уже имеет
@@ -343,13 +357,14 @@ Windows-клиент не хранит баланс и не выполняет �
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `104 passed, 12 skipped` | unit/API/contract/jobs и memory-backed flows; skipped требуют PostgreSQL DSN |
+| `cd backend && uv run pytest -q` | `108 passed, 12 skipped` | unit/API/contract/jobs и memory-backed flows, включая HTTP enrollment и in-process gRPC portal scope; skipped требуют PostgreSQL DSN |
 | `cd backend && uv run ruff check .` | успешно | lint backend |
-| `cd backend && uv run ruff format --check ...` | успешно, 167 files | форматирование |
+| `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 3 старых неформатированных файла |
 | `cd frontend && npm run typecheck` | успешно | TypeScript compile/type boundary |
 | `cd frontend && npm run build` | успешно | production Vite build |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
-| `docker compose up -d --build` | успешно | full local stack; migration `20260830_0031`, services healthy/running |
+| `docker compose up -d --build` | успешно | full local stack пересобран; migrations `20260830_0032` и `20260830_0033` применены, HTTP/gRPC/frontend healthy |
+| live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
 | Live HTTP smoke | успешно | fresh operator token, `/auth/me`, payment methods, analytics 200, sales 200, auth-aware error path |
 | Redis cache smoke | TTL около `16 s` сразу после чтения | cache key created with bounded 20 s TTL; Redis не заменяет DB |
 | Playwright headed smoke | успешно | login, map fixed card/scroll-frame, checkout retry behavior, payment CRUD, analytics without 403 |
@@ -360,10 +375,10 @@ Windows-клиент не хранит баланс и не выполняет �
 | Направление | Почему не закрыто |
 | --- | --- |
 | PostgreSQL integration/concurrency | 12 тестов пропускаются без `GAMECLUB_TEST_POSTGRES_DSN` и Redis DSN; memory tests не доказывают database locks/constraints |
-| Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime |
+| Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime; `dotnet` отсутствует в PATH |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | сейчас подтверждён локальный headed smoke; полноценный набор браузеров и realtime transport не выполнялись |
-| Production security | нужны real secret storage, TLS/mTLS certificates, device enrollment, rotation/revocation, backups и deployment policy |
+| Production security | нужны real secret storage, enrollment rate-limit/rebind, TLS/mTLS certificates, rotation/revocation, backups и deployment policy |
 | Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
 
 ## 11. Следующие задачи
@@ -395,7 +410,7 @@ Windows-клиент не хранит баланс и не выполняет �
 
 ### P1 — production readiness
 
-- per-device enrollment вместо временного device bootstrap;
+- hardening per-device enrollment: rebind policy, rate limit, pairing, rotation;
 - access/refresh key rotation, revocation policy и полноценный secret storage;
 - production HTTPS/gRPC TLS, при необходимости mTLS, certificate issuance/rotation;
 - Windows Credential Manager hardening и kiosk provisioning Assigned Access/

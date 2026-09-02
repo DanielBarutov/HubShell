@@ -1,6 +1,8 @@
 export type BackendWorkstation = {
   id: string;
   device_id: string;
+  mac_address: string | null;
+  installation_bound: boolean;
   name: string;
   group_id: string | null;
   position: number | null;
@@ -528,7 +530,8 @@ export class GameClubApi {
   }
 
   async registerWorkstation(payload: {
-    device_id: string;
+    device_id?: string;
+    mac_address: string;
     name: string;
     group_id: string | null;
     position: number | null;
@@ -547,7 +550,7 @@ export class GameClubApi {
     });
   }
 
-  async updateWorkstation(workstationId: string, payload: { name: string; group_id: string | null; position: number | null }): Promise<BackendWorkstation> {
+  async updateWorkstation(workstationId: string, payload: { name: string; mac_address: string | null; group_id: string | null; position: number | null }): Promise<BackendWorkstation> {
     return this.request<BackendWorkstation>(`/workstations/${workstationId}`, {
       method: "PUT",
       body: JSON.stringify(payload),

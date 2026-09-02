@@ -18,6 +18,10 @@ class WorkstationModel(WorkstationBase):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     device_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    mac_address: Mapped[str | None] = mapped_column(
+        String(17), unique=True, index=True, nullable=True
+    )
+    installation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     name: Mapped[str] = mapped_column(String(128))
     group_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     position: Mapped[int | None] = mapped_column(nullable=True)
@@ -46,6 +50,8 @@ class WorkstationModel(WorkstationBase):
             disabled_reason=self.disabled_reason,
             capabilities=tuple(self.capabilities or ()),
             archived_at=self.archived_at,
+            mac_address=self.mac_address,
+            installation_id=self.installation_id,
         )
 
     @classmethod
@@ -62,6 +68,8 @@ class WorkstationModel(WorkstationBase):
             disabled_reason=workstation.disabled_reason,
             capabilities=list(workstation.capabilities),
             archived_at=workstation.archived_at,
+            mac_address=workstation.mac_address,
+            installation_id=workstation.installation_id,
         )
 
 
@@ -78,6 +86,13 @@ class PostgresWorkstationRepository:
         async with open_session(self._engine_provider) as session:
             result = await session.scalar(
                 select(WorkstationModel).where(WorkstationModel.device_id == device_id)
+            )
+            return result.to_domain() if result else None
+
+    async def get_by_mac_address(self, mac_address: str) -> Workstation | None:
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalar(
+                select(WorkstationModel).where(WorkstationModel.mac_address == mac_address)
             )
             return result.to_domain() if result else None
 

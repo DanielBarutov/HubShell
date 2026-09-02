@@ -439,3 +439,161 @@ class ClientService:
             timeout,
             metadata,
             _registered_method=True)
+
+
+class ClientPortalServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Register = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/Register',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.RegisterPortalRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+                _registered_method=True)
+        self.Login = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/Login',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+                _registered_method=True)
+        self.Get = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/Get',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.GetPortalRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
+                _registered_method=True)
+
+
+class ClientPortalServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def Register(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Login(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Get(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ClientPortalServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Register': grpc.unary_unary_rpc_method_handler(
+                    servicer.Register,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.RegisterPortalRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.SerializeToString,
+            ),
+            'Login': grpc.unary_unary_rpc_method_handler(
+                    servicer.Login,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.SerializeToString,
+            ),
+            'Get': grpc.unary_unary_rpc_method_handler(
+                    servicer.Get,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.GetPortalRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'gameclub.clients.v1.ClientPortalService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('gameclub.clients.v1.ClientPortalService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ClientPortalService:
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Register(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/Register',
+            gameclub_dot_v1_dot_clients__pb2.RegisterPortalRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Login(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/Login',
+            gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Get(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/Get',
+            gameclub_dot_v1_dot_clients__pb2.GetPortalRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

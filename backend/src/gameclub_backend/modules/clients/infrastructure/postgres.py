@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, String, select, text
+from sqlalchemy import DateTime, String, func, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -147,6 +147,20 @@ class PostgresClientRepository:
     async def get(self, client_id: uuid.UUID) -> Client | None:
         async with open_session(self._engine_provider) as session:
             model = await session.get(ClientModel, client_id)
+            return model.to_domain() if model else None
+
+    async def get_by_nickname(self, nickname: str) -> Client | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(
+                select(ClientModel).where(
+                    func.lower(ClientModel.nickname) == nickname.strip().lower()
+                )
+            )
+            return model.to_domain() if model else None
+
+    async def get_by_phone(self, phone: str) -> Client | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(select(ClientModel).where(ClientModel.phone == phone))
             return model.to_domain() if model else None
 
     async def list_clients(self) -> list[Client]:

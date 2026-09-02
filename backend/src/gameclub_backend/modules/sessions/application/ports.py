@@ -27,6 +27,9 @@ class SessionRepository(typing.Protocol):
     ) -> list[Session]:
         """Return sessions for operator display."""
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+        """Return recent sessions belonging to one client."""
+
     async def save(self, session: Session) -> Session:
         """Persist a session or its lifecycle transition."""
 

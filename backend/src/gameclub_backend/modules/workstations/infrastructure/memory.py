@@ -16,6 +16,12 @@ class InMemoryWorkstationRepository:
             None,
         )
 
+    async def get_by_mac_address(self, mac_address: str) -> Workstation | None:
+        return next(
+            (item for item in self._items.values() if item.mac_address == mac_address),
+            None,
+        )
+
     async def list(self) -> list[Workstation]:
         return sorted(
             self._items.values(),

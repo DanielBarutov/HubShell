@@ -1,5 +1,6 @@
 using GameClub.Client.Application.Ports;
 using GameClub.Client.Domain;
+using GameClub.Client.Infrastructure;
 
 namespace GameClub.Client.Application;
 
@@ -16,6 +17,8 @@ public sealed class ClientSessionCoordinator
 
     public IWorkstationSessionGateway BackendClient => _backendClient;
 
+    public IClientPortalGateway ClientPortal => _backendClient;
+
     public async Task<ClientConnectionSnapshot> CheckConnectionAsync(
         CancellationToken cancellationToken = default)
     {
@@ -31,6 +34,26 @@ public sealed class ClientSessionCoordinator
         {
             return AuthenticationRequiredSnapshot();
         }
+        catch (DeviceEnrollmentPendingException)
+        {
+            return WaitingForAssignmentSnapshot();
+        }
+        catch (DeviceEnrollmentDisabledException)
+        {
+            return new ClientConnectionSnapshot(
+                ClientConnectionState.Offline,
+                "Место отключено администратором",
+                null,
+                "—");
+        }
+        catch (DeviceEnrollmentRejectedException)
+        {
+            return new ClientConnectionSnapshot(
+                ClientConnectionState.Offline,
+                "Эта установка уже привязана к другому месту",
+                null,
+                "—");
+        }
         catch (Exception)
         {
             return new ClientConnectionSnapshot(
@@ -45,6 +68,13 @@ public sealed class ClientSessionCoordinator
         new(
             ClientConnectionState.AuthenticationRequired,
             "Требуется повторная авторизация устройства",
+            null,
+            "—");
+
+    private static ClientConnectionSnapshot WaitingForAssignmentSnapshot() =>
+        new(
+            ClientConnectionState.WaitingForAssignment,
+            "Ожидаем привязку этого ПК администратором",
             null,
             "—");
 

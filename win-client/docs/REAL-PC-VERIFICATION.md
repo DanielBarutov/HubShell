@@ -1,54 +1,26 @@
 # Проверка Windows-клиента на реальном ПК
 
-Этот документ предназначен для первой полноценной проверки `GameClub.Client`
-на физическом компьютере под Windows. В Linux можно проверить структуру проекта,
-контракты и статические границы, но нельзя считать подтверждёнными WinUI 3
-restore/build, запуск окна, access-gate и системный kiosk.
+Этот документ проверяет целевой deployment: один EXE собирается на админском
+Windows-ПК, затем переносится на игровой ПК и запускается без консольной
+настройки. Linux подтверждает только исходники, контракты и серверные тесты;
+WinUI 3, XAML compiler, fullscreen и kiosk нужно проверять на физическом
+Windows-ПК.
 
-## 1. Что понадобится
+## 1. Что нужно заранее
 
-- физический Windows 10 build 17763+ или Windows 11;
-- для сборки: Visual Studio 2022 с workload **.NET desktop development**, .NET
-  8 SDK и Windows SDK;
-- архитектура `x64` для обычного игрового ПК;
-- доступ к исходникам проекта и PowerShell;
-- запущенный backend GameClub;
-- зарегистрированный в dashboard workstation с тем же `device_id`, который
-  будет передан Windows-клиенту.
+- Windows 10 build 17763+ или Windows 11 на тестовом игровом ПК;
+- админский Windows-ПК с Visual Studio 2022, workload `.NET desktop
+  development`, .NET 8 SDK и Windows SDK;
+- backend GameClub, доступный игровому ПК по HTTPS/gRPC TLS;
+- операторский доступ к web-админке;
+- отдельная тестовая workstation и тестовый пользователь.
 
-Целевая матрица версий находится в
-[SUPPORT-MATRIX.md](SUPPORT-MATRIX.md).
+Для обычного клиента не нужны Visual Studio, .NET SDK и права администратора.
+Архитектура `x64` подходит для обычного игрового ПК.
 
-## 2. Выберите схему подключения
+## 2. Проверить backend и порты
 
-### Backend и Windows-клиент на одном ПК
-
-Это самый простой вариант для первого smoke-теста. Клиент использует:
-
-```text
-GAMECLUB_AUTH_ADDRESS=http://127.0.0.1:8100
-GAMECLUB_GRPC_ADDRESS=http://127.0.0.1:51051
-```
-
-### Backend на отдельном Linux-компьютере
-
-Вместо `127.0.0.1` укажите LAN-адрес backend-хоста, например
-`https://192.168.1.20:8100` и `https://192.168.1.20:51051`,
-если на backend настроен TLS/reverse proxy.
-
-Важно: текущий dev Compose по умолчанию публикует HTTP и gRPC только на
-`127.0.0.1` хоста. Для подключения с другого компьютера нужно осознанно
-изменить сетевую публикацию/прокси и правила firewall. Для production
-используйте TLS и `https://`/защищённый gRPC endpoint; не переносите dev
-bootstrap-токен в постоянную установку.
-
-Dev HTTP разрешён только для loopback. Для client PC на отдельном хосте нужен
-защищённый HTTPS/gRPC endpoint либо backend и клиент следует временно запускать
-на одной машине для локального smoke-теста.
-
-## 3. Запустите dev backend
-
-Из корня проекта в PowerShell:
+На машине, где запущен backend, администратор может поднять dev-стек:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -57,250 +29,169 @@ docker compose ps
 (Invoke-WebRequest http://127.0.0.1:8100/health/ready).StatusCode
 ```
 
-Ожидаемый код readiness — `200`. Если backend запущен на другом хосте,
-проверяйте его адрес вместо `127.0.0.1`.
+Ожидаемый readiness — `200`. Для реального игрового ПК `127.0.0.1` не подходит:
+в EXE нужно зашить доступный DNS/LAN-адрес backend и защищённые endpoint'ы.
+Dev HTTP loopback не является способом подключения удалённого клиента.
 
-Для локального dev допустимы значения из `.env.example`, но перед проверкой
-убедитесь, что bootstrap-токен и operator credentials заданы в локальном
-`.env`, а не вписаны в эту инструкцию или в исходники. Реальные секреты не
-добавляйте в Git и не передавайте в командной строке, если этого можно избежать.
+Текущий Compose публикует host-порты frontend `3100`, HTTP `8100`, gRPC `51051`,
+PostgreSQL `55432` и Redis `56379`. В клиент вшивается только HTTP auth и gRPC
+адрес; PostgreSQL/Redis клиенту не нужны.
 
-## 4. Зарегистрируйте workstation
+## 3. Один раз собрать portable EXE
 
-1. Откройте operator UI: `http://127.0.0.1:3100`.
-2. Войдите оператором dev-окружения.
-3. В настройках добавьте или найдите workstation и задайте:
-   - `device_id`, например `pc-001`;
-   - имя и группу/зону;
-   - позицию на карте;
-   - разрешённое состояние, без disabled-причины.
-4. Для группы задайте тему (обычная, VIP, neon или minimal) и policy.
-
-Один только device bootstrap token не регистрирует новый ПК: identity устройства
-должна существовать в Workstations. Для первого безопасного теста используйте
-`lock_after_session=true`, но временно выключите
-`restart_after_session`, иначе успешная проверка `session.stop` может запланировать
-перезапуск Windows.
-
-## 5. Подготовьте переменные процесса
-
-Откройте PowerShell из корня проекта. Значения ниже действуют только для текущего
-окна PowerShell и не сохраняются в репозитории:
+На админском Windows-ПК из каталога `win-client` выполните:
 
 ```powershell
-Set-Location .\win-client
-
-$env:GAMECLUB_ENVIRONMENT = "dev"
-$env:GAMECLUB_DEVICE_ID = "pc-001"
-$env:GAMECLUB_AUTH_ADDRESS = "http://127.0.0.1:8100"
-$env:GAMECLUB_GRPC_ADDRESS = "http://127.0.0.1:51051"
-
-$deviceTokenLine = Get-Content ..\.env |
-    Where-Object { $_ -match '^GAMECLUB_DEVICE_BOOTSTRAP_TOKEN=' } |
-    Select-Object -First 1
-$env:GAMECLUB_DEVICE_BOOTSTRAP_TOKEN =
-    $deviceTokenLine -replace '^GAMECLUB_DEVICE_BOOTSTRAP_TOKEN=', ''
-Remove-Variable deviceTokenLine
+.\scripts\build-portable-exe.ps1 `
+  -Architecture x64 `
+  -Configuration Release `
+  -EnvironmentName production `
+  -AuthAddress "https://api.example.club:8100" `
+  -GrpcAddress "https://api.example.club:51051"
 ```
 
-Если backend находится на Linux-хосте, замените оба адреса на его LAN/TLS-адрес.
-Не вставляйте фактическое значение токена в отчёты, скриншоты или Git.
+Подставьте реальные адреса вашей инфраструктуры. Результат:
 
-Для access-gate сгенерируйте PBKDF2-хеши локально. Скрипт не печатает plaintext
-пароль, поэтому сохраните пароль в менеджере секретов тестовой машины:
-
-```powershell
-$userHashLine = .\scripts\new-access-hash.ps1 -Kind user
-$env:GAMECLUB_CLIENT_ACCESS_PIN_HASH =
-    $userHashLine.Substring($userHashLine.IndexOf("=") + 1)
-Remove-Variable userHashLine
-
-$managerHashLine = .\scripts\new-access-hash.ps1 -Kind manager
-$env:GAMECLUB_MANAGER_PASSWORD_HASH =
-    $managerHashLine.Substring($managerHashLine.IndexOf("=") + 1)
-Remove-Variable managerHashLine
+```text
+artifacts\portable\win-x64\Release\GameClub.Client.exe
 ```
 
-В dev при отсутствии manager hash существует встроенное значение `password`, но
-для проверяемого сценария лучше задать свой пароль и зафиксировать только факт
-проверки, не сам пароль.
+Сохраните SHA-256 из вывода скрипта. Не копируйте в EXE или командную строку
+секреты, JWT, bootstrap token, PIN-хэши или `device_id`.
 
-## 6. Выполните native restore/build/test
+## 4. Запустить клиент до назначения
 
-В том же PowerShell:
+1. Скопируйте один `GameClub.Client.exe` на игровой ПК.
+2. Запустите двойным кликом обычным пользователем, не от имени администратора.
+3. Убедитесь, что клиент стартует в полноэкранном borderless shell, а не в
+   обычном окне с desktop-фоном.
+4. До назначения места клиент показывает ожидание привязки по MAC и не открывает
+   рабочие действия.
+5. В логах и файлах не должно быть JWT, паролей и полного payload.
 
-```powershell
-dotnet --info
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
-```
+На игровом ПК не выполняются `dotnet`, PowerShell setup, установка SDK,
+создание env-переменных или генерация PIN-хэшей.
 
-Скрипт проверяет Windows, выполняет `restore`, native `build` и `test`, затем
-печатает ручной checklist. Успехом считается только ситуация, когда все три шага
-завершились без ошибок. При необходимости те же действия вручную:
+## 5. Назначить MAC в админке
 
-```powershell
-dotnet restore .\GameClub.Client.sln
-dotnet build .\GameClub.Client.sln --configuration Debug -p:Platform=x64 --no-restore
-dotnet test .\GameClub.Client.sln --configuration Debug -p:Platform=x64 --no-restore
-```
+1. Откройте web-админку на админском ПК.
+2. Создайте workstation без ручного `device_id`.
+3. Введите MAC игрового ПК, выберите имя, группу/зону и позицию.
+4. Убедитесь, что место имеет разрешённое состояние и не disabled.
+5. Дождитесь автоматического перехода клиента из `pending` в `approved`.
 
-## 7. Запустите клиент
+MAC можно посмотреть штатными средствами Windows, например в сведениях
+сетевого адаптера. В production используйте подтверждённый MAC из инвентаризации;
+MAC сам по себе не считается полноценной аутентификацией.
 
-Предпочтительно запустить `GameClub.Client` из Visual Studio с конфигурацией
-`Debug` и платформой `x64`. Если нужен запуск из PowerShell после build:
+После первого approved backend связывает workstation с техническим
+`installation_id` в `%LocalAppData%\GameClub\Client`. Другая установка не может
+молча заменить эту привязку. Проверяйте также heartbeat, тему группы и policy.
 
-```powershell
-$clientExe = Get-ChildItem .\src\GameClub.Client\bin -Recurse `
-    -Filter GameClub.Client.exe | Select-Object -First 1
-& $clientExe.FullName
-```
+## 6. Пользовательский smoke
 
-Клиент должен стартовать в `Locked`, без показа баланса, профиля и рабочих
-действий до ввода пользовательского PIN.
+На Locked-экране проверить:
 
-## 8. Ручной smoke-чеклист
+- [ ] fullscreen, borderless, focus и отсутствие обычного title bar;
+- [ ] до входа не видны баланс, история и рабочие операции;
+- [ ] новая регистрация по nickname, телефону и PIN проходит один раз;
+- [ ] повторный запуск/вход не создаёт дублирующий аккаунт или ledger;
+- [ ] вход работает по nickname и canonical phone;
+- [ ] видны только данные текущего пользователя: баланс, бонусы, пополнения,
+  списания, поминутные charges, товары, тарифы, сессии и доступное время;
+- [ ] logout очищает пользовательский snapshot и возвращает Locked;
+- [ ] истёкший/отозванный client token возвращает Locked без показа чужих данных;
+- [ ] `Ctrl+Alt+P` открывает только manager maintenance по отдельному паролю;
+- [ ] закрытие maintenance снова возвращает Locked.
 
-Отмечайте каждый пункт как `PASS`, `FAIL` или `NOT CHECKED` с временем и
-комментарием.
+Одна и та же операция не должна повторяться при двойном клике. Ошибка backend
+должна показываться понятным состоянием, а не оставлять пользователя в
+полусостоянии активной сессии.
 
-### Access-gate и режимы
+## 7. Связь, настройки и сессия
 
-- [ ] После запуска отображается `Locked`; рабочие данные не раскрыты.
-- [ ] Правильный пользовательский PIN переводит клиент в `User`.
-- [ ] Неверные попытки отклоняются; после пяти ошибок действует cooldown.
-- [ ] После закрытия/деактивации окна credentials очищаются, клиент возвращается
-  в `Locked`.
-- [ ] `Ctrl+Alt+P` открывает manager maintenance только по отдельному паролю.
-- [ ] После бездействия клиент блокируется; штатный таймаут access-gate — 10 минут.
-- [ ] При `401/403` или `Unauthenticated/PermissionDenied` клиент не продолжает
-  рабочие действия и требует повторной авторизации устройства.
+- [ ] workstation становится online только после актуального heartbeat;
+- [ ] остановка backend/gRPC показывает offline/reconnect, а не ложный успех;
+- [ ] после восстановления соединения возвращаются heartbeat, stream, тема и
+  policy без ручного ввода токена;
+- [ ] смена темы группы применяется после обновления настроек;
+- [ ] старт/stop сессии проходит через backend и не создаёт вторую active-сессию;
+- [ ] поминутная сессия отражается в доступном времени и debit history;
+- [ ] повторное нажатие stop/sale не создаёт второй debit, sale или active session;
+- [ ] после restart клиент снова стартует Locked и повторяет enrollment по своей
+  installation identity.
 
-### Связь с backend и карта ПК
-
-- [ ] Workstation появляется online с правильным `device_id`.
-- [ ] Первый heartbeat приходит в течение примерно 15–30 секунд; статус не
-  становится «доступен» только из-за факта регистрации.
-- [ ] При остановке backend/gRPC клиент показывает offline/reconnect, а не
-  ложный успех операции:
+Для управляемого сетевого теста на backend-хосте:
 
 ```powershell
 docker compose stop backend-grpc
-# подождать 15–30 секунд и проверить offline/reconnect
+# проверить offline/reconnect на игровом ПК
 docker compose start backend-grpc
 # дождаться heartbeat и восстановления stream
 ```
 
-- [ ] После восстановления соединения клиент снова получает актуальную policy.
-- [ ] Компактный и full-window режимы переключаются, контекст не теряется.
+Не используйте для первого smoke команды `system.restart`, `shell.*` и другие
+непроверенные административные действия.
 
-### Темы и типизированные команды
+## 8. Windows kiosk boundary
 
-- [ ] Из настроек группы применяются `standard`, `vip`, `neon`, `minimal`.
-- [ ] Тема обновляется после heartbeat без пересборки клиента.
-- [ ] Для безопасной проверки команды отправьте только `theme.apply` или
-  `display.lock` через operator UI/API; проверяйте переход команды из `queued` в
-  `acknowledged`.
-- [ ] Повторная доставка одной команды не создаёт второй локальный side effect.
-- [ ] Не используйте для первого smoke `system.restart`, `shell.*` и любые
-  непроверенные административные команды.
-
-Для ручной проверки BFF используйте Swagger backend (окончание `/docs`) и операторский
-JWT. Endpoint команды:
-`POST /api/v1/workstations/{workstation_id}/commands` с заголовком
-`Idempotency-Key`; статус читается через
-`GET /api/v1/workstations/{workstation_id}/commands/{command_id}`.
-
-### Сессия
-
-- [ ] Создайте тестовую сессию из operator UI для этого workstation.
-- [ ] Убедитесь, что в один момент времени не появляется вторая active-сессия.
-- [ ] Выполните штатное завершение и отдельно interrupt-сценарий.
-- [ ] После подтверждённого `session.stop` клиент переходит в
-  `SessionLocked`/`Locked`, а повторное нажатие не создаёт вторую операцию.
-- [ ] После теста верните исходное значение `restart_after_session` в policy.
-
-### Обрыв и повторный запуск
-
-- [ ] Остановите клиент во время offline и запустите снова: стартовое состояние
-  снова `Locked`.
-- [ ] Восстановите backend и проверьте heartbeat, stream и ACK после reconnect.
-- [ ] В логах нет токенов, PIN, manager password, JWT или полного payload.
-
-## 9. Проверка Windows kiosk
-
-App-level access-gate не является границей безопасности Windows. Assigned Access
-или Shell Launcher проверяйте только на отдельной тестовой машине с возможностью
-восстановления. Не применяйте policy на ежедневном рабочем ПК.
-
-Сначала сформируйте preview без изменения системы:
+App-level Locked shell не запрещает выход в Windows. На отдельной тестовой
+машине сформируйте preview:
 
 ```powershell
 .\scripts\configure-windows-kiosk.ps1 `
-    -KioskUser "GameClubUser" `
-    -ExecutablePath "C:\Program Files\GameClub\Client\GameClub.Client.exe"
+  -KioskUser "GameClubUser" `
+  -ExecutablePath "C:\GameClub\GameClub.Client.exe"
 ```
 
-Фактическое применение требует поддерживаемой редакции Enterprise/Education/IoT,
-прав администратора/SYSTEM, отдельной kiosk-учётной записи и заранее проверенного
-пути восстановления. После отдельного подтверждения можно применить policy через
-`-Apply`; восстановление выполняется так:
+Применение выполняйте только после сохранения точки восстановления и отдельного
+подтверждения:
+
+```powershell
+.\scripts\configure-windows-kiosk.ps1 -Apply
+```
+
+Проверьте обычным пользователем отсутствие Explorer, Start Menu, desktop,
+Alt+Tab и произвольных приложений, а также recovery. Для возврата:
 
 ```powershell
 .\scripts\configure-windows-kiosk.ps1 -Apply -Restore
 ```
 
-Проверяйте обычным пользователем запрет Explorer, Start Menu, Alt+Tab,
-неразрешённых приложений, выхода в desktop и восстановление клиента после
-перезапуска. Если редакция Windows или policy не позволяет выполнить этот пункт,
-фиксируйте `NOT CHECKED`, а не `PASS`.
+Если редакция Windows не поддерживает Assigned Access/Shell Launcher, отмечайте
+пункт `NOT CHECKED`, а не `PASS`.
 
-## 10. Release-проверка (после Debug smoke)
+## 9. Native build и release-check
 
-Для передачи одного EXE на клиентский ПК после успешного Debug smoke выполните:
+На машине разработчика/администратора, не на игровом ПК:
 
 ```powershell
-.\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
+.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 ```
 
-Файл для передачи:
-`artifacts\portable\win-x64\Release\GameClub.Client.exe`.
-Проверьте его запуск на чистом тестовом профиле. Публикация и installer для
-folder-варианта выполняются отдельно:
+Успехом считаются безошибочные `dotnet restore`, `dotnet build` и `dotnet test`.
+Для solution используйте `-p:Platform=x64`, а не `--arch`.
 
-```powershell
-.\scripts\publish-windows.ps1 -Architecture x64 -Configuration Release
-.\scripts\build-installer.ps1 -Architecture x64 -Configuration Release
-```
+После Debug smoke снова соберите Release portable, проверьте SHA-256 и запустите
+файл на чистом профиле игрового ПК. Отдельная folder-публикация и installer
+нужны только для сценариев автозапуска/recovery; основной пользовательский
+сценарий остаётся «скопировать один EXE и запустить».
 
-Проверьте установку на чистом тестовом профиле, автозапуск, recovery task и
-удаление. В self-contained payload должен попасть весь необходимый runtime, а не
-только EXE. Production secrets не должны вшиваться в EXE или передаваться в
-обычный installer command line.
+## 10. Отчёт о проверке
 
-## 11. Что приложить к результату
+Зафиксируйте:
 
-- commit/version backend и Windows-клиента;
-- edition и build Windows;
+- версию/commit backend и клиента;
+- edition/build Windows, архитектуру и конфигурацию;
 - вывод `dotnet --info` без секретов;
-- архитектуру и конфигурацию сборки;
-- результат restore/build/test;
-- список пунктов smoke с `PASS`/`FAIL`/`NOT CHECKED`;
-- время теста, workstation `device_id` и backend endpoint без токенов;
-- скриншоты только без PIN, JWT, токенов и персональных данных;
-- отдельное указание, проверялся ли Assigned Access/Shell Launcher.
+- restore/build/test и SHA-256 EXE;
+- workstation MAC без лишних персональных данных;
+- пункты smoke как `PASS`, `FAIL` или `NOT CHECKED`;
+- отдельно: проверялись ли reconnect, kiosk, recovery и production TLS.
 
-## Критерий завершения
+Нативная проверка считается закрытой только после реального запуска и ручного
+smoke. Linux-тесты и статический анализ не заменяют этот результат.
 
-Нативная проверка считается закрытой, когда на реальном Windows-ПК пройдены
-restore/build/test, locked/user/maintenance/session flows, reconnect, heartbeat,
-темы, типизированная команда и повторный запуск. Kiosk и Release installer
-отмечаются отдельными результатами; отсутствие поддерживаемой редакции Windows
-не скрывается под общим статусом «клиент проверен».
-
-Связанные документы:
-
-- [README.md](../README.md) — конфигурация и локальный запуск;
-- [ACCESS-GATE.md](ACCESS-GATE.md) — границы app-shell и Windows security;
-- [SUPPORT-MATRIX.md](SUPPORT-MATRIX.md) — целевые версии и ограничения;
-- [lockdown plan](../../plans/22-windows-lockdown/PLAN.md) — план lockdown;
-- [verification matrix](../../plans/VERIFICATION.md) — общий verification matrix.
+Связанные документы: [README.md](../README.md),
+[ACCESS-GATE.md](ACCESS-GATE.md), [SUPPORT-MATRIX.md](SUPPORT-MATRIX.md),
+[`plans/28-integration-checks`](../../plans/28-integration-checks/PLAN.md).

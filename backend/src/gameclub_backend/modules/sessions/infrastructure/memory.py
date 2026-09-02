@@ -45,6 +45,13 @@ class InMemorySessionRepository:
             reverse=True,
         )
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+        return sorted(
+            (item for item in self._items.values() if item.client_id == client_id),
+            key=lambda item: item.started_at,
+            reverse=True,
+        )[:limit]
+
     async def save(self, session: Session) -> Session:
         async with self._lock:
             existing = self._items.get(session.id)

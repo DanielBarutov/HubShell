@@ -131,6 +131,16 @@ class PostgresSessionRepository:
             )
             return [model.to_domain() for model in result]
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(SessionModel)
+                .where(SessionModel.client_id == client_id)
+                .order_by(SessionModel.started_at.desc())
+                .limit(max(1, min(limit, 100)))
+            )
+            return [model.to_domain() for model in result]
+
     async def save(self, session: Session) -> Session:
         async with open_session(self._engine_provider) as db_session:
             async with db_session.begin():

@@ -148,6 +148,11 @@ def test_clients_contract_contains_balance_operation_history() -> None:
         "ListGuests",
     }.issubset(service.methods_by_name)
     assert "discount_category" in clients_pb2.Guest.DESCRIPTOR.fields_by_name
+    portal_service = clients_pb2.DESCRIPTOR.services_by_name["ClientPortalService"]
+    assert {"Register", "Login", "Get"}.issubset(portal_service.methods_by_name)
+    assert "device_id" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
+    assert "tariff_name" in clients_pb2.PortalSession.DESCRIPTOR.fields_by_name
+    assert "tariff_name" in clients_pb2.PortalCharge.DESCRIPTOR.fields_by_name
 
 
 def test_guest_links_are_present_in_reservation_and_frontend_contracts() -> None:

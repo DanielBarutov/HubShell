@@ -17,9 +17,10 @@ dev-стеком для всех доступных серверных част�
 каталог, бронирования и sliding panels.
 
 Не закрыты платформенные и production-границы: native Windows build/runtime,
-настоящий kiosk deployment, per-device enrollment/rotation, внешние payment
-providers, тяжёлые фоновые отчёты и полноценный realtime transport. Фактическая
-Windows-проверка остаётся отдельным чекапом на целевой машине.
+настоящий kiosk deployment, hardening per-device enrollment (rebind, rate limit,
+rotation), внешние payment providers, тяжёлые фоновые отчёты и полноценный
+realtime transport. Фактическая Windows-проверка остаётся отдельным чекапом на
+целевой машине.
 
 ## Порядок работы и единое расположение планов
 
@@ -46,8 +47,15 @@ Windows сохраняют свои короткие owner-level входы в `
 | 12 | [`12-live-metered-billing/PLAN.md`](12-live-metered-billing/PLAN.md) | поминутное списание, последовательные тарифы и операции с карты ПК | `in_progress` |
 | 13 | [`13-payment-methods/PLAN.md`](13-payment-methods/PLAN.md) | настраиваемые способы оплаты в настройках клуба | `done` |
 | 14 | [`../frontend/PLAN.md`](../frontend/PLAN.md) | owner-level план операторской веб-оболочки и dashboard | `in_progress` |
-| 15 | [`../win-client/PLAN.md`](../win-client/PLAN.md) | owner-level план Windows-виджета, тем и связи с backend | `in_progress` |
+| 15 | [`../win-client/PLAN.md`](../win-client/PLAN.md) | owner-level план Windows-клиента, тем и связи с backend | `in_progress` |
 | 22 | [`22-windows-lockdown/PLAN.md`](22-windows-lockdown/PLAN.md) | Windows app gate, kiosk policy и provisioning | `in_progress` |
+| 23 | [`23-windows-enrollment-member-portal/PLAN.md`](23-windows-enrollment-member-portal/PLAN.md) | автоматическое подключение по MAC, fullscreen shell и личный кабинет | `in_progress` |
+| 23a | [`23-device-enrollment/PLAN.md`](23-device-enrollment/PLAN.md) | MAC enrollment и device identity | `in_progress` |
+| 24 | [`24-windows-shell/PLAN.md`](24-windows-shell/PLAN.md) | полноэкранная locked-оболочка клиента | `in_progress` |
+| 25 | [`25-client-portal/PLAN.md`](25-client-portal/PLAN.md) | регистрация, вход и личный кабинет пользователя | `in_progress` |
+| 26 | [`26-frontend-device-assignment/PLAN.md`](26-frontend-device-assignment/PLAN.md) | назначение MAC и статусы устройства в админке | `in_progress` |
+| 27 | [`27-portable-deployment/PLAN.md`](27-portable-deployment/PLAN.md) | один portable EXE без console setup | `in_progress` |
+| 28 | [`28-integration-checks/PLAN.md`](28-integration-checks/PLAN.md) | сквозные backend/frontend/Windows чекапы | `in_progress` |
 
 Статусы:
 
@@ -75,6 +83,13 @@ backend/PLAN.md
 ├── plans/12-live-metered-billing
 ├── plans/13-payment-methods
 ├── plans/22-windows-lockdown
+├── plans/23-windows-enrollment-member-portal
+├── plans/23-device-enrollment
+├── plans/24-windows-shell
+├── plans/25-client-portal
+├── plans/26-frontend-device-assignment
+├── plans/27-portable-deployment
+├── plans/28-integration-checks
 ├── frontend/PLAN.md
 └── win-client/PLAN.md
 ```
@@ -94,7 +109,7 @@ Auth является платформенной зависимостью для
 - проверки;
 - риски и зависимости.
 
-Новые решения, которые влияют на несколько областей, сначала добавляются сюда или в соответствующий план, затем отражаются в `AGENTS.md`, если становятся постоянным правилом проекта.
+Новые решения, которые влияют на несколько областей, сначала добавляются сюда или в соответствующий план, затем отражаются в `CODEX.md`, если становятся постоянным правилом проекта.
 
 ## Общий MVP-контур
 

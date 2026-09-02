@@ -10,7 +10,11 @@ from gameclub_backend.modules.workstations.application.ports import (
     WorkstationRepository,
     WorkstationSnapshotCache,
 )
-from gameclub_backend.modules.workstations.domain import Workstation, WorkstationStatus
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    WorkstationStatus,
+    normalize_mac_address,
+)
 
 LEGACY_WORKSTATION_GROUP_IDS = frozenset({"main", "vip"})
 
@@ -41,19 +45,31 @@ class WorkstationService:
 
     async def register(
         self,
-        device_id: str,
+        device_id: str | None,
         name: str,
         group_id: str | None = None,
         position: int | None = None,
         client_version: str | None = None,
         capabilities: typing.Sequence[str] = (),
+        mac_address: str | None = None,
     ) -> Workstation:
-        normalized_device_id = device_id.strip()
+        try:
+            normalized_mac = normalize_mac_address(mac_address) if mac_address else None
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        normalized_device_id = device_id.strip() if device_id else ""
+        if not normalized_device_id and normalized_mac:
+            normalized_device_id = f"mac-{normalized_mac.replace(':', '').lower()}"
         normalized_name = name.strip()
         if not normalized_device_id or not normalized_name:
-            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "device_id and name are required")
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "name and either device_id or mac_address are required",
+            )
         if await self._repository.get_by_device_id(normalized_device_id):
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation already registered")
+        if normalized_mac and await self._repository.get_by_mac_address(normalized_mac):
+            raise ApplicationError(ErrorCode.CONFLICT, "MAC address is already assigned")
 
         workstation = Workstation(
             id=uuid.uuid4(),
@@ -63,6 +79,7 @@ class WorkstationService:
             position=position,
             client_version=client_version,
             capabilities=self._normalize_capabilities(capabilities),
+            mac_address=normalized_mac,
         )
         saved = await self._with_group_theme(await self._repository.save(workstation))
         await self._invalidate_cache()
@@ -102,6 +119,7 @@ class WorkstationService:
         name: str,
         group_id: str | None,
         position: int | None,
+        mac_address: str | None = None,
     ) -> Workstation:
         workstation = await self._repository.get(workstation_id)
         if workstation is None or workstation.archived_at is not None:
@@ -110,6 +128,19 @@ class WorkstationService:
         normalized_group = group_id.strip().lower() if group_id else None
         if not normalized_name:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Workstation name is required")
+        try:
+            normalized_mac = normalize_mac_address(mac_address) if mac_address else None
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        if normalized_mac != workstation.mac_address and workstation.installation_id:
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Workstation is already bound; use the explicit rebind flow",
+            )
+        if normalized_mac and normalized_mac != workstation.mac_address:
+            assigned = await self._repository.get_by_mac_address(normalized_mac)
+            if assigned is not None and assigned.id != workstation_id:
+                raise ApplicationError(ErrorCode.CONFLICT, "MAC address is already assigned")
         if (
             normalized_group
             and self._groups
@@ -122,10 +153,50 @@ class WorkstationService:
             name=normalized_name,
             group_id=normalized_group,
             position=position,
+            mac_address=normalized_mac,
         )
         saved = await self._with_group_theme(await self._repository.save(updated))
         await self._invalidate_cache()
         return saved
+
+    async def enroll_by_mac(
+        self,
+        mac_addresses: typing.Sequence[str],
+        installation_id: str,
+    ) -> Workstation | None:
+        normalized_installation_id = installation_id.strip()
+        if not normalized_installation_id or len(normalized_installation_id) > 128:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Installation identity is required")
+        normalized_macs: list[str] = []
+        for mac in mac_addresses:
+            try:
+                normalized_macs.append(normalize_mac_address(mac))
+            except ValueError:
+                continue
+        if not normalized_macs:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "At least one valid MAC is required")
+
+        workstation = None
+        for mac in dict.fromkeys(normalized_macs):
+            workstation = await self._repository.get_by_mac_address(mac)
+            if workstation is not None:
+                break
+        if workstation is None:
+            return None
+        if (
+            workstation.installation_id
+            and workstation.installation_id != normalized_installation_id
+        ):
+            raise ApplicationError(
+                ErrorCode.PERMISSION_DENIED,
+                "Workstation is already bound to another installation",
+            )
+        if workstation.installation_id is None:
+            workstation = await self._repository.save(
+                dataclasses.replace(workstation, installation_id=normalized_installation_id)
+            )
+            await self._invalidate_cache()
+        return await self._with_group_theme(workstation)
 
     async def enable(self, workstation_id: uuid.UUID) -> Workstation:
         workstation = await self._repository.get(workstation_id)
