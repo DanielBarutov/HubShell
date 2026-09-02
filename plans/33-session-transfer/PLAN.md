@@ -39,9 +39,11 @@
 
 Добавлены offer/confirm DTO и application flow с token, expiry, idempotency и
 проверкой target workstation. PostgreSQL repository получил owner-side
-`commit_transfer` с блокировками offer/session/source/target в одной транзакции;
-frontend и WinUI умеют создать offer и явно подтвердить перенос. Добавлены
-audit operations и source-level duplicate-safe result mapping.
+`commit_transfer` с блокировками offer/session/source/target в одной транзакции,
+а также advisory lock для offer key и корректный conflict при двух разных
+confirm keys; frontend и WinUI умеют создать offer и явно подтвердить перенос.
+Добавлены audit operations, source-level duplicate-safe mapping и реальный
+PostgreSQL concurrency test.
 
 ## Не входит
 

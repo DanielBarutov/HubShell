@@ -97,7 +97,19 @@ class OfflineReplayService:
             operation.sequence,
         )
         if previous is not None:
-            recorded, _ = previous
+            recorded, recorded_result = previous
+            if (
+                recorded.id == operation.id
+                and recorded.idempotency_key == operation.idempotency_key
+                and recorded.checksum == operation.checksum
+            ):
+                return OfflineOperationResult(
+                    operation.id,
+                    operation.sequence,
+                    OfflineOperationStatus.DUPLICATE,
+                    "Операция уже принята сервером",
+                    recorded_result.applied_at,
+                )
             result = OfflineOperationResult(
                 operation.id,
                 operation.sequence,

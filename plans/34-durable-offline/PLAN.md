@@ -41,7 +41,9 @@
 validation, sequence/idempotency/checksum, per-operation result и memory/Postgres
 repositories. WinUI получил DPAPI-protected JSONL journal, durable sidecar для
 sequence, recovery/ACK cleanup, gateway replay и coordinator snapshot/replay
-связку. Backend unit tests покрывают duplicate, checksum conflict, stop и gap.
+связку. Backend unit tests покрывают duplicate, checksum conflict, stop и gap;
+PostgreSQL DSN test подтверждает параллельную повторную доставку без второго
+debit и исправляет race-классификацию той же sequence.
 
 ## Не входит
 
