@@ -35,6 +35,7 @@ _AUDITED_OPERATIONS = frozenset(
         "GetTransferOffer",
         "ConfirmTransfer",
         "ReplayOfflineBatch",
+        "CheckEntry",
     }
 )
 

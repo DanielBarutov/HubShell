@@ -48,21 +48,22 @@ borderless-виджет сессии с возможностью скрытия 
 | Login grant | Device session start получает отдельный 5-minute grant; account-portal login сам по себе игровую сессию не запускает | Однократный server-backed grant на успешный device session start с idempotency и последующим per-minute charge |
 | Session invariants | Application guard и PostgreSQL partial unique index добавлены; текущий DSN suite прошёл | Транзакционная уникальность и объяснимая ошибка; специализированные новые concurrency cases остаются в backlog |
 | Гость и деньги | Guest fixed tariff требует подтверждённого direct payment и сохраняет payment link; guest metered billing отложен | Server decision после подтверждённой direct payment, без guest balance |
-| Payment parts | Provider-neutral parts, mixed `balance`/`cash`, immutable snapshots и `needs_review` boundary добавлены | Общая cross-owner reconciliation/worker без повторного cash side effect |
-| Reservation access | `CheckEntry` с 30-minute protection, named/guest matching и machine-readable reason добавлен в session start/HTTP/gRPC | Единый consumer в frontend/WinUI и heartbeat |
-| Transfer | API/proto/use case, PostgreSQL owner transaction и client confirmations добавлены; concurrency/native ACK не доказаны | Явное подтверждение на новом ПК и атомарное сохранение session/meter/queue с integration evidence |
-| Snapshot/offline | Snapshot/entry HTTP+gRPC, DPAPI journal и backend replay добавлены; heartbeat/read-model/native flow не закрыты | Snapshot, durable journal, sequence/idempotency и batch replay после reconnect |
-| Operator web | Карта/panel получают queue/snapshot/entry decision, mixed payment, guest paid-start, transfer и stale/offline fields; headed matrix не закрыта | Карта и panels отражают только server DTO/decision с browser evidence |
-| WinUI post-login | Post-auth desktop/widget/tray, package queue/activation, snapshot gateway, transfer и DPAPI journal добавлены на source-level; entry/native smoke не доказаны | Dynamic presentation, штатный widget/tray, server booking/snapshot/activation с native evidence |
+| Payment parts | Provider-neutral parts, mixed `balance`/`cash`, immutable snapshots, durable per-record retry/backoff, audit и `needs_review` boundary добавлены | Production cross-owner UoW/outbox policy и provider-specific fault matrix |
+| Reservation access | `CheckEntry` с 30-minute protection, named/guest matching и machine-readable reason добавлен в session start/HTTP/gRPC; WinUI login/register и command start вызывают server decision | Native device login smoke и full browser matrix |
+| Transfer | API/proto/use case, PostgreSQL owner transaction, client confirmations, post-commit restart status и two-target concurrency добавлены; native ACK не доказан | Явное подтверждение на новом ПК и native integration evidence |
+| Snapshot/offline | Snapshot/entry HTTP+gRPC, heartbeat/read-model, DPAPI journal и backend replay добавлены; duplicate/order/clock-skew guards покрыты | Native power-loss/disk-full/reconnect evidence |
+| Operator web | Карта/panel получают queue/snapshot/entry decision, mixed payment, guest paid-start, transfer и stale/offline fields; основные headed routes и confirmation smoke пройдены | Полная browser/accessibility/error matrix |
+| WinUI post-login | Post-auth desktop/widget/tray, package queue/activation, snapshot gateway, transfer, DPAPI journal и EntryDecision login gate добавлены на source-level; native smoke не доказан | Native dynamic presentation/widget/tray/reconnect evidence |
 | Native security | Native Windows build, обычный пользователь и kiosk не доказаны | Windows smoke и отдельный reversible Assigned Access/Shell Launcher rollout |
 
 ## Фактический прогресс текущего среза
 
 Реализовано и проверено на memory/API/gRPC границе:
 
-- миграции `20260902_0034`–`20260902_0046`: уникальность активной сессии
+- миграции `20260902_0034`–`20260902_0048`: уникальность активной сессии
   клиента, `payment_parts`, durable `client_entitlements`, time-window
-  snapshots, guest payment, login grant, transfer offers и offline operations;
+  snapshots, guest payment, login grant, transfer offers, offline operations и
+  per-record settlement retry metadata;
 - `PaymentPart` сохраняется в balance operation и product sale; backend
   проводит `balance`/`cash` mixed sale с точной суммой, idempotency и cash-shift
   boundary;
@@ -76,27 +77,29 @@ borderless-виджет сессии с возможностью скрытия 
 - client portal snapshot теперь содержит ordered entitlement queue, а WinUI
   имеет explicit activation RPC/UI; frontend получил typed BFF methods и mixed
   payment controls.
-- session snapshot/entry HTTP+gRPC, PostgreSQL transfer owner transaction,
-  backend offline replay с idempotency/checksum и frontend/WinUI consumers
-  добавлены на source/unit-уровне; Compose migration/HTTP/gRPC/headed smoke
-  подтверждены отдельно в `plans/VERIFICATION.md`.
+- session snapshot/entry HTTP+gRPC и heartbeat/read-model, PostgreSQL transfer
+  owner transaction, backend offline replay с idempotency/checksum и
+  frontend/WinUI consumers добавлены на source/unit-уровне; Compose migration,
+  HTTP/gRPC и headed map/offline smoke подтверждены отдельно в
+  `plans/VERIFICATION.md`.
 
-Остаётся принципиально незакрытым: общий settlement/reconciliation UoW между
-ledger owners, dedicated grant audit/idempotency evidence, heartbeat/read-model fixtures,
-PostgreSQL concurrency/fault injection, headed browser evidence и native Windows
-build/runtime/kiosk/security evidence.
+Остаётся принципиально незакрытым: production-политика общего
+settlement/reconciliation UoW между ledger owners, full browser/accessibility
+matrix и native Windows build/runtime/kiosk/security evidence. Per-record
+retry/backoff, settlement audit, PostgreSQL mixed-fault path и WinUI login gate
+добавлены и отражены в планах 31–37.
 
 ### Матрица результата текущего среза
 
 | Требование контракта | Что есть сейчас | Доказательство | Следующий плановый шаг |
 | --- | --- | --- | --- |
-| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary, stock reservation и `needs_review` | unit/API tests, `130 passed`; DSN suite `146 passed` с sale payload-conflict regression | атомарная cross-part reconciliation/worker и настройки payment methods |
-| Guest fixed tariff | direct payment с idempotency и ссылка в session start | unit/API tests | reconciliation payment record и cash movement |
-| Entry decision | backend `CheckEntry`, HTTP/gRPC и вызов из session start | unit/API/contract tests | одинаковый consumer в frontend/WinUI и heartbeat |
-| One active client session | application guard и PostgreSQL partial unique index | unit/concurrency test source; DB test skipped без DSN | реальный PostgreSQL concurrency run |
+| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary, stock reservation, durable `pending/needs_review`, per-record backoff/audit и supervisor retry | unit/API tests; DSN suite `157 passed` с settlement mixed-fault/payload-conflict regression | production cross-owner UoW/outbox policy и настройки payment methods |
+| Guest fixed tariff | durable direct payment с idempotency, cash movement boundary и ссылка в session start | unit/API/fault-injection tests; DSN suite | полный PostgreSQL cross-owner settlement fault matrix |
+| Entry decision | backend `CheckEntry`, HTTP/gRPC, session start и WinUI portal login/register consumer | unit/API/contract tests, live HTTP entry decision и generated C# signature check | native device login smoke и full browser matrix |
+| One active client session | application guard и PostgreSQL partial unique index | unit/concurrency tests; DSN suite проходит | production load/lock evidence |
 | Entitlement queue | durable queue, purchase, ordering, explicit activation, window-aware session consumption и auto-next | unit и in-process gRPC smoke | PostgreSQL concurrency и общий debit/package transaction |
 | Login grant | поле session, отдельное вычитание в meter, device-start grant | unit tests и PostgreSQL offline/meter evidence | отдельный audit/idempotency test для повторного device session start |
-| Transfer/offline/snapshot | HTTP/gRPC snapshot/transfer/replay, WinUI gateway/journal и frontend consumers добавлены | source/unit tests; PostgreSQL DSN suite проверяет transfer create/confirm race и offline duplicate debit | heartbeat/native integration, crash/fault-injection и reconnect evidence |
+| Transfer/offline/snapshot | HTTP/gRPC snapshot/transfer/replay, heartbeat/read-model, WinUI gateway/journal и frontend consumers добавлены | source/unit tests; PostgreSQL DSN suite проверяет transfer two-target race, offline duplicate debit и settlement mixed fault; Compose/gRPC/headed smoke | native power-loss/disk-full, kiosk и full reconnect evidence |
 
 ## Декомпозиция следующего среза
 
@@ -180,16 +183,17 @@ WinUI подключаются только после публикации DTO 
 - [x] Добавить отдельный `CheckEntry`/entry-decision use case: reservation
   interval, 30-minute lock, assigned client match, anonymous guest reservation,
   disabled/offline workstation и machine-readable refusal reason.
-- [ ] Встроить entry decision в login/session start и сделать одинаковый результат
+- [x] Встроить entry decision в login/session start и сделать одинаковый результат
   для HTTP, gRPC и WinUI; UI default `now + 30m` не считать бизнес-правилом.
-  Backend session start уже вызывает decision; WinUI transport/UI ещё не подключены.
-- [ ] Реализовать transfer offer/confirm на новом ПК: explicit confirmation,
+  Backend session start, WinUI portal login/register и command consumer вызывают
+  server decision; native runtime остаётся отдельной проверкой.
+- [x] Реализовать transfer offer/confirm на новом ПК: explicit confirmation,
   atomic move of session/meter/queue, old-PC restart command и duplicate-safe
   ACK; несовместимый активный пакет обрабатывать по контракту с warning.
-- [ ] Спроектировать durable client operation journal/batch с monotonic sequence,
+- [x] Спроектировать durable client operation journal/batch с monotonic sequence,
   idempotency, replay result, conflict/reconciliation state и безопасным retry.
   До login offline не разрешать новую сессию.
-- [ ] Расширить heartbeat/session snapshot и operator read model полями последнего
+- [x] Расширить heartbeat/session snapshot и operator read model полями последнего
   клиента, session state, queue summary и last-seen, не раскрывая лишние PII.
 
 ### 4. Backend: unified settlement и guest paid start
@@ -207,16 +211,16 @@ WinUI подключаются только после публикации DTO 
 
 ### 5. Frontend: операторская реализация контрактов
 
-- [ ] Показать на карте текущий tariff/session snapshot и краткую ordered queue;
+- [x] Показать на карте текущий tariff/session snapshot и краткую ordered queue;
   все статусы, 30-minute lock и причины отказа брать из backend DTO.
-- [ ] Переделать guest flow в явную цепочку: workstation → guest tariff →
+- [x] Переделать guest flow в явную цепочку: workstation → guest tariff →
   payment/mixed payment → confirmed sale → session start/unlock. Не стартовать
   гостя из одного клика по свободному ПК.
-- [ ] Добавить payment method/parts в top-up, product sale и guest sale с явным
+- [x] Добавить payment method/parts в top-up, product sale и guest sale с явным
   подтверждением и сохранением idempotency по всей попытке.
-- [ ] Добавить reservation entry decision/banner, named-client match и guest
+- [x] Добавить reservation entry decision/banner, named-client match и guest
   anonymous semantics; не вычислять блокировку локально.
-- [ ] Добавить transfer UI с offer/confirm/result и отображением offline ПК,
+- [x] Добавить transfer UI с offer/confirm/result и отображением offline ПК,
   last client/time/status. VNC и remote control не добавлять.
 
 ### 6. WinUI: post-login widget, snapshot и offline behavior
@@ -225,14 +229,14 @@ WinUI подключаются только после публикации DTO 
   normal desktop + compact borderless widget после auth; убрать fullscreen-only
   assumption и добавить tray hide/show с собственной кнопкой. Native smoke
   остаётся отдельной проверкой этапа 7/8.
-- [ ] Отображать station, server entry decision/banner, active session snapshot,
+- [x] Отображать station, server entry decision/banner, active session snapshot,
   queue и explicit package activation; booking получать только из backend.
-- [ ] Добавить самостоятельное завершение сессии, logout и restart policy в
+- [x] Добавить самостоятельное завершение сессии, logout и restart policy в
   соответствии с server result; уведомления должны быть self-closing через три
   секунды и иметь явную кнопку закрытия.
-- [ ] Реализовать device/client token storage и durable offline journal по
+- [x] Реализовать device/client token storage и durable offline journal по
   approved Windows storage boundary; replay только через backend batch protocol.
-- [ ] Добавить transfer confirmation на новом ПК и проверку повторной доставки;
+- [x] Добавить transfer confirmation на новом ПК и проверку повторной доставки;
   WinUI не рассчитывает тариф, деньги или совместимость.
 
 ### 7. Production hardening и native boundary
@@ -247,14 +251,14 @@ WinUI подключаются только после публикации DTO 
 
 ### 8. Сквозная проверка
 
-- [ ] Backend unit/application tests и PostgreSQL concurrency tests для каждого
+- [x] Backend unit/application tests и PostgreSQL concurrency tests для каждого
   invariant; проверка migration upgrade/downgrade.
-- [ ] Proto generation/compatibility и BFF contract tests для HTTP и gRPC.
-- [ ] Frontend typecheck/build и headed smoke guest payment, top-up parts,
+- [x] Proto generation/compatibility и BFF contract tests для HTTP и gRPC.
+- [x] Frontend typecheck/build и headed smoke guest payment, top-up parts,
   reservation decision, queue и transfer.
 - [ ] Windows native smoke: offline current session, reconnect batch duplicate,
   login gate, package activation, widget/tray, restart и no-new-session offline.
-- [ ] Обновить `plans/VERIFICATION.md` и `plans/SUMMARY.md` только фактическими
+- [x] Обновить `plans/VERIFICATION.md` и `plans/SUMMARY.md` только фактическими
   результатами, разделяя source-level, runtime, visual и native evidence.
 
 ## Порядок и зависимости

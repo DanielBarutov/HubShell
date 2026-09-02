@@ -6,6 +6,7 @@ using GameClub.Client.Contracts;
 using Workstations = GameClub.Client.Contracts.Workstations.V1;
 using Sessions = GameClub.Client.Contracts.Sessions.V1;
 using Clients = GameClub.Client.Contracts.Clients.V1;
+using Reservations = GameClub.Client.Contracts.Reservations.V1;
 using GameClub.Client.Domain;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -19,6 +20,7 @@ public sealed class GrpcBackendClient : IBackendClient
     private readonly SystemService.SystemServiceClient _systemClient;
     private readonly Workstations.WorkstationService.WorkstationServiceClient _workstationClient;
     private readonly Sessions.SessionService.SessionServiceClient _sessionClient;
+    private readonly Reservations.ReservationService.ReservationServiceClient _reservationClient;
     private readonly Clients.ClientPortalService.ClientPortalServiceClient _clientPortalClient;
     private readonly ITokenProvider? _tokenProvider;
     private string? _clientPortalAccessToken;
@@ -30,6 +32,7 @@ public sealed class GrpcBackendClient : IBackendClient
         _systemClient = new SystemService.SystemServiceClient(_channel);
         _workstationClient = new Workstations.WorkstationService.WorkstationServiceClient(_channel);
         _sessionClient = new Sessions.SessionService.SessionServiceClient(_channel);
+        _reservationClient = new Reservations.ReservationService.ReservationServiceClient(_channel);
         _clientPortalClient = new Clients.ClientPortalService.ClientPortalServiceClient(_channel);
         _tokenProvider = tokenProvider;
     }
@@ -162,7 +165,10 @@ public sealed class GrpcBackendClient : IBackendClient
             response.GroupId,
             response.Theme,
             response.ManagerPasswordVerifier,
-            ToLockdownPolicySnapshot(response.LockdownPolicy));
+            ToLockdownPolicySnapshot(response.LockdownPolicy),
+            response.SessionSnapshot is null || response.SessionSnapshot.CalculateSize() == 0
+                ? null
+                : ToSessionSnapshot(response.SessionSnapshot));
     }
 
     public async Task<SessionSnapshot> StartSessionAsync(
@@ -193,6 +199,32 @@ public sealed class GrpcBackendClient : IBackendClient
             deadline: DateTime.UtcNow.AddSeconds(5),
             cancellationToken: cancellationToken);
         return ToSessionSnapshot(response);
+    }
+
+    public async Task<EntryDecisionSnapshot> CheckEntryAsync(
+        string workstationId,
+        string? clientId,
+        string? guestId,
+        CancellationToken cancellationToken = default)
+    {
+        var metadata = await CreateMetadataAsync(cancellationToken);
+        var response = await _reservationClient.CheckEntryAsync(
+            new Reservations.CheckEntryRequest
+            {
+                WorkstationId = workstationId,
+                ClientId = clientId ?? string.Empty,
+                GuestId = guestId ?? string.Empty,
+            },
+            headers: metadata,
+            deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return new EntryDecisionSnapshot(
+            response.Allowed,
+            response.Reason,
+            string.IsNullOrWhiteSpace(response.ReservationId) ? null : response.ReservationId,
+            string.IsNullOrWhiteSpace(response.AssignedClientId) ? null : response.AssignedClientId,
+            response.StartsAt is not null ? response.StartsAt.ToDateTimeOffset() : null,
+            response.EndsAt is not null ? response.EndsAt.ToDateTimeOffset() : null);
     }
 
     public async Task<SessionSnapshot> StopSessionAsync(

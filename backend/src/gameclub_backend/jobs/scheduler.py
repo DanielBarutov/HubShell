@@ -2,7 +2,11 @@ import asyncio
 import contextlib
 
 from gameclub_backend.config import get_settings
-from gameclub_backend.jobs.billing import meter_active_sessions, reconcile_billing_charges
+from gameclub_backend.jobs.billing import (
+    meter_active_sessions,
+    reconcile_billing_charges,
+    reconcile_pending_settlements,
+)
 from gameclub_backend.jobs.cash_shifts import run_cash_shift_schedule
 from gameclub_backend.jobs.reservations import sweep_reservation_no_shows
 
@@ -20,6 +24,7 @@ async def run() -> None:
         while True:
             sweep_reservation_no_shows.send()
             reconcile_billing_charges.send()
+            reconcile_pending_settlements.send()
             meter_active_sessions.send()
             run_cash_shift_schedule.send()
             await asyncio.sleep(
@@ -35,6 +40,8 @@ async def run() -> None:
             reconcile_billing_charges.broker.close()
         with contextlib.suppress(Exception):
             meter_active_sessions.broker.close()
+        with contextlib.suppress(Exception):
+            reconcile_pending_settlements.broker.close()
         with contextlib.suppress(Exception):
             run_cash_shift_schedule.broker.close()
 

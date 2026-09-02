@@ -340,6 +340,39 @@ class BillingService:
             return []
         return await self._reconciliation.list_recent(max(1, min(limit, 500)))
 
+    async def retry_reconciliation(
+        self,
+        session_id: uuid.UUID,
+        reviewed_by: str,
+    ) -> ChargeReconciliation:
+        """Retry a review row only after an explicit supervisor action."""
+        if self._reconciliation is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Reconciliation is not configured",
+            )
+        if not reviewed_by.strip():
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Review author is required")
+        item = await self._reconciliation.get_by_session_id(session_id)
+        if item is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Billing reconciliation not found")
+        if item.status is ReconciliationStatus.COMPLETED:
+            return item
+        if item.status is ReconciliationStatus.NEEDS_REVIEW:
+            item = await self._reconciliation.save(item.reopen_for_review(self._clock.now()))
+        try:
+            await self.charge_session(
+                session_id=session_id,
+                charged_by=item.charged_by,
+                idempotency_key=item.idempotency_key,
+            )
+        except ApplicationError:
+            raise
+        refreshed = await self._reconciliation.get_by_session_id(session_id)
+        if refreshed is None:
+            raise ApplicationError(ErrorCode.INTERNAL, "Reconciliation result is missing")
+        return refreshed
+
     async def revenue_between(
         self,
         start_at: datetime.datetime,

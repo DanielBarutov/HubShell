@@ -56,11 +56,28 @@ public sealed class ClientSessionCoordinator
             return null;
         }
 
-        var result = await _backendClient.ReplayOfflineBatchAsync(
-            session.Id,
-            deviceId,
-            pending,
-            cancellationToken);
+        OfflineBatchResultSnapshot result = default!;
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                result = await _backendClient.ReplayOfflineBatchAsync(
+                    session.Id,
+                    deviceId,
+                    pending,
+                    cancellationToken);
+                break;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception) when (attempt < maxAttempts)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * Math.Pow(2, attempt - 1)), cancellationToken);
+            }
+        }
         var acknowledged = result.Results
             .Where(item => item.Status is "applied" or "duplicate")
             .Select(item => item.OperationId)
@@ -135,6 +152,8 @@ public sealed class ClientSessionCoordinator
         Action<string>? onThemeReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
+        Action<SessionSnapshot>? onSessionSnapshotReceived = null,
+        Action<ClientConnectionState>? onConnectionStateChanged = null,
         Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
@@ -148,6 +167,7 @@ public sealed class ClientSessionCoordinator
                     clientVersion,
                     capabilities,
                     cancellationToken);
+                onConnectionStateChanged?.Invoke(ClientConnectionState.Online);
                 if (!string.IsNullOrWhiteSpace(heartbeat.Theme))
                 {
                     onThemeReceived?.Invoke(heartbeat.Theme);
@@ -160,6 +180,10 @@ public sealed class ClientSessionCoordinator
                 {
                     onLockdownPolicyReceived?.Invoke(heartbeat.LockdownPolicy);
                 }
+                if (heartbeat.SessionSnapshot is not null)
+                {
+                    onSessionSnapshotReceived?.Invoke(heartbeat.SessionSnapshot);
+                }
                 if (refreshSessionSnapshot is not null)
                 {
                     await refreshSessionSnapshot();
@@ -171,7 +195,7 @@ public sealed class ClientSessionCoordinator
             }
             catch (Exception)
             {
-                // Следующая итерация повторит heartbeat после короткого интервала.
+                onConnectionStateChanged?.Invoke(ClientConnectionState.Reconnecting);
             }
 
             if (!await timer.WaitForNextTickAsync(cancellationToken))

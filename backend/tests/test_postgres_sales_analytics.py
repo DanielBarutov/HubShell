@@ -15,6 +15,17 @@ from gameclub_backend.modules.sales.application.service import ProductSaleServic
 from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 
 
+class FaultInjectingCashSettlement:
+    def __init__(self) -> None:
+        self.fail = True
+        self.calls: list[dict[str, object]] = []
+
+    async def settle(self, **kwargs: object) -> None:
+        self.calls.append(kwargs)
+        if self.fail:
+            raise RuntimeError("fault injected after the balance side effect")
+
+
 @pytest.fixture
 def postgres_dsn() -> str:
     dsn = os.getenv("GAMECLUB_TEST_POSTGRES_DSN")
@@ -164,6 +175,94 @@ async def test_postgres_concurrent_sale_key_with_different_payload_is_conflict(
         assert final_product is not None
         assert final_client.balance_cents == 1_000 - 300 * final_sale.quantity
         assert final_product.stock_quantity == 3 - final_sale.quantity
+    finally:
+        async with engine.begin() as connection:
+            if product_id is not None:
+                await connection.execute(
+                    text("DELETE FROM product_sales WHERE product_id = :product_id"),
+                    {"product_id": product_id},
+                )
+                await connection.execute(
+                    text("DELETE FROM products WHERE id = :product_id"),
+                    {"product_id": product_id},
+                )
+            if client_id is not None:
+                await connection.execute(
+                    text("DELETE FROM balance_operations WHERE client_id = :client_id"),
+                    {"client_id": client_id},
+                )
+                await connection.execute(
+                    text("DELETE FROM clients WHERE id = :client_id"),
+                    {"client_id": client_id},
+                )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_mixed_sale_fault_between_parts_reuses_balance_key(
+    postgres_dsn: str,
+) -> None:
+    engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
+    product_id: uuid.UUID | None = None
+    client_id: uuid.UUID | None = None
+    try:
+        catalog = CatalogService(PostgresCatalogRepository(lambda: engine))
+        product = await catalog.create_product(
+            f"PgFaultProduct{uuid.uuid4().hex[:8]}",
+            "integration",
+            300,
+            cost_price_cents=120,
+            stock_quantity=2,
+        )
+        product_id = product.id
+        clients = ClientService(PostgresClientRepository(lambda: engine))
+        client = await clients.create(f"PgFaultClient{uuid.uuid4().hex[:8]}")
+        client_id = client.id
+        await clients.top_up(
+            client.id,
+            1_000,
+            0,
+            "PostgreSQL settlement fault test",
+            "integration-test",
+            f"pg-fault-deposit-{uuid.uuid4()}",
+        )
+        cash = FaultInjectingCashSettlement()
+        sales = PostgresProductSaleRepository(lambda: engine)
+        service = ProductSaleService(
+            sales,
+            catalog,
+            clients,
+            cash=cash,
+        )
+        sale_key = f"pg-fault-sale-{uuid.uuid4()}"
+
+        with pytest.raises(RuntimeError, match="fault injected"):
+            await service.sell(
+                product.id,
+                quantity=1,
+                client_id=client.id,
+                payment_method="mixed",
+                cash_shift_id=uuid.uuid4(),
+                sold_by="integration-test",
+                idempotency_key=sale_key,
+                payment_parts=[
+                    {"method": "balance", "amount_cents": 100},
+                    {"method": "cash", "amount_cents": 200},
+                ],
+            )
+
+        pending = await sales.get_by_idempotency_key(sale_key)
+        assert pending is not None
+        assert pending.status.value == "needs_review"
+        assert (await clients.get(client.id)).balance_cents == 900
+        assert (await catalog.get_product(product.id)).stock_quantity == 1
+
+        cash.fail = False
+        completed = await service.reconcile(pending.id)
+        assert completed.status.value == "completed"
+        assert (await clients.get(client.id)).balance_cents == 900
+        assert (await catalog.get_product(product.id)).stock_quantity == 1
+        assert len(cash.calls) == 2
     finally:
         async with engine.begin() as connection:
             if product_id is not None:

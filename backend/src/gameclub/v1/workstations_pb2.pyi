@@ -1,6 +1,7 @@
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from gameclub.v1 import sessions_pb2 as _sessions_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -39,7 +40,7 @@ WORKSTATION_COMMAND_STATUS_FAILED: WorkstationCommandStatus
 WORKSTATION_COMMAND_STATUS_EXPIRED: WorkstationCommandStatus
 
 class Workstation(_message.Message):
-    __slots__ = ("id", "device_id", "name", "group_id", "position", "status", "last_seen_at", "client_version", "disabled_reason", "capabilities", "theme", "manager_password_verifier", "lockdown_policy")
+    __slots__ = ("id", "device_id", "name", "group_id", "position", "status", "last_seen_at", "client_version", "disabled_reason", "capabilities", "theme", "manager_password_verifier", "lockdown_policy", "active_session_id", "active_session_status", "session_server_time", "session_snapshot")
     ID_FIELD_NUMBER: _ClassVar[int]
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -53,6 +54,10 @@ class Workstation(_message.Message):
     THEME_FIELD_NUMBER: _ClassVar[int]
     MANAGER_PASSWORD_VERIFIER_FIELD_NUMBER: _ClassVar[int]
     LOCKDOWN_POLICY_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_SESSION_STATUS_FIELD_NUMBER: _ClassVar[int]
+    SESSION_SERVER_TIME_FIELD_NUMBER: _ClassVar[int]
+    SESSION_SNAPSHOT_FIELD_NUMBER: _ClassVar[int]
     id: str
     device_id: str
     name: str
@@ -66,7 +71,11 @@ class Workstation(_message.Message):
     theme: str
     manager_password_verifier: str
     lockdown_policy: WorkstationLockdownPolicy
-    def __init__(self, id: _Optional[str] = ..., device_id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ..., position: _Optional[int] = ..., status: _Optional[_Union[WorkstationStatus, str]] = ..., last_seen_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., client_version: _Optional[str] = ..., disabled_reason: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., theme: _Optional[str] = ..., manager_password_verifier: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ...) -> None: ...
+    active_session_id: str
+    active_session_status: str
+    session_server_time: _timestamp_pb2.Timestamp
+    session_snapshot: _sessions_pb2.SessionSnapshot
+    def __init__(self, id: _Optional[str] = ..., device_id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ..., position: _Optional[int] = ..., status: _Optional[_Union[WorkstationStatus, str]] = ..., last_seen_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., client_version: _Optional[str] = ..., disabled_reason: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., theme: _Optional[str] = ..., manager_password_verifier: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ..., active_session_id: _Optional[str] = ..., active_session_status: _Optional[str] = ..., session_server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session_snapshot: _Optional[_Union[_sessions_pb2.SessionSnapshot, _Mapping]] = ...) -> None: ...
 
 class WorkstationGroup(_message.Message):
     __slots__ = ("id", "name", "theme", "updated_at", "lockdown_policy")

@@ -4,6 +4,7 @@ import datetime
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus
 from gameclub_backend.modules.reservations.domain import ReservationStatus
 from gameclub_backend.modules.sessions.application.ports import (
     ClientLookup,
@@ -162,6 +163,11 @@ class SessionService:
                 or payment.guest_id != guest_id
             ):
                 raise ApplicationError(ErrorCode.CONFLICT, "Guest payment does not match session")
+            if payment.status is not DirectPaymentStatus.CONFIRMED:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Guest payment has not been confirmed",
+                )
         if reservation_id is not None:
             if self._reservations is None:
                 raise ApplicationError(

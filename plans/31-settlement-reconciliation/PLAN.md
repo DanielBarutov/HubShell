@@ -29,17 +29,21 @@ balance ledger, cash ledger, sale/payment fact и stock reservation.
 
 ## Текущее состояние
 
-DTO, JSONB snapshots и mixed sale boundary уже добавлены. Известный разрыв —
-последовательное проведение частей может оставить частичное settlement при
-ошибке следующей части; guest payment fact и cash movement также ещё не имеют
-полной reconciliation границы.
+DTO, JSONB snapshots и mixed sale boundary уже добавлены. Durable payment/sale
+records создаются до side effect, неопределённый результат переводится в
+`needs_review`, а transient failure получает per-record `attempts`,
+`next_attempt_at` и capped exponential backoff.
 
 ## Реализовано в текущем срезе
 
 Payment parts, immutable snapshots, pending sale reservation и статус
 `needs_review` подключены к memory/PostgreSQL repositories и frontend. Ошибка
 после начала balance/cash side effect больше не отменяет sale автоматически;
-review rows доступны оператору через `list_sales`.
+review rows доступны оператору через `list_sales`. Migration `20260902_0047`
+добавляет автора durable guest payment, а `20260902_0048` — retry metadata для
+guest payment и product sale. Worker повторяет только due `pending`, audit
+сохраняет settlement outcome/action/request key, а `needs_review` требует
+supervisor action с исходным ключом.
 
 ## Входит в план
 
@@ -71,10 +75,14 @@ review rows доступны оператору через `list_sales`.
    sale не публиковались как completed при частичном сбое.
 5. [x] Связать guest direct payment с cash movement и server confirmation;
    session start разрешать только по завершённому payment fact.
-6. [ ] Добавить reconciliation worker, retry/backoff, audit и operator review;
-   worker не должен молча повторять cash side effect.
+6. [x] Добавить reconciliation worker, retry/backoff, audit и operator review;
+   worker подбирает только due `pending`, retry schedule хранится на каждой
+   записи, audit фиксирует success/retryable/needs_review/cancelled и supervisor
+   retry сохраняет исходный idempotency key.
 7. [x] Обновить HTTP/gRPC responses и frontend DTO для `pending/needs_review`.
-8. [ ] Покрыть PostgreSQL-повторы и fault injection между каждым шагом settlement.
+8. [x] Покрыть PostgreSQL-повторы и fault injection между settlement шагами;
+   DSN-тест фиксирует stock reservation → balance debit → cash failure →
+   reconciliation и подтверждает отсутствие второго balance debit/stock change.
 
 ## Критерии готовности
 
@@ -101,7 +109,8 @@ review rows доступны оператору через `list_sales`.
 
 ## Остаток и release blocker
 
-Денежный ledger, cash ledger, stock и sale пока не объединены общей
-PostgreSQL-транзакцией; review является безопасным компенсирующим контуром.
-Нужны worker/review action и fault-injection matrix для неизвестного cash
-результата, а также PostgreSQL evidence.
+Остаётся решение о production PostgreSQL UoW/outbox-политике между owner-модулями
+и расширение fault matrix на каждую реализацию внешнего provider. Текущий MVP
+контур уже имеет compensating review, due worker, durable backoff, settlement
+audit и реальный PostgreSQL mixed-failure/idempotency evidence; provider
+integrations сознательно не входят в этот срез.

@@ -50,10 +50,11 @@ GameClub — операторская система игрового клуба
 [`plans/29-contract-alignment/PLAN.md`](29-contract-alignment/PLAN.md). Текущий
 срез добавляет durable entitlement queue и consumption с окнами/auto-next,
 device login-grant, payment parts, guest paid-start prerequisite, entry
-decision, one-active-client guard, session snapshot, transfer, offline replay и
-portal/WinUI queue activation. Полное контрактное закрытие ещё не достигнуто:
-не завершены cross-owner settlement UoW, heartbeat/read-model evidence, часть
-operator UI и native Windows evidence. Остаток нарезан на планы
+decision, one-active-client guard, session snapshot, transfer, offline replay,
+durable settlement retry/audit и portal/WinUI queue activation. Полное
+контрактное закрытие ещё не достигнуто: открыты production cross-owner UoW/
+provider policy, полная browser/accessibility matrix и native Windows evidence.
+Остаток нарезан на планы
 [`30–34`](30-entitlements-meter/PLAN.md), [`35`](35-frontend-contract-consumers/PLAN.md),
 [`36`](36-winui-contract-consumers/PLAN.md) и [`37`](37-platform-integration-evidence/PLAN.md).
 
@@ -65,7 +66,7 @@ operator UI и native Windows evidence. Остаток нарезан на пл�
 | [`backend/src/gameclub_backend/`](../backend/src/gameclub_backend/) | composition root, application, modules, jobs, HTTP/gRPC | реализация backend |
 | [`backend/src/gameclub_backend/modules/`](../backend/src/gameclub_backend/modules/) | bounded contexts | домен, use cases, repositories, handlers |
 | [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) | source-of-truth `.proto` | native gRPC-контракты |
-| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0046` | схема PostgreSQL; текущая голова `20260902_0046` |
+| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0048` | схема PostgreSQL; текущая голова `20260902_0048` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
 | [`frontend/src/App.tsx`](../frontend/src/App.tsx) | текущий operator shell и основные flows | UI orchestration; бизнес-расчёты остаются в backend |
@@ -305,8 +306,8 @@ flows.
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
 
-Не закрыто: cross-owner settlement/reconciliation UoW, heartbeat/read-model
-evidence, production hardening enrollment/rebind/token rotation, native
+Не закрыто: cross-owner settlement/reconciliation UoW и fault-injection matrix,
+production hardening enrollment/rebind/token rotation, native
 `dotnet restore/build/test`, запуск под обычным пользователем, реальный
 reconnect/theme/restart smoke и Assigned Access/Shell Launcher с ограничением
 Explorer/Alt+Tab/других приложений. App-level lock не считается заменой Windows
@@ -373,27 +374,27 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `130 passed, 16 skipped` без DSN; `146 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, locked delta, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q` | `139 passed, 18 skipped` без DSN; `157 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и PostgreSQL flows, включая settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
 | `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
 | `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
 | `cd frontend && npm run typecheck` | успешно (повторено 2026-09-02) | TypeScript compile/type boundary |
 | `cd frontend && npm run build` | успешно (повторено 2026-09-02) | production Vite build |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
-| `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | full local stack собран и поднят; PostgreSQL/Redis healthy, migrations применены до `20260902_0046`, HTTP/frontend smoke прошёл; native Windows client в compose не входит |
+| `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | backend stack пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; native Windows client в compose не входит |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
 | Live HTTP smoke | успешно | fresh operator token, `/auth/me`, payment methods, analytics 200, sales 200, auth-aware error path |
 | Redis cache smoke | TTL около `16 s` сразу после чтения | cache key created with bounded 20 s TTL; Redis не заменяет DB |
-| Playwright headed smoke | успешно | login, map fixed card/scroll-frame, checkout retry behavior, payment CRUD, analytics without 403 |
+| Playwright headed smoke | частично успешно | login, dashboard/map/PC context, bookings, clients, catalog sale confirmation, analytics, cash, settings, offline heartbeat lock и disabled sale/booking actions; полная contract/browser matrix ещё не закрыта |
 | Product/catalog smoke | `PUT` существующего товара → `200` | regression after backend rebuild |
 
 ### Чеки, которые ещё нужны
 
 | Направление | Почему не закрыто |
 | --- | --- |
-| PostgreSQL integration/concurrency | 16 тестов пропускаются без `GAMECLUB_TEST_POSTGRES_DSN` и Redis DSN; при dev DSN все 146 backend-тестов проходят, включая package/transfer/offline concurrency |
+| PostgreSQL integration/concurrency | без DSN 18 тестов пропускаются; при dev DSN все 157 backend-тестов проходят, включая package/transfer/offline/settlement mixed-fault evidence; production cross-owner UoW/provider policy остаётся открытой |
 | Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime; `dotnet` отсутствует в PATH |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
-| Browser matrix/realtime | сейчас подтверждён локальный headed smoke; полноценный набор браузеров и realtime transport не выполнялись |
+| Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
 | Production security | нужны real secret storage, enrollment rate-limit/rebind, TLS/mTLS certificates, rotation/revocation, backups и deployment policy |
 | Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
 
@@ -401,15 +402,13 @@ security boundary. Детали — в
 
 ### P0 — доказать текущий MVP
 
-0. Дочерние планы [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
-   реализованы на source/unit-уровне и остаются в `in_progress` до закрытия
-   своих integration/native критериев. Следующий обязательный шаг —
-   [`37`](37-platform-integration-evidence/PLAN.md): PostgreSQL/Compose,
-   headed browser, Windows native/kiosk и security evidence.
+0. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
+   закрыты доступными source/unit/API/visual checks; native/runtime границы
+   остаются явно отмеченными в [`37`](37-platform-integration-evidence/PLAN.md)
+   и его evidence report.
 
-1. Запустить backend suite с реальными `GAMECLUB_TEST_POSTGRES_DSN` и
-   `GAMECLUB_TEST_REDIS_URL`, затем закрыть или документировать каждый skipped
-   integration/concurrency test.
+1. На целевой Windows-машине выполнить native verification и kiosk rehearsal;
+   локальный backend suite с dev PostgreSQL/Redis уже прошёл: `157 passed`.
 2. На Windows выполнить:
 
    ```powershell

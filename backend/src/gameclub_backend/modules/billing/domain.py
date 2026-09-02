@@ -141,6 +141,19 @@ class ChargeReconciliation:
             updated_at=now,
         )
 
+    def reopen_for_review(self, now: datetime.datetime) -> "ChargeReconciliation":
+        """Create an explicit, auditable retry window after operator review."""
+        if self.status is ReconciliationStatus.COMPLETED:
+            return self
+        if self.status is not ReconciliationStatus.NEEDS_REVIEW:
+            return self
+        return dataclasses.replace(
+            self,
+            status=ReconciliationStatus.PENDING,
+            next_attempt_at=now,
+            updated_at=now,
+        )
+
     def is_due(self, now: datetime.datetime) -> bool:
         return (
             self.status

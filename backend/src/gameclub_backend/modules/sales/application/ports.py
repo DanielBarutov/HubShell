@@ -12,6 +12,9 @@ class ProductLookup(typing.Protocol):
 
 
 class ProductSaleRepository(typing.Protocol):
+    async def get_by_id(self, sale_id: uuid.UUID) -> ProductSale | None:
+        """Return one durable sale by ID."""
+
     async def get_by_idempotency_key(self, idempotency_key: str) -> ProductSale | None:
         """Return a sale created by the same request key."""
 
@@ -24,8 +27,28 @@ class ProductSaleRepository(typing.Protocol):
     async def cancel(self, sale: ProductSale) -> ProductSale:
         """Cancel a pending sale and return reserved stock."""
 
-    async def mark_needs_review(self, sale: ProductSale, error: str) -> ProductSale:
+    async def mark_needs_review(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime | None = None,
+    ) -> ProductSale:
         """Persist an unresolved settlement without repeating side effects."""
+
+    async def mark_retryable(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime,
+    ) -> ProductSale:
+        """Persist a transient failure with a durable next-attempt timestamp."""
+
+    async def reopen_for_reconciliation(
+        self,
+        sale: ProductSale,
+        now: datetime.datetime,
+    ) -> ProductSale:
+        """Persist the explicit supervisor transition back to pending."""
 
     async def list_sales(
         self,
@@ -35,6 +58,13 @@ class ProductSaleRepository(typing.Protocol):
         limit: int = 100,
     ) -> list[ProductSale]:
         """Return completed sales for operator and analytics reads."""
+
+    async def list_recoverable(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[ProductSale]:
+        """Return pending sales whose settlement can be retried safely."""
 
 
 class ClientSale(typing.Protocol):

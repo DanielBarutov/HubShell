@@ -10,7 +10,7 @@ export function toUiWorkstation(
 ): Workstation {
   const technicalStatus = {
     online: "online",
-    stale: "offline",
+    stale: "stale",
     offline: "offline",
     disabled: "maintenance",
     unknown: "offline",

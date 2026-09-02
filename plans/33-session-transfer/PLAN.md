@@ -60,13 +60,13 @@ PostgreSQL concurrency test.
    reservation/entry decision и совместимости зоны.
 3. [x] Реализовать atomic confirm: lock old/new workstation и session, смена
    ownership, meter baseline, queue и audit в одной транзакции.
-4. [ ] Добавить warning/explicit confirmation для burn несовместимого active
+4. [x] Добавить warning/explicit confirmation для burn несовместимого active
    package; не менять queued packages.
 5. [x] Опубликовать versioned HTTP/gRPC DTO и идемпотентные retry semantics.
-6. [ ] После commit отправлять old-PC restart с correlation/idempotency key;
+6. [x] После commit отправлять old-PC restart с correlation/idempotency key;
    transport failure не откатывает уже подтверждённый transfer молча.
 7. [x] Подключить WinUI offer/confirm/result и operator read-only status.
-8. [ ] Добавить fault/concurrency tests для двух подтверждений и двух target PCs.
+8. [x] Добавить fault/concurrency tests для двух подтверждений и двух target PCs.
 
 ## Критерии готовности
 
@@ -79,9 +79,10 @@ PostgreSQL concurrency test.
 
 ## Остаток и release blocker
 
-Нужно завершить атомарную политику burn несовместимого active package, old-PC
-restart ACK и реальные PostgreSQL lock/concurrency tests. Memory fallback пока
-сохраняет offer и session последовательно, а native transfer smoke не выполнен.
+Source-level burn warning/confirmation, post-commit restart command/status и
+PostgreSQL lock/concurrency tests закрыты. Остался native transfer smoke с ACK
+на целевом Windows-клиенте; memory fallback по-прежнему не является доказательством
+production transaction boundary.
 
 ## Проверки и evidence
 

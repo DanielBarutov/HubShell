@@ -4,6 +4,12 @@ namespace GameClub.Client.Application.Ports;
 
 public interface IWorkstationSessionGateway
 {
+    Task<EntryDecisionSnapshot> CheckEntryAsync(
+        string workstationId,
+        string? clientId,
+        string? guestId,
+        CancellationToken cancellationToken = default);
+
     Task<SessionSnapshot> StartSessionAsync(
         string workstationId,
         string deviceId,

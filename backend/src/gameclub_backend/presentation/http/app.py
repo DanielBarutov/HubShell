@@ -327,6 +327,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         guest_payment_repository,
         tariffs=catalog,
         cash=CashShiftGuestPaymentSettlement(cash_shifts),
+        audit=audit_repository,
     )
     sessions = SessionService(
         session_repository,
@@ -350,6 +351,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         products=catalog,
         clients=clients,
         cash=CashShiftSaleSettlement(cash_shifts),
+        audit=audit_repository,
     )
     payment_methods = PaymentMethodService(payment_method_repository)
     analytics = AnalyticsService(analytics_repository)
@@ -388,7 +390,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.refresh_tokens = refresh_tokens
     application.include_router(auth_router)
     application.include_router(create_audit_router(audit_repository))
-    application.include_router(create_workstations_router(workstations, command_service))
+    application.include_router(create_workstations_router(workstations, command_service, sessions))
     application.include_router(create_workstation_groups_router(workstation_groups))
     application.include_router(create_clients_router(clients))
     application.include_router(create_entitlements_router(entitlements))

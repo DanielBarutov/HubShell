@@ -240,6 +240,10 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
 
     assert 'case "session.start"' in executor_source
     assert 'case "session.stop"' in executor_source
+    assert "CheckEntryAsync" in executor_source
+    assert "if (!entry.Allowed)" in executor_source
+    assert "response.StartsAt is not null" in grpc_source
+    assert "response.EndsAt is not null" in grpc_source
     assert '"client_id"' in executor_source
     assert '"session_id"' in executor_source
     assert "SessionService.SessionServiceClient" in grpc_source
@@ -254,9 +258,12 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "DeviceId = deviceId" in grpc_source
     assert "response.Theme" in grpc_source
     assert "ApplyThemeFromHeartbeat" in window_source
+    assert "ApplyHeartbeatConnectionState" in window_source
     assert "ApplyWorkstationTheme" in window_source
     assert "_viewModel.IsExpanded = isCompact" in window_source
     assert "WindowModeActionLabel" in view_model_source
+    assert "EnsureEntryAllowedAsync" in view_model_source
+    assert "_clientPortal.Logout()" in view_model_source
     assert '"vip" => "VIP-зона"' in view_model_source
     assert "GAMECLUB_ENVIRONMENT" in window_source
     assert "EndpointPolicy.GetEnvironmentEndpoint" in window_source
@@ -266,6 +273,9 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
 
 def test_windows_support_check_is_reproducible_and_platform_explicit() -> None:
     script = (PROJECT_ROOT / "win-client" / "scripts" / "verify-windows.ps1").read_text()
+    kiosk_script = (
+        PROJECT_ROOT / "win-client" / "scripts" / "configure-windows-kiosk.ps1"
+    ).read_text()
 
     assert "dotnet restore" in script
     assert "dotnet build" in script
@@ -275,6 +285,13 @@ def test_windows_support_check_is_reproducible_and_platform_explicit() -> None:
     assert "стартует Locked" in script
     assert "manager password" in script
     assert "Assigned Access" in script
+    resolved_executable_assignment = (
+        "$resolvedExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath)"
+    )
+    assert resolved_executable_assignment in kiosk_script
+    assert kiosk_script.index(resolved_executable_assignment) < kiosk_script.index(
+        "if (-not $Apply)"
+    )
 
 
 def test_windows_access_gate_has_locked_start_and_manager_boundary() -> None:

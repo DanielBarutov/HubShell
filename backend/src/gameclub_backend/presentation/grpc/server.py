@@ -316,6 +316,7 @@ def create_server(
             token_service,
             command_service,
             workstation_group_service,
+            session_service,
         ),
         server,
     )

@@ -134,6 +134,16 @@ public sealed class WindowsCommandExecutor : IWorkstationCommandExecutor
             var tariffId = ReadOptionalString(payload.RootElement, "tariff_id");
             var tariffQuantity = ReadPositiveInt(payload.RootElement, "tariff_quantity") ?? 1;
 
+            var entry = await _sessionGateway.CheckEntryAsync(
+                command.WorkstationId,
+                clientId,
+                ReadOptionalString(payload.RootElement, "guest_id"),
+                cancellationToken);
+            if (!entry.Allowed)
+            {
+                return new CommandExecutionResult(false, $"Вход отклонён: {entry.Reason}");
+            }
+
             var session = await _sessionGateway.StartSessionAsync(
                 command.WorkstationId,
                 deviceId,

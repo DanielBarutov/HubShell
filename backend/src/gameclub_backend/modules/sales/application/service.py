@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import uuid
 from collections.abc import Mapping, Sequence
 
+from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
 from gameclub_backend.modules.sales.application.ports import (
@@ -33,12 +35,14 @@ class ProductSaleService:
         clients: ClientSale,
         cash: CashSaleSettlement | None = None,
         clock: Clock | None = None,
+        audit: AuditRepository | None = None,
     ) -> None:
         self._repository = repository
         self._products = products
         self._clients = clients
         self._cash = cash
         self._clock = clock or UtcClock()
+        self._audit = audit
 
     async def sell(
         self,
@@ -193,28 +197,66 @@ class ProductSaleService:
                         actor_id=actor,
                     )
                 settled_any = True
-            return await self._repository.complete(pending.complete(self._clock.now()))
-        except ApplicationError:
+            result = await self._repository.complete(pending.complete(self._clock.now()))
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=result,
+                actor_id=actor,
+                outcome="success",
+                status_code=200,
+            )
+            return result
+        except ApplicationError as error:
             if not settled_any and not settlement_attempted:
                 await self._cancel_pending(sale)
+                outcome = "cancelled"
+            elif self._is_retryable(error):
+                await self._mark_retryable(sale, str(error), self._clock.now())
+                outcome = "retryable"
             else:
                 await self._mark_needs_review(
                     sale,
                     "Payment settlement may have been applied; manual review is required",
                 )
+                outcome = "needs_review"
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=sale,
+                actor_id=actor,
+                outcome=outcome,
+                status_code=500,
+            )
             raise
         except ValueError as error:
             if not settled_any and not settlement_attempted:
                 await self._cancel_pending(sale)
+                outcome = "cancelled"
             else:
                 await self._mark_needs_review(sale, str(error))
+                outcome = "needs_review"
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=sale,
+                actor_id=actor,
+                outcome=outcome,
+                status_code=500,
+            )
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
         except Exception as error:
             if not settled_any and not settlement_attempted:
                 await self._cancel_pending(sale)
+                outcome = "cancelled"
             else:
                 await self._mark_needs_review(sale, f"Manual review required: {error}")
+                outcome = "needs_review"
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=sale,
+                actor_id=actor,
+                outcome=outcome,
+                status_code=500,
+            )
             raise
 
     async def _cancel_pending(self, sale: ProductSale) -> None:
@@ -226,13 +268,147 @@ class ProductSaleService:
             # compensating stock update cannot be completed immediately.
             return
 
-    async def _mark_needs_review(self, sale: ProductSale, error: str) -> None:
+    async def _mark_needs_review(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime | None = None,
+    ) -> None:
         try:
-            await self._repository.mark_needs_review(sale, error)
+            await self._repository.mark_needs_review(sale, error, now)
         except Exception:
             # Preserve the settlement failure; an operator can still inspect the
             # durable pending row if the review transition itself is unavailable.
             return
+
+    async def _mark_retryable(
+        self,
+        sale: ProductSale,
+        error: str,
+        now: datetime.datetime,
+    ) -> None:
+        try:
+            await self._repository.mark_retryable(sale, error, now)
+        except Exception:
+            # Keep the original settlement failure visible. The durable pending
+            # row remains available for the next reconciliation sweep.
+            return
+
+    async def reconcile(self, sale_id: uuid.UUID) -> ProductSale:
+        """Retry a pending/review sale using the original idempotent side effects.
+
+        This is an explicit operator action. Pending rows are safe worker input;
+        needs_review rows are never retried implicitly after an unknown cash
+        result.
+        """
+        sale = await self._repository.get_by_id(sale_id)
+        if sale is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Product sale not found")
+        if sale.status is ProductSaleStatus.COMPLETED:
+            return sale
+        if sale.status is ProductSaleStatus.CANCELLED:
+            raise ApplicationError(ErrorCode.CONFLICT, "Cancelled sale cannot be reconciled")
+        if sale.status not in {ProductSaleStatus.PENDING, ProductSaleStatus.NEEDS_REVIEW}:
+            raise ApplicationError(ErrorCode.CONFLICT, "Sale is not recoverable")
+        if sale.status is ProductSaleStatus.NEEDS_REVIEW:
+            sale = await self._repository.reopen_for_reconciliation(
+                sale,
+                self._clock.now(),
+            )
+        parts = sale.payment_parts or (
+            PaymentPart(sale.payment_method.value, sale.total_price_cents),
+        )
+        try:
+            for index, part in enumerate(parts):
+                if part.method == ProductPaymentMethod.BALANCE.value:
+                    if sale.client_id is None:
+                        raise ApplicationError(
+                            ErrorCode.CONFLICT,
+                            "Balance payment requires a client",
+                        )
+                    await self._clients.debit(
+                        client_id=sale.client_id,
+                        amount_cents=part.amount_cents,
+                        reason=f"Product sale {sale.id}",
+                        actor_id=sale.sold_by,
+                        idempotency_key=f"product-sale-balance:{sale.idempotency_key}:{index}",
+                    )
+                else:
+                    if self._cash is None or sale.cash_shift_id is None:
+                        raise ApplicationError(
+                            ErrorCode.DEPENDENCY_UNAVAILABLE,
+                            "Cash settlement is not configured",
+                        )
+                    await self._cash.settle(
+                        shift_id=sale.cash_shift_id,
+                        amount_cents=part.amount_cents,
+                        sale_idempotency_key=f"{sale.idempotency_key}:{index}",
+                        actor_id=sale.sold_by,
+                    )
+            result = await self._repository.complete(sale.complete(self._clock.now()))
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=result,
+                actor_id=sale.sold_by,
+                outcome="success",
+                status_code=200,
+            )
+            return result
+        except Exception as error:
+            now = self._clock.now()
+            message = (
+                f"Settlement retry scheduled: {error}"
+                if self._is_retryable(error)
+                else f"Manual review required: {error}"
+            )
+            if self._is_retryable(error):
+                await self._mark_retryable(sale, message, now)
+            else:
+                await self._mark_needs_review(sale, message, now)
+            await self._record_audit(
+                action="product_sale.settlement",
+                sale=sale,
+                actor_id=sale.sold_by,
+                outcome="retryable" if self._is_retryable(error) else "needs_review",
+                status_code=500,
+            )
+            raise
+
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        return isinstance(error, ApplicationError) and error.code in {
+            ErrorCode.DEPENDENCY_UNAVAILABLE,
+            ErrorCode.INTERNAL,
+        }
+
+    async def _record_audit(
+        self,
+        *,
+        action: str,
+        sale: ProductSale,
+        actor_id: str,
+        outcome: str,
+        status_code: int,
+    ) -> None:
+        if self._audit is None:
+            return
+        event = AuditEvent(
+            id=uuid.uuid4(),
+            actor_id=actor_id.strip() or None,
+            action=action,
+            resource_path=f"/api/v1/sales/{sale.id}",
+            outcome=outcome,
+            status_code=status_code,
+            request_id=sale.idempotency_key,
+            created_at=self._clock.now(),
+        )
+        try:
+            await self._audit.record(event)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "product_sale_audit_write_failed sale_id=%s",
+                sale.id,
+            )
 
     @staticmethod
     def _matches_request(

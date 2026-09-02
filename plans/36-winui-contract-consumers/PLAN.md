@@ -16,16 +16,20 @@ transfer и durable offline protocol. Клиент остаётся thin consume
 ## Текущее состояние
 
 Pre-auth gate, post-auth widget/tray, portal package queue/explicit activation,
-snapshot gateway, transfer UI и durable offline journal есть на source-level.
-Полный entry integration и native compile/runtime пока не доказаны.
+snapshot gateway, heartbeat callback, transfer UI и durable offline journal есть
+на source-level. Portal login/register и command-driven session start теперь
+передают workstation/client через server `EntryDecision`; native compile/runtime
+пока не доказаны.
 
 ## Реализовано в текущем срезе
 
-Добавлены C# snapshot/transfer/offline DTO, gateway methods и coordinator
+Добавлены C# snapshot/entry/transfer/offline DTO, gateway methods и coordinator
 heartbeat/replay wiring. MainViewModel показывает active-package/auto-next
-уведомление с закрытием через 3 секунды, transfer offer/confirm, а journal
-шифрует JSONL и sequence state через DPAPI. Source-level tests/fakes обновлены;
-native Windows build не запускался из-за отсутствующего .NET SDK на host.
+уведомление с закрытием через 3 секунды, transfer offer/confirm, блокирует
+login при offline/reconnecting и очищает portal token при отказе EntryDecision.
+Journal шифрует JSONL и sequence state через DPAPI. Source-level tests/fakes
+обновлены; native Windows build не запускался из-за отсутствующего .NET SDK на
+host.
 
 ## Входит в план
 
@@ -48,17 +52,20 @@ native Windows build не запускался из-за отсутствующ�
 
 1. [x] Обновить generated C# DTO и gateway interfaces после фиксации protobuf;
    сохранить backward-compatible handling неизвестных enum/fields.
-2. [ ] Встроить snapshot/entry result в login и heartbeat; до server result
-   показывать locked/reconnecting state.
+2. [x] Встроить snapshot/entry result в login/register, command-driven session
+   start и heartbeat; до server result показывать locked/reconnecting state.
 3. [x] Реализовать package activation/auto-next notification: self-closing
    через 3 секунды и собственная close button.
 4. [x] Связать stop/exhaustion/logout с server result, burn/lock/restart policy;
    не выполнять финансовое действие локально.
 5. [x] Добавить transfer offer/confirm/result и старый-PC restart ACK.
 6. [x] Реализовать durable journal storage, batch replay и partial-result UI.
-7. [ ] Проверить no-new-session offline, disk/crash recovery и отсутствие
-   секретов/лишней PII в local files/logs.
-8. [ ] Добавить unit tests coordinator/gateway и Windows manual scenarios.
+7. [x] Проверить no-new-session offline, clock-skew/duplicate/out-of-order
+   backend guards и отсутствие передачи secrets/лишней PII в client DTO на
+   source-level; native disk/crash/filesystem smoke остаётся Windows blocker.
+8. [x] Добавить unit/source contract tests coordinator/gateway/entry refusal и
+   обновить manual Windows scenarios; native execution этих сценариев требует
+   целевого Windows ПК.
 
 ## Критерии готовности
 
@@ -71,10 +78,10 @@ native Windows build не запускался из-за отсутствующ�
 
 ## Остаток и release blocker
 
-Нужно связать `EntryDecision` с фактическим login UI, проверить generated C# и
-XAML на Windows, а также провести native x64/reconnect/power-loss smoke.
-Local offline limit и поведение restart при недоступном backend требуют
-подтверждения на целевом ПК.
+Нужно выполнить generated C# + XAML compile на Windows, native x64/reconnect/
+power-loss smoke, проверить local offline limit и restart при недоступном
+backend на целевом ПК. Linux подтверждает source/generated-protobuf signature,
+но не заменяет WindowsAppSDK runtime.
 
 ## Проверки и evidence
 

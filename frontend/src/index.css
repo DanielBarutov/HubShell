@@ -281,7 +281,7 @@ html, body, .app-shell, .main-content { color: #d7e0ee; background: #0e141c; }
 .map-stage { position: relative; display: grid; grid-template-columns: 186px minmax(0, 1fr); min-height: 590px; overflow: hidden; border: 1px solid #243247; border-radius: 18px; background: radial-gradient(circle at 80% 10%, #1b2a41 0, #111a29 38%, #0d1420 100%); box-shadow: 0 18px 45px rgba(15, 28, 48, .16); }
 .map-legend-panel { z-index: 2; margin: 19px 0 19px 19px; padding: 17px 14px; color: #a8b5ca; border: 1px solid rgba(255, 255, 255, .09); border-radius: 12px; background: rgba(11, 18, 30, .86); box-shadow: 0 12px 25px rgba(0, 0, 0, .16); }
 .map-panel-title { display: flex; align-items: center; justify-content: space-between; padding-bottom: 15px; color: #eff5ff; border-bottom: 1px solid rgba(255, 255, 255, .08); font-size: 11px; }.map-panel-title span { color: #8da0bb; font-size: 10px; }
-.map-legend-item { display: grid; grid-template-columns: 13px 1fr auto; align-items: center; gap: 8px; padding: 11px 0; font-size: 10px; }.map-legend-item b { color: #71849e; font-weight: 600; }.legend-square { width: 9px; height: 9px; border-radius: 2px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .04); }.legend-square.online, .legend-dot.online { background: #36c98f; }.legend-square.busy, .legend-dot.busy { background: #a57cf4; }.legend-square.offline, .legend-dot.offline { background: #75849a; }.legend-square.maintenance, .legend-dot.maintenance { background: #e3a457; }
+.map-legend-item { display: grid; grid-template-columns: 13px 1fr auto; align-items: center; gap: 8px; padding: 11px 0; font-size: 10px; }.map-legend-item b { color: #71849e; font-weight: 600; }.legend-square { width: 9px; height: 9px; border-radius: 2px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .04); }.legend-square.online, .legend-dot.online { background: #36c98f; }.legend-square.busy, .legend-dot.busy { background: #a57cf4; }.legend-square.stale, .legend-dot.stale { background: #aab5c5; }.legend-square.offline, .legend-dot.offline { background: #75849a; }.legend-square.maintenance, .legend-dot.maintenance { background: #e3a457; }
 .map-panel-zone { margin-top: 13px; padding: 8px; color: #c9d5e8; border-radius: 7px; background: rgba(120, 157, 211, .12); font-size: 9px; text-align: center; }
 .map-canvas { position: relative; display: grid; grid-template-columns: repeat(6, minmax(92px, 1fr)); grid-auto-rows: 112px; gap: 10px; align-content: start; padding: 25px; background-image: linear-gradient(rgba(136, 161, 196, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(136, 161, 196, .06) 1px, transparent 1px); background-size: 34px 34px; }
 .map-slot { position: relative; min-width: 0; min-height: 0; border: 1px solid rgba(109, 133, 166, .18); border-radius: 10px; background: rgba(10, 17, 28, .28); transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }.map-slot.occupied { border-color: transparent; background: transparent; }.map-slot-number { position: absolute; top: 8px; right: 9px; color: rgba(139, 158, 184, .46); font-size: 9px; font-weight: 700; pointer-events: none; }.map-slot.drop-target { border-color: #c9f27d; background: rgba(201, 242, 125, .11); box-shadow: 0 0 0 2px rgba(201, 242, 125, .14); }.map-arrange-hint { margin-left: auto; color: #91a5c2; font-size: 10px; }
@@ -459,6 +459,10 @@ nav { gap: 5px; }
   .schedule-toggle { grid-template-columns: 16px minmax(0, 1fr) 100px; }
 }
 
+/* Stale is distinct from a disconnected workstation, but remains non-operational. */
+.pc-status-dot.stale { background: #aab5c5; }
+.map-seat.stale { border-color: #66748a; opacity: .8; }
+
 /* Final map sizing: the canvas is an independent scroll frame and seats keep
    the same physical size on every operator screen. */
 .map-stage { grid-template-columns: 166px minmax(0, 1fr); min-height: 500px; }
@@ -588,7 +592,7 @@ nav { gap: 3px; }
 .pc-name, .section-row h2, .card-heading h3 { color: #eaf1f8; }
 .pc-illustration { color: #637b96; }
 .pc-client, .pc-zone { color: #9aacc0; }
-.status-online { color: #5fd49b; }.status-busy { color: #b28ef6; }.status-offline { color: #8b9aaf; }.status-maintenance { color: #efaa5f; }
+.status-online { color: #5fd49b; }.status-busy { color: #b28ef6; }.status-stale { color: #aab5c5; }.status-offline { color: #8b9aaf; }.status-maintenance { color: #efaa5f; }
 .lower-grid { gap: 12px; margin-top: 25px; }
 .white-card { padding: 18px; }
 .card-heading p, .activity-item span, .upcoming-item span { color: #7f90a6; }
@@ -633,7 +637,7 @@ nav { gap: 3px; }
 .right-panel { width: 440px; padding: 28px 26px; color: #d5e0ec; border-left: 1px solid #2a3e55; background: #111b27; box-shadow: -18px 0 48px rgba(0, 0, 0, .34); }
 .panel-overlay { background: rgba(4, 10, 17, .68); backdrop-filter: blur(4px); }
 .panel-header { border-color: #293c51; }.panel-header p, .right-panel .detail-row span, .right-panel .subheading { color: #8193aa; }.panel-header h2, .right-panel .detail-row strong { color: #f0f5fb; }
-.panel-pc-hero { border-color: #293c51; }.large-pc-icon { color: #62d39b; background: #183b30; }.large-pc-icon.busy { color: #b092ff; background: #2a2344; }.large-pc-icon.offline { color: #8797aa; background: #202d3c; }.large-pc-icon.maintenance { color: #efaa5f; background: #402b1b; }
+.panel-pc-hero { border-color: #293c51; }.large-pc-icon { color: #62d39b; background: #183b30; }.large-pc-icon.busy { color: #b092ff; background: #2a2344; }.large-pc-icon.stale { color: #aab5c5; background: #293544; }.large-pc-icon.offline { color: #8797aa; background: #202d3c; }.large-pc-icon.maintenance { color: #efaa5f; background: #402b1b; }
 .pill-status { color: #b9c9d9; background: #1c2a3a; }.panel-pc-hero h2 { color: #e5edf6; }.panel-pc-hero p { color: #8294aa; }
 .panel-section { border-color: #293c51; }
 .right-panel .booking-form input, .right-panel .booking-form select, .right-panel .booking-form textarea, .right-panel .amount-field input, .right-panel .schedule-fields input, .right-panel .schedule-time { color: #e1eaf4; border-color: #344b64; background: #182737; }
