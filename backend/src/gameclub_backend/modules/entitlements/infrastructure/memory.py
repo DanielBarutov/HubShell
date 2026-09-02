@@ -116,7 +116,7 @@ class InMemoryEntitlementRepository:
                 raise ValueError("Package is outside its time window")
             updated = item.consume(minutes, now)
             self._items[entitlement_id] = updated
-            return updated
+            return updated, item.remaining_minutes - updated.remaining_minutes
 
     async def burn_for_client(
         self,
