@@ -45,6 +45,17 @@ class InMemoryProductSaleRepository:
             self._items[sale.id] = cancelled
             return cancelled
 
+    async def mark_needs_review(self, sale: ProductSale, error: str) -> ProductSale:
+        async with self._lock:
+            current = self._items.get(sale.id)
+            if current is None:
+                raise ValueError("Product sale not found")
+            if current.status is ProductSaleStatus.COMPLETED:
+                return current
+            reviewed = current.needs_review(error)
+            self._items[sale.id] = reviewed
+            return reviewed
+
     async def list_sales(
         self,
         start_at: datetime.datetime | None = None,
@@ -53,7 +64,9 @@ class InMemoryProductSaleRepository:
         limit: int = 100,
     ) -> list[ProductSale]:
         items = [
-            item for item in self._items.values() if item.status is ProductSaleStatus.COMPLETED
+            item
+            for item in self._items.values()
+            if item.status in {ProductSaleStatus.COMPLETED, ProductSaleStatus.NEEDS_REVIEW}
         ]
         if start_at is not None:
             items = [item for item in items if item.created_at >= start_at]

@@ -8,6 +8,8 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using System.Drawing;
+using Forms = System.Windows.Forms;
 using WinRT.Interop;
 using XamlApplication = Microsoft.UI.Xaml.Application;
 
@@ -19,6 +21,8 @@ public sealed partial class MainWindow : Window
     private readonly AppWindow _appWindow;
     private readonly IWorkstationPowerController _powerController;
     private readonly DeviceEnrollmentTokenProvider _enrollmentTokenProvider;
+    private Forms.NotifyIcon? _trayIcon;
+    private bool _closing;
 
     public MainWindow()
     {
@@ -33,7 +37,6 @@ public sealed partial class MainWindow : Window
             presenter.IsMaximizable = false;
             presenter.IsMinimizable = false;
         }
-        _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         Closed += MainWindowClosed;
         Activated += MainWindowActivated;
         // GAMECLUB_ENVIRONMENT remains a development-only runtime override;
@@ -49,13 +52,17 @@ public sealed partial class MainWindow : Window
             new ClientSessionCoordinator(
                 new GrpcBackendClient(
                     grpcAddress,
-                    _enrollmentTokenProvider)),
+                    _enrollmentTokenProvider),
+                new JsonlOfflineJournal()),
             accessCredentials,
             null,
             "0.1.0",
             new[] { "commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1" },
             _powerController);
         ContentRoot.DataContext = _viewModel;
+        _viewModel.PropertyChanged += ViewModelPropertyChanged;
+        InitializeTrayIcon();
+        ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode);
         _ = StartClientAsync();
     }
 
@@ -116,20 +123,39 @@ public sealed partial class MainWindow : Window
         await _viewModel.StopActiveSessionAsync();
     }
 
+    private async void CreateTransferOffer(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.CreateTransferOfferAsync();
+    }
+
+    private async void ConfirmTransfer(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.ConfirmTransferAsync();
+    }
+
+    private void DismissSessionNotification(object sender, RoutedEventArgs args)
+    {
+        _viewModel.DismissSessionNotification();
+    }
+
     private async void MainWindowClosed(object sender, WindowEventArgs args)
     {
+        _closing = true;
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
+        _viewModel.PropertyChanged -= ViewModelPropertyChanged;
         await _viewModel.DisposeAsync();
     }
 
     private void MainWindowActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState != WindowActivationState.Deactivated)
-        {
-            return;
-        }
-
-        ManagerPasswordBox.Password = string.Empty;
-        _viewModel.LockClient();
+        // Losing focus is normal desktop behavior after login. Access is locked
+        // only by the server/session policy or an explicit logout action.
+        _ = args;
     }
 
     private void PortalIdentifierChanged(object sender, TextChangedEventArgs args)
@@ -198,6 +224,11 @@ public sealed partial class MainWindow : Window
         PortalRegistrationPinBox.Password = string.Empty;
     }
 
+    private async void ActivateFirstPortalEntitlement(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.ActivateFirstPortalEntitlementAsync();
+    }
+
     private void OpenPortalRegistration(object sender, RoutedEventArgs args) =>
         _viewModel.ShowPortalRegistration();
 
@@ -238,6 +269,78 @@ public sealed partial class MainWindow : Window
     {
         ManagerPasswordBox.Password = string.Empty;
         _viewModel.LockClient();
+    }
+
+    private void HideToTray(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        if (!_viewModel.IsAccessLocked && !_viewModel.IsMaintenanceMode)
+        {
+            _appWindow.Hide();
+        }
+    }
+
+    private void ViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(MainViewModel.IsAccessLocked)
+            or nameof(MainViewModel.IsMaintenanceMode))
+        {
+            DispatcherQueue.TryEnqueue(() =>
+                ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode));
+        }
+    }
+
+    private void InitializeTrayIcon()
+    {
+        _trayIcon = new Forms.NotifyIcon
+        {
+            Icon = SystemIcons.Application,
+            Text = "GameClub",
+            Visible = true,
+            ContextMenuStrip = new Forms.ContextMenuStrip(),
+        };
+        _trayIcon.DoubleClick += RestoreFromTray;
+        _trayIcon.ContextMenuStrip.Items.Add("Показать", null, RestoreFromTray);
+        _trayIcon.ContextMenuStrip.Items.Add("Выйти", null, ExitFromTray);
+    }
+
+    private void RestoreFromTray(object? sender, EventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        _appWindow.Show();
+        Activate();
+    }
+
+    private void ExitFromTray(object? sender, EventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        _closing = true;
+        Close();
+    }
+
+    private void ApplyWindowMode(bool accessGateVisible)
+    {
+        if (_closing)
+        {
+            return;
+        }
+        if (accessGateVisible)
+        {
+            _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+            return;
+        }
+
+        var presenter = OverlappedPresenter.Create();
+        presenter.SetBorderAndTitleBar(false, false);
+        presenter.IsResizable = false;
+        presenter.IsMaximizable = false;
+        presenter.IsMinimizable = false;
+        presenter.IsAlwaysOnTop = true;
+        _appWindow.SetPresenter(presenter);
+        _appWindow.Resize(new Windows.Graphics.SizeInt32(460, 720));
     }
 
     private void ApplyThemeFromCommand(string theme)

@@ -9,8 +9,13 @@ import "google/protobuf/timestamp.proto";
 service SessionService {
   rpc Start(StartSessionRequest) returns (Session);
   rpc Get(GetSessionRequest) returns (Session);
+  rpc GetSnapshot(GetSessionSnapshotRequest) returns (SessionSnapshot);
   rpc List(ListSessionsRequest) returns (ListSessionsResponse);
   rpc Stop(StopSessionRequest) returns (Session);
+  rpc CreateTransferOffer(CreateTransferOfferRequest) returns (TransferOffer);
+  rpc GetTransferOffer(GetTransferOfferRequest) returns (TransferOffer);
+  rpc ConfirmTransfer(ConfirmTransferRequest) returns (TransferResult);
+  rpc ReplayOfflineBatch(ReplayOfflineBatchRequest) returns (ReplayOfflineBatchResponse);
 }
 
 enum SessionStatus {
@@ -34,6 +39,9 @@ message Session {
   string guest_id = 12;
   string tariff_id = 13;
   int32 tariff_quantity = 14;
+  string guest_payment_id = 15;
+  int32 login_grant_minutes = 16;
+  string entitlement_id = 17;
 }
 
 message StartSessionRequest {
@@ -47,10 +55,56 @@ message StartSessionRequest {
   string guest_id = 8;
   string tariff_id = 9;
   int32 tariff_quantity = 10;
+  string guest_payment_id = 11;
+  string entitlement_id = 12;
 }
 
 message GetSessionRequest {
   string session_id = 1;
+}
+
+message GetSessionSnapshotRequest {
+  string session_id = 1;
+  string device_id = 2;
+}
+
+message PackageSnapshot {
+  string id = 1;
+  string tariff_id = 2;
+  string zone_id = 3;
+  int32 duration_minutes = 4;
+  int32 remaining_minutes = 5;
+  int32 queue_position = 6;
+  string status = 7;
+  int32 window_start_minute = 8;
+  int32 window_end_minute = 9;
+  string window_timezone = 10;
+}
+
+message SessionMeterSnapshot {
+  string session_id = 1;
+  int32 billed_minutes = 2;
+  int64 billed_cents = 3;
+  int32 package_minutes = 4;
+  string active_entitlement_id = 5;
+  string status = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message SessionSnapshot {
+  int32 schema_version = 1;
+  google.protobuf.Timestamp server_time = 2;
+  Session session = 3;
+  string workstation_id = 4;
+  string zone_id = 5;
+  string client_id = 6;
+  int64 balance_cents = 7;
+  int64 balance_bonus = 8;
+  PackageSnapshot active_package = 9;
+  repeated PackageSnapshot package_queue = 10;
+  SessionMeterSnapshot meter = 11;
+  repeated string allowed_actions = 12;
+  string device_id = 13;
 }
 
 message ListSessionsRequest {
@@ -65,4 +119,77 @@ message ListSessionsResponse {
 message StopSessionRequest {
   string session_id = 1;
   string device_id = 2;
+}
+
+message CreateTransferOfferRequest {
+  string session_id = 1;
+  string target_workstation_id = 2;
+  string device_id = 3;
+  string idempotency_key = 4;
+}
+
+message GetTransferOfferRequest {
+  string offer_id = 1;
+  string device_id = 2;
+  string token = 3;
+}
+
+message ConfirmTransferRequest {
+  string offer_id = 1;
+  string device_id = 2;
+  string token = 3;
+  string idempotency_key = 4;
+}
+
+message TransferOffer {
+  string id = 1;
+  string session_id = 2;
+  string client_id = 3;
+  string source_workstation_id = 4;
+  string target_workstation_id = 5;
+  string token = 6;
+  string status = 7;
+  bool requires_package_burn = 8;
+  string warning = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+  google.protobuf.Timestamp confirmed_at = 12;
+}
+
+message TransferResult {
+  TransferOffer offer = 1;
+  Session session = 2;
+}
+
+message ReplayOfflineBatchRequest {
+  int32 protocol_version = 1;
+  string device_id = 2;
+  string session_id = 3;
+  repeated OfflineOperation operations = 4;
+}
+
+message OfflineOperation {
+  string id = 1;
+  int64 sequence = 2;
+  string kind = 3;
+  string payload_json = 4;
+  int32 snapshot_version = 5;
+  string idempotency_key = 6;
+  string checksum = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message OfflineOperationResult {
+  string operation_id = 1;
+  int64 sequence = 2;
+  string status = 3;
+  string message = 4;
+  google.protobuf.Timestamp applied_at = 5;
+}
+
+message ReplayOfflineBatchResponse {
+  int32 protocol_version = 1;
+  string session_id = 2;
+  repeated OfflineOperationResult results = 3;
+  SessionSnapshot snapshot = 4;
 }

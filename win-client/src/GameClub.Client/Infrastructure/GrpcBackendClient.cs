@@ -90,6 +90,23 @@ public sealed class GrpcBackendClient : IBackendClient
         return ToPortalSnapshot(response);
     }
 
+    public async Task<ClientPortalSnapshot> ActivateEntitlementAsync(
+        string deviceId,
+        string entitlementId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.ActivateEntitlementAsync(
+            new Clients.ActivateEntitlementRequest
+            {
+                DeviceId = deviceId,
+                EntitlementId = entitlementId,
+            },
+            headers: await CreateClientPortalMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return ToPortalSnapshot(response);
+    }
+
     public void Logout() => (_clientPortalAccessToken, _clientPortalExpiresAt) = (null, default);
 
     public async Task<ClientConnectionSnapshot> CheckConnectionAsync(
@@ -194,6 +211,170 @@ public sealed class GrpcBackendClient : IBackendClient
             deadline: DateTime.UtcNow.AddSeconds(5),
             cancellationToken: cancellationToken);
         return ToSessionSnapshot(response);
+    }
+
+    public async Task<SessionSnapshot> GetSessionSnapshotAsync(
+        string sessionId,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var metadata = await CreateMetadataAsync(cancellationToken);
+        var response = await _sessionClient.GetSnapshotAsync(
+            new Sessions.GetSessionSnapshotRequest
+            {
+                SessionId = sessionId,
+                DeviceId = deviceId,
+            },
+            headers: metadata,
+            deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return ToSessionSnapshot(response);
+    }
+
+    private static SessionSnapshot ToSessionSnapshot(Sessions.SessionSnapshot response)
+    {
+        var session = ToSessionSnapshot(response.Session);
+        return session with
+        {
+            LoginGrantMinutes = response.Session.LoginGrantMinutes,
+            EntitlementId = string.IsNullOrWhiteSpace(response.Session.EntitlementId)
+                ? null
+                : response.Session.EntitlementId,
+            ZoneId = string.IsNullOrWhiteSpace(response.ZoneId) ? null : response.ZoneId,
+            BalanceCents = string.IsNullOrWhiteSpace(response.ClientId)
+                ? null
+                : response.BalanceCents,
+            BalanceBonus = string.IsNullOrWhiteSpace(response.ClientId)
+                ? null
+                : response.BalanceBonus,
+            ActivePackage = response.ActivePackage is null || response.ActivePackage.CalculateSize() == 0
+                ? null
+                : ToPackageSnapshot(response.ActivePackage),
+            PackageQueue = response.PackageQueue.Select(ToPackageSnapshot).ToArray(),
+            Meter = response.Meter is null || response.Meter.CalculateSize() == 0
+                ? null
+                : new SessionMeterSnapshot(
+                    response.Meter.SessionId,
+                    response.Meter.BilledMinutes,
+                    response.Meter.BilledCents,
+                    response.Meter.PackageMinutes,
+                    string.IsNullOrWhiteSpace(response.Meter.ActiveEntitlementId)
+                        ? null
+                        : response.Meter.ActiveEntitlementId,
+                    response.Meter.Status,
+                    ToIsoTimestamp(response.Meter.UpdatedAt)),
+            ServerTime = ToIsoTimestamp(response.ServerTime),
+            DeviceId = string.IsNullOrWhiteSpace(response.DeviceId) ? null : response.DeviceId,
+        };
+    }
+
+    public async Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
+        string sessionId,
+        string targetWorkstationId,
+        string deviceId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _sessionClient.CreateTransferOfferAsync(
+            new Sessions.CreateTransferOfferRequest
+            {
+                SessionId = sessionId,
+                TargetWorkstationId = targetWorkstationId,
+                DeviceId = deviceId,
+                IdempotencyKey = idempotencyKey,
+            },
+            headers: await CreateMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return ToTransferOfferSnapshot(response);
+    }
+
+    public async Task<SessionTransferOfferSnapshot> GetTransferOfferAsync(
+        string offerId,
+        string deviceId,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _sessionClient.GetTransferOfferAsync(
+            new Sessions.GetTransferOfferRequest
+            {
+                OfferId = offerId,
+                DeviceId = deviceId,
+                Token = token,
+            },
+            headers: await CreateMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return ToTransferOfferSnapshot(response);
+    }
+
+    public async Task<SessionTransferResultSnapshot> ConfirmTransferAsync(
+        string offerId,
+        string deviceId,
+        string token,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _sessionClient.ConfirmTransferAsync(
+            new Sessions.ConfirmTransferRequest
+            {
+                OfferId = offerId,
+                DeviceId = deviceId,
+                Token = token,
+                IdempotencyKey = idempotencyKey,
+            },
+            headers: await CreateMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return new SessionTransferResultSnapshot(
+            ToTransferOfferSnapshot(response.Offer),
+            ToSessionSnapshot(response.Session));
+    }
+
+    public async Task<OfflineBatchResultSnapshot> ReplayOfflineBatchAsync(
+        string sessionId,
+        string deviceId,
+        IReadOnlyCollection<OfflineOperationSnapshot> operations,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new Sessions.ReplayOfflineBatchRequest
+        {
+            ProtocolVersion = 1,
+            SessionId = sessionId,
+            DeviceId = deviceId,
+        };
+        request.Operations.AddRange(operations.Select(operation =>
+        {
+            var item = new Sessions.OfflineOperation
+            {
+                Id = operation.Id,
+                Sequence = operation.Sequence,
+                Kind = operation.Kind,
+                PayloadJson = operation.PayloadJson,
+                SnapshotVersion = operation.SnapshotVersion,
+                IdempotencyKey = operation.IdempotencyKey,
+                Checksum = operation.Checksum,
+            };
+            item.CreatedAt = Timestamp.FromDateTime(operation.CreatedAt.UtcDateTime);
+            return item;
+        }));
+        var response = await _sessionClient.ReplayOfflineBatchAsync(
+            request,
+            headers: await CreateMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        var results = response.Results.Select(item => new OfflineOperationResultSnapshot(
+            item.OperationId,
+            item.Sequence,
+            item.Status,
+            item.Message,
+            item.AppliedAt is null ? null : ToIsoTimestamp(item.AppliedAt))).ToArray();
+        return new OfflineBatchResultSnapshot(
+            response.SessionId,
+            results,
+            response.Snapshot is null || response.Snapshot.CalculateSize() == 0
+                ? null
+                : ToSessionSnapshot(response.Snapshot));
     }
 
     public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
@@ -339,7 +520,19 @@ public sealed class GrpcBackendClient : IBackendClient
                 purchase.Quantity,
                 purchase.TotalPriceCents,
                 purchase.PaymentMethod,
-                ToIsoTimestamp(purchase.CreatedAt))).ToArray());
+                ToIsoTimestamp(purchase.CreatedAt))).ToArray(),
+            source.Entitlements.Select(entitlement => new ClientPortalEntitlement(
+                entitlement.Id,
+                entitlement.TariffId,
+                string.IsNullOrWhiteSpace(entitlement.ZoneId) ? null : entitlement.ZoneId,
+                entitlement.Status,
+                entitlement.DurationMinutes,
+                entitlement.RemainingMinutes,
+                entitlement.PriceCents,
+                entitlement.QueuePosition,
+                string.IsNullOrWhiteSpace(entitlement.TariffName) ? null : entitlement.TariffName,
+                ToIsoTimestamp(entitlement.PurchasedAt),
+                entitlement.ActivatedAt is null ? null : ToIsoTimestamp(entitlement.ActivatedAt))).ToArray());
 
     private static WorkstationCommandSnapshot ToSnapshot(Workstations.WorkstationCommand command) =>
         new(
@@ -363,6 +556,35 @@ public sealed class GrpcBackendClient : IBackendClient
             session.EndedAt is null ? null : ToIsoTimestamp(session.EndedAt),
             session.Source,
             session.ReservationId);
+
+    private static SessionPackageSnapshot ToPackageSnapshot(Sessions.PackageSnapshot package) =>
+        new(
+            package.Id,
+            package.TariffId,
+            string.IsNullOrWhiteSpace(package.ZoneId) ? null : package.ZoneId,
+            package.DurationMinutes,
+            package.RemainingMinutes,
+            package.QueuePosition,
+            package.Status,
+            package.WindowStartMinute,
+            package.WindowEndMinute,
+            string.IsNullOrWhiteSpace(package.WindowTimezone) ? null : package.WindowTimezone);
+
+    private static SessionTransferOfferSnapshot ToTransferOfferSnapshot(
+        Sessions.TransferOffer offer) =>
+        new(
+            offer.Id,
+            offer.SessionId,
+            offer.ClientId,
+            offer.SourceWorkstationId,
+            offer.TargetWorkstationId,
+            offer.Token,
+            offer.Status,
+            offer.RequiresPackageBurn,
+            string.IsNullOrWhiteSpace(offer.Warning) ? null : offer.Warning,
+            ToIsoTimestamp(offer.CreatedAt),
+            ToIsoTimestamp(offer.ExpiresAt),
+            offer.ConfirmedAt is null ? null : ToIsoTimestamp(offer.ConfirmedAt));
 
     private static WorkstationLockdownPolicySnapshot ToLockdownPolicySnapshot(
         Workstations.WorkstationLockdownPolicy policy)

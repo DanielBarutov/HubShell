@@ -54,6 +54,9 @@ import type {
   BackendProductCategory,
   BackendTariff,
   BackendSessionMeter,
+  BackendSessionSnapshot,
+  BackendProductSale,
+  BackendTransferOffer,
   BackendWorkstationGroup,
   Reservation,
 } from "./api";
@@ -123,6 +126,7 @@ function App() {
   const [liveRevenueCents, setLiveRevenueCents] = useState<number | null>(null);
   const [liveRevenueChargeCount, setLiveRevenueChargeCount] = useState(0);
   const [liveCashShifts, setLiveCashShifts] = useState<BackendCashShift[]>([]);
+  const [liveReviewSales, setLiveReviewSales] = useState<BackendProductSale[]>([]);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
   const [liveRefreshKey, setLiveRefreshKey] = useState(0);
@@ -186,7 +190,7 @@ function App() {
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, backendGroups] = await Promise.all([
+        const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, backendGroups, sales, backendTariffs] = await Promise.all([
           api.listWorkstations(),
           api.listClients(),
           api.listSessions(true),
@@ -195,6 +199,8 @@ function App() {
           api.getRevenue(today.toISOString(), tomorrow.toISOString()),
           api.listCashShifts(),
           api.listWorkstationGroups(),
+          api.listSales({ limit: 100 }),
+          api.listTariffs(),
         ]);
         if (!active) {
           return;
@@ -204,10 +210,11 @@ function App() {
         );
         const groupNames = new Map(backendGroups.map((group) => [group.id, group.name]));
         const clientNames = new Map(backendClients.map((client) => [client.id, client.nickname]));
+        const tariffNames = new Map(backendTariffs.map((tariff) => [tariff.id, tariff.name]));
         setLiveGroups(backendGroups);
         setLivePcs(backendPcs.map((pc) => {
           const session = sessionsByWorkstation.get(pc.id);
-          return toUiWorkstation(pc, session, pc.group_id ? groupNames.get(pc.group_id) : undefined, session?.client_id ? clientNames.get(session.client_id) : undefined);
+          return toUiWorkstation(pc, session, pc.group_id ? groupNames.get(pc.group_id) : undefined, session?.client_id ? clientNames.get(session.client_id) : undefined, session?.tariff_id ? tariffNames.get(session.tariff_id) : undefined);
         }));
         setLiveClients(backendClients.map(toUiClient));
         setLiveReservations(todayReservations);
@@ -215,6 +222,7 @@ function App() {
         setLiveRevenueCents(revenue.amount_cents);
         setLiveRevenueChargeCount(revenue.charge_count);
         setLiveCashShifts(cashShifts);
+        setLiveReviewSales(sales.filter((sale) => sale.status === "needs_review"));
         setLiveError(null);
       } catch (error) {
         if (active) {
@@ -383,7 +391,7 @@ function App() {
           <div className="topbar-actions">
             <button className="topbar-quick-add" aria-label="Быстрое пополнение" onClick={() => openDeposit()}><Plus size={17} /></button>
             <label className="global-search"><Search size={16} /><input aria-label="Быстрый поиск клиента" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") setSection("clients"); }} placeholder="Найти клиента" /></label>
-            <span className={`live-indicator ${liveError ? "warning" : ""}`}><i /> {liveError ? "Нет обновления" : LIVE_MODE ? "Система подключена" : "Система работает"}</span>
+            <span className={`live-indicator ${liveError || liveReviewSales.length ? "warning" : ""}`}><i /> {liveError ? "Нет обновления" : liveReviewSales.length ? `Требуют сверки: ${liveReviewSales.length}` : LIVE_MODE ? "Система подключена" : "Система работает"}</span>
           </div>
         </header>
 
@@ -401,7 +409,7 @@ function App() {
 
       {panel && panel !== "sale" && <div className="panel-overlay" aria-hidden="true" onClick={() => setPanel(null)} />}
       {panel && panel !== "sale" && <aside className={`right-panel ${panel ? "open" : ""}`} role="dialog" aria-modal={panel ? true : undefined} aria-label="Контекстная панель" aria-hidden={!panel}>
-        {panel === "pc" && selectedPc && <PcPanel pc={selectedPc} clients={currentClients} cashShifts={liveCashShifts} onClose={() => setPanel(null)} onEdit={() => setPanel("workstation")} onBook={() => openBooking(selectedPc.id)} onDeposit={openDeposit} onOpenSale={() => openSale(selectedPc)} onSessionChanged={() => setLiveRefreshKey((value) => value + 1)} api={LIVE_MODE ? api : undefined} />}
+        {panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={currentPcs} clients={currentClients} cashShifts={liveCashShifts} onClose={() => setPanel(null)} onEdit={() => setPanel("workstation")} onBook={() => openBooking(selectedPc.id)} onDeposit={openDeposit} onOpenSale={() => openSale(selectedPc)} onSessionChanged={() => setLiveRefreshKey((value) => value + 1)} api={LIVE_MODE ? api : undefined} />}
         {panel === "client" && selectedClient && <ClientPanel client={selectedClient} api={LIVE_MODE ? api : undefined} onClose={() => setPanel(null)} onSaved={() => { setLiveRefreshKey((value) => value + 1); setPanel(null); }} onDeposit={() => openDeposit(selectedClient)} onBonusDeposit={() => openDeposit(selectedClient, true)} />}
         {panel === "new-client" && LIVE_MODE && <NewClientPanel api={api} onClose={() => setPanel(null)} onSaved={() => { setLiveRefreshKey((value) => value + 1); setPanel(null); }} />}
         {panel === "deposit" && <DepositPanel initialClient={selectedClient ?? undefined} bonusOnly={depositBonusOnly} onClose={() => setPanel(null)} onCompleted={() => { setLiveRefreshKey((value) => value + 1); setPanel(null); }} clients={currentClients} api={LIVE_MODE ? api : undefined} />}
@@ -598,7 +606,7 @@ function Segmented({ value, onChange, options }: { value: string; onChange: (val
 }
 
 function PcGrid({ pcs, onPc, compact = false }: { pcs: Workstation[]; onPc: (pc: Workstation) => void; compact?: boolean }) {
-  return <div className={`pc-grid ${compact ? "compact" : ""}`}>{pcs.map((pc) => <button className="pc-card" key={pc.id} onClick={() => onPc(pc)}><div className="pc-card-top"><span className={`pc-status-dot ${pc.status}`} /><span className="pc-name">{pc.name}</span><MoreHorizontal size={16} className="muted" /></div><div className="pc-illustration"><Computer size={compact ? 28 : 34} strokeWidth={1.45} /></div><div className="pc-card-bottom"><span className={statusMeta[pc.status].className}>{statusMeta[pc.status].label}</span>{pc.client ? <span className="pc-client">{pc.client}</span> : <span className="pc-zone">{pc.group}</span>}</div>{pc.session && <div className="session-time"><Clock3 size={12} /> {pc.session}</div>}</button>)}</div>;
+  return <div className={`pc-grid ${compact ? "compact" : ""}`}>{pcs.map((pc) => <button className="pc-card" key={pc.id} onClick={() => onPc(pc)}><div className="pc-card-top"><span className={`pc-status-dot ${pc.status}`} /><span className="pc-name">{pc.name}</span><MoreHorizontal size={16} className="muted" /></div><div className="pc-illustration"><Computer size={compact ? 28 : 34} strokeWidth={1.45} /></div><div className="pc-card-bottom"><span className={statusMeta[pc.status].className}>{statusMeta[pc.status].label}</span>{pc.client ? <span className="pc-client">{pc.client}</span> : <span className="pc-zone">{pc.group}</span>}{pc.tariff && <span className="pc-zone">{pc.tariff}</span>}</div>{pc.session && <div className="session-time"><Clock3 size={12} /> {pc.session}</div>}{pc.status === "offline" && pc.lastSeen && <div className="session-time">Последний heartbeat: {pc.lastSeen}</div>}</button>)}</div>;
 }
 
 function MapView({ onPc, onSalePc, onBookPc, onEditPc, pcs, group, setGroup, zoneOptions, onNewWorkstation, onPositionsChange }: { onPc: (pc: Workstation) => void; onSalePc: (pc: Workstation) => void; onBookPc: (workstationId?: string) => void; onEditPc: (pc: Workstation) => void; pcs: Workstation[]; group: string; setGroup: (group: string) => void; zoneOptions: string[]; onNewWorkstation?: () => void; onPositionsChange?: (changes: Array<{ workstationId: string; position: number }>) => Promise<void> }) {
@@ -648,7 +656,7 @@ function MapView({ onPc, onSalePc, onBookPc, onEditPc, pcs, group, setGroup, zon
     }
   };
 
-  return <><div className="page-heading"><div><p className="eyebrow">Оборудование · Рабочая карта</p><h1>Карта клуба</h1><p className="subheading">{editMode ? "Перетащите места в нужные ячейки и сохраните планировку." : "Нажмите на место, чтобы сразу оформить продажу; управление ПК — через кнопку ⋯."}</p></div><div className="heading-actions"><button className={`secondary-button map-edit-toggle ${editMode ? "active" : ""}`} aria-pressed={editMode} onClick={() => { setEditMode((value) => !value); setContextPcId(null); }}><Edit3 size={15} /> {editMode ? "Завершить редактирование" : "Редактировать карту"}</button><button className="primary-button" disabled={!onNewWorkstation} onClick={onNewWorkstation}><Plus size={17} /> Добавить место</button></div></div><div className="map-toolbar"><Segmented value={group} onChange={setGroup} options={zoneOptions} />{editMode && onPositionsChange && <span className="map-arrange-hint">Перетащите карточку на нужное место</span>}<div className="legend"><span><i className="legend-dot online" /> Свободен</span><span><i className="legend-dot busy" /> Занят</span><span><i className="legend-dot offline" /> Не в сети</span><span><i className="legend-dot maintenance" /> Сервис</span></div></div>{positionError && <div className="form-error map-error" role="alert">{positionError}</div>}<div className="map-stage"><aside className="map-legend-panel"><div className="map-panel-title"><strong>Состояние мест</strong><span>{pcs.length}</span></div><div className="map-legend-item"><i className="legend-square online" /><span>Свободны</span><b>{pcs.filter((pc) => pc.status === "online").length}</b></div><div className="map-legend-item"><i className="legend-square busy" /><span>Активная сессия</span><b>{pcs.filter((pc) => pc.status === "busy").length}</b></div><div className="map-legend-item"><i className="legend-square offline" /><span>Нет связи</span><b>{pcs.filter((pc) => pc.status === "offline").length}</b></div><div className="map-legend-item"><i className="legend-square maintenance" /><span>Сервис</span><b>{pcs.filter((pc) => pc.status === "maintenance").length}</b></div><div className="map-panel-zone">{group === "Все зоны" ? "Все зоны" : group}</div></aside><div className="map-canvas" aria-label="Карта игровых мест">{pcs.length ? Array.from({ length: slotCount }, (_, slot) => { const placed = slotByIndex.get(slot); const showContext = placed && contextPcId === placed.pc.id && !editMode; return <div className={`map-slot ${placed ? "occupied" : ""} ${dropTargetSlot === slot ? "drop-target" : ""}`} key={slot} aria-label={`Место ${slot + 1}${placed ? `: ${placed.pc.name}` : ": свободно"}`} onDragOver={(event) => { if (editMode && onPositionsChange) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTargetSlot(slot); } }} onDragLeave={() => setDropTargetSlot((current) => current === slot ? null : current)} onDrop={(event) => void handleDrop(event, slot)}>{!placed && <span className="map-slot-number">#{slot + 1}</span>}{placed && <><button className={`map-seat ${placed.pc.status} ${draggedWorkstationId === placed.pc.id ? "is-dragging" : ""}`} draggable={editMode && Boolean(onPositionsChange)} onDragStart={(event) => { if (!editMode || !onPositionsChange) return; justDraggedRef.current = true; setPositionError(null); setDraggedWorkstationId(placed.pc.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", placed.pc.id); }} onDragEnd={() => { setDraggedWorkstationId(null); setDropTargetSlot(null); window.setTimeout(() => { justDraggedRef.current = false; }, 0); }} onClick={(event) => { event.stopPropagation(); if (justDraggedRef.current) { justDraggedRef.current = false; return; } if (editMode) { onEditPc(placed.pc); } else { onSalePc(placed.pc); } }} onContextMenu={(event) => { event.preventDefault(); setContextPcId(placed.pc.id); }} aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}><div className="map-seat-top"><span>{placed.pc.name}</span><span className="map-seat-state">{placed.pc.status === "busy" ? <Wifi size={12} /> : placed.pc.status === "maintenance" ? <Settings size={12} /> : placed.pc.status === "offline" ? <X size={12} /> : <Check size={12} />}</span></div><div className="map-seat-screen"><Computer size={20} /></div><div className="map-seat-bottom"><small>{placed.pc.client || statusMeta[placed.pc.status].label}</small>{placed.pc.session && <small><Clock3 size={10} /> {placed.pc.session}</small>}</div></button><button type="button" className="map-seat-manage" title="Открыть карточку места" aria-label={`Открыть карточку ${placed.pc.name}`} onClick={(event) => { event.stopPropagation(); onPc(placed.pc); }}><PanelRightClose size={12} /></button>{showContext && <div className="map-context-menu" role="menu" onClick={(event) => event.stopPropagation()}><strong>{placed.pc.name}</strong><button role="menuitem" onClick={() => { setContextPcId(null); onSalePc(placed.pc); }}><Receipt size={13} /> Оформить продажу</button><button role="menuitem" onClick={() => { setContextPcId(null); onPc(placed.pc); }}><PanelRightClose size={13} /> Открыть карточку</button><button role="menuitem" disabled={placed.pc.status === "busy" || placed.pc.status === "offline" || placed.pc.status === "maintenance"} onClick={() => { setContextPcId(null); onBookPc(placed.pc.id); }}><CalendarDays size={13} /> Забронировать</button><button role="menuitem" onClick={() => { setContextPcId(null); onEditPc(placed.pc); }}><Settings size={13} /> Настройки места</button></div>}</>}</div>; }) : <div className="map-empty">Зарегистрированных мест пока нет</div>}</div></div></>;
+  return <><div className="page-heading"><div><p className="eyebrow">Оборудование · Рабочая карта</p><h1>Карта клуба</h1><p className="subheading">{editMode ? "Перетащите места в нужные ячейки и сохраните планировку." : "Нажмите на место, чтобы сразу оформить продажу; управление ПК — через кнопку ⋯."}</p></div><div className="heading-actions"><button className={`secondary-button map-edit-toggle ${editMode ? "active" : ""}`} aria-pressed={editMode} onClick={() => { setEditMode((value) => !value); setContextPcId(null); }}><Edit3 size={15} /> {editMode ? "Завершить редактирование" : "Редактировать карту"}</button><button className="primary-button" disabled={!onNewWorkstation} onClick={onNewWorkstation}><Plus size={17} /> Добавить место</button></div></div><div className="map-toolbar"><Segmented value={group} onChange={setGroup} options={zoneOptions} />{editMode && onPositionsChange && <span className="map-arrange-hint">Перетащите карточку на нужное место</span>}<div className="legend"><span><i className="legend-dot online" /> Свободен</span><span><i className="legend-dot busy" /> Занят</span><span><i className="legend-dot offline" /> Не в сети</span><span><i className="legend-dot maintenance" /> Сервис</span></div></div>{positionError && <div className="form-error map-error" role="alert">{positionError}</div>}<div className="map-stage"><aside className="map-legend-panel"><div className="map-panel-title"><strong>Состояние мест</strong><span>{pcs.length}</span></div><div className="map-legend-item"><i className="legend-square online" /><span>Свободны</span><b>{pcs.filter((pc) => pc.status === "online").length}</b></div><div className="map-legend-item"><i className="legend-square busy" /><span>Активная сессия</span><b>{pcs.filter((pc) => pc.status === "busy").length}</b></div><div className="map-legend-item"><i className="legend-square offline" /><span>Нет связи</span><b>{pcs.filter((pc) => pc.status === "offline").length}</b></div><div className="map-legend-item"><i className="legend-square maintenance" /><span>Сервис</span><b>{pcs.filter((pc) => pc.status === "maintenance").length}</b></div><div className="map-panel-zone">{group === "Все зоны" ? "Все зоны" : group}</div></aside><div className="map-canvas" aria-label="Карта игровых мест">{pcs.length ? Array.from({ length: slotCount }, (_, slot) => { const placed = slotByIndex.get(slot); const showContext = placed && contextPcId === placed.pc.id && !editMode; return <div className={`map-slot ${placed ? "occupied" : ""} ${dropTargetSlot === slot ? "drop-target" : ""}`} key={slot} aria-label={`Место ${slot + 1}${placed ? `: ${placed.pc.name}` : ": свободно"}`} onDragOver={(event) => { if (editMode && onPositionsChange) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTargetSlot(slot); } }} onDragLeave={() => setDropTargetSlot((current) => current === slot ? null : current)} onDrop={(event) => void handleDrop(event, slot)}>{!placed && <span className="map-slot-number">#{slot + 1}</span>}{placed && <><button className={`map-seat ${placed.pc.status} ${draggedWorkstationId === placed.pc.id ? "is-dragging" : ""}`} draggable={editMode && Boolean(onPositionsChange)} onDragStart={(event) => { if (!editMode || !onPositionsChange) return; justDraggedRef.current = true; setPositionError(null); setDraggedWorkstationId(placed.pc.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", placed.pc.id); }} onDragEnd={() => { setDraggedWorkstationId(null); setDropTargetSlot(null); window.setTimeout(() => { justDraggedRef.current = false; }, 0); }} onClick={(event) => { event.stopPropagation(); if (justDraggedRef.current) { justDraggedRef.current = false; return; } if (editMode) { onEditPc(placed.pc); } else { onSalePc(placed.pc); } }} onContextMenu={(event) => { event.preventDefault(); setContextPcId(placed.pc.id); }} aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}><div className="map-seat-top"><span>{placed.pc.name}</span><span className="map-seat-state">{placed.pc.status === "busy" ? <Wifi size={12} /> : placed.pc.status === "maintenance" ? <Settings size={12} /> : placed.pc.status === "offline" ? <X size={12} /> : <Check size={12} />}</span></div><div className="map-seat-screen"><Computer size={20} /></div><div className="map-seat-bottom"><small>{placed.pc.client || statusMeta[placed.pc.status].label}</small>{placed.pc.tariff && <small>{placed.pc.tariff}</small>}{placed.pc.session && <small><Clock3 size={10} /> {placed.pc.session}</small>}{placed.pc.status === "offline" && placed.pc.lastSeen && <small>HB: {placed.pc.lastSeen}</small>}</div></button><button type="button" className="map-seat-manage" title="Открыть карточку места" aria-label={`Открыть карточку ${placed.pc.name}`} onClick={(event) => { event.stopPropagation(); onPc(placed.pc); }}><PanelRightClose size={12} /></button>{showContext && <div className="map-context-menu" role="menu" onClick={(event) => event.stopPropagation()}><strong>{placed.pc.name}</strong><button role="menuitem" onClick={() => { setContextPcId(null); onSalePc(placed.pc); }}><Receipt size={13} /> Оформить продажу</button><button role="menuitem" onClick={() => { setContextPcId(null); onPc(placed.pc); }}><PanelRightClose size={13} /> Открыть карточку</button><button role="menuitem" disabled={placed.pc.status === "busy" || placed.pc.status === "offline" || placed.pc.status === "maintenance"} onClick={() => { setContextPcId(null); onBookPc(placed.pc.id); }}><CalendarDays size={13} /> Забронировать</button><button role="menuitem" onClick={() => { setContextPcId(null); onEditPc(placed.pc); }}><Settings size={13} /> Настройки места</button></div>}</>}</div>; }) : <div className="map-empty">Зарегистрированных мест пока нет</div>}</div></div></>;
 }
 
 function WorkstationTable({ pcs, onPc }: { pcs: Workstation[]; onPc: (pc: Workstation) => void }) {
@@ -1813,7 +1821,8 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
   const [searchResults, setSearchResults] = useState<Client[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "mixed">("cash");
+  const [balancePartAmount, setBalancePartAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1891,6 +1900,8 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
   const timeLines = lines.filter((line) => line.kind === "tariff");
   const productLines = lines.filter((line) => line.kind === "product");
   const totalCents = lines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);
+  const timeTotalCents = timeLines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);
+  const productTotalCents = productLines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);
   const totalMinutes = timeLines.reduce((sum, line) => sum + (line.durationMinutes ?? 0) * line.quantity, 0);
   const mixedTariffs = new Set(timeLines.map((line) => line.sourceId)).size > 1;
   const lineCount = lines.reduce((sum, line) => sum + line.quantity, 0);
@@ -1937,7 +1948,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
     setClient(null);
     setClientQuery("");
     setSearchResults([]);
-    if (paymentMethod === "balance") setPaymentMethod("cash");
+    if (paymentMethod === "balance" || paymentMethod === "mixed") setPaymentMethod("cash");
   };
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1956,13 +1967,33 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       setError("Продажа времени доступна из карточки игрового места");
       return;
     }
-    if (paymentMethod === "balance" && !client) {
+    if ((paymentMethod === "balance" || paymentMethod === "mixed") && !client) {
       setError("Для оплаты с баланса выберите зарегистрированного клиента");
       return;
     }
-    if (api && paymentMethod === "cash" && !activeShift) {
+    if (api && (paymentMethod === "cash" || paymentMethod === "mixed") && !activeShift) {
       setError("Нет актуальной открытой кассовой смены");
       return;
+    }
+    const balancePartCents = Math.round(Number(balancePartAmount.replace(",", ".")) * 100);
+    if (paymentMethod === "mixed" && (
+      productLines.length !== 1
+      || !Number.isInteger(balancePartCents)
+      || balancePartCents <= 0
+      || balancePartCents >= productTotalCents
+    )) {
+      setError("Для смешанной оплаты выберите один товар и укажите часть с баланса меньше его суммы");
+      return;
+    }
+    if (api && buyerMode === "guest" && timeLines.length) {
+      if (!activeShift) {
+        setError("Для гостевого тарифа нужна открытая кассовая смена");
+        return;
+      }
+      if (timeTotalCents <= 0) {
+        setError("Гостевой прямой оплатой можно провести только тариф с фиксированной ценой");
+        return;
+      }
     }
     const timeSignature = timeLines[0] ? `${timeLines[0].sourceId}:${timeLines[0].quantity}` : "";
     if (startedSession && startedSession.signature !== timeSignature) {
@@ -1975,11 +2006,27 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
         setSuccess("Демо: заказ собран и готов к проведению");
         return;
       }
+      let guestPaymentId: string | undefined;
+      if (buyerMode === "guest" && timeLines[0] && !startedSession) {
+        const payment = await api.confirmGuestSessionPayment(
+          {
+            workstation_id: pc!.id,
+            tariff_id: timeLines[0].sourceId,
+            tariff_quantity: timeLines[0].quantity,
+            guest_name: "Гость",
+            cash_shift_id: activeShift!.id,
+            payment_parts: [{ method: "cash", amount_cents: timeTotalCents }],
+          },
+          `guest-payment-${sessionIdempotencyKey.current}`,
+        );
+        guestPaymentId = payment.id;
+      }
       if (pc && timeLines[0] && !startedSession) {
         const session = await api.startSession({
             workstation_id: pc.id,
             client_id: client?.id,
             guest_name: client ? undefined : "Гость",
+            guest_payment_id: guestPaymentId,
             source: "operator",
             tariff_id: timeLines[0].sourceId,
             tariff_quantity: timeLines[0].quantity,
@@ -1989,13 +2036,26 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       for (const line of productLines) {
         const operationKey = productIdempotencyKeys.current.get(line.key) ?? `sale-product-${crypto.randomUUID()}`;
         productIdempotencyKeys.current.set(line.key, operationKey);
-        await api.sellProduct({
-          product_id: line.sourceId,
-          quantity: line.quantity,
-          client_id: client?.id,
-          payment_method: paymentMethod,
-          cash_shift_id: paymentMethod === "cash" ? activeShift?.id : undefined,
-        }, operationKey);
+          const lineTotalCents = line.priceCents * line.quantity;
+          const lineBalanceCents = paymentMethod === "mixed" ? balancePartCents : 0;
+          const linePaymentParts = paymentMethod === "mixed"
+            ? [
+              { method: "balance", amount_cents: lineBalanceCents },
+              { method: "cash", amount_cents: lineTotalCents - lineBalanceCents },
+            ]
+            : undefined;
+          const sale = await api.sellProduct({
+            product_id: line.sourceId,
+            quantity: line.quantity,
+            client_id: client?.id,
+            payment_method: paymentMethod,
+            cash_shift_id: paymentMethod === "cash" || paymentMethod === "mixed" ? activeShift?.id : undefined,
+            payment_parts: linePaymentParts,
+          }, operationKey);
+          if (sale.status === "needs_review") {
+            setError(`Продажа сохранена для ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`);
+            return;
+          }
       }
       onSaved();
     } catch (requestError) {
@@ -2033,7 +2093,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
           </div><div className="sale-line-info"><strong>{line.name}</strong><small>{line.detail}</small><b>{money(line.priceCents * line.quantity)}</b></div><div className="sale-quantity"><button type="button" aria-label={`Уменьшить ${line.name}`} onClick={() => changeQuantity(line.key, -1)}><Minus size={13} /></button><span>{line.quantity}</span><button type="button" aria-label={`Увеличить ${line.name}`} onClick={() => changeQuantity(line.key, 1)}><Plus size={13} /></button></div><button type="button" className="sale-remove-line" aria-label={`Удалить ${line.name}`} onClick={() => removeLine(line.key)}><X size={14} /></button></div>) : <div className="sale-empty-order"><Receipt size={24} /><strong>Заказ пока пуст</strong><span>Нажимайте на карточки слева, чтобы добавить время или товары</span></div>}</div>
           <div className="sale-order-summary"><div><span>Игровое время</span><strong>{totalMinutes ? formatDuration(totalMinutes) : "—"}</strong></div><div><span>Товары</span><strong>{productLines.length ? `${productLines.reduce((sum, line) => sum + line.quantity, 0)} шт.` : "—"}</strong></div><div className="sale-total-row"><span>Итого к оплате</span><strong>{money(totalCents)}</strong></div></div>
           {mixedTariffs && <div className="sale-inline-warning"><Tags size={16} /><span>В корзине разные тарифы. Визуально можно собрать заказ, но backend пока проводит только один тариф за старт.</span></div>}
-          <div className="sale-payment"><div className="sale-payment-heading"><span>Способ оплаты товаров</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button></div></div>
+          <div className="sale-payment"><div className="sale-payment-heading"><span>Способ оплаты товаров</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
           {error && <div className="sale-form-error" role="alert">{error}</div>}
           {success && <div className="sale-form-success" role="status">{success}</div>}
           <button className="sale-submit-button" disabled={submitting || !lines.length || mixedTariffs}>{submitting ? "Проводим заказ…" : `Оформить продажу · ${money(totalCents)}`}<ChevronRight size={17} /></button>
@@ -2048,7 +2108,8 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
   const [quantity, setQuantity] = useState("1");
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "mixed">("cash");
+  const [balancePartAmount, setBalancePartAmount] = useState("");
   const [cashShiftId, setCashShiftId] = useState(cashShifts.find((shift) => shift.status === "open")?.id ?? "");
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -2083,24 +2144,43 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
       setError("Количество должно быть от 1 до " + product.stock_quantity + " шт.");
       return;
     }
-    if (paymentMethod === "balance" && !client) {
+    if ((paymentMethod === "balance" || paymentMethod === "mixed") && !client) {
       setError("Для оплаты с баланса выберите зарегистрированного клиента");
       return;
     }
-    if (paymentMethod === "cash" && !cashShiftId) {
+    if ((paymentMethod === "cash" || paymentMethod === "mixed") && !cashShiftId) {
       setError("Откройте кассовую смену для наличной продажи");
+      return;
+    }
+    const balancePartCents = Math.round(Number(balancePartAmount.replace(",", ".")) * 100);
+    if (paymentMethod === "mixed" && (
+      !Number.isInteger(balancePartCents)
+      || balancePartCents <= 0
+      || balancePartCents >= totalCents
+    )) {
+      setError("Укажите положительную часть с баланса меньше общей суммы");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      await api.sellProduct({
+      const sale = await api.sellProduct({
         product_id: product.id,
         quantity: parsedQuantity,
         client_id: client?.id,
         payment_method: paymentMethod,
-        cash_shift_id: paymentMethod === "cash" ? cashShiftId : undefined,
+        cash_shift_id: paymentMethod === "cash" || paymentMethod === "mixed" ? cashShiftId : undefined,
+        payment_parts: paymentMethod === "mixed"
+          ? [
+            { method: "balance", amount_cents: balancePartCents },
+            { method: "cash", amount_cents: totalCents - balancePartCents },
+          ]
+          : undefined,
       }, "product-sale-" + crypto.randomUUID());
+      if (sale.status === "needs_review") {
+        setError(`Продажа сохранена для ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`);
+        return;
+      }
       onSaved();
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : "Не удалось продать товар");
@@ -2109,7 +2189,7 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
     }
   };
 
-  return <div className="panel-inner"><PanelHeader title="Продажа товара" subtitle="Магазин · операция" onClose={onClose} /><div className="sale-product-card"><div className="sale-product-icon"><ShoppingCart size={21} /></div><div><strong>{product.name}</strong><span>Остаток {product.stock_quantity} шт. · {(product.price_cents / 100).toLocaleString("ru-RU")} ₽/шт.</span></div></div><form className="booking-form product-sale-form" onSubmit={(event) => void submit(event)}><label>Количество, шт.<input type="number" min="1" max={product.stock_quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} autoFocus /></label><label>Клиент <span className="field-hint">необязательно для наличной оплаты</span><input value={clientQuery} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Ник или телефон" /></label>{searchResults.length > 0 && !client && <div className="sale-client-results">{searchResults.slice(0, 4).map((item) => <button type="button" className="client-result" key={item.id} onClick={() => { setClient(item); setClientQuery(item.nickname); setSearchResults([]); }}><span className="client-avatar">{item.nickname.slice(0, 2).toUpperCase()}</span><span><strong>{item.nickname}</strong><small>{formatRussianPhone(item.phone)}</small></span><ChevronRight size={14} /></button>)}</div>}<div className="sale-payment-picker"><span>Способ оплаты</span><div className="compact-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}>Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} onClick={() => setPaymentMethod("balance")} disabled={!client}>Баланс клиента</button></div></div>{paymentMethod === "cash" && <label>Кассовая смена<select value={cashShiftId} onChange={(event) => setCashShiftId(event.target.value)} disabled={!openShifts.length}><option value="">{openShifts.length ? "Выберите смену" : "Нет открытой смены"}</option>{openShifts.map((shift) => <option value={shift.id} key={shift.id}>{shift.register_id} · {(shift.expected_close_cents / 100).toLocaleString("ru-RU")} ₽</option>)}</select></label>}<div className="sale-total"><span>Итого</span><strong>{(totalCents / 100).toLocaleString("ru-RU")} ₽</strong></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Проводим продажу..." : "Продать товар"}</button><button type="button" className="secondary-button wide" onClick={onClose}>Отмена</button></form></div>;
+  return <div className="panel-inner"><PanelHeader title="Продажа товара" subtitle="Магазин · операция" onClose={onClose} /><div className="sale-product-card"><div className="sale-product-icon"><ShoppingCart size={21} /></div><div><strong>{product.name}</strong><span>Остаток {product.stock_quantity} шт. · {(product.price_cents / 100).toLocaleString("ru-RU")} ₽/шт.</span></div></div><form className="booking-form product-sale-form" onSubmit={(event) => void submit(event)}><label>Количество, шт.<input type="number" min="1" max={product.stock_quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} autoFocus /></label><label>Клиент <span className="field-hint">необязательно для наличной оплаты</span><input value={clientQuery} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Ник или телефон" /></label>{searchResults.length > 0 && !client && <div className="sale-client-results">{searchResults.slice(0, 4).map((item) => <button type="button" className="client-result" key={item.id} onClick={() => { setClient(item); setClientQuery(item.nickname); setSearchResults([]); }}><span className="client-avatar">{item.nickname.slice(0, 2).toUpperCase()}</span><span><strong>{item.nickname}</strong><small>{formatRussianPhone(item.phone)}</small></span><ChevronRight size={14} /></button>)}</div>}<div className="sale-payment-picker"><span>Способ оплаты</span><div className="compact-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}>Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} onClick={() => setPaymentMethod("balance")} disabled={!client}>Баланс клиента</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((totalCents / 200).toFixed(2)); }} disabled={!client}>Смешанная</button></div></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}{(paymentMethod === "cash" || paymentMethod === "mixed") && <label>Кассовая смена<select value={cashShiftId} onChange={(event) => setCashShiftId(event.target.value)} disabled={!openShifts.length}><option value="">{openShifts.length ? "Выберите смену" : "Нет открытой смены"}</option>{openShifts.map((shift) => <option value={shift.id} key={shift.id}>{shift.register_id} · {(shift.expected_close_cents / 100).toLocaleString("ru-RU")} ₽</option>)}</select></label>}<div className="sale-total"><span>Итого</span><strong>{(totalCents / 100).toLocaleString("ru-RU")} ₽</strong></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Проводим продажу..." : "Продать товар"}</button><button type="button" className="secondary-button wide" onClick={onClose}>Отмена</button></form></div>;
 }
 
 function DiscountPanel({ api, onClose, onSaved }: { api: GameClubApi; onClose: () => void; onSaved: () => void }) {
@@ -2203,6 +2283,7 @@ function UpcomingBookings({
 
 function PcPanel({
   pc,
+  workstations,
   clients,
   cashShifts,
   onClose,
@@ -2214,6 +2295,7 @@ function PcPanel({
   api,
 }: {
   pc: Workstation;
+  workstations: Workstation[];
   clients: Client[];
   cashShifts: BackendCashShift[];
   onClose: () => void;
@@ -2233,6 +2315,7 @@ function PcPanel({
   const [tariffId, setTariffId] = useState<string>("");
   const [tariffQuantity, setTariffQuantity] = useState("1");
   const [meter, setMeter] = useState<BackendSessionMeter | null>(null);
+  const [sessionSnapshot, setSessionSnapshot] = useState<BackendSessionSnapshot | null>(null);
   const [products, setProducts] = useState<BackendProduct[]>([]);
   const [saleProductId, setSaleProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
@@ -2240,6 +2323,8 @@ function PcPanel({
   const [saleCashShiftId, setSaleCashShiftId] = useState(cashShifts.find((shift) => shift.status === "open")?.id ?? "");
   const [stoppedSessionId, setStoppedSessionId] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferOffer, setTransferOffer] = useState<BackendTransferOffer | null>(null);
   const clientField = getSearchField(clientQuery);
 
   useEffect(() => {
@@ -2262,18 +2347,25 @@ function PcPanel({
   useEffect(() => {
     if (!api || pc.status !== "busy" || !pc.sessionId) {
       setMeter(null);
+      setSessionSnapshot(null);
       return undefined;
     }
     let active = true;
-    const refreshMeter = () => {
-      void api.getSessionMeter(pc.sessionId!).then((value) => {
-        if (active) setMeter(value);
+    const refreshSnapshot = () => {
+      void api.getSessionSnapshot(pc.sessionId!).then((value) => {
+        if (active) {
+          setSessionSnapshot(value);
+          setMeter(value.meter);
+        }
       }).catch(() => {
-        if (active) setMeter(null);
+        if (active) {
+          setSessionSnapshot(null);
+          setMeter(null);
+        }
       });
     };
-    refreshMeter();
-    const timer = window.setInterval(refreshMeter, 10_000);
+    refreshSnapshot();
+    const timer = window.setInterval(refreshSnapshot, 10_000);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -2331,6 +2423,11 @@ function PcPanel({
         setOperationSuccess(true);
         setOperationState("Сессия прервана. Проверьте итог и выполните списание.");
       } else {
+        const entry = await api.checkEntry(pc.id, clientCandidate?.id);
+        if (!entry.allowed) {
+          setOperationState(`Вход запрещён: ${entry.reason}`);
+          return;
+        }
         await api.startSession(
           {
             workstation_id: pc.id,
@@ -2349,6 +2446,27 @@ function PcPanel({
     } catch (error) {
       setOperationSuccess(false);
       setOperationState(error instanceof ApiError ? error.message : "Не удалось изменить сессию");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const activatePackage = async (entitlementId: string) => {
+    if (!api || !sessionSnapshot?.client_id) {
+      return;
+    }
+    setSubmitting(true);
+    setOperationSuccess(false);
+    setOperationState(null);
+    try {
+      await api.activateEntitlement(sessionSnapshot.client_id, entitlementId);
+      const refreshed = await api.getSessionSnapshot(sessionSnapshot.session.id);
+      setSessionSnapshot(refreshed);
+      setMeter(refreshed.meter);
+      setOperationSuccess(true);
+      setOperationState("Пакет активирован на сервере");
+    } catch (error) {
+      setOperationState(error instanceof ApiError ? error.message : "Не удалось активировать пакет");
     } finally {
       setSubmitting(false);
     }
@@ -2373,6 +2491,42 @@ function PcPanel({
     } catch (error) {
       setOperationSuccess(false);
       setOperationState(error instanceof ApiError ? error.message : "Не удалось списать с баланса");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const transferSession = async () => {
+    if (!api || !pc.sessionId || !transferTargetId) {
+      setOperationState("Выберите свободное место для переноса");
+      return;
+    }
+    setSubmitting(true);
+    setOperationSuccess(false);
+    setOperationState(null);
+    try {
+      const offer = await api.createTransferOffer(
+        pc.sessionId,
+        transferTargetId,
+        `transfer-offer-${crypto.randomUUID()}`,
+      );
+      setTransferOffer(offer);
+      const confirmation = offer.warning
+        ? `${offer.warning}\n\nПодтвердить перенос?`
+        : "Подтвердить перенос активной сессии на выбранный ПК?";
+      if (!window.confirm(confirmation)) {
+        setOperationState("Перенос не подтверждён");
+        return;
+      }
+      const result = await api.confirmTransfer(
+        offer.id,
+        `transfer-confirm-${crypto.randomUUID()}`,
+      );
+      setOperationSuccess(true);
+      setOperationState(`Сессия перенесена на ${workstations.find((item) => item.id === result.workstation_id)?.name ?? "новое место"}`);
+      onSessionChanged();
+    } catch (error) {
+      setOperationState(error instanceof ApiError ? error.message : "Не удалось перенести сессию");
     } finally {
       setSubmitting(false);
     }
@@ -2448,13 +2602,15 @@ function PcPanel({
     <PanelHeader title={pc.name} subtitle={pc.group} onClose={onClose} />
     <div className="panel-pc-hero">
       <div className={"large-pc-icon " + pc.status}><Computer size={50} strokeWidth={1.2} /></div>
-      <div><span className={"pill-status " + meta.className}><i /> {meta.label}</span><h2>{pc.client || "Место свободно"}</h2><p>{pc.session ? "Сессия началась " + pc.session + " назад" : pc.lastSeen || "Готово к новой сессии"}</p>{meter && <small className="meter-status">Поминутно · списано {(meter.billed_cents / 100).toLocaleString("ru-RU")} ₽ · {meter.billed_minutes} мин · {meter.status === "exhausted" ? "баланс исчерпан" : "активно"}</small>}</div>
+      <div><span className={"pill-status " + meta.className}><i /> {meta.label}</span><h2>{pc.client || "Место свободно"}</h2><p>{pc.session ? "Сессия началась " + pc.session + " назад" : pc.lastSeen || "Готово к новой сессии"}</p>{meter && <small className="meter-status">{meter.package_minutes > 0 ? `Пакет · использовано ${meter.package_minutes} мин` : "Поминутно"} · списано ${(meter.billed_cents / 100).toLocaleString("ru-RU")} ₽ · {meter.billed_minutes} мин · {meter.status === "exhausted" ? "баланс исчерпан" : "активно"}</small>}</div>
     </div>
     <div className="panel-section">
       <div className="detail-row"><span>Группа</span><strong>{pc.group}</strong></div>
       <div className="detail-row"><span>Позиция на карте</span><strong>{pc.position ?? "—"}</strong></div>
       <div className="detail-row"><span>Клиентский агент</span><strong>{pc.deviceId || "—"}</strong></div>
+      {sessionSnapshot?.active_entitlement && <div className="detail-row"><span>Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
     </div>
+    {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="panel-section"><div className="card-heading"><div><h3>Очередь пакетов</h3><p>Решение об активации подтверждает backend</p></div></div>{sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="detail-row" key={item.id}><span>#{item.queue_position} · {item.remaining_minutes} мин</span><button className="text-button" onClick={() => void activatePackage(item.id)} disabled={submitting || Boolean(sessionSnapshot.active_entitlement)}>Активировать</button></div>)}</div>}
     {pc.status !== "busy" && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
       <div className="sale-entry-icon"><Receipt size={20} /></div>
       <div><strong>Оформить продажу</strong><span>Время, товары и покупатель — в одном окне</span></div>
@@ -2465,6 +2621,14 @@ function PcPanel({
       <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
       {pc.status === "busy" ? <button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status === "offline" || pc.status === "maintenance"}><ShoppingCart size={15} /> Открыть продажи</button>}
       {stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
+      {pc.status === "busy" && api && <>
+        <label>Перенести на место<select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)} disabled={submitting}>
+          <option value="">Выберите свободный ПК</option>
+          {workstations.filter((item) => item.id !== pc.id && item.status === "online").map((item) => <option value={item.id} key={item.id}>{item.name} · {item.group}</option>)}
+        </select></label>
+        <button className="secondary-button wide" onClick={() => void transferSession()} disabled={submitting || !transferTargetId}>Перенести сессию</button>
+        {transferOffer && <small className="muted">Transfer offer: {transferOffer.status} · действует до {new Date(transferOffer.expires_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</small>}
+      </>}
       <button className="secondary-button wide" onClick={onBook}>Забронировать место</button>
       {operationState && <div className={`${operationSuccess ? "form-success" : "form-error"} command-result`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
     </div>
@@ -2491,6 +2655,7 @@ function DepositPanel({
   const [query, setQuery] = useState(initialClient?.nickname ?? "");
   const [amount, setAmount] = useState("1000");
   const [bonusAmount, setBonusAmount] = useState(bonusOnly ? "100" : "0");
+  const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
   const [liveResult, setLiveResult] = useState<Client | undefined>(initialClient);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -2552,7 +2717,14 @@ function DepositPanel({
     try {
       await api.topUp(
         result.id,
-        { amount_cents: bonusOnly ? 0 : amountCents, bonus_amount: parsedBonus, reason: bonusOnly ? "Начисление бонусов через оператора" : "Пополнение через оператора" },
+        {
+          amount_cents: bonusOnly ? 0 : amountCents,
+          bonus_amount: parsedBonus,
+          reason: bonusOnly ? "Начисление бонусов через оператора" : "Пополнение через оператора",
+          payment_parts: bonusOnly
+            ? undefined
+            : [{ method: depositPaymentMethod, amount_cents: amountCents }],
+        },
         crypto.randomUUID(),
       );
       onCompleted();
@@ -2563,7 +2735,7 @@ function DepositPanel({
     }
   };
 
-  return <div className="panel-inner"><PanelHeader title={bonusOnly ? "Начисление бонусов" : "Пополнение депозита"} subtitle="Баланс клиента" onClose={onClose} /><div className="deposit-step"><span className="step-label">1 / 2</span><h2>Найдите клиента</h2><p>Введите минимум 3 символа ника или 4 цифры телефона.</p><div className="search-box panel-search"><Search size={17} /><input aria-label="Ник или номер телефона" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ник или номер телефона" /></div>{ready && result && <div className="client-result"><div className="client-avatar">{result.nickname.slice(0, 2).toUpperCase()}</div><div><strong>{result.nickname}</strong><span>{formatRussianPhone(result.phone)}</span></div><ChevronRight size={16} /></div>}{ready && !result && <div className="empty-result" role="status" aria-live="polite">{searchError || "Клиент не найден"}</div>}</div><div className="deposit-preview"><div><span>{bonusOnly ? "Бонусы будут начислены на" : "Средства будут зачислены на"}</span><strong>{result?.nickname || "—"}</strong></div><ShieldCheck size={21} /></div>{!bonusOnly && <label className="amount-field">Сумма пополнения<input aria-label="Сумма пополнения в рублях" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /> <span>₽</span></label>}<label className="amount-field">Бонусы<input aria-label="Количество бонусов" inputMode="numeric" value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>{searchError && result && <div className="form-error" role="alert">{searchError}</div>}<button className="primary-button wide" disabled={!result || submitting} onClick={() => void submit()}>{submitting ? "Зачисляем..." : bonusOnly ? "Начислить бонусы" : "Зачислить депозит"}</button><button className="secondary-button wide" onClick={onClose}>Отмена</button></div>;
+  return <div className="panel-inner"><PanelHeader title={bonusOnly ? "Начисление бонусов" : "Пополнение депозита"} subtitle="Баланс клиента" onClose={onClose} /><div className="deposit-step"><span className="step-label">1 / 2</span><h2>Найдите клиента</h2><p>Введите минимум 3 символа ника или 4 цифры телефона.</p><div className="search-box panel-search"><Search size={17} /><input aria-label="Ник или номер телефона" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ник или номер телефона" /></div>{ready && result && <div className="client-result"><div className="client-avatar">{result.nickname.slice(0, 2).toUpperCase()}</div><div><strong>{result.nickname}</strong><span>{formatRussianPhone(result.phone)}</span></div><ChevronRight size={16} /></div>}{ready && !result && <div className="empty-result" role="status" aria-live="polite">{searchError || "Клиент не найден"}</div>}</div><div className="deposit-preview"><div><span>{bonusOnly ? "Бонусы будут начислены на" : "Средства будут зачислены на"}</span><strong>{result?.nickname || "—"}</strong></div><ShieldCheck size={21} /></div>{!bonusOnly && <><label className="amount-field">Сумма пополнения<input aria-label="Сумма пополнения в рублях" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /> <span>₽</span></label><label>Способ оплаты<select value={depositPaymentMethod} onChange={(event) => setDepositPaymentMethod(event.target.value)}><option value="cash">Наличные</option><option value="card">Карта</option><option value="transfer">Перевод</option></select></label></>}<label className="amount-field">Бонусы<input aria-label="Количество бонусов" inputMode="numeric" value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>{searchError && result && <div className="form-error" role="alert">{searchError}</div>}<button className="primary-button wide" disabled={!result || submitting} onClick={() => void submit()}>{submitting ? "Зачисляем..." : bonusOnly ? "Начислить бонусы" : "Зачислить депозит"}</button><button className="secondary-button wide" onClick={onClose}>Отмена</button></div>;
 }
 
 function localDateTimeValue(date: Date): string {

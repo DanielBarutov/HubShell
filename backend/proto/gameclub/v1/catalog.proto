@@ -59,6 +59,9 @@ message Tariff {
   BillingMode billing_mode = 12;
   int64 price_per_minute_cents = 13;
   int32 free_minutes = 14;
+  optional int32 window_start_minute = 15;
+  optional int32 window_end_minute = 16;
+  string window_timezone = 17;
 }
 
 enum BillingMode {
@@ -86,6 +89,9 @@ message CreateTariffRequest {
   BillingMode billing_mode = 9;
   int64 price_per_minute_cents = 10;
   int32 free_minutes = 11;
+  optional int32 window_start_minute = 12;
+  optional int32 window_end_minute = 13;
+  string window_timezone = 14;
 }
 
 message ListTariffsRequest {}

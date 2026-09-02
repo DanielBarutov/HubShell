@@ -25,6 +25,16 @@ class InMemorySessionRepository:
             None,
         )
 
+    async def get_active_for_client(self, client_id: uuid.UUID) -> Session | None:
+        return next(
+            (
+                item
+                for item in self._items.values()
+                if item.client_id == client_id and item.status is SessionStatus.ACTIVE
+            ),
+            None,
+        )
+
     async def get_by_idempotency_key(self, idempotency_key: str) -> Session | None:
         session_id = self._idempotency.get(idempotency_key)
         return self._items.get(session_id) if session_id else None
@@ -66,6 +76,10 @@ class InMemorySessionRepository:
                 active = await self.get_active_for_workstation(session.workstation_id)
                 if active is not None and active.id != session.id:
                     raise ValueError("Workstation already has an active session")
+                if session.client_id is not None:
+                    active_client = await self.get_active_for_client(session.client_id)
+                    if active_client is not None and active_client.id != session.id:
+                        raise ValueError("Client already has an active session")
             self._items[session.id] = session
             if session.idempotency_key:
                 self._idempotency[session.idempotency_key] = session.id

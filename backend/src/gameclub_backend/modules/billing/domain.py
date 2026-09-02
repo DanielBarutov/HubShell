@@ -47,6 +47,8 @@ class SessionMeter:
     last_operation_id: uuid.UUID | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    package_minutes: int = 0
+    active_entitlement_id: uuid.UUID | None = None
 
     def advance(
         self,
@@ -55,9 +57,16 @@ class SessionMeter:
         operation_id: uuid.UUID | None,
         now: datetime.datetime,
         status: MeterStatus | None = None,
+        package_minutes: int | None = None,
+        active_entitlement_id: uuid.UUID | None = None,
     ) -> "SessionMeter":
         if billed_minutes < self.billed_minutes or billed_cents < self.billed_cents:
             raise ValueError("Session meter cannot move backwards")
+        next_package_minutes = self.package_minutes if package_minutes is None else package_minutes
+        if next_package_minutes < 0:
+            raise ValueError("Session package minutes cannot be negative")
+        if next_package_minutes < self.package_minutes:
+            raise ValueError("Session package minutes cannot move backwards")
         return dataclasses.replace(
             self,
             billed_minutes=billed_minutes,
@@ -65,6 +74,8 @@ class SessionMeter:
             last_operation_id=operation_id or self.last_operation_id,
             status=status or self.status,
             updated_at=now,
+            package_minutes=next_package_minutes,
+            active_entitlement_id=active_entitlement_id,
         )
 
 

@@ -75,6 +75,34 @@ class CheckAvailabilityResponse(_message.Message):
     reason: str
     def __init__(self, available: _Optional[bool] = ..., conflicting_reservation_ids: _Optional[_Iterable[str]] = ..., reason: _Optional[str] = ...) -> None: ...
 
+class CheckEntryRequest(_message.Message):
+    __slots__ = ("workstation_id", "client_id", "guest_id", "at")
+    WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    GUEST_ID_FIELD_NUMBER: _ClassVar[int]
+    AT_FIELD_NUMBER: _ClassVar[int]
+    workstation_id: str
+    client_id: str
+    guest_id: str
+    at: _timestamp_pb2.Timestamp
+    def __init__(self, workstation_id: _Optional[str] = ..., client_id: _Optional[str] = ..., guest_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class CheckEntryResponse(_message.Message):
+    __slots__ = ("allowed", "reason", "reservation_id", "assigned_client_id", "starts_at", "ends_at")
+    ALLOWED_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    RESERVATION_ID_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNED_CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    STARTS_AT_FIELD_NUMBER: _ClassVar[int]
+    ENDS_AT_FIELD_NUMBER: _ClassVar[int]
+    allowed: bool
+    reason: str
+    reservation_id: str
+    assigned_client_id: str
+    starts_at: _timestamp_pb2.Timestamp
+    ends_at: _timestamp_pb2.Timestamp
+    def __init__(self, allowed: _Optional[bool] = ..., reason: _Optional[str] = ..., reservation_id: _Optional[str] = ..., assigned_client_id: _Optional[str] = ..., starts_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., ends_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
 class CreateReservationRequest(_message.Message):
     __slots__ = ("workstation_ids", "client_id", "guest_name", "start_at", "end_at", "notes", "tariff_id", "idempotency_key", "guest_id")
     WORKSTATION_IDS_FIELD_NUMBER: _ClassVar[int]

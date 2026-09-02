@@ -22,6 +22,7 @@ service ClientPortalService {
   rpc Register(RegisterPortalRequest) returns (ClientPortalSession);
   rpc Login(LoginPortalRequest) returns (ClientPortalSession);
   rpc Get(GetPortalRequest) returns (ClientPortalSnapshot);
+  rpc ActivateEntitlement(ActivateEntitlementRequest) returns (ClientPortalSnapshot);
 }
 
 message Client {
@@ -66,6 +67,13 @@ message TopUpRequest {
   int64 bonus_amount = 3;
   string reason = 4;
   string idempotency_key = 5;
+  repeated PaymentPart payment_parts = 6;
+}
+
+message PaymentPart {
+  string method = 1;
+  int64 amount_cents = 2;
+  string reference = 3;
 }
 
 message TopUpResponse {
@@ -84,6 +92,7 @@ message BalanceOperation {
   string actor_id = 7;
   string idempotency_key = 8;
   google.protobuf.Timestamp created_at = 9;
+  repeated PaymentPart payment_parts = 10;
 }
 
 message ListBalanceOperationsRequest {
@@ -152,6 +161,11 @@ message GetPortalRequest {
   int32 limit = 2;
 }
 
+message ActivateEntitlementRequest {
+  string entitlement_id = 1;
+  string device_id = 2;
+}
+
 message ClientPortalSession {
   string access_token = 1;
   int32 expires_in = 2;
@@ -165,6 +179,21 @@ message ClientPortalSnapshot {
   repeated PortalCharge charges = 4;
   repeated PortalPurchase purchases = 5;
   int64 available_time_minutes = 6;
+  repeated PortalEntitlement entitlements = 7;
+}
+
+message PortalEntitlement {
+  string id = 1;
+  string tariff_id = 2;
+  string zone_id = 3;
+  int32 duration_minutes = 4;
+  int32 remaining_minutes = 5;
+  int64 price_cents = 6;
+  int32 queue_position = 7;
+  string status = 8;
+  string tariff_name = 9;
+  google.protobuf.Timestamp purchased_at = 10;
+  google.protobuf.Timestamp activated_at = 11;
 }
 
 message PortalBalanceOperation {
@@ -174,6 +203,7 @@ message PortalBalanceOperation {
   int64 bonus_amount = 4;
   string reason = 5;
   google.protobuf.Timestamp created_at = 6;
+  repeated PaymentPart payment_parts = 7;
 }
 
 message PortalSession {

@@ -5,7 +5,7 @@ import typing
 import uuid
 
 from gameclub_backend.modules.clients.domain import Client, Guest
-from gameclub_backend.modules.reservations.domain import Reservation
+from gameclub_backend.modules.reservations.domain import EntryDecision, Reservation
 from gameclub_backend.modules.workstations.domain import Workstation
 
 
@@ -59,3 +59,14 @@ class GuestLookup(typing.Protocol):
 class Clock(typing.Protocol):
     def now(self) -> datetime.datetime:
         """Return an aware UTC datetime."""
+
+
+class ReservationEntryLookup(typing.Protocol):
+    async def check_entry(
+        self,
+        workstation_id: uuid.UUID,
+        client_id: uuid.UUID | None = None,
+        guest_id: uuid.UUID | None = None,
+        now: datetime.datetime | None = None,
+    ) -> EntryDecision:
+        """Return the authoritative workstation entry decision."""

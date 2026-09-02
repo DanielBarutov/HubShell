@@ -2,6 +2,7 @@ import dataclasses
 import datetime
 import enum
 import uuid
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 @dataclasses.dataclass(frozen=True)
@@ -62,6 +63,9 @@ class Tariff:
     billing_mode: BillingMode = BillingMode.BLOCK
     price_per_minute_cents: int = 0
     free_minutes: int = 0
+    window_start_minute: int | None = None
+    window_end_minute: int | None = None
+    window_timezone: str | None = None
 
     def __post_init__(self) -> None:
         if self.duration_minutes <= 0:
@@ -72,6 +76,23 @@ class Tariff:
             BillingMode(self.billing_mode)
         except ValueError as error:
             raise ValueError("Invalid tariff billing mode") from error
+        if (self.window_start_minute is None) != (self.window_end_minute is None):
+            raise ValueError("Tariff time window requires both start and end")
+        if self.window_start_minute is not None and not (
+            0 <= self.window_start_minute < 24 * 60
+            and 0 <= self.window_end_minute < 24 * 60
+            and self.window_start_minute != self.window_end_minute
+        ):
+            raise ValueError("Tariff time window minutes are invalid")
+        if self.window_timezone is not None and not self.window_timezone.strip():
+            raise ValueError("Tariff time window timezone cannot be empty")
+        if self.window_start_minute is not None and self.window_timezone is None:
+            raise ValueError("Tariff time window timezone is required")
+        if self.window_timezone:
+            try:
+                ZoneInfo(self.window_timezone.strip())
+            except ZoneInfoNotFoundError as error:
+                raise ValueError("Tariff time window timezone is invalid") from error
 
     def applies_at(self, moment: datetime.datetime, group_id: str | None) -> bool:
         return (

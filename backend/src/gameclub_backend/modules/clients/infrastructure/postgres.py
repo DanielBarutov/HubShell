@@ -2,7 +2,7 @@ import datetime
 import uuid
 
 from sqlalchemy import DateTime, String, func, select, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -12,6 +12,7 @@ from gameclub_backend.modules.clients.domain import (
     Client,
     Guest,
 )
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 
 
 class ClientBase(DeclarativeBase):
@@ -79,6 +80,9 @@ class BalanceOperationModel(ClientBase):
     operation_type: Mapped[str] = mapped_column(
         String(32), default=BalanceOperationType.TOP_UP.value
     )
+    payment_parts: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
 
     def to_domain(self) -> BalanceOperation:
         return BalanceOperation(
@@ -91,6 +95,7 @@ class BalanceOperationModel(ClientBase):
             idempotency_key=self.idempotency_key,
             created_at=self.created_at,
             operation_type=BalanceOperationType(self.operation_type),
+            payment_parts=tuple(PaymentPart.from_dict(part) for part in (self.payment_parts or [])),
         )
 
     @classmethod
@@ -105,6 +110,7 @@ class BalanceOperationModel(ClientBase):
             idempotency_key=operation.idempotency_key,
             created_at=operation.created_at,
             operation_type=operation.operation_type.value,
+            payment_parts=[part.as_dict() for part in operation.payment_parts],
         )
 
 

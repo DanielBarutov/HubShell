@@ -30,6 +30,19 @@ from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import Bonus, Money, Nickname, PhoneNumber
 from gameclub_backend.modules.clients.infrastructure.guests_memory import InMemoryGuestRepository
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+from gameclub_backend.modules.direct_payments.application.service import (
+    GuestSessionPaymentService,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.cash import (
+    CashShiftGuestPaymentSettlement,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.memory import (
+    InMemoryGuestSessionPaymentRepository,
+)
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.memory import (
+    InMemoryEntitlementRepository,
+)
 from gameclub_backend.modules.reservations.application.service import ReservationService
 from gameclub_backend.modules.reservations.domain import ReservationStatus
 from gameclub_backend.modules.reservations.infrastructure.memory import (
@@ -180,6 +193,107 @@ async def test_client_search_and_top_up_are_idempotent() -> None:
     assert len(history) == 1
     assert history[0].id == first_operation.id
     assert history[0].reason == "Initial deposit"
+
+
+async def test_entitlement_queue_requires_explicit_activation_and_preserves_order() -> None:
+    clients = ClientService(InMemoryClientRepository())
+    client = await clients.create("PackageQueueClient")
+    await clients.top_up(client.id, 1_000, 0, "Deposit", "operator", "package-deposit")
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Two hours",
+        group_id="main",
+        duration_minutes=120,
+        price_cents=300,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="two-hours",
+    )
+    service = EntitlementService(
+        InMemoryEntitlementRepository(),
+        tariffs=catalog,
+        clients=clients,
+    )
+
+    first = await service.purchase(client.id, tariff.id, "operator", "package-001")
+    repeated = await service.purchase(client.id, tariff.id, "operator", "package-001")
+    second = await service.purchase(client.id, tariff.id, "operator", "package-002")
+
+    assert repeated.id == first.id
+    assert [item.queue_position for item in await service.list_for_client(client.id)] == [1, 2]
+    assert first.status.value == "queued"
+    active = await service.activate(first.id, client.id)
+    assert active.status.value == "active"
+    with pytest.raises(ApplicationError) as conflict:
+        await service.activate(second.id, client.id)
+    assert conflict.value.code is ErrorCode.CONFLICT
+    exhausted = await service.consume(first.id, client.id, 120)
+    assert exhausted.status.value == "exhausted"
+    assert (await service.activate(second.id, client.id)).status.value == "active"
+    assert (await clients.get(client.id)).balance_cents == 400
+
+
+async def test_guest_tariff_requires_confirmed_direct_payment_before_session_start() -> None:
+    workstation_repository = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstation_repository).register(
+        "guest-payment-device",
+        "Guest payment PC",
+        group_id="main",
+    )
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Guest hour",
+        group_id="main",
+        duration_minutes=60,
+        price_cents=250,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="guest-hour",
+    )
+    cash_shifts = CashShiftService(InMemoryCashShiftRepository())
+    shift = await cash_shifts.open("guest-register", 0, "operator", "guest-payment-shift")
+    guest_payments = GuestSessionPaymentService(
+        InMemoryGuestSessionPaymentRepository(),
+        tariffs=catalog,
+        cash=CashShiftGuestPaymentSettlement(cash_shifts),
+    )
+    clients = InMemoryClientRepository()
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstation_repository,
+        clients=clients,
+        guest_payments=guest_payments,
+    )
+
+    with pytest.raises(ApplicationError) as missing_payment:
+        await sessions.start(
+            workstation.id,
+            created_by="operator",
+            guest_name="Гость",
+            tariff_id=tariff.id,
+        )
+    assert missing_payment.value.code is ErrorCode.CONFLICT
+
+    payment = await guest_payments.confirm(
+        workstation_id=workstation.id,
+        tariff_id=tariff.id,
+        tariff_quantity=1,
+        guest_name="Гость",
+        actor_id="operator",
+        idempotency_key="guest-payment-001",
+        cash_shift_id=shift.id,
+        payment_parts=[{"method": "cash", "amount_cents": 250}],
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        guest_name="Гость",
+        tariff_id=tariff.id,
+        guest_payment_id=payment.id,
+    )
+
+    assert session.guest_payment_id == payment.id
+    assert (await cash_shifts.get(shift.id)).expected_close_cents == 250
 
 
 async def test_guest_profile_search_and_booking_session_links() -> None:
@@ -1438,6 +1552,87 @@ async def test_session_rejects_a_second_active_session_and_disabled_workstation(
 
     assert active_error.value.code is ErrorCode.CONFLICT
     assert disabled_error.value.code is ErrorCode.CONFLICT
+
+
+async def test_entry_decision_protects_reservations_and_allows_assigned_client() -> None:
+    class FixedClock:
+        current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)
+
+        def now(self) -> datetime.datetime:
+            return self.current
+
+    clock = FixedClock()
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations).register("entry-device", "Entry PC")
+    clients = InMemoryClientRepository()
+    client_service = ClientService(clients, clock=clock)
+    assigned = await client_service.create("EntryAssigned")
+    other = await client_service.create("EntryOther")
+    reservations = ReservationService(
+        InMemoryReservationRepository(),
+        workstations=workstations,
+        clients=clients,
+        clock=clock,
+    )
+    reservation = await reservations.create(
+        workstation_ids=[workstation.id],
+        start_at=clock.current + datetime.timedelta(minutes=20),
+        end_at=clock.current + datetime.timedelta(minutes=80),
+        created_by="operator",
+        client_id=assigned.id,
+    )
+
+    anonymous = await reservations.check_entry(workstation.id, now=clock.current)
+    assert not anonymous.allowed
+    assert anonymous.reason == "reservation_client_required"
+    assert anonymous.reservation_id == reservation.id
+
+    matching = await reservations.check_entry(
+        workstation.id,
+        client_id=assigned.id,
+        now=clock.current,
+    )
+    assert matching.allowed
+    assert matching.reason == "allowed"
+
+    mismatch = await reservations.check_entry(
+        workstation.id,
+        client_id=other.id,
+        now=clock.current,
+    )
+    assert not mismatch.allowed
+    assert mismatch.reason == "reservation_client_mismatch"
+
+
+async def test_session_rejects_one_client_on_two_workstations() -> None:
+    workstations = InMemoryWorkstationRepository()
+    workstation_service = WorkstationService(workstations)
+    first = await workstation_service.register("client-session-device-1", "PC-01")
+    second = await workstation_service.register("client-session-device-2", "PC-02")
+    clients = InMemoryClientRepository()
+    client = await ClientService(clients).create("OneSessionFox")
+    service = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations,
+        clients=clients,
+    )
+
+    await service.start(
+        first.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="one-client-session-1",
+    )
+    with pytest.raises(ApplicationError) as error:
+        await service.start(
+            second.id,
+            created_by="operator",
+            client_id=client.id,
+            idempotency_key="one-client-session-2",
+        )
+
+    assert error.value.code is ErrorCode.CONFLICT
+    assert error.value.message == "Client already has an active session"
 
 
 async def test_session_validates_linked_reservation_ownership() -> None:

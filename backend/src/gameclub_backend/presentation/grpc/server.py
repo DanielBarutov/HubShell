@@ -54,6 +54,20 @@ from gameclub_backend.modules.clients.infrastructure.postgres import (
     PostgresClientRepository,
     PostgresGuestRepository,
 )
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.memory import (
+    InMemoryEntitlementRepository,
+)
+from gameclub_backend.modules.entitlements.infrastructure.postgres import (
+    PostgresEntitlementRepository,
+)
+from gameclub_backend.modules.offline.application.service import OfflineReplayService
+from gameclub_backend.modules.offline.infrastructure.memory import (
+    InMemoryOfflineReplayRepository,
+)
+from gameclub_backend.modules.offline.infrastructure.postgres import (
+    PostgresOfflineReplayRepository,
+)
 from gameclub_backend.modules.reservations.application.service import ReservationService
 from gameclub_backend.modules.reservations.infrastructure.memory import (
     InMemoryReservationRepository,
@@ -65,8 +79,15 @@ from gameclub_backend.modules.sales.application.service import ProductSaleServic
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
+from gameclub_backend.modules.sessions.infrastructure.transfers_memory import (
+    InMemorySessionTransferRepository,
+)
+from gameclub_backend.modules.sessions.infrastructure.transfers_postgres import (
+    PostgresSessionTransferRepository,
+)
 from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
@@ -184,6 +205,9 @@ def create_server(
         cash_approval_repository = PostgresCashApprovalRepository(engine_provider)
         analytics_repository = PostgresAnalyticsRepository(engine_provider)
         sales_repository = PostgresProductSaleRepository(engine_provider)
+        entitlement_repository = PostgresEntitlementRepository(engine_provider)
+        transfer_repository = PostgresSessionTransferRepository(engine_provider)
+        offline_repository = PostgresOfflineReplayRepository(engine_provider)
     else:
         workstation_repository = InMemoryWorkstationRepository()
         workstation_group_repository = InMemoryWorkstationGroupRepository()
@@ -200,6 +224,9 @@ def create_server(
         cash_approval_repository = InMemoryCashApprovalRepository()
         analytics_repository = InMemoryAnalyticsRepository()
         sales_repository = InMemoryProductSaleRepository()
+        entitlement_repository = InMemoryEntitlementRepository()
+        transfer_repository = InMemorySessionTransferRepository()
+        offline_repository = InMemoryOfflineReplayRepository()
     workstation_service = WorkstationService(
         workstation_repository,
         stale_after_seconds=settings.workstation_stale_after_seconds,
@@ -210,6 +237,13 @@ def create_server(
     client_service = ClientService(client_repository)
     guest_service = GuestService(guest_repository)
     catalog_service = CatalogService(catalog_repository)
+    entitlement_service = EntitlementService(
+        entitlement_repository,
+        tariffs=catalog_service,
+        clients=client_service,
+        active_sessions=session_repository,
+        workstations=workstation_repository,
+    )
     reservation_service = ReservationService(
         reservation_repository,
         workstations=workstation_repository,
@@ -223,6 +257,8 @@ def create_server(
         clients=client_repository,
         reservations=reservation_service,
         guests=guest_repository,
+        entitlements=entitlement_service,
+        meters=meter_repository,
     )
     billing_service = BillingService(
         billing_repository,
@@ -232,6 +268,7 @@ def create_server(
         catalog=catalog_service,
         reconciliation=billing_reconciliation_repository,
         meter_repository=meter_repository,
+        entitlements=entitlement_service,
     )
     cash_shift_service = CashShiftService(
         cash_shift_repository,
@@ -249,12 +286,29 @@ def create_server(
         charges=billing_service,
         sales=sales_service,
         tariffs=catalog_service,
+        entitlements=entitlement_service,
+        workstations=workstation_repository,
     )
     command_service = WorkstationCommandService(
         command_repository,
         workstations=workstation_repository,
         notifier=InMemoryCommandNotifier(),
         command_ttl_seconds=settings.workstation_command_ttl_seconds,
+    )
+    session_transfer_service = SessionTransferService(
+        transfer_repository,
+        sessions=session_repository,
+        workstations=workstation_repository,
+        reservations=reservation_service,
+        entitlements=entitlement_service,
+        commands=command_service,
+    )
+    offline_service = OfflineReplayService(
+        offline_repository,
+        sessions=session_service,
+        session_repository=session_repository,
+        workstations=workstation_repository,
+        billing=billing_service,
     )
     workstations_pb2_grpc.add_WorkstationServiceServicer_to_server(
         WorkstationGrpcService(
@@ -282,7 +336,12 @@ def create_server(
         server,
     )
     sessions_pb2_grpc.add_SessionServiceServicer_to_server(
-        SessionGrpcService(session_service, token_service),
+        SessionGrpcService(
+            session_service,
+            token_service,
+            session_transfer_service,
+            offline_service,
+        ),
         server,
     )
     billing_pb2_grpc.add_BillingServiceServicer_to_server(

@@ -92,6 +92,9 @@ class TariffModel(CatalogBase):
     billing_mode: Mapped[str] = mapped_column(String(16), default=BillingMode.BLOCK.value)
     price_per_minute_cents: Mapped[int] = mapped_column(default=0)
     free_minutes: Mapped[int] = mapped_column(default=0)
+    window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    window_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     def to_domain(self) -> Tariff:
         return Tariff(
@@ -109,6 +112,9 @@ class TariffModel(CatalogBase):
             billing_mode=BillingMode(self.billing_mode),
             price_per_minute_cents=self.price_per_minute_cents,
             free_minutes=self.free_minutes,
+            window_start_minute=self.window_start_minute,
+            window_end_minute=self.window_end_minute,
+            window_timezone=self.window_timezone,
         )
 
     @classmethod
@@ -128,6 +134,9 @@ class TariffModel(CatalogBase):
             billing_mode=tariff.billing_mode.value,
             price_per_minute_cents=tariff.price_per_minute_cents,
             free_minutes=tariff.free_minutes,
+            window_start_minute=tariff.window_start_minute,
+            window_end_minute=tariff.window_end_minute,
+            window_timezone=tariff.window_timezone,
         )
 
 

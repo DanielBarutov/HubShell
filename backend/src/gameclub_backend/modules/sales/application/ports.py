@@ -24,6 +24,9 @@ class ProductSaleRepository(typing.Protocol):
     async def cancel(self, sale: ProductSale) -> ProductSale:
         """Cancel a pending sale and return reserved stock."""
 
+    async def mark_needs_review(self, sale: ProductSale, error: str) -> ProductSale:
+        """Persist an unresolved settlement without repeating side effects."""
+
     async def list_sales(
         self,
         start_at: datetime.datetime | None = None,

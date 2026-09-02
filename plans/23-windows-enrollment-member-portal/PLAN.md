@@ -19,8 +19,9 @@ bootstrap token из обычной установки игрового ПК.
 4. Администратор в web-панели создаёт/редактирует место и указывает MAC.
 5. Клиент находит назначенное место, получает настройки группы и device access
    token, после чего начинает heartbeat.
-6. Клиент стартует в полноэкранной заблокированной оболочке. Пользователь может
-   зарегистрироваться или войти; `Ctrl+Alt+P` открывает менеджерский вход.
+6. Клиент стартует в полноэкранном access-gate. Пользователь может
+   зарегистрироваться или войти; после входа получает обычный Windows Desktop
+   и компактный session widget; `Ctrl+Alt+P` открывает менеджерский вход.
 7. После входа пользователь видит профиль, баланс, историю пополнений и
    списаний, покупки товаров/тарифов и доступное время.
 
@@ -43,7 +44,7 @@ MAC используется для назначения в клубной се�
 - Адрес backend не вводится на игровом ПК. Для production EXE собирается с
   заранее известным HTTPS/DNS endpoint клуба; dev loopback остаётся только для
   разработки и тестов.
-- Полноэкранное окно WinUI и app-level lock не заменяют Windows Assigned
+- Полноэкранное окно WinUI до входа и app-level lock не заменяют Windows Assigned
   Access/Shell Launcher. Запрет выхода из Windows desktop проверяется отдельным
   native smoke-чеком по плану 22.
 
@@ -55,6 +56,10 @@ MAC используется для назначения в клубной се�
 [`26-frontend-device-assignment`](../26-frontend-device-assignment/PLAN.md),
 [`27-portable-deployment`](../27-portable-deployment/PLAN.md) и
 [`28-integration-checks`](../28-integration-checks/PLAN.md).
+
+Сквозное выравнивание session snapshot, package activation, reservation entry
+decision, transfer и durable offline replay выполняется по
+[`29-contract-alignment`](../29-contract-alignment/PLAN.md).
 
 ### Backend
 
@@ -77,8 +82,8 @@ MAC используется для назначения в клубной се�
   отключённого места, offline и успешной привязки.
 - [x] Перейти с local access-code gate на server-backed user register/login;
   локальный env verifier оставить только явно включаемым dev fallback.
-- [x] Запускать клиент в borderless fullscreen locked shell; компактный режим
-  оставить только как менеджерский/диагностический режим.
+- [ ] Реализовать state-dependent presentation: fullscreen access-gate до входа,
+  обычный Windows Desktop и compact borderless widget/tray после входа.
 - [x] Реализовать `Ctrl+Alt+P`, профиль пользователя, историю операций,
   сессий, списаний, товаров/тарифов и доступного времени.
 - [ ] Добавить хранение/ротацию device и client tokens без plaintext в логах.

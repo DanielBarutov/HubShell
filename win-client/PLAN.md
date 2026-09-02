@@ -1,25 +1,31 @@
-# Windows client — полноэкранная оболочка игрового ПК
+# Windows client — access-gate и post-login session widget
 
 Статус: `in_progress`  
 Приоритет: `P0`  
 Владелец: `win-client/`  
-Зависимости: `backend/PLAN.md`, Workstations и Auth
+Зависимости: `backend/PLAN.md`, Workstations и Auth, а также планы
+[`33-session-transfer`](../plans/33-session-transfer/PLAN.md),
+[`34-durable-offline`](../plans/34-durable-offline/PLAN.md),
+[`36-winui-contract-consumers`](../plans/36-winui-contract-consumers/PLAN.md) и
+[`37-platform-integration-evidence`](../plans/37-platform-integration-evidence/PLAN.md)
 
 Детальный план lockdown и Windows provisioning: [`plans/22-windows-lockdown/PLAN.md`](../plans/22-windows-lockdown/PLAN.md).
 
 ## Цель
 
 Создать Windows-клиент на C#/.NET и WinUI 3, который после запуска сам
-подключается к backend, назначается администратором по MAC, получает настройки
-группы и стартует в полноэкранном заблокированном режиме. Компактный виджет
-остаётся служебным режимом, а не основным пользовательским сценарием.
+подключается к backend, назначается администратором по MAC и получает настройки
+группы. До server-backed авторизации он работает как полноэкранный borderless
+access-gate. После авторизации не заменяет Windows shell, переходит к обычному
+Windows Desktop и показывает компактный borderless-виджет сессии, который можно
+скрыть в трей. Manager maintenance остаётся отдельным режимом.
 
 Подробный целевой flow и личный кабинет: [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md).
 
 ## Входит в план
 
-- WinUI 3 shell и fullscreen locked window;
-- borderless fullscreen locked shell; compact mode only for maintenance/diagnostics;
+- WinUI 3 access-gate и post-login session widget;
+- dynamic borderless/fullscreen presentation и tray hide/show;
 - gRPC connection и generated client;
 - automatic MAC enrollment and device identity;
 - heartbeat, reconnect, cancellation и network status;
@@ -39,8 +45,9 @@
 
 ## UX и технические правила
 
-- обычный режим — полноэкранная locked-оболочка без стандартного chrome окна;
-- компактный режим доступен только после manager flow для обслуживания;
+- до авторизации — полноэкранный locked access-gate без стандартного chrome;
+- после авторизации — обычный Windows Desktop и компактный borderless widget без
+  системных кнопок окна; widget можно скрыть собственной кнопкой в трей;
 - клиент не требует ручных env-переменных, PIN-хэшей или bootstrap token при
   обычной установке;
 - тема выбирается серверной конфигурацией группы, например VIP/обычный зал;
@@ -55,8 +62,9 @@
 1. [x] Зафиксировать Windows support matrix, .NET/WinUI versions и способ сборки.
 2. [x] Создать solution с UI, application logic, domain models и infrastructure adapters.
 3. [x] Реализовать generated gRPC client и auth metadata boundary.
-4. [x] Реализовать borderless fullscreen window state; compact режим оставить
-   только для manager maintenance/диагностики.
+4. [x] Реализовать state-dependent window presentation: fullscreen gate до auth,
+    post-auth desktop/widget и tray hide/show; native Windows smoke всё ещё
+    нужен для подтверждения фактического поведения.
 5. [x] Реализовать heartbeat, reconnect, timeout и graceful shutdown boundary.
 6. [x] Реализовать локальный theme shell с safe defaults; versioned server configuration остаётся.
 7. [x] Реализовать gRPC command receiver/ack boundary, capabilities reporting, reconnect-backoff и ограниченный журнал результатов для защиты от повторного side effect; безопасный executor поддерживает `display.lock`/`theme.apply`.
@@ -107,17 +115,26 @@
     разделить app-level shell lock и Windows security boundary, добавить
     декларативную policy группы, безопасный session lock и обратимый provisioning
     Assigned Access/Shell Launcher.
-23. [x] Реализовать исходный срез плана [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md):
-    automatic MAC enrollment, server-backed user login/registration, fullscreen
-    shell и личный кабинет с историей операций. Native Windows и production
-    hardening остаются отдельными checks.
+23. [x] Выполнить source-level контрактный срез [`plans/29-contract-alignment/PLAN.md`](../plans/29-contract-alignment/PLAN.md):
+    session snapshot gateway, package lifecycle notification, transfer и durable
+    offline batch. Package queue и explicit activation доступны в client portal
+    snapshot/gRPC/UI; entry login integration, native Windows и production
+    hardening остаются отдельными checks в планах 32/36/37.
 
-Текущий срез: gRPC-клиент получает device JWT через MAC enrollment, передаёт bearer
+Декомпозиция оставшегося runtime: entitlement/meter и snapshot принадлежат
+планам [`30`](../plans/30-entitlements-meter/PLAN.md) и
+[`32`](../plans/32-session-snapshot-entry/PLAN.md), transfer — [`33`](../plans/33-session-transfer/PLAN.md),
+offline — [`34`](../plans/34-durable-offline/PLAN.md), WinUI consumers —
+[`36`](../plans/36-winui-contract-consumers/PLAN.md), а native/kiosk evidence —
+[`37`](../plans/37-platform-integration-evidence/PLAN.md).
+
+Текущий source-level срез: gRPC-клиент получает device JWT через MAC enrollment, передаёт bearer
 metadata, heartbeat и server-streaming команды с acknowledgement. Клиент проверяет
 `expires_at` перед исполнением и отрицательно подтверждает просроченную команду.
-После потери stream клиент переподключается с backoff до 30 секунд, а результат
-исполненной команды сохраняется в ограниченном in-memory журнале до ACK, поэтому
-повторная доставка после потери ответа не повторяет side effect в том же процессе.
+После потери stream клиент переподключается с backoff до 30 секунд, а
+offline-операции active session сохраняются в DPAPI-защищённом JSONL journal с
+durable sequence state до server ACK; повторная доставка не должна повторять
+side effect.
 Protobuf source-of-truth содержит актуальные catalog/reservation/session/billing contracts,
 включая единый CatalogSnapshot для чтения тарифов и discount rules, а
 Python compatibility test подтверждает наличие generated Python и C# consumers.
@@ -127,6 +144,7 @@ Session-команды принимают только JSON-поля `client_id`
 Heartbeat возвращает тему настроенной группы; клиент принимает только allowlist
 `standard`, `vip`, `neon`, `minimal`, преобразует её в безопасную палитру WinUI и
 использует стандартную тему при неизвестном значении.
+Session snapshot/transfer/replay DTO и gateway подключены на source-level.
 Сборка WinUI 3 и ручная проверка окна требуют Windows; ограничения и команды
 вынесены в [`docs/SUPPORT-MATRIX.md`](docs/SUPPORT-MATRIX.md). В Linux локально
 восстановлен .NET 8 SDK и NuGet-граф, но WindowsAppSDK `XamlCompiler.exe` не
@@ -137,11 +155,13 @@ App-level access-gate и тестируемая проверка PBKDF2-хеше
 
 ## Критерии готовности
 
-- клиент запускается fullscreen в borderless Locked shell;
+- клиент запускается fullscreen в borderless Locked access-gate, а после входа
+  переходит к post-auth desktop/widget flow;
 - устанавливает защищённое соединение и сообщает heartbeat;
 - переживает временное отключение сети без ложного success;
 - получает тему группы ПК без новой сборки;
-- показывает ближайшую бронь и не предлагает несовместимый по времени тариф;
+- показывает только server-backed reservation decision, session snapshot и
+  package activation result;
 - команды имеют acknowledgement, timeout и безопасное поведение при дубле;
 - клиент не расходится с backend по бизнес-правилам;
 - секреты и лишние персональные данные не сохраняются.
@@ -167,6 +187,9 @@ App-level access-gate и тестируемая проверка PBKDF2-хеше
 - reservation display and time-boundary tests;
 - запуск под ограниченной учётной записью;
 - проверка локальных файлов и логов на отсутствие секретов.
+
+Обязательная дополнительная матрица и порядок закрытия разрывов находятся в
+[`plans/29-contract-alignment/PLAN.md`](../plans/29-contract-alignment/PLAN.md).
 
 ## Открытые вопросы
 

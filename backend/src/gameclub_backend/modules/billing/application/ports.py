@@ -11,6 +11,7 @@ from gameclub_backend.modules.billing.domain import (
 )
 from gameclub_backend.modules.catalog.domain import Quote
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
+from gameclub_backend.modules.entitlements.application.service import EntitlementConsumption
 from gameclub_backend.modules.sessions.domain import Session
 from gameclub_backend.modules.workstations.domain import Workstation
 
@@ -69,6 +70,21 @@ class MeterRepository(typing.Protocol):
 
     async def save(self, meter: SessionMeter) -> SessionMeter:
         """Persist monotonic meter progress."""
+
+
+class EntitlementMeter(typing.Protocol):
+    async def get_active_for_client(self, client_id: uuid.UUID):
+        """Return the package currently active for a client, if any."""
+
+    async def consume_for_session(
+        self,
+        client_id: uuid.UUID,
+        zone_id: str | None,
+        minutes: int,
+        now: datetime.datetime | None = None,
+        initial_entitlement_id: uuid.UUID | None = None,
+    ) -> EntitlementConsumption:
+        """Consume package minutes and auto-activate the next compatible item."""
 
 
 class SessionLookup(typing.Protocol):

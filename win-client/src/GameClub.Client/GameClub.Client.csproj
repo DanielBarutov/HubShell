@@ -12,6 +12,7 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseRidGraph>true</UseRidGraph>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />
@@ -39,6 +40,7 @@
     <PackageReference Include="Grpc.Net.Client" Version="2.66.0" />
     <PackageReference Include="Google.Protobuf" Version="3.28.2" />
     <PackageReference Include="Grpc.Tools" Version="2.66.0" PrivateAssets="All" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

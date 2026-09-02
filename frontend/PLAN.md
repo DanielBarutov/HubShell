@@ -3,7 +3,9 @@
 Статус: `in_progress`  
 Приоритет: `P0`  
 Владелец: `frontend/`  
-Зависимости: `backend/PLAN.md` и backend-планы Workstations, Clients, Catalog, Reservations, Auth
+Зависимости: `backend/PLAN.md`, backend-планы Workstations, Clients, Catalog,
+Reservations, Auth, [`plans/29-contract-alignment/PLAN.md`](../plans/29-contract-alignment/PLAN.md)
+и [`plans/35-frontend-contract-consumers/PLAN.md`](../plans/35-frontend-contract-consumers/PLAN.md)
 
 ## Цель
 
@@ -27,6 +29,17 @@
 - базовые настройки групп, тем, товаров и тарифов;
 - loading/empty/error/success/disabled/offline states;
 - Tailwind tokens и Lucide icon system.
+
+## Контрактный backlog
+
+Сквозной аудит в [`plans/29-contract-alignment/PLAN.md`](../plans/29-contract-alignment/PLAN.md)
+зафиксировал обязательные задачи, которые нельзя закрывать локальной логикой
+React: отображение package queue/session snapshot, guest paid-start только после
+подтверждённой оплаты, payment parts для top-up/sale, server reservation entry
+decision с 30-минутным lock, transfer flow и offline PC evidence. Typed BFF DTO
+для payment parts, entitlements, snapshot, transfer и guest payment опубликованы;
+основные server-backed consumers подключены на source-level. Остались headed
+browser/accessibility evidence и интеграционные проверки после текущих миграций.
 
 ## Не входит
 
@@ -149,6 +162,15 @@ SmartShell берём как рабочий ориентир: слева пос�
 42. [x] Исправить частичный checkout: сохранять idempotency keys сессии и
     товарных операций в пределах одной попытки, а stale operator permissions
     обновлять через refresh при ответе BFF `403`.
+43. [x] Подключить typed BFF методы и DTO для payment parts, entitlement queue,
+    explicit activation и подтверждённой guest direct payment; гостевой тариф
+    в checkout теперь не стартует до server confirmation.
+44. [x] Добавить payment-method boundary для top-up и mixed payment UI для
+    product sale; разбивка товара проверяется до отправки и сохраняет оба part.
+45. [x] Подключить к карте и PC context panel ordered package queue, session
+    snapshot и server entry-decision/banner; добавить transfer result и offline
+    workstation state после публикации соответствующих backend DTO. Headed
+    browser evidence остаётся в плане 37.
 
 Текущий live-срез: после operator login frontend получает список ПК и активных
 сессий через FastAPI,
@@ -228,9 +250,10 @@ cost/stock, а управление категориями вынесено в �
 
 Продажа времени и товаров постепенно переводится из узкой контекстной панели в
 полноразмерное checkout-окно. UI поддерживает несколько выбранных строк в
-локальной корзине, но backend-сценарий старта сессии по-прежнему отправляет только
-один тариф с `tariff_quantity`; разные тарифы не объединяются молча и требуют
-будущего order/entitlement-контракта.
+локальной корзине, mixed payment для одной товарной sale-команды и явную
+server-confirmed guest payment. Backend-сценарий старта сессии по-прежнему
+отправляет только один тариф с `tariff_quantity`; разные тарифы, entitlement
+consumption и entry decision требуют следующего backend-среза.
 
 ## Критерии готовности
 

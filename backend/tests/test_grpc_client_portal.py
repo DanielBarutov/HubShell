@@ -14,6 +14,10 @@ from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatal
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.memory import (
+    InMemoryEntitlementRepository,
+)
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
@@ -50,12 +54,18 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
         clients=client_service,
     )
     charge_repository = InMemoryChargeRepository()
+    entitlement_service = EntitlementService(
+        InMemoryEntitlementRepository(),
+        tariffs=catalog,
+        clients=client_service,
+    )
     portal = ClientPortalService(
         clients=client_service,
         sessions=session_repository,
         charges=ChargeHistoryReader(charge_repository),
         sales=sales,
         tariffs=catalog,
+        entitlements=entitlement_service,
     )
 
     server = grpc.aio.server()
@@ -86,6 +96,20 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
             ),
             metadata=(("authorization", f"Bearer {device_token}"),),
         )
+        await client_service.top_up(
+            uuid.UUID(registered.snapshot.client.id),
+            1_000,
+            0,
+            "Package test balance",
+            "operator",
+            "grpc-portal-top-up",
+        )
+        await entitlement_service.purchase(
+            uuid.UUID(registered.snapshot.client.id),
+            tariff.id,
+            "operator",
+            "grpc-portal-package",
+        )
         await session_repository.save(
             Session(
                 id=uuid.uuid4(),
@@ -105,6 +129,13 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
             clients_pb2.GetPortalRequest(device_id="device-01"),
             metadata=(("authorization", f"Bearer {registered.access_token}"),),
         )
+        activated = await client.ActivateEntitlement(
+            clients_pb2.ActivateEntitlementRequest(
+                entitlement_id=snapshot.entitlements[0].id,
+                device_id="device-01",
+            ),
+            metadata=(("authorization", f"Bearer {registered.access_token}"),),
+        )
 
         with pytest.raises(grpc.aio.AioRpcError) as error:
             await client.Get(
@@ -119,4 +150,6 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
     assert snapshot.client.id == registered.snapshot.client.id
     assert snapshot.available_time_minutes == 0
     assert snapshot.sessions[0].tariff_name == "Ночной тариф"
+    assert snapshot.entitlements[0].status == "queued"
+    assert activated.entitlements[0].status == "active"
     assert error.value.code() is grpc.StatusCode.PERMISSION_DENIED

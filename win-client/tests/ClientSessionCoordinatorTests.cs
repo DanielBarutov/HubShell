@@ -92,6 +92,100 @@ public sealed class ClientSessionCoordinatorTests
                 string.Empty,
                 string.Empty));
 
+        public Task<SessionSnapshot> GetSessionSnapshotAsync(
+            string sessionId,
+            string deviceId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SessionSnapshot(
+                sessionId,
+                string.Empty,
+                null,
+                null,
+                string.Empty,
+                string.Empty,
+                null,
+                string.Empty,
+                string.Empty,
+                DeviceId: deviceId));
+
+        public Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
+            string sessionId,
+            string targetWorkstationId,
+            string deviceId,
+            string idempotencyKey,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SessionTransferOfferSnapshot(
+                string.Empty,
+                sessionId,
+                string.Empty,
+                deviceId,
+                targetWorkstationId,
+                string.Empty,
+                "pending",
+                false,
+                null,
+                string.Empty,
+                string.Empty,
+                null));
+
+        public Task<SessionTransferOfferSnapshot> GetTransferOfferAsync(
+            string offerId,
+            string deviceId,
+            string token,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SessionTransferOfferSnapshot(
+                offerId,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                deviceId,
+                token,
+                "pending",
+                false,
+                null,
+                string.Empty,
+                string.Empty,
+                null));
+
+        public Task<SessionTransferResultSnapshot> ConfirmTransferAsync(
+            string offerId,
+            string deviceId,
+            string token,
+            string idempotencyKey,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SessionTransferResultSnapshot(
+                new SessionTransferOfferSnapshot(
+                    offerId,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    deviceId,
+                    token,
+                    "confirmed",
+                    false,
+                    null,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty),
+                new SessionSnapshot(
+                    string.Empty,
+                    string.Empty,
+                    null,
+                    null,
+                    string.Empty,
+                    string.Empty,
+                    null,
+                    string.Empty,
+                    string.Empty,
+                    DeviceId: deviceId)));
+
+        public Task<OfflineBatchResultSnapshot> ReplayOfflineBatchAsync(
+            string sessionId,
+            string deviceId,
+            IReadOnlyCollection<OfflineOperationSnapshot> operations,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new OfflineBatchResultSnapshot(sessionId, Array.Empty<OfflineOperationResultSnapshot>(), null));
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

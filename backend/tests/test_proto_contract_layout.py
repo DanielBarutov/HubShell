@@ -47,6 +47,7 @@ def test_reservation_contract_contains_availability_and_lifecycle_methods() -> N
 
     assert {
         "CheckAvailability",
+        "CheckEntry",
         "Create",
         "List",
         "Get",
@@ -56,12 +57,13 @@ def test_reservation_contract_contains_availability_and_lifecycle_methods() -> N
         "Complete",
         "MarkNoShow",
     }.issubset(methods)
+    assert "reason" in reservations_pb2.CheckEntryResponse.DESCRIPTOR.fields_by_name
     assert "status" in reservations_pb2.Reservation.DESCRIPTOR.fields_by_name
 
 
 def test_session_contract_contains_idempotent_lifecycle_methods() -> None:
     service = sessions_pb2.DESCRIPTOR.services_by_name["SessionService"]
-    assert {"Start", "Get", "List", "Stop"}.issubset(service.methods_by_name)
+    assert {"Start", "Get", "GetSnapshot", "List", "Stop"}.issubset(service.methods_by_name)
     assert "idempotency_key" in sessions_pb2.Session.DESCRIPTOR.fields_by_name
     assert "idempotency_key" in sessions_pb2.StartSessionRequest.DESCRIPTOR.fields_by_name
     assert "device_id" in sessions_pb2.StartSessionRequest.DESCRIPTOR.fields_by_name
@@ -70,6 +72,8 @@ def test_session_contract_contains_idempotent_lifecycle_methods() -> None:
     assert "guest_id" in sessions_pb2.StartSessionRequest.DESCRIPTOR.fields_by_name
     assert "tariff_id" in sessions_pb2.Session.DESCRIPTOR.fields_by_name
     assert "tariff_id" in sessions_pb2.StartSessionRequest.DESCRIPTOR.fields_by_name
+    assert "schema_version" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
+    assert "package_minutes" in sessions_pb2.SessionMeterSnapshot.DESCRIPTOR.fields_by_name
 
 
 def test_billing_contract_contains_idempotent_session_charge_methods() -> None:
@@ -149,10 +153,14 @@ def test_clients_contract_contains_balance_operation_history() -> None:
     }.issubset(service.methods_by_name)
     assert "discount_category" in clients_pb2.Guest.DESCRIPTOR.fields_by_name
     portal_service = clients_pb2.DESCRIPTOR.services_by_name["ClientPortalService"]
-    assert {"Register", "Login", "Get"}.issubset(portal_service.methods_by_name)
+    assert {"Register", "Login", "Get", "ActivateEntitlement"}.issubset(
+        portal_service.methods_by_name
+    )
     assert "device_id" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalSession.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalCharge.DESCRIPTOR.fields_by_name
+    assert "entitlements" in clients_pb2.ClientPortalSnapshot.DESCRIPTOR.fields_by_name
+    assert "queue_position" in clients_pb2.PortalEntitlement.DESCRIPTOR.fields_by_name
 
 
 def test_guest_links_are_present_in_reservation_and_frontend_contracts() -> None:
@@ -238,7 +246,9 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "DeviceAuthenticationRequiredException" in grpc_source
     assert "StatusCode.Unauthenticated" in grpc_source
     assert "MainWindowActivated" in window_source
-    assert "WindowActivationState.Deactivated" in window_source
+    assert "Losing focus is normal desktop behavior" in window_source
+    assert "HideToTray" in window_source
+    assert "IsAlwaysOnTop" in window_source
     assert "SecuredContentVisibility" in xaml_source
     assert "SecuredContentVisibility" in view_model_source
     assert "DeviceId = deviceId" in grpc_source
@@ -316,9 +326,7 @@ def test_grpc_production_requires_explicit_tls_configuration() -> None:
         / "grpc"
         / "server.py"
     ).read_text()
-    threat_model = (
-        PROJECT_ROOT / "plans" / "04-auth-security" / "THREAT-MODEL.md"
-    ).read_text()
+    threat_model = (PROJECT_ROOT / "plans" / "04-auth-security" / "THREAT-MODEL.md").read_text()
 
     assert "grpc_tls_cert_file" in config_source
     assert "grpc_tls_key_file" in config_source

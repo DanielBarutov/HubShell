@@ -40,6 +40,8 @@ class InMemoryMeterRepository:
                     raise ValueError("Session meter cannot move backwards")
                 if meter.billed_cents < current.billed_cents:
                     raise ValueError("Session meter cannot move backwards")
+                if meter.package_minutes < current.package_minutes:
+                    raise ValueError("Session package minutes cannot move backwards")
             self._items[meter.session_id] = meter
             return meter
 

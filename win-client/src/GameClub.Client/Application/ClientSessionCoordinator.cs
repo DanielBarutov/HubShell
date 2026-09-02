@@ -7,17 +7,67 @@ namespace GameClub.Client.Application;
 public sealed class ClientSessionCoordinator
 {
     private readonly IBackendClient _backendClient;
+    private readonly IOfflineJournal? _offlineJournal;
     private readonly Dictionary<string, CommandExecutionResult> _pendingAcknowledgements = new();
     private const int MaxPendingAcknowledgements = 128;
 
-    public ClientSessionCoordinator(IBackendClient backendClient)
+    public ClientSessionCoordinator(
+        IBackendClient backendClient,
+        IOfflineJournal? offlineJournal = null)
     {
         _backendClient = backendClient;
+        _offlineJournal = offlineJournal;
     }
 
     public IWorkstationSessionGateway BackendClient => _backendClient;
 
     public IClientPortalGateway ClientPortal => _backendClient;
+
+    public async Task QueueOfflineOperationAsync(
+        SessionSnapshot session,
+        OfflineOperationSnapshot operation,
+        CancellationToken cancellationToken = default)
+    {
+        if (_offlineJournal is null)
+        {
+            throw new InvalidOperationException("Offline journal is not configured");
+        }
+        if (!session.Id.Equals(operation.SessionId, StringComparison.Ordinal)
+            || !session.Status.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Offline operations require an active server session");
+        }
+        await _offlineJournal.AppendAsync(operation, cancellationToken);
+    }
+
+    public async Task<OfflineBatchResultSnapshot?> ReplayOfflineOperationsAsync(
+        SessionSnapshot session,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (_offlineJournal is null
+            || !session.Status.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        var pending = await _offlineJournal.ReadPendingAsync(session.Id, cancellationToken);
+        if (pending.Count == 0)
+        {
+            return null;
+        }
+
+        var result = await _backendClient.ReplayOfflineBatchAsync(
+            session.Id,
+            deviceId,
+            pending,
+            cancellationToken);
+        var acknowledged = result.Results
+            .Where(item => item.Status is "applied" or "duplicate")
+            .Select(item => item.OperationId)
+            .ToArray();
+        await _offlineJournal.AcknowledgeAsync(acknowledged, cancellationToken);
+        return result;
+    }
 
     public async Task<ClientConnectionSnapshot> CheckConnectionAsync(
         CancellationToken cancellationToken = default)
@@ -85,6 +135,7 @@ public sealed class ClientSessionCoordinator
         Action<string>? onThemeReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
+        Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
@@ -108,6 +159,10 @@ public sealed class ClientSessionCoordinator
                 if (heartbeat.LockdownPolicy is not null)
                 {
                     onLockdownPolicyReceived?.Invoke(heartbeat.LockdownPolicy);
+                }
+                if (refreshSessionSnapshot is not null)
+                {
+                    await refreshSessionSnapshot();
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

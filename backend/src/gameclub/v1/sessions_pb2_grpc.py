@@ -44,6 +44,11 @@ class SessionServiceStub:
                 request_serializer=gameclub_dot_v1_dot_sessions__pb2.GetSessionRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v1_dot_sessions__pb2.Session.FromString,
                 _registered_method=True)
+        self.GetSnapshot = channel.unary_unary(
+                '/gameclub.sessions.v1.SessionService/GetSnapshot',
+                request_serializer=gameclub_dot_v1_dot_sessions__pb2.GetSessionSnapshotRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_sessions__pb2.SessionSnapshot.FromString,
+                _registered_method=True)
         self.List = channel.unary_unary(
                 '/gameclub.sessions.v1.SessionService/List',
                 request_serializer=gameclub_dot_v1_dot_sessions__pb2.ListSessionsRequest.SerializeToString,
@@ -53,6 +58,26 @@ class SessionServiceStub:
                 '/gameclub.sessions.v1.SessionService/Stop',
                 request_serializer=gameclub_dot_v1_dot_sessions__pb2.StopSessionRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v1_dot_sessions__pb2.Session.FromString,
+                _registered_method=True)
+        self.CreateTransferOffer = channel.unary_unary(
+                '/gameclub.sessions.v1.SessionService/CreateTransferOffer',
+                request_serializer=gameclub_dot_v1_dot_sessions__pb2.CreateTransferOfferRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_sessions__pb2.TransferOffer.FromString,
+                _registered_method=True)
+        self.GetTransferOffer = channel.unary_unary(
+                '/gameclub.sessions.v1.SessionService/GetTransferOffer',
+                request_serializer=gameclub_dot_v1_dot_sessions__pb2.GetTransferOfferRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_sessions__pb2.TransferOffer.FromString,
+                _registered_method=True)
+        self.ConfirmTransfer = channel.unary_unary(
+                '/gameclub.sessions.v1.SessionService/ConfirmTransfer',
+                request_serializer=gameclub_dot_v1_dot_sessions__pb2.ConfirmTransferRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_sessions__pb2.TransferResult.FromString,
+                _registered_method=True)
+        self.ReplayOfflineBatch = channel.unary_unary(
+                '/gameclub.sessions.v1.SessionService/ReplayOfflineBatch',
+                request_serializer=gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchResponse.FromString,
                 _registered_method=True)
 
 
@@ -71,6 +96,12 @@ class SessionServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetSnapshot(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def List(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -78,6 +109,30 @@ class SessionServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Stop(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateTransferOffer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetTransferOffer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ConfirmTransfer(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplayOfflineBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -96,6 +151,11 @@ def add_SessionServiceServicer_to_server(servicer, server):
                     request_deserializer=gameclub_dot_v1_dot_sessions__pb2.GetSessionRequest.FromString,
                     response_serializer=gameclub_dot_v1_dot_sessions__pb2.Session.SerializeToString,
             ),
+            'GetSnapshot': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSnapshot,
+                    request_deserializer=gameclub_dot_v1_dot_sessions__pb2.GetSessionSnapshotRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_sessions__pb2.SessionSnapshot.SerializeToString,
+            ),
             'List': grpc.unary_unary_rpc_method_handler(
                     servicer.List,
                     request_deserializer=gameclub_dot_v1_dot_sessions__pb2.ListSessionsRequest.FromString,
@@ -105,6 +165,26 @@ def add_SessionServiceServicer_to_server(servicer, server):
                     servicer.Stop,
                     request_deserializer=gameclub_dot_v1_dot_sessions__pb2.StopSessionRequest.FromString,
                     response_serializer=gameclub_dot_v1_dot_sessions__pb2.Session.SerializeToString,
+            ),
+            'CreateTransferOffer': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateTransferOffer,
+                    request_deserializer=gameclub_dot_v1_dot_sessions__pb2.CreateTransferOfferRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_sessions__pb2.TransferOffer.SerializeToString,
+            ),
+            'GetTransferOffer': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTransferOffer,
+                    request_deserializer=gameclub_dot_v1_dot_sessions__pb2.GetTransferOfferRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_sessions__pb2.TransferOffer.SerializeToString,
+            ),
+            'ConfirmTransfer': grpc.unary_unary_rpc_method_handler(
+                    servicer.ConfirmTransfer,
+                    request_deserializer=gameclub_dot_v1_dot_sessions__pb2.ConfirmTransferRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_sessions__pb2.TransferResult.SerializeToString,
+            ),
+            'ReplayOfflineBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplayOfflineBatch,
+                    request_deserializer=gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +252,33 @@ class SessionService:
             _registered_method=True)
 
     @staticmethod
+    def GetSnapshot(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.sessions.v1.SessionService/GetSnapshot',
+            gameclub_dot_v1_dot_sessions__pb2.GetSessionSnapshotRequest.SerializeToString,
+            gameclub_dot_v1_dot_sessions__pb2.SessionSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def List(request,
             target,
             options=(),
@@ -215,6 +322,114 @@ class SessionService:
             '/gameclub.sessions.v1.SessionService/Stop',
             gameclub_dot_v1_dot_sessions__pb2.StopSessionRequest.SerializeToString,
             gameclub_dot_v1_dot_sessions__pb2.Session.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateTransferOffer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.sessions.v1.SessionService/CreateTransferOffer',
+            gameclub_dot_v1_dot_sessions__pb2.CreateTransferOfferRequest.SerializeToString,
+            gameclub_dot_v1_dot_sessions__pb2.TransferOffer.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTransferOffer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.sessions.v1.SessionService/GetTransferOffer',
+            gameclub_dot_v1_dot_sessions__pb2.GetTransferOfferRequest.SerializeToString,
+            gameclub_dot_v1_dot_sessions__pb2.TransferOffer.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ConfirmTransfer(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.sessions.v1.SessionService/ConfirmTransfer',
+            gameclub_dot_v1_dot_sessions__pb2.ConfirmTransferRequest.SerializeToString,
+            gameclub_dot_v1_dot_sessions__pb2.TransferResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplayOfflineBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.sessions.v1.SessionService/ReplayOfflineBatch',
+            gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchRequest.SerializeToString,
+            gameclub_dot_v1_dot_sessions__pb2.ReplayOfflineBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

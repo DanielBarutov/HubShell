@@ -38,8 +38,20 @@
 11. `../plans/10-product-sales` — продажи товаров, snapshots и settlement.
 12. `../plans/11-analytics` — клиентская и клубная read-only аналитика.
 13. `../plans/13-payment-methods` — настройки способов оплаты клуба.
+14. `../plans/29-contract-alignment` — сквозное выравнивание обязательных
+    backend/frontend/WinUI контрактов и закрытие подтверждённых разрывов.
+    Декомпозиция реализации: планы [`30`](../plans/30-entitlements-meter/PLAN.md),
+    [`31`](../plans/31-settlement-reconciliation/PLAN.md),
+    [`32`](../plans/32-session-snapshot-entry/PLAN.md),
+    [`33`](../plans/33-session-transfer/PLAN.md),
+    [`34`](../plans/34-durable-offline/PLAN.md) и
+    [`37`](../plans/37-platform-integration-evidence/PLAN.md).
 
-Frontend и Windows-клиент начинают интеграцию после фиксации нужных контрактов, но их UI-каркас может разрабатываться параллельно.
+Frontend и Windows-клиент начинают интеграцию после фиксации нужных контрактов,
+но их UI-каркас может разрабатываться параллельно. Сквозные обязательные
+разрывы зафиксированы в
+[`../plans/29-contract-alignment/PLAN.md`](../plans/29-contract-alignment/PLAN.md);
+наличие текущих модулей не означает выполнение продуктового контракта.
 
 ## Границы модулей
 
@@ -97,6 +109,17 @@ Sessions поддерживают анонимного `Гостя`, а Cash Shi
 и автозакрытия. Web refresh-сессия рассчитана на 90 дней. Native Windows kiosk и
 Assigned Access по-прежнему требуют проверки на Windows и не считаются закрытыми
 этим backend/frontend срезом.
+
+Контрактный аудит выявил отдельный P0-срез: durable entitlement queue и login
+grant, guest paid-start, payment parts, reservation entry decision, one-active-
+client invariant, transfer, session snapshot и offline batch protocol. В текущем
+срезе backend имеет migrations `20260902_0034`–`0046`, payment parts,
+guest-payment prerequisite, `CheckEntry`, package consumption с time windows и
+auto-next, snapshot, transfer owner transaction, offline replay и
+one-active-client guard. Portal-login grant, общий cross-owner settlement UoW,
+PostgreSQL concurrency и transport/native evidence остаются открытыми. Эти
+возможности не следует добавлять локальными обходами в BFF или WinUI; порядок
+реализации и transport boundaries описаны в планах 29–37.
 Дополнительно Clients получил защищённые operator-команды редактирования,
 мягкой деактивации и выдачи временного пароля с сохранением только хеша; Catalog
 получил CRUD товара, закупочную цену и остаток. Эти поля добавлены в HTTP BFF и

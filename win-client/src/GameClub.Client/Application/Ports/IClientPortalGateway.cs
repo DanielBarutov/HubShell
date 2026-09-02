@@ -22,5 +22,10 @@ public interface IClientPortalGateway
         int limit = 50,
         CancellationToken cancellationToken = default);
 
+    Task<ClientPortalSnapshot> ActivateEntitlementAsync(
+        string deviceId,
+        string entitlementId,
+        CancellationToken cancellationToken = default);
+
     void Logout();
 }

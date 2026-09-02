@@ -79,6 +79,48 @@ export type BackendBalanceOperation = {
   actor_id: string;
   idempotency_key: string;
   created_at: string;
+  payment_parts: BackendPaymentPart[];
+};
+
+export type BackendPaymentPart = {
+  method: string;
+  amount_cents: number;
+  reference?: string | null;
+};
+
+export type BackendEntitlement = {
+  id: string;
+  client_id: string;
+  tariff_id: string;
+  zone_id: string | null;
+  duration_minutes: number;
+  remaining_minutes: number;
+  price_cents: number;
+  queue_position: number;
+  status: "queued" | "active" | "exhausted" | "burned";
+  idempotency_key: string;
+  purchased_at: string;
+  activated_at: string | null;
+  ended_at: string | null;
+  burn_reason: string | null;
+  window_start_minute?: number | null;
+  window_end_minute?: number | null;
+  window_timezone?: string | null;
+};
+
+export type BackendGuestSessionPayment = {
+  id: string;
+  workstation_id: string;
+  tariff_id: string;
+  tariff_quantity: number;
+  guest_id: string | null;
+  guest_name: string;
+  total_price_cents: number;
+  payment_parts: BackendPaymentPart[];
+  cash_shift_id: string;
+  status: "confirmed";
+  idempotency_key: string;
+  created_at: string;
 };
 
 export type BackendAuditEvent = {
@@ -120,6 +162,9 @@ export type BackendTariff = {
   billing_mode: "block" | "per_minute";
   price_per_minute_cents: number;
   free_minutes: number;
+  window_start_minute?: number | null;
+  window_end_minute?: number | null;
+  window_timezone?: string | null;
 };
 
 export type BackendDiscountRule = {
@@ -169,13 +214,15 @@ export type BackendProductSale = {
   unit_cost_price_cents: number;
   total_price_cents: number;
   total_cost_price_cents: number;
-  payment_method: "balance" | "cash";
+  payment_method: "balance" | "cash" | "mixed";
   cash_shift_id: string | null;
-  status: "pending" | "completed" | "cancelled";
+  status: "pending" | "completed" | "cancelled" | "needs_review";
   sold_by: string;
   idempotency_key: string;
   created_at: string;
   completed_at: string | null;
+  payment_parts: BackendPaymentPart[];
+  settlement_error: string | null;
 };
 
 export type BackendTopProduct = {
@@ -359,6 +406,37 @@ export type BackendSession = {
   idempotency_key: string | null;
   tariff_id: string | null;
   tariff_quantity: number;
+  guest_payment_id: string | null;
+  login_grant_minutes: number;
+  entitlement_id: string | null;
+};
+
+export type BackendSessionSnapshot = {
+  schema_version: number;
+  server_time: string;
+  session: BackendSession;
+  workstation_id: string;
+  zone_id: string | null;
+  client_id: string | null;
+  balance_cents: number | null;
+  balance_bonus: number | null;
+  active_entitlement: BackendSnapshotEntitlement | null;
+  entitlements: BackendSnapshotEntitlement[];
+  meter: BackendSessionMeter | null;
+  allowed_actions: string[];
+};
+
+export type BackendSnapshotEntitlement = {
+  id: string;
+  tariff_id: string;
+  zone_id: string | null;
+  duration_minutes: number;
+  remaining_minutes: number;
+  status: "queued" | "active" | "exhausted" | "burned";
+  queue_position: number;
+  window_start_minute: number | null;
+  window_end_minute: number | null;
+  window_timezone: string | null;
 };
 
 export type BackendSessionMeter = {
@@ -367,8 +445,32 @@ export type BackendSessionMeter = {
   tariff_id: string;
   billed_minutes: number;
   billed_cents: number;
+  package_minutes: number;
+  active_entitlement_id: string | null;
   status: "running" | "exhausted" | "settled";
   updated_at: string;
+};
+
+export type BackendTransferOffer = {
+  id: string;
+  session_id: string;
+  client_id: string;
+  source_workstation_id: string;
+  target_workstation_id: string;
+  token: string;
+  status: "pending" | "confirmed" | "expired" | "rejected";
+  requires_package_burn: boolean;
+  warning: string | null;
+  created_at: string;
+  expires_at: string;
+  confirmed_at: string | null;
+};
+
+export type BackendTransferResult = {
+  offer: BackendTransferOffer;
+  session_id: string;
+  workstation_id: string;
+  status: "active" | "completed";
 };
 
 export type BackendSessionCharge = {
@@ -454,6 +556,17 @@ export type StartSessionPayload = {
   reservation_id?: string;
   tariff_id?: string;
   tariff_quantity?: number;
+  guest_payment_id?: string;
+  entitlement_id?: string;
+};
+
+export type BackendEntryDecision = {
+  allowed: boolean;
+  reason: string;
+  reservation_id: string | null;
+  assigned_client_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
 };
 
 export class ApiError extends Error {
@@ -610,6 +723,47 @@ export class GameClubApi {
       params.set("workstation_id", workstationId);
     }
     return this.request<BackendSession[]>(`/sessions?${params}`);
+  }
+
+  async getSessionSnapshot(sessionId: string): Promise<BackendSessionSnapshot> {
+    return this.request<BackendSessionSnapshot>(`/sessions/${sessionId}/snapshot`);
+  }
+
+  async createTransferOffer(
+    sessionId: string,
+    targetWorkstationId: string,
+    idempotencyKey: string,
+  ): Promise<BackendTransferOffer> {
+    return this.request<BackendTransferOffer>("/session-transfers/offers", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({
+        session_id: sessionId,
+        target_workstation_id: targetWorkstationId,
+      }),
+    });
+  }
+
+  async getTransferOffer(offerId: string): Promise<BackendTransferOffer> {
+    return this.request<BackendTransferOffer>(`/session-transfers/offers/${offerId}`);
+  }
+
+  async confirmTransfer(offerId: string, idempotencyKey: string): Promise<BackendTransferResult> {
+    return this.request<BackendTransferResult>(`/session-transfers/offers/${offerId}/confirm`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+  }
+
+  async checkEntry(
+    workstationId: string,
+    clientId?: string,
+    guestId?: string,
+  ): Promise<BackendEntryDecision> {
+    const params = new URLSearchParams({ workstation_id: workstationId });
+    if (clientId) params.set("client_id", clientId);
+    if (guestId) params.set("guest_id", guestId);
+    return this.request<BackendEntryDecision>(`/reservations/entry-decision?${params}`);
   }
 
   async chargeSession(sessionId: string, idempotencyKey: string): Promise<BackendSessionCharge> {
@@ -819,7 +973,12 @@ export class GameClubApi {
 
   async topUp(
     clientId: string,
-    payload: { amount_cents: number; bonus_amount: number; reason: string },
+    payload: {
+      amount_cents: number;
+      bonus_amount: number;
+      reason: string;
+      payment_parts?: BackendPaymentPart[];
+    },
     idempotencyKey: string,
   ): Promise<BackendClient> {
     const response = await this.request<{ client: BackendClient }>(`/clients/${clientId}/top-up`, {
@@ -828,6 +987,48 @@ export class GameClubApi {
       body: JSON.stringify(payload),
     });
     return response.client;
+  }
+
+  async listClientEntitlements(clientId: string): Promise<BackendEntitlement[]> {
+    return this.request<BackendEntitlement[]>(`/clients/${clientId}/entitlements`);
+  }
+
+  async purchaseEntitlement(
+    clientId: string,
+    tariffId: string,
+    idempotencyKey: string,
+  ): Promise<BackendEntitlement> {
+    return this.request<BackendEntitlement>(`/clients/${clientId}/entitlements`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ tariff_id: tariffId }),
+    });
+  }
+
+  async activateEntitlement(clientId: string, entitlementId: string): Promise<BackendEntitlement> {
+    return this.request<BackendEntitlement>(
+      `/clients/${clientId}/entitlements/${entitlementId}/activate`,
+      { method: "POST" },
+    );
+  }
+
+  async confirmGuestSessionPayment(
+    payload: {
+      workstation_id: string;
+      tariff_id: string;
+      tariff_quantity?: number;
+      guest_id?: string;
+      guest_name?: string;
+      cash_shift_id: string;
+      payment_parts: BackendPaymentPart[];
+    },
+    idempotencyKey: string,
+  ): Promise<BackendGuestSessionPayment> {
+    return this.request<BackendGuestSessionPayment>("/guest-payments", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
   }
 
 
@@ -850,6 +1051,9 @@ export class GameClubApi {
     billing_mode?: "block" | "per_minute";
     price_per_minute_cents?: number;
     free_minutes?: number;
+    window_start_minute?: number;
+    window_end_minute?: number;
+    window_timezone?: string;
   }): Promise<BackendTariff> {
     return this.request<BackendTariff>("/catalog/tariffs", {
       method: "POST",
@@ -890,7 +1094,14 @@ export class GameClubApi {
   }
 
   async sellProduct(
-    payload: { product_id: string; quantity: number; client_id?: string; payment_method: "balance" | "cash"; cash_shift_id?: string },
+    payload: {
+      product_id: string;
+      quantity: number;
+      client_id?: string;
+      payment_method: "balance" | "cash" | "mixed";
+      cash_shift_id?: string;
+      payment_parts?: BackendPaymentPart[];
+    },
     idempotencyKey: string,
   ): Promise<BackendProductSale> {
     return this.request<BackendProductSale>("/sales", {
