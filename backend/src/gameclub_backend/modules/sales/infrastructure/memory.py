@@ -2,13 +2,15 @@ import asyncio
 import datetime
 import uuid
 
+from gameclub_backend.modules.catalog.application.ports import ProductInventory
 from gameclub_backend.modules.sales.domain import ProductSale, ProductSaleStatus
 
 
 class InMemoryProductSaleRepository:
-    def __init__(self) -> None:
+    def __init__(self, inventory: ProductInventory | None = None) -> None:
         self._items: dict[uuid.UUID, ProductSale] = {}
         self._by_key: dict[str, uuid.UUID] = {}
+        self._inventory = inventory
         self._lock = asyncio.Lock()
 
     async def get_by_idempotency_key(self, idempotency_key: str) -> ProductSale | None:
@@ -20,6 +22,13 @@ class InMemoryProductSaleRepository:
             existing_id = self._by_key.get(sale.idempotency_key)
             if existing_id is not None:
                 return self._items[existing_id]
+            if self._inventory is not None:
+                await self._inventory.reserve_stock(
+                    sale.product_id,
+                    sale.quantity,
+                    sale.unit_price_cents,
+                    sale.unit_cost_price_cents,
+                )
             self._items[sale.id] = sale
             self._by_key[sale.idempotency_key] = sale.id
             return sale
@@ -42,6 +51,8 @@ class InMemoryProductSaleRepository:
             if current.status is ProductSaleStatus.COMPLETED:
                 return current
             cancelled = current.cancel()
+            if self._inventory is not None and current.status is ProductSaleStatus.PENDING:
+                await self._inventory.release_stock(current.product_id, current.quantity)
             self._items[sale.id] = cancelled
             return cancelled
 

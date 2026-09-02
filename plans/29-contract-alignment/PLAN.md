@@ -90,7 +90,7 @@ build/runtime/kiosk/security evidence.
 
 | Требование контракта | Что есть сейчас | Доказательство | Следующий плановый шаг |
 | --- | --- | --- | --- |
-| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary и `needs_review` | unit/API tests, `129 passed`; DSN suite `144 passed` | атомарная cross-part reconciliation/worker и настройки payment methods |
+| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary, stock reservation и `needs_review` | unit/API tests, `130 passed`; DSN suite `146 passed` с sale payload-conflict regression | атомарная cross-part reconciliation/worker и настройки payment methods |
 | Guest fixed tariff | direct payment с idempotency и ссылка в session start | unit/API tests | reconciliation payment record и cash movement |
 | Entry decision | backend `CheckEntry`, HTTP/gRPC и вызов из session start | unit/API/contract tests | одинаковый consumer в frontend/WinUI и heartbeat |
 | One active client session | application guard и PostgreSQL partial unique index | unit/concurrency test source; DB test skipped без DSN | реальный PostgreSQL concurrency run |

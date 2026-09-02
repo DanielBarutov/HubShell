@@ -60,13 +60,14 @@ class ProductSaleService:
                 existing_parts = normalize_payment_parts(payment_parts, existing.total_price_cents)
             except ValueError as error:
                 raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
-            if (
-                existing.product_id != product_id
-                or existing.quantity != quantity
-                or existing.client_id != client_id
-                or existing.payment_method.value != payment_method.strip().lower()
-                or existing.cash_shift_id != cash_shift_id
-                or existing.payment_parts != existing_parts
+            if not self._matches_request(
+                existing,
+                product_id=product_id,
+                quantity=quantity,
+                client_id=client_id,
+                payment_method=payment_method,
+                cash_shift_id=cash_shift_id,
+                payment_parts=existing_parts,
             ):
                 raise ApplicationError(
                     ErrorCode.CONFLICT, "Idempotency key belongs to another sale"
@@ -150,6 +151,18 @@ class ProductSaleService:
                 # Another request with the same key won the reservation lock.
                 # The first lookup can race with that request, so never settle
                 # a pending row that this invocation did not create.
+                if not self._matches_request(
+                    pending,
+                    product_id=product_id,
+                    quantity=quantity,
+                    client_id=client_id,
+                    payment_method=method.value,
+                    cash_shift_id=cash_shift_id,
+                    payment_parts=sale.payment_parts,
+                ):
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT, "Idempotency key belongs to another sale"
+                    )
                 return pending
             if pending.status is ProductSaleStatus.COMPLETED:
                 return pending
@@ -220,6 +233,26 @@ class ProductSaleService:
             # Preserve the settlement failure; an operator can still inspect the
             # durable pending row if the review transition itself is unavailable.
             return
+
+    @staticmethod
+    def _matches_request(
+        sale: ProductSale,
+        *,
+        product_id: uuid.UUID,
+        quantity: int,
+        client_id: uuid.UUID | None,
+        payment_method: str,
+        cash_shift_id: uuid.UUID | None,
+        payment_parts: tuple[PaymentPart, ...],
+    ) -> bool:
+        return (
+            sale.product_id == product_id
+            and sale.quantity == quantity
+            and sale.client_id == client_id
+            and sale.payment_method.value == payment_method.strip().lower()
+            and sale.cash_shift_id == cash_shift_id
+            and sale.payment_parts == payment_parts
+        )
 
     async def list_sales(
         self,

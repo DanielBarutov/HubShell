@@ -223,7 +223,7 @@ def create_server(
         cash_shift_repository = InMemoryCashShiftRepository()
         cash_approval_repository = InMemoryCashApprovalRepository()
         analytics_repository = InMemoryAnalyticsRepository()
-        sales_repository = InMemoryProductSaleRepository()
+        sales_repository = InMemoryProductSaleRepository(catalog_repository)
         entitlement_repository = InMemoryEntitlementRepository()
         transfer_repository = InMemorySessionTransferRepository()
         offline_repository = InMemoryOfflineReplayRepository()

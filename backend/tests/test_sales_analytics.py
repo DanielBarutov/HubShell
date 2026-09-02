@@ -5,6 +5,7 @@ import uuid
 import httpx
 import pytest
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.analytics.application.service import AnalyticsService
 from gameclub_backend.modules.analytics.infrastructure.memory import InMemoryAnalyticsRepository
@@ -26,12 +27,15 @@ class FailingCashSettlement:
 
 
 async def test_product_sale_debits_client_once_and_is_idempotent() -> None:
-    catalog = CatalogService(InMemoryCatalogRepository())
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Coffee", "drinks", 250, stock_quantity=5)
     clients = ClientService(InMemoryClientRepository())
     client = await clients.create("SaleClient")
     await clients.top_up(client.id, 1_000, 0, "Deposit", "operator", "deposit-sale-test")
-    service = ProductSaleService(InMemoryProductSaleRepository(), catalog, clients)
+    service = ProductSaleService(
+        InMemoryProductSaleRepository(catalog_repository), catalog, clients
+    )
 
     sale = await service.sell(
         product.id,
@@ -59,12 +63,15 @@ async def test_product_sale_debits_client_once_and_is_idempotent() -> None:
 
 
 async def test_concurrent_product_sale_requests_settle_once() -> None:
-    catalog = CatalogService(InMemoryCatalogRepository())
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Snack", "food", 300, stock_quantity=2)
     clients = ClientService(InMemoryClientRepository())
     client = await clients.create("ConcurrentSaleClient")
     await clients.top_up(client.id, 1_000, 0, "Deposit", "operator", "deposit-concurrent-sale")
-    service = ProductSaleService(InMemoryProductSaleRepository(), catalog, clients)
+    service = ProductSaleService(
+        InMemoryProductSaleRepository(catalog_repository), catalog, clients
+    )
 
     results = await asyncio.gather(
         *(
@@ -86,13 +93,68 @@ async def test_concurrent_product_sale_requests_settle_once() -> None:
     assert len(await clients.list_operations(client.id)) == 2
 
 
+async def test_concurrent_sale_key_with_different_payload_is_conflict() -> None:
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
+    product = await catalog.create_product("Conflicting snack", "food", 300, stock_quantity=3)
+    clients = ClientService(InMemoryClientRepository())
+    client = await clients.create("ConflictingSaleClient")
+    await clients.top_up(
+        client.id,
+        1_000,
+        0,
+        "Deposit",
+        "operator",
+        "deposit-conflicting-sale",
+    )
+    service = ProductSaleService(
+        InMemoryProductSaleRepository(catalog_repository), catalog, clients
+    )
+
+    results = await asyncio.gather(
+        service.sell(
+            product.id,
+            quantity=1,
+            client_id=client.id,
+            payment_method="balance",
+            cash_shift_id=None,
+            sold_by="operator",
+            idempotency_key="sale-conflicting-payload",
+        ),
+        service.sell(
+            product.id,
+            quantity=2,
+            client_id=client.id,
+            payment_method="balance",
+            cash_shift_id=None,
+            sold_by="operator",
+            idempotency_key="sale-conflicting-payload",
+        ),
+        return_exceptions=True,
+    )
+
+    successful = [item for item in results if not isinstance(item, Exception)]
+    failures = [item for item in results if isinstance(item, Exception)]
+    assert len(successful) == 1
+    assert len(failures) == 1
+    assert isinstance(failures[0], ApplicationError)
+    assert failures[0].code is ErrorCode.CONFLICT
+    successful_sale = successful[0]
+    assert successful_sale.quantity in {1, 2}
+    assert (await clients.get(client.id)).balance_cents == 1_000 - 300 * successful_sale.quantity
+    final_product = await catalog.get_product(product.id)
+    assert final_product is not None
+    assert final_product.stock_quantity == 3 - successful_sale.quantity
+
+
 async def test_guest_product_sale_is_settled_in_cash_shift() -> None:
-    catalog = CatalogService(InMemoryCatalogRepository())
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Water", "drinks", 100, stock_quantity=3)
     cash_shifts = CashShiftService(InMemoryCashShiftRepository())
     shift = await cash_shifts.open("front-desk", 0, "operator", "cash-open-sale-test")
     service = ProductSaleService(
-        InMemoryProductSaleRepository(),
+        InMemoryProductSaleRepository(catalog_repository),
         catalog,
         ClientService(InMemoryClientRepository()),
         cash=CashShiftSaleSettlement(cash_shifts),
@@ -113,9 +175,10 @@ async def test_guest_product_sale_is_settled_in_cash_shift() -> None:
 
 
 async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:
-    catalog = CatalogService(InMemoryCatalogRepository())
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Review water", "drinks", 100, stock_quantity=2)
-    repository = InMemoryProductSaleRepository()
+    repository = InMemoryProductSaleRepository(catalog_repository)
     service = ProductSaleService(
         repository,
         catalog,
@@ -141,7 +204,8 @@ async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:
 
 
 async def test_mixed_product_sale_persists_and_settles_each_payment_part() -> None:
-    catalog = CatalogService(InMemoryCatalogRepository())
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Mixed snack", "food", 300, stock_quantity=2)
     clients = ClientService(InMemoryClientRepository())
     client = await clients.create("MixedSaleClient")
@@ -157,7 +221,7 @@ async def test_mixed_product_sale_persists_and_settles_each_payment_part() -> No
     cash_shifts = CashShiftService(InMemoryCashShiftRepository())
     shift = await cash_shifts.open("front-desk", 0, "operator", "cash-open-mixed-sale-test")
     service = ProductSaleService(
-        InMemoryProductSaleRepository(),
+        InMemoryProductSaleRepository(catalog_repository),
         catalog,
         clients,
         cash=CashShiftSaleSettlement(cash_shifts),
