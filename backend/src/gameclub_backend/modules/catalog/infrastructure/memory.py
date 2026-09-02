@@ -12,6 +12,7 @@ class InMemoryCatalogRepository:
         self._categories: dict[str, ProductCategory] = {}
         self._tariffs: dict[uuid.UUID, Tariff] = {}
         self._discount_rules: dict[uuid.UUID, DiscountRule] = {}
+        self._product_lock = asyncio.Lock()
         self._tariff_lock = asyncio.Lock()
 
     async def save_product(self, product: Product) -> Product:
@@ -26,6 +27,40 @@ class InMemoryCatalogRepository:
 
     async def delete_product(self, product_id: uuid.UUID) -> None:
         self._products.pop(product_id, None)
+
+    async def reserve_stock(
+        self,
+        product_id: uuid.UUID,
+        quantity: int,
+        expected_price_cents: int,
+        expected_cost_price_cents: int,
+    ) -> None:
+        async with self._product_lock:
+            product = self._products.get(product_id)
+            if product is None:
+                raise ValueError("Product not found")
+            if not product.active:
+                raise ValueError("Product is inactive")
+            if product.stock_quantity < quantity:
+                raise ValueError("Insufficient product stock")
+            if (
+                product.price_cents != expected_price_cents
+                or product.cost_price_cents != expected_cost_price_cents
+            ):
+                raise ValueError("Product price changed, retry the sale")
+            self._products[product_id] = dataclasses.replace(
+                product,
+                stock_quantity=product.stock_quantity - quantity,
+            )
+
+    async def release_stock(self, product_id: uuid.UUID, quantity: int) -> None:
+        async with self._product_lock:
+            product = self._products.get(product_id)
+            if product is not None:
+                self._products[product_id] = dataclasses.replace(
+                    product,
+                    stock_quantity=product.stock_quantity + quantity,
+                )
 
     async def save_category(self, category: ProductCategory) -> ProductCategory:
         self._categories[category.id] = category

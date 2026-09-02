@@ -43,8 +43,8 @@ account-portal login без игровой сессии grant не выдаёт 
 для activation/consume/burn, auto-next, immediate activation при пустой
 очереди, monotonic meter package state и server snapshot. Device session
 получает durable `login_grant_minutes=5`; portal activation остаётся отдельным
-явным действием. Unit/API slice подтверждён 129 тестами; полный DSN suite после
-concurrency-коррекции прошёл 144 теста.
+явным действием. Unit/API slice подтверждён 130 тестами; полный DSN suite после
+concurrency-коррекции прошёл 146 тестов.
 
 ## Входит в план
 

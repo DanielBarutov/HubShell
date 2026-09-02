@@ -61,3 +61,17 @@ class CatalogRepository(typing.Protocol):
         moment: datetime.datetime,
     ) -> list[DiscountRule]:
         """Return discount rules applicable at a moment."""
+
+
+class ProductInventory(typing.Protocol):
+    async def reserve_stock(
+        self,
+        product_id: uuid.UUID,
+        quantity: int,
+        expected_price_cents: int,
+        expected_cost_price_cents: int,
+    ) -> None:
+        """Reserve product stock using the catalog-owned product snapshot."""
+
+    async def release_stock(self, product_id: uuid.UUID, quantity: int) -> None:
+        """Return stock reserved by a pending sale."""

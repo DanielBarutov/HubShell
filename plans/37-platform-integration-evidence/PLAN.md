@@ -29,9 +29,9 @@ preflight.
 ## Реализовано в текущем срезе
 
 Локально повторены backend proto generation, Ruff, frontend typecheck/build и
-backend suite: `129 passed, 15 skipped` без DSN и `144 passed` с dev
+backend suite: `130 passed, 16 skipped` без DSN и `146 passed` с dev
 PostgreSQL/Redis DSN. DSN suite теперь включает package locked-delta,
-transfer offer/confirm race и offline duplicate-delivery checks. Compose rebuild применил migrations до `20260902_0046`,
+transfer offer/confirm race, offline duplicate-delivery и sale payload-conflict checks. Compose rebuild применил migrations до `20260902_0046`,
 HTTP/headed smoke подтвердил login, dashboard, map, context panel, session
 snapshot и entry decision, а внешний gRPC smoke подтвердил health и
 авторизованный snapshot. Полная fault-injection matrix, browser matrix и
