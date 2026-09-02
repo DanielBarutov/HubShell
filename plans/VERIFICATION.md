@@ -7,7 +7,7 @@
 
 | Срез | Что проверено | Результат | Граница доказательства |
 | --- | --- | --- | --- |
-| Backend foundation и модули | Ruff, unit/API/contract tests, metered billing, package windows/auto-next, snapshot, transfer, offline replay, settlement review, manager credential, lockdown policy, analytics, payment parts, guest paid-start и entry decision | `125 passed, 12 skipped` без DSN; `137 passed` с dev PostgreSQL/Redis DSN (2026-09-02) | Dedicated package/debit/transfer/offline PostgreSQL concurrency и fault injection остаются отдельной проверкой |
+| Backend foundation и модули | Ruff, unit/API/contract tests, metered billing, package windows/auto-next, locked consumption delta, snapshot, transfer, offline replay, settlement review, manager credential, lockdown policy, analytics, payment parts, guest paid-start и entry decision | `128 passed, 12 skipped` без DSN; `141 passed` с dev PostgreSQL/Redis DSN (2026-09-02) | Полная package/debit/transfer/offline transaction matrix и fault injection остаются отдельной проверкой; package locked-delta check уже добавлен |
 | PostgreSQL schema | Alembic migration chain through active-client, payment-parts, entitlement, guest-payment, login-grant, transfer и offline migrations | `20260902_0046 (head)` по `alembic heads`; Compose migrate применил chain на dev PostgreSQL | Production backup/rollback и dedicated concurrency suite не проверялись |
 | Guest persistence | Guest CRUD/search и ссылки `guest_id` в Reservation/Session | успешно | Memory/API contract checks; PostgreSQL concurrency matrix пропущена без DSN |
 | Cash producer/approval boundary | provider-neutral producers, approvals, HTTP/gRPC contracts | успешно | Unit/API/contract suite; реальные provider webhook не подключены |

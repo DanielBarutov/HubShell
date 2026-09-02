@@ -130,7 +130,10 @@ class EntitlementService:
         if (
             self._active_sessions is not None
             and self._workstations is not None
-            and not any(item.status is EntitlementStatus.QUEUED for item in queued)
+            and not any(
+                item.status in {EntitlementStatus.QUEUED, EntitlementStatus.ACTIVE}
+                for item in queued
+            )
         ):
             active_session = await self._active_sessions.get_active_for_client(client_id)
             if active_session is not None:
@@ -181,12 +184,13 @@ class EntitlementService:
                 "Entitlement belongs to another client",
             )
         try:
-            return await self._repository.consume_for_client(
+            updated, _ = await self._repository.consume_for_client(
                 entitlement_id,
                 client_id,
                 minutes,
                 self._clock.now(),
             )
+            return updated
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
@@ -251,9 +255,16 @@ class EntitlementService:
         exhausted: list[uuid.UUID] = []
         active = await self._repository.get_active_for_client(client_id)
         if initial_entitlement_id is not None:
-            if active is None or active.id != initial_entitlement_id:
+            initial = await self._repository.get(initial_entitlement_id)
+            if initial is None or initial.client_id != client_id:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Session package not found")
+            if (active is None and initial.status is not EntitlementStatus.EXHAUSTED) or (
+                active is not None
+                and active.id != initial_entitlement_id
+                and initial.status is not EntitlementStatus.EXHAUSTED
+            ):
                 raise ApplicationError(ErrorCode.CONFLICT, "Session package is not active")
-        if active is None:
+        if active is None and initial_entitlement_id is None:
             return EntitlementConsumption(
                 consumed_minutes=0,
                 active_entitlement_id=None,
@@ -273,7 +284,9 @@ class EntitlementService:
                         zone_id,
                     )
                 except ValueError as error:
-                    raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+                    active = await self._repository.get_active_for_client(client_id)
+                    if active is None:
+                        raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
             if not active.is_compatible(zone_id) or not active.is_available_at(moment):
                 break
             take = min(remaining_to_consume, active.remaining_minutes)
@@ -281,7 +294,7 @@ class EntitlementService:
                 exhausted.append(active.id)
                 continue
             try:
-                updated = await self._repository.consume_for_client(
+                updated, consumed_now = await self._repository.consume_for_client(
                     active.id,
                     client_id,
                     take,
@@ -289,8 +302,10 @@ class EntitlementService:
                 )
             except ValueError as error:
                 raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-            consumed += take
-            remaining_to_consume -= take
+            consumed += consumed_now
+            remaining_to_consume -= consumed_now
+            if consumed_now == 0:
+                break
             if updated.status is EntitlementStatus.EXHAUSTED:
                 exhausted.append(updated.id)
         active = await self._repository.get_active_for_client(client_id)

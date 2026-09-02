@@ -373,7 +373,7 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `125 passed, 12 skipped` без DSN; `137 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q` | `128 passed, 12 skipped` без DSN; `141 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, locked delta, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
 | `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
 | `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
 | `cd frontend && npm run typecheck` | успешно (повторено 2026-09-02) | TypeScript compile/type boundary |

@@ -250,7 +250,7 @@ class PostgresEntitlementRepository:
                 model.remaining_minutes = updated.remaining_minutes
                 model.status = updated.status.value
                 model.ended_at = updated.ended_at
-                return updated
+                return updated, item.remaining_minutes - updated.remaining_minutes
 
     async def burn_for_client(
         self,

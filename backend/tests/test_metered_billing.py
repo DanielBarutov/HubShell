@@ -368,6 +368,119 @@ async def test_package_purchased_during_uncovered_active_session_activates_immed
 
 
 @pytest.mark.asyncio
+async def test_package_purchased_with_active_package_stays_queued() -> None:
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        _billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(clock)
+    first = await entitlements.purchase(client.id, tariff.id, "operator", "active-package-1")
+    await entitlements.activate(first.id, client.id)
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="active-package-session",
+    )
+
+    second = await entitlements.purchase(client.id, tariff.id, "operator", "active-package-2")
+
+    assert second.status is EntitlementStatus.QUEUED
+    assert second.queue_position == first.queue_position + 1
+    assert (await entitlements.get_active_for_client(client.id)).id == first.id
+    assert session.status.value == "active"
+
+
+@pytest.mark.asyncio
+async def test_parallel_package_consumers_count_actual_locked_delta() -> None:
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        _billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(clock, duration_minutes=3)
+    package = await entitlements.purchase(client.id, tariff.id, "operator", "parallel-package")
+    await entitlements.activate(package.id, client.id)
+    await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="parallel-package-session",
+    )
+
+    results = await asyncio.gather(
+        *(
+            entitlements.consume_for_session(
+                client.id,
+                "vip",
+                2,
+                now=clock.current,
+                initial_entitlement_id=package.id,
+            )
+            for _ in range(2)
+        )
+    )
+
+    assert sorted(result.consumed_minutes for result in results) == [1, 2]
+    assert sum(result.consumed_minutes for result in results) == 3
+    assert (await entitlements.get(package.id)).status is EntitlementStatus.EXHAUSTED
+
+
+@pytest.mark.asyncio
+async def test_auto_next_accepts_exhausted_session_package_baseline() -> None:
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        _billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(clock, duration_minutes=1)
+    first = await entitlements.purchase(client.id, tariff.id, "operator", "baseline-package-1")
+    second = await entitlements.purchase(client.id, tariff.id, "operator", "baseline-package-2")
+    await entitlements.activate(first.id, client.id)
+    await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="baseline-package-session",
+    )
+    await entitlements.consume_for_session(
+        client.id,
+        "vip",
+        1,
+        now=clock.current,
+        initial_entitlement_id=first.id,
+    )
+
+    result = await entitlements.consume_for_session(
+        client.id,
+        "vip",
+        1,
+        now=clock.current,
+        initial_entitlement_id=first.id,
+    )
+
+    assert result.consumed_minutes == 1
+    assert result.active_entitlement_id is None
+    assert result.exhausted_entitlement_ids == (second.id,)
+
+
+@pytest.mark.asyncio
 async def test_windowed_package_consumes_only_minutes_inside_local_window() -> None:
     clock = FixedClock()
     clock.current = datetime.datetime(2026, 8, 29, 18, tzinfo=datetime.UTC)

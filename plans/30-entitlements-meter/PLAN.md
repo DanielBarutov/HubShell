@@ -43,7 +43,8 @@ grant именно на успешный portal login.
 для activation/consume/burn, auto-next, immediate activation при пустой
 очереди, monotonic meter package state и server snapshot. Device session
 получает durable `login_grant_minutes=5`; portal activation остаётся отдельным
-явным действием. Unit/API slice подтверждён 125 тестами.
+явным действием. Unit/API slice подтверждён 128 тестами; полный DSN suite после
+concurrency-коррекции прошёл 140 тестов.
 
 ## Входит в план
 

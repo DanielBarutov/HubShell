@@ -48,8 +48,8 @@ class EntitlementRepository(typing.Protocol):
         client_id: uuid.UUID,
         minutes: int,
         now: datetime.datetime,
-    ) -> Entitlement:
-        """Atomically consume minutes from one entitlement."""
+    ) -> tuple[Entitlement, int]:
+        """Atomically consume minutes and return the actual consumed delta."""
 
     async def burn_for_client(
         self,
