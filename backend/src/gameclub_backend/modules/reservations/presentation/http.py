@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.reservations.application.service import ReservationService
 from gameclub_backend.modules.reservations.domain import (
+    EntryDecision,
     Reservation,
     ReservationAvailability,
     ReservationStatus,
@@ -16,6 +17,7 @@ from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("reservations.manage"))]
 QueryDatetime = typing.Annotated[datetime.datetime, Query()]
+QueryEntryAt = typing.Annotated[datetime.datetime | None, Query()]
 
 
 class CreateReservationRequest(BaseModel):
@@ -54,6 +56,19 @@ class CheckAvailabilityResponse(BaseModel):
     @classmethod
     def from_domain(cls, availability: ReservationAvailability) -> "CheckAvailabilityResponse":
         return cls.model_validate(availability, from_attributes=True)
+
+
+class EntryDecisionResponse(BaseModel):
+    allowed: bool
+    reason: str
+    reservation_id: uuid.UUID | None
+    assigned_client_id: uuid.UUID | None
+    starts_at: datetime.datetime | None
+    ends_at: datetime.datetime | None
+
+    @classmethod
+    def from_domain(cls, decision: EntryDecision) -> "EntryDecisionResponse":
+        return cls.model_validate(decision, from_attributes=True)
 
 
 class ReservationResponse(BaseModel):
@@ -111,6 +126,23 @@ def create_router(service: ReservationService) -> APIRouter:
         del principal
         availability = await service.check_availability(**body.model_dump())
         return CheckAvailabilityResponse.from_domain(availability)
+
+    @router.get("/entry-decision", response_model=EntryDecisionResponse)
+    async def check_entry(
+        workstation_id: uuid.UUID,
+        principal: Operator,
+        client_id: uuid.UUID | None = None,
+        guest_id: uuid.UUID | None = None,
+        at: QueryEntryAt = None,
+    ) -> EntryDecisionResponse:
+        del principal
+        decision = await service.check_entry(
+            workstation_id=workstation_id,
+            client_id=client_id,
+            guest_id=guest_id,
+            now=at,
+        )
+        return EntryDecisionResponse.from_domain(decision)
 
     @router.post("/{reservation_id}/cancel", response_model=ReservationResponse)
     async def cancel_reservation(

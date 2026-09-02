@@ -1,6 +1,6 @@
 # GameClub / HubShell — сводка проекта
 
-Дата среза: `2026-08-30`<br>
+Дата среза: `2026-09-02`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
 Этот файл фиксирует фактическое состояние кода, планов и проверок на дату среза.
@@ -46,6 +46,17 @@ GameClub — операторская система игрового клуба
 | Background workers | Dramatiq/Redis | billing reconciliation, reservation no-show, кассовое расписание |
 | PostgreSQL/Redis | infrastructure adapters | долговременные факты/настройки и технический кэш/брокер |
 
+Сравнение с обязательными продуктовыми контрактами выполнено и оформлено в
+[`plans/29-contract-alignment/PLAN.md`](29-contract-alignment/PLAN.md). Текущий
+срез добавляет durable entitlement queue и consumption с окнами/auto-next,
+device login-grant, payment parts, guest paid-start prerequisite, entry
+decision, one-active-client guard, session snapshot, transfer, offline replay и
+portal/WinUI queue activation. Полное контрактное закрытие ещё не достигнуто:
+не завершены cross-owner settlement UoW, heartbeat/read-model evidence, часть
+operator UI и native Windows evidence. Остаток нарезан на планы
+[`30–34`](30-entitlements-meter/PLAN.md), [`35`](35-frontend-contract-consumers/PLAN.md),
+[`36`](36-winui-contract-consumers/PLAN.md) и [`37`](37-platform-integration-evidence/PLAN.md).
+
 ## 3. Карта репозитория
 
 | Путь | Что находится внутри | Роль |
@@ -54,7 +65,7 @@ GameClub — операторская система игрового клуба
 | [`backend/src/gameclub_backend/`](../backend/src/gameclub_backend/) | composition root, application, modules, jobs, HTTP/gRPC | реализация backend |
 | [`backend/src/gameclub_backend/modules/`](../backend/src/gameclub_backend/modules/) | bounded contexts | домен, use cases, repositories, handlers |
 | [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) | source-of-truth `.proto` | native gRPC-контракты |
-| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0033` | схема PostgreSQL; текущая голова `20260830_0033` |
+| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0046` | схема PostgreSQL; текущая голова `20260902_0046` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
 | [`frontend/src/App.tsx`](../frontend/src/App.tsx) | текущий operator shell и основные flows | UI orchestration; бизнес-расчёты остаются в backend |
@@ -171,15 +182,15 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и сертификаты |
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
 | Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
-| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | расширение discount/version matrix и будущие entitlements/order semantics |
-| Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support | PostgreSQL concurrency matrix и дальнейшие reservation policies |
-| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration | native device runtime и production enrollment |
-| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing | bonus/refund/reserve/external finance — отдельный backlog |
+| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | entitlement package consumption, time windows and next-compatible auto-start |
+| Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | WinUI/operator decision consumer and PostgreSQL concurrency matrix |
+| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot | PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
+| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing with login-grant subtraction | entitlement-aware billing, guest direct settlement reconciliation; bonus/refund/reserve/external finance — отдельный backlog |
 | Reports/Dashboard | read-only current revenue/dashboard data and audit-backed activity | расширенные reports/read models по нагрузке |
 | Cash Shifts | open/close, cash ledger, movements, references, approvals, schedules, provider-neutral producer boundary | реальные provider/webhook producers и отдельные finance integrations |
-| Product Sales | client/guest sale, stock reservation, price/cost/category snapshots, balance/cash settlement boundary, idempotency, HTTP API | basket/order, returns, bonuses, external acquirer |
+| Product Sales | client/guest sale, stock reservation, price/cost/category snapshots, balance/cash settlement boundary, mixed payment parts, idempotency, HTTP API | atomic cross-part reconciliation, basket/order, returns, bonuses, external acquirer |
 | Analytics | read-only overview/client analytics, daily/hourly dynamics, occupancy, zones/PC/tariffs/payment methods, margin, segments, CSV и gRPC read contract | фоновые отчёты через Dramatiq; retention/cohorts, heavy projections, XLSX/PDF |
-| Payment Methods | CRUD `/api/v1/payment-methods`, validation, PostgreSQL repository, migration seeds `balance`/`cash`, settings UI | проведение оплаты остаётся у Balance/Cash/Sales; provider methods добавляются отдельно |
+| Payment Methods | CRUD `/api/v1/payment-methods`, validation, PostgreSQL repository, migration seeds `balance`/`cash`, settings UI | provider activation/settlement integrations добавляются отдельно |
 
 ### HTTP BFF surface
 
@@ -253,8 +264,9 @@ Generated Python находится в `backend/src/gameclub/v1/`, а C# project
 permissions, баланса, stock и идемпотентности выполняются backend.
 
 Отложено на стороне frontend: полноценный realtime transport, расширенная
-browser/device matrix, order/entitlement checkout для смешанных тарифов,
-production-scale UI для тяжёлых отчётов и native Windows flows.
+browser/device matrix, order checkout для смешанных тарифов сверх базовой
+entitlement queue, production-scale UI для тяжёлых отчётов и native Windows
+flows.
 
 ## 8. Windows client
 
@@ -265,12 +277,13 @@ production-scale UI для тяжёлых отчётов и native Windows flows
 | `Domain` | connection state, heartbeat, command/session snapshots, lockdown policy |
 | `Application` | access-gate и session coordinators, ports для backend/token/executor |
 | `Infrastructure` | gRPC adapter, bearer metadata, health, enrollment, token storage, Windows command/power adapters, endpoint policy |
-| `Presentation` | WinUI `MainWindow`, `App`, `MainViewModel`, fullscreen Locked shell |
+| `Presentation` | WinUI `MainWindow`, `App`, `MainViewModel`, pre-auth fullscreen Locked gate и задел под post-auth widget |
 | `tests` | access-gate, session coordinator, password verifier, command executor |
 
 Уже реализовано в source-level срезе:
 
-- borderless fullscreen locked shell; compact toggle убран из пользовательского flow;
+- borderless fullscreen locked gate; после авторизации compact borderless
+  widget, always-on-top и hide/show tray button;
 - MAC enrollment, installation identity в AppData, device JWT и bearer metadata;
 - server-streaming command receiver с `expires_at`, ACK/NACK, reconnect backoff
   и ограниченным in-memory duplicate guard;
@@ -286,17 +299,20 @@ production-scale UI для тяжёлых отчётов и native Windows flows
   `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
   зашитыми non-secret HTTPS endpoint metadata для передачи на клиентский ПК.
 - server-backed register/login/profile/history screen показывает баланс,
-  операции, списания времени, товары, тарифы/сессии и доступное время.
+  операции, списания времени, товары, тарифы/сессии и доступное время; portal
+  snapshot теперь передаёт ordered package queue и explicit activation RPC/UI.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
 
-Не закрыто: production hardening enrollment/rebind/token rotation, native `dotnet restore/build/test`, запуск под обычным пользователем,
-реальный reconnect/theme/restart smoke и Assigned Access/Shell Launcher с
-ограничением Explorer/Alt+Tab/других приложений. App-level lock не считается
-заменой Windows security boundary. Детали — в
+Не закрыто: cross-owner settlement/reconciliation UoW, heartbeat/read-model
+evidence, production hardening enrollment/rebind/token rotation, native
+`dotnet restore/build/test`, запуск под обычным пользователем, реальный
+reconnect/theme/restart smoke и Assigned Access/Shell Launcher с ограничением
+Explorer/Alt+Tab/других приложений. App-level lock не считается заменой Windows
+security boundary. Детали — в
 [`win-client/docs/SUPPORT-MATRIX.md`](../win-client/docs/SUPPORT-MATRIX.md) и
-[`plans/22-windows-lockdown/PLAN.md`](22-windows-lockdown/PLAN.md).
+[`plans/29-contract-alignment/PLAN.md`](29-contract-alignment/PLAN.md).
 
 ## 9. История сделанных срезов
 
@@ -336,7 +352,7 @@ Windows-клиент не хранит баланс и не выполняет �
       миграциями `0032/0033`;
     - `ClientPortalService` в gRPC с device-scoped registration/login и
       client-scoped JWT, histories и available time;
-    - WinUI fullscreen shell и server-backed login/register/profile/history;
+    - WinUI pre-auth fullscreen gate и server-backed login/register/profile/history;
     - portable publish получил baked HTTPS endpoint parameters и не требует
       env/bootstrap/token/PIN setup на игровом ПК.
     - enrollment получает понятный rejected-state при конфликте installation id;
@@ -357,13 +373,13 @@ Windows-клиент не хранит баланс и не выполняет �
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `108 passed, 12 skipped` | unit/API/contract/jobs и memory-backed flows, включая HTTP enrollment и in-process gRPC portal scope; skipped требуют PostgreSQL DSN |
-| `cd backend && uv run ruff check .` | успешно | lint backend |
-| `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 3 старых неформатированных файла |
-| `cd frontend && npm run typecheck` | успешно | TypeScript compile/type boundary |
-| `cd frontend && npm run build` | успешно | production Vite build |
+| `cd backend && uv run pytest -q` | `125 passed, 12 skipped` без DSN; `137 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
+| `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
+| `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
+| `cd frontend && npm run typecheck` | успешно (повторено 2026-09-02) | TypeScript compile/type boundary |
+| `cd frontend && npm run build` | успешно (повторено 2026-09-02) | production Vite build |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
-| `docker compose up -d --build` | успешно | full local stack пересобран; migrations `20260830_0032` и `20260830_0033` применены, HTTP/gRPC/frontend healthy |
+| `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | full local stack собран и поднят; PostgreSQL/Redis healthy, migrations применены до `20260902_0046`, HTTP/frontend smoke прошёл; native Windows client в compose не входит |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
 | Live HTTP smoke | успешно | fresh operator token, `/auth/me`, payment methods, analytics 200, sales 200, auth-aware error path |
 | Redis cache smoke | TTL около `16 s` сразу после чтения | cache key created with bounded 20 s TTL; Redis не заменяет DB |
@@ -384,6 +400,12 @@ Windows-клиент не хранит баланс и не выполняет �
 ## 11. Следующие задачи
 
 ### P0 — доказать текущий MVP
+
+0. Дочерние планы [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
+   реализованы на source/unit-уровне и остаются в `in_progress` до закрытия
+   своих integration/native критериев. Следующий обязательный шаг —
+   [`37`](37-platform-integration-evidence/PLAN.md): PostgreSQL/Compose,
+   headed browser, Windows native/kiosk и security evidence.
 
 1. Запустить backend suite с реальными `GAMECLUB_TEST_POSTGRES_DSN` и
    `GAMECLUB_TEST_REDIS_URL`, затем закрыть или документировать каждый skipped
@@ -420,7 +442,7 @@ Windows-клиент не хранит баланс и не выполняет �
 ### Product backlog
 
 - внешние payment provider/webhook integrations;
-- order/entitlements для смешанной корзины тарифов, basket/returns;
+- basket/returns и order-семантика сверх entitlement queue из P0-плана;
 - bonus spending, reservations of funds, refunds и guest cashier flow;
 - retention/cohort/LTV и тяжёлые read projections, XLSX/PDF reports;
 - notifications, employees/roles, расширенный audit;

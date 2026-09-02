@@ -4,10 +4,11 @@ import datetime
 import uuid
 
 from sqlalchemy import DateTime, Integer, String, select, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.modules.sales.domain import (
     ProductPaymentMethod,
     ProductSale,
@@ -44,6 +45,10 @@ class ProductSaleModel(SalesBase):
     completed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    payment_parts: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
 
     def to_domain(self) -> ProductSale:
         return ProductSale(
@@ -65,6 +70,8 @@ class ProductSaleModel(SalesBase):
             idempotency_key=self.idempotency_key,
             created_at=self.created_at,
             completed_at=self.completed_at,
+            payment_parts=tuple(PaymentPart.from_dict(part) for part in (self.payment_parts or [])),
+            settlement_error=self.settlement_error,
         )
 
     @classmethod
@@ -91,6 +98,8 @@ class ProductSaleModel(SalesBase):
                     "idempotency_key": sale.idempotency_key,
                     "created_at": sale.created_at,
                     "completed_at": sale.completed_at,
+                    "payment_parts": [part.as_dict() for part in sale.payment_parts],
+                    "settlement_error": sale.settlement_error,
                 }.items()
             }
         )
@@ -189,6 +198,19 @@ class PostgresProductSaleRepository:
                 model.status = ProductSaleStatus.CANCELLED.value
                 return model.to_domain()
 
+    async def mark_needs_review(self, sale: ProductSale, error: str) -> ProductSale:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
+                if model is None:
+                    raise ValueError("Product sale not found")
+                if model.status == ProductSaleStatus.COMPLETED.value:
+                    return model.to_domain()
+                reviewed = model.to_domain().needs_review(error)
+                model.status = reviewed.status.value
+                model.settlement_error = reviewed.settlement_error
+                return reviewed
+
     async def list_sales(
         self,
         start_at: datetime.datetime | None = None,
@@ -196,7 +218,11 @@ class PostgresProductSaleRepository:
         client_id: uuid.UUID | None = None,
         limit: int = 100,
     ) -> list[ProductSale]:
-        filters = [ProductSaleModel.status == ProductSaleStatus.COMPLETED.value]
+        filters = [
+            ProductSaleModel.status.in_(
+                [ProductSaleStatus.COMPLETED.value, ProductSaleStatus.NEEDS_REVIEW.value]
+            )
+        ]
         if start_at is not None:
             filters.append(ProductSaleModel.created_at >= start_at)
         if end_at is not None:

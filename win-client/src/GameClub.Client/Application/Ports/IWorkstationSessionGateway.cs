@@ -19,4 +19,35 @@ public interface IWorkstationSessionGateway
         string sessionId,
         string deviceId,
         CancellationToken cancellationToken = default);
+
+    Task<SessionSnapshot> GetSessionSnapshotAsync(
+        string sessionId,
+        string deviceId,
+        CancellationToken cancellationToken = default);
+
+    Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
+        string sessionId,
+        string targetWorkstationId,
+        string deviceId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default);
+
+    Task<SessionTransferOfferSnapshot> GetTransferOfferAsync(
+        string offerId,
+        string deviceId,
+        string token,
+        CancellationToken cancellationToken = default);
+
+    Task<SessionTransferResultSnapshot> ConfirmTransferAsync(
+        string offerId,
+        string deviceId,
+        string token,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default);
+
+    Task<OfflineBatchResultSnapshot> ReplayOfflineBatchAsync(
+        string sessionId,
+        string deviceId,
+        IReadOnlyCollection<OfflineOperationSnapshot> operations,
+        CancellationToken cancellationToken = default);
 }

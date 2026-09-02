@@ -8,6 +8,7 @@ from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("clients.manage"))]
@@ -31,6 +32,27 @@ class TopUpRequest(BaseModel):
     amount_cents: int = Field(default=0, ge=0)
     bonus_amount: int = Field(default=0, ge=0)
     reason: str = Field(min_length=1, max_length=255)
+    payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class PaymentPartRequest(BaseModel):
+    method: str = Field(min_length=1, max_length=64)
+    amount_cents: int = Field(gt=0)
+    reference: str | None = Field(default=None, max_length=256)
+
+
+class PaymentPartResponse(BaseModel):
+    method: str
+    amount_cents: int
+    reference: str | None
+
+    @classmethod
+    def from_domain(cls, part: PaymentPart) -> "PaymentPartResponse":
+        return cls(
+            method=part.method,
+            amount_cents=part.amount_cents,
+            reference=part.reference,
+        )
 
 
 class ClientResponse(BaseModel):
@@ -99,6 +121,7 @@ class BalanceOperationResponse(BaseModel):
     actor_id: str
     idempotency_key: str
     created_at: str
+    payment_parts: list[PaymentPartResponse]
 
     @classmethod
     def from_domain(cls, operation: BalanceOperation) -> "BalanceOperationResponse":
@@ -112,6 +135,9 @@ class BalanceOperationResponse(BaseModel):
             actor_id=operation.actor_id,
             idempotency_key=operation.idempotency_key,
             created_at=operation.created_at.isoformat(),
+            payment_parts=[
+                PaymentPartResponse.from_domain(part) for part in operation.payment_parts
+            ],
         )
 
 

@@ -1,4 +1,6 @@
 import datetime
+import json
+import secrets
 import typing
 import uuid
 
@@ -64,10 +66,29 @@ from gameclub_backend.modules.clients.application.portal import (
 )
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
+from gameclub_backend.modules.offline.application.service import OfflineReplayService
+from gameclub_backend.modules.offline.domain import (
+    OfflineBatch,
+    OfflineOperationKind,
+    OfflineOperationResult,
+)
+from gameclub_backend.modules.offline.domain import (
+    OfflineOperation as DomainOfflineOperation,
+)
 from gameclub_backend.modules.reservations.application.service import ReservationService
-from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
+from gameclub_backend.modules.reservations.domain import (
+    EntryDecision,
+    Reservation,
+    ReservationStatus,
+)
 from gameclub_backend.modules.sessions.application.service import SessionService
-from gameclub_backend.modules.sessions.domain import Session, SessionStatus
+from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
+from gameclub_backend.modules.sessions.domain import (
+    Session,
+    SessionSnapshot,
+    SessionStatus,
+    SessionTransferOffer,
+)
 from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
@@ -751,6 +772,14 @@ def to_balance_operation_proto(
         reason=operation.reason,
         actor_id=operation.actor_id,
         idempotency_key=operation.idempotency_key,
+        payment_parts=[
+            clients_pb2.PaymentPart(
+                method=part.method,
+                amount_cents=part.amount_cents,
+                reference=part.reference or "",
+            )
+            for part in operation.payment_parts
+        ],
     )
     created_at = to_timestamp(operation.created_at)
     if created_at is not None:
@@ -771,6 +800,14 @@ def to_portal_snapshot_proto(
                 bonus_amount=operation.bonus_amount,
                 reason=operation.reason,
                 created_at=to_timestamp(operation.created_at),
+                payment_parts=[
+                    clients_pb2.PaymentPart(
+                        method=part.method,
+                        amount_cents=part.amount_cents,
+                        reference=part.reference or "",
+                    )
+                    for part in operation.payment_parts
+                ],
             )
             for operation in snapshot.balance_operations
         ],
@@ -813,6 +850,22 @@ def to_portal_snapshot_proto(
             for purchase in snapshot.purchases
         ],
         available_time_minutes=snapshot.available_time_minutes,
+        entitlements=[
+            clients_pb2.PortalEntitlement(
+                id=str(item.id),
+                tariff_id=str(item.tariff_id),
+                zone_id=item.zone_id or "",
+                duration_minutes=item.duration_minutes,
+                remaining_minutes=item.remaining_minutes,
+                price_cents=item.price_cents,
+                queue_position=item.queue_position,
+                status=item.status.value,
+                tariff_name=snapshot.tariff_names.get(item.tariff_id, ""),
+                purchased_at=to_timestamp(item.purchased_at),
+                activated_at=to_timestamp(item.activated_at),
+            )
+            for item in snapshot.entitlements
+        ],
     )
     return response
 
@@ -891,6 +944,14 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
                 reason=request.reason,
                 actor_id=principal.subject_id,
                 idempotency_key=request.idempotency_key,
+                payment_parts=[
+                    {
+                        "method": part.method,
+                        "amount_cents": part.amount_cents,
+                        "reference": part.reference or None,
+                    }
+                    for part in request.payment_parts
+                ],
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1045,6 +1106,30 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             await abort_application_error(context, error)
         return to_portal_snapshot_proto(snapshot)
 
+    async def ActivateEntitlement(
+        self,
+        request: clients_pb2.ActivateEntitlementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSnapshot:
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.activate_entitlement(
+                parse_uuid(principal.subject_id, "client_id"),
+                parse_uuid(request.entitlement_id, "entitlement_id"),
+                request.device_id,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_portal_snapshot_proto(snapshot)
+
     async def _issue_session(
         self,
         client: Client,
@@ -1106,6 +1191,12 @@ def to_tariff_proto(tariff: Tariff) -> catalog_pb2.Tariff:
         price_per_minute_cents=tariff.price_per_minute_cents,
         free_minutes=tariff.free_minutes,
     )
+    if tariff.window_start_minute is not None:
+        response.window_start_minute = tariff.window_start_minute
+    if tariff.window_end_minute is not None:
+        response.window_end_minute = tariff.window_end_minute
+    if tariff.window_timezone is not None:
+        response.window_timezone = tariff.window_timezone
     valid_from = to_timestamp(tariff.valid_from)
     valid_to = to_timestamp(tariff.valid_to)
     if valid_from is not None:
@@ -1204,6 +1295,13 @@ class CatalogGrpcService(catalog_pb2_grpc.CatalogServiceServicer):
                 }.get(request.billing_mode, BillingMode.BLOCK),
                 price_per_minute_cents=request.price_per_minute_cents,
                 free_minutes=request.free_minutes,
+                window_start_minute=(
+                    request.window_start_minute if request.HasField("window_start_minute") else None
+                ),
+                window_end_minute=(
+                    request.window_end_minute if request.HasField("window_end_minute") else None
+                ),
+                window_timezone=request.window_timezone or None,
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1362,6 +1460,24 @@ def to_reservation_proto(reservation: Reservation) -> reservations_pb2.Reservati
     return response
 
 
+def to_entry_decision_proto(decision: EntryDecision) -> reservations_pb2.CheckEntryResponse:
+    response = reservations_pb2.CheckEntryResponse(
+        allowed=decision.allowed,
+        reason=decision.reason,
+        reservation_id=str(decision.reservation_id) if decision.reservation_id else "",
+        assigned_client_id=(
+            str(decision.assigned_client_id) if decision.assigned_client_id else ""
+        ),
+    )
+    starts_at = to_timestamp(decision.starts_at)
+    ends_at = to_timestamp(decision.ends_at)
+    if starts_at is not None:
+        response.starts_at.CopyFrom(starts_at)
+    if ends_at is not None:
+        response.ends_at.CopyFrom(ends_at)
+    return response
+
+
 class ReservationGrpcService(reservations_pb2_grpc.ReservationServiceServicer):
     def __init__(
         self,
@@ -1396,6 +1512,25 @@ class ReservationGrpcService(reservations_pb2_grpc.ReservationServiceServicer):
             ],
             reason=availability.reason or "",
         )
+
+    async def CheckEntry(
+        self,
+        request: reservations_pb2.CheckEntryRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> reservations_pb2.CheckEntryResponse:
+        await require_operator(context, self._token_service, "reservations.manage")
+        try:
+            decision = await self._service.check_entry(
+                workstation_id=parse_uuid(request.workstation_id, "workstation_id"),
+                client_id=parse_uuid(request.client_id, "client_id") if request.client_id else None,
+                guest_id=parse_uuid(request.guest_id, "guest_id") if request.guest_id else None,
+                now=from_timestamp(request.at, "at") if request.HasField("at") else None,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_entry_decision_proto(decision)
 
     async def Create(
         self,
@@ -1566,6 +1701,9 @@ def to_session_proto(session: Session) -> sessions_pb2.Session:
         idempotency_key=session.idempotency_key or "",
         tariff_id=str(session.tariff_id) if session.tariff_id else "",
         tariff_quantity=session.tariff_quantity,
+        guest_payment_id=str(session.guest_payment_id) if session.guest_payment_id else "",
+        login_grant_minutes=session.login_grant_minutes,
+        entitlement_id=str(session.entitlement_id) if session.entitlement_id else "",
     )
     for field_name, value in (
         ("started_at", session.started_at),
@@ -1577,14 +1715,107 @@ def to_session_proto(session: Session) -> sessions_pb2.Session:
     return response
 
 
+def to_package_snapshot_proto(item) -> sessions_pb2.PackageSnapshot:
+    return sessions_pb2.PackageSnapshot(
+        id=str(item.id),
+        tariff_id=str(item.tariff_id),
+        zone_id=item.zone_id or "",
+        duration_minutes=item.duration_minutes,
+        remaining_minutes=item.remaining_minutes,
+        queue_position=item.queue_position,
+        status=item.status.value,
+        window_start_minute=item.window_start_minute or 0,
+        window_end_minute=item.window_end_minute or 0,
+        window_timezone=item.window_timezone or "",
+    )
+
+
+def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.SessionSnapshot:
+    response = sessions_pb2.SessionSnapshot(
+        schema_version=snapshot.schema_version,
+        session=to_session_proto(snapshot.session),
+        workstation_id=str(snapshot.workstation_id),
+        device_id=snapshot.device_id,
+        zone_id=snapshot.zone_id or "",
+        client_id=str(snapshot.client_id) if snapshot.client_id else "",
+        balance_cents=snapshot.balance_cents or 0,
+        balance_bonus=snapshot.balance_bonus or 0,
+        package_queue=[to_package_snapshot_proto(item) for item in snapshot.entitlements],
+        allowed_actions=list(snapshot.allowed_actions),
+    )
+    server_time = to_timestamp(snapshot.server_time)
+    if server_time is not None:
+        response.server_time.CopyFrom(server_time)
+    if snapshot.active_entitlement is not None:
+        response.active_package.CopyFrom(to_package_snapshot_proto(snapshot.active_entitlement))
+    if snapshot.meter is not None:
+        meter = snapshot.meter
+        response.meter.CopyFrom(
+            sessions_pb2.SessionMeterSnapshot(
+                session_id=str(meter.session_id),
+                billed_minutes=meter.billed_minutes,
+                billed_cents=meter.billed_cents,
+                package_minutes=meter.package_minutes,
+                active_entitlement_id=(
+                    str(meter.active_entitlement_id) if meter.active_entitlement_id else ""
+                ),
+                status=meter.status.value,
+                updated_at=to_timestamp(meter.updated_at),
+            )
+        )
+    return response
+
+
+def to_transfer_offer_proto(offer: SessionTransferOffer) -> sessions_pb2.TransferOffer:
+    response = sessions_pb2.TransferOffer(
+        id=str(offer.id),
+        session_id=str(offer.session_id),
+        client_id=str(offer.client_id),
+        source_workstation_id=str(offer.source_workstation_id),
+        target_workstation_id=str(offer.target_workstation_id),
+        token=offer.token,
+        status=offer.status.value,
+        requires_package_burn=offer.requires_package_burn,
+        warning=offer.warning or "",
+    )
+    for field_name, value in (
+        ("created_at", offer.created_at),
+        ("expires_at", offer.expires_at),
+        ("confirmed_at", offer.confirmed_at),
+    ):
+        timestamp = to_timestamp(value)
+        if timestamp is not None:
+            getattr(response, field_name).CopyFrom(timestamp)
+    return response
+
+
+def to_offline_result_proto(
+    result: OfflineOperationResult,
+) -> sessions_pb2.OfflineOperationResult:
+    response = sessions_pb2.OfflineOperationResult(
+        operation_id=str(result.operation_id),
+        sequence=result.sequence,
+        status=result.status.value,
+        message=result.message,
+    )
+    applied_at = to_timestamp(result.applied_at)
+    if applied_at is not None:
+        response.applied_at.CopyFrom(applied_at)
+    return response
+
+
 class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
     def __init__(
         self,
         service: SessionService,
         token_service: JwtTokenService | None,
+        transfer_service: SessionTransferService | None = None,
+        offline_service: OfflineReplayService | None = None,
     ) -> None:
         self._service = service
         self._token_service = token_service
+        self._transfer_service = transfer_service
+        self._offline_service = offline_service
 
     async def Start(
         self,
@@ -1617,6 +1848,16 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
                 guest_id=parse_uuid(request.guest_id, "guest_id") if request.guest_id else None,
                 tariff_id=parse_uuid(request.tariff_id, "tariff_id") if request.tariff_id else None,
                 tariff_quantity=request.tariff_quantity or 1,
+                guest_payment_id=(
+                    parse_uuid(request.guest_payment_id, "guest_payment_id")
+                    if request.guest_payment_id
+                    else None
+                ),
+                entitlement_id=(
+                    parse_uuid(request.entitlement_id, "entitlement_id")
+                    if request.entitlement_id
+                    else None
+                ),
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1637,6 +1878,26 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
         except ApplicationError as error:
             await abort_application_error(context, error)
         return to_session_proto(session)
+
+    async def GetSnapshot(
+        self,
+        request: sessions_pb2.GetSessionSnapshotRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.SessionSnapshot:
+        principal = await require_session_actor(
+            context,
+            self._token_service,
+            request.device_id,
+        )
+        try:
+            snapshot = await self._service.snapshot(parse_uuid(request.session_id, "session_id"))
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        if principal.subject_type is SubjectType.DEVICE and snapshot.device_id != request.device_id:
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Session device does not match")
+        return to_session_snapshot_proto(snapshot)
 
     async def List(
         self,
@@ -1678,6 +1939,148 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
         except ApplicationError as error:
             await abort_application_error(context, error)
         return to_session_proto(session)
+
+    async def CreateTransferOffer(
+        self,
+        request: sessions_pb2.CreateTransferOfferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.TransferOffer:
+        if self._transfer_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Transfer service is not configured")
+        principal = await require_session_actor(
+            context,
+            self._token_service,
+            request.device_id,
+        )
+        try:
+            offer = await self._transfer_service.create_offer(
+                parse_uuid(request.session_id, "session_id"),
+                parse_uuid(request.target_workstation_id, "target_workstation_id"),
+                request.idempotency_key,
+                actor_device_id=(
+                    request.device_id if principal.subject_type is SubjectType.DEVICE else None
+                ),
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_transfer_offer_proto(offer)
+
+    async def GetTransferOffer(
+        self,
+        request: sessions_pb2.GetTransferOfferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.TransferOffer:
+        principal = await require_principal(context, self._token_service)
+        if not principal.can("sessions.manage"):
+            if principal.subject_type is not SubjectType.DEVICE:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "Transfer identity is not permitted",
+                )
+            if not request.device_id or principal.subject_id != request.device_id:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "Transfer identity is not permitted",
+                )
+        if not request.token and not principal.can("sessions.manage"):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Transfer token is required")
+        try:
+            offer = await self._transfer_service.get(parse_uuid(request.offer_id, "offer_id"))
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        if request.token and not secrets.compare_digest(request.token, offer.token):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Invalid transfer token")
+        return to_transfer_offer_proto(offer)
+
+    async def ConfirmTransfer(
+        self,
+        request: sessions_pb2.ConfirmTransferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.TransferResult:
+        principal = await require_session_actor(
+            context,
+            self._token_service,
+            request.device_id,
+        )
+        try:
+            offer = await self._transfer_service.get(parse_uuid(request.offer_id, "offer_id"))
+            confirmed, session = await self._transfer_service.confirm(
+                offer.id,
+                request.idempotency_key,
+                token=request.token or None,
+                actor_device_id=(
+                    request.device_id if principal.subject_type is SubjectType.DEVICE else None
+                ),
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return sessions_pb2.TransferResult(
+            offer=to_transfer_offer_proto(confirmed),
+            session=to_session_proto(session),
+        )
+
+    async def ReplayOfflineBatch(
+        self,
+        request: sessions_pb2.ReplayOfflineBatchRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.ReplayOfflineBatchResponse:
+        if self._offline_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Offline service is not configured")
+        principal = await require_session_actor(
+            context,
+            self._token_service,
+            request.device_id,
+        )
+        try:
+            session_id = parse_uuid(request.session_id, "session_id")
+            operations = []
+            for item in request.operations:
+                payload = json.loads(item.payload_json)
+                if not isinstance(payload, dict):
+                    raise ValueError("Offline payload must be a JSON object")
+                operations.append(
+                    DomainOfflineOperation(
+                        id=parse_uuid(item.id, "operation_id"),
+                        session_id=session_id,
+                        device_id=request.device_id,
+                        sequence=item.sequence,
+                        kind=OfflineOperationKind(item.kind),
+                        payload_json=item.payload_json,
+                        snapshot_version=item.snapshot_version,
+                        idempotency_key=item.idempotency_key,
+                        checksum=item.checksum,
+                        created_at=required_timestamp(item, "created_at"),
+                    )
+                )
+            result = await self._offline_service.replay(
+                OfflineBatch(
+                    protocol_version=request.protocol_version,
+                    device_id=request.device_id,
+                    session_id=session_id,
+                    operations=tuple(operations),
+                ),
+                actor_device_id=(
+                    request.device_id if principal.subject_type is SubjectType.DEVICE else None
+                ),
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        response = sessions_pb2.ReplayOfflineBatchResponse(
+            protocol_version=result.protocol_version,
+            session_id=str(result.session_id),
+            results=[to_offline_result_proto(item) for item in result.results],
+        )
+        if result.snapshot is not None:
+            response.snapshot.CopyFrom(to_session_snapshot_proto(result.snapshot))
+        return response
 
 
 def to_charge_proto(charge: SessionCharge) -> billing_pb2.SessionCharge:

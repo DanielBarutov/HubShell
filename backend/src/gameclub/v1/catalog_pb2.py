@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19gameclub/v1/catalog.proto\x12\x13gameclub.catalog.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8c\x01\n\x07Product\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\t\x12\x13\n\x0bprice_cents\x18\x04 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x05 \x01(\x08\x12\x18\n\x10\x63ost_price_cents\x18\x06 \x01(\x03\x12\x16\n\x0estock_quantity\x18\x07 \x01(\x03\"\x9d\x01\n\x14\x43reateProductRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x02 \x01(\t\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\x12\x18\n\x10\x63ost_price_cents\x18\x04 \x01(\x03\x12\x16\n\x0estock_quantity\x18\x05 \x01(\x03\x12\x13\n\x06\x61\x63tive\x18\x06 \x01(\x08H\x00\x88\x01\x01\x42\t\n\x07_active\"\x15\n\x13ListProductsRequest\"F\n\x14ListProductsResponse\x12.\n\x08products\x18\x01 \x03(\x0b\x32\x1c.gameclub.catalog.v1.Product\"\x9d\x03\n\x06Tariff\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08group_id\x18\x03 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x04 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x05 \x01(\x03\x12.\n\nvalid_from\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06\x61\x63tive\x18\x08 \x01(\x08\x12\x12\n\ntariff_key\x18\t \x01(\t\x12\x0f\n\x07version\x18\n \x01(\x05\x12\x37\n\tlifecycle\x18\x0b \x01(\x0e\x32$.gameclub.catalog.v1.TariffLifecycle\x12\x36\n\x0c\x62illing_mode\x18\x0c \x01(\x0e\x32 .gameclub.catalog.v1.BillingMode\x12\x1e\n\x16price_per_minute_cents\x18\r \x01(\x03\x12\x14\n\x0c\x66ree_minutes\x18\x0e \x01(\x05\"\xfd\x02\n\x13\x43reateTariffRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08group_id\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x03 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x04 \x01(\x03\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x12\n\ntariff_key\x18\x07 \x01(\t\x12\x37\n\tlifecycle\x18\x08 \x01(\x0e\x32$.gameclub.catalog.v1.TariffLifecycle\x12\x36\n\x0c\x62illing_mode\x18\t \x01(\x0e\x32 .gameclub.catalog.v1.BillingMode\x12\x1e\n\x16price_per_minute_cents\x18\n \x01(\x03\x12\x14\n\x0c\x66ree_minutes\x18\x0b \x01(\x05\"\x14\n\x12ListTariffsRequest\"C\n\x13ListTariffsResponse\x12,\n\x07tariffs\x18\x01 \x03(\x0b\x32\x1b.gameclub.catalog.v1.Tariff\")\n\x14PublishTariffRequest\x12\x11\n\ttariff_id\x18\x01 \x01(\t\")\n\x14\x41rchiveTariffRequest\x12\x11\n\ttariff_id\x18\x01 \x01(\t\"\xc1\x01\n\x0c\x44iscountRule\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x02 \x01(\t\x12\x13\n\x0bpercent_bps\x18\x03 \x01(\x05\x12\x10\n\x08priority\x18\x04 \x01(\x05\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06\x61\x63tive\x18\x07 \x01(\x08\"\xb2\x01\n\x19\x43reateDiscountRuleRequest\x12\x10\n\x08\x63\x61tegory\x18\x01 \x01(\t\x12\x13\n\x0bpercent_bps\x18\x02 \x01(\x05\x12\x10\n\x08priority\x18\x03 \x01(\x05\x12.\n\nvalid_from\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x1a\n\x18ListDiscountRulesRequest\"M\n\x19ListDiscountRulesResponse\x12\x30\n\x05rules\x18\x01 \x03(\x0b\x32!.gameclub.catalog.v1.DiscountRule\"\x1b\n\x19GetCatalogSnapshotRequest\"z\n\x0f\x43\x61talogSnapshot\x12,\n\x07tariffs\x18\x01 \x03(\x0b\x32\x1b.gameclub.catalog.v1.Tariff\x12\x39\n\x0e\x64iscount_rules\x18\x02 \x03(\x0b\x32!.gameclub.catalog.v1.DiscountRule\"\x81\x01\n\x0cQuoteRequest\x12\x18\n\x10\x64uration_minutes\x18\x01 \x01(\x05\x12\x10\n\x08group_id\x18\x02 \x01(\t\x12*\n\x06moment\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x11\x64iscount_category\x18\x04 \x01(\t\"\xce\x01\n\rQuoteResponse\x12\x11\n\ttariff_id\x18\x01 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x02 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\x12#\n\x1bprice_before_discount_cents\x18\x04 \x01(\x03\x12\x1d\n\x15\x64iscount_amount_cents\x18\x05 \x01(\x03\x12\x1c\n\x14\x64iscount_percent_bps\x18\x06 \x01(\x05\x12\x19\n\x11\x64iscount_category\x18\x07 \x01(\t*`\n\x0b\x42illingMode\x12\x1c\n\x18\x42ILLING_MODE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x42ILLING_MODE_BLOCK\x10\x01\x12\x1b\n\x17\x42ILLING_MODE_PER_MINUTE\x10\x02*\x8e\x01\n\x0fTariffLifecycle\x12 \n\x1cTARIFF_LIFECYCLE_UNSPECIFIED\x10\x00\x12\x1a\n\x16TARIFF_LIFECYCLE_DRAFT\x10\x01\x12\x1e\n\x1aTARIFF_LIFECYCLE_PUBLISHED\x10\x02\x12\x1d\n\x19TARIFF_LIFECYCLE_ARCHIVED\x10\x03\x32\xd3\x07\n\x0e\x43\x61talogService\x12X\n\rCreateProduct\x12).gameclub.catalog.v1.CreateProductRequest\x1a\x1c.gameclub.catalog.v1.Product\x12\x63\n\x0cListProducts\x12(.gameclub.catalog.v1.ListProductsRequest\x1a).gameclub.catalog.v1.ListProductsResponse\x12U\n\x0c\x43reateTariff\x12(.gameclub.catalog.v1.CreateTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12`\n\x0bListTariffs\x12\'.gameclub.catalog.v1.ListTariffsRequest\x1a(.gameclub.catalog.v1.ListTariffsResponse\x12W\n\rPublishTariff\x12).gameclub.catalog.v1.PublishTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12W\n\rArchiveTariff\x12).gameclub.catalog.v1.ArchiveTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12g\n\x12\x43reateDiscountRule\x12..gameclub.catalog.v1.CreateDiscountRuleRequest\x1a!.gameclub.catalog.v1.DiscountRule\x12r\n\x11ListDiscountRules\x12-.gameclub.catalog.v1.ListDiscountRulesRequest\x1a..gameclub.catalog.v1.ListDiscountRulesResponse\x12j\n\x12GetCatalogSnapshot\x12..gameclub.catalog.v1.GetCatalogSnapshotRequest\x1a$.gameclub.catalog.v1.CatalogSnapshot\x12N\n\x05Quote\x12!.gameclub.catalog.v1.QuoteRequest\x1a\".gameclub.catalog.v1.QuoteResponseB\'\xaa\x02$GameClub.Client.Contracts.Catalog.V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19gameclub/v1/catalog.proto\x12\x13gameclub.catalog.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8c\x01\n\x07Product\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\t\x12\x13\n\x0bprice_cents\x18\x04 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x05 \x01(\x08\x12\x18\n\x10\x63ost_price_cents\x18\x06 \x01(\x03\x12\x16\n\x0estock_quantity\x18\x07 \x01(\x03\"\x9d\x01\n\x14\x43reateProductRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x02 \x01(\t\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\x12\x18\n\x10\x63ost_price_cents\x18\x04 \x01(\x03\x12\x16\n\x0estock_quantity\x18\x05 \x01(\x03\x12\x13\n\x06\x61\x63tive\x18\x06 \x01(\x08H\x00\x88\x01\x01\x42\t\n\x07_active\"\x15\n\x13ListProductsRequest\"F\n\x14ListProductsResponse\x12.\n\x08products\x18\x01 \x03(\x0b\x32\x1c.gameclub.catalog.v1.Product\"\xa6\x04\n\x06Tariff\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08group_id\x18\x03 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x04 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x05 \x01(\x03\x12.\n\nvalid_from\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06\x61\x63tive\x18\x08 \x01(\x08\x12\x12\n\ntariff_key\x18\t \x01(\t\x12\x0f\n\x07version\x18\n \x01(\x05\x12\x37\n\tlifecycle\x18\x0b \x01(\x0e\x32$.gameclub.catalog.v1.TariffLifecycle\x12\x36\n\x0c\x62illing_mode\x18\x0c \x01(\x0e\x32 .gameclub.catalog.v1.BillingMode\x12\x1e\n\x16price_per_minute_cents\x18\r \x01(\x03\x12\x14\n\x0c\x66ree_minutes\x18\x0e \x01(\x05\x12 \n\x13window_start_minute\x18\x0f \x01(\x05H\x00\x88\x01\x01\x12\x1e\n\x11window_end_minute\x18\x10 \x01(\x05H\x01\x88\x01\x01\x12\x17\n\x0fwindow_timezone\x18\x11 \x01(\tB\x16\n\x14_window_start_minuteB\x14\n\x12_window_end_minute\"\x86\x04\n\x13\x43reateTariffRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08group_id\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x03 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x04 \x01(\x03\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x12\n\ntariff_key\x18\x07 \x01(\t\x12\x37\n\tlifecycle\x18\x08 \x01(\x0e\x32$.gameclub.catalog.v1.TariffLifecycle\x12\x36\n\x0c\x62illing_mode\x18\t \x01(\x0e\x32 .gameclub.catalog.v1.BillingMode\x12\x1e\n\x16price_per_minute_cents\x18\n \x01(\x03\x12\x14\n\x0c\x66ree_minutes\x18\x0b \x01(\x05\x12 \n\x13window_start_minute\x18\x0c \x01(\x05H\x00\x88\x01\x01\x12\x1e\n\x11window_end_minute\x18\r \x01(\x05H\x01\x88\x01\x01\x12\x17\n\x0fwindow_timezone\x18\x0e \x01(\tB\x16\n\x14_window_start_minuteB\x14\n\x12_window_end_minute\"\x14\n\x12ListTariffsRequest\"C\n\x13ListTariffsResponse\x12,\n\x07tariffs\x18\x01 \x03(\x0b\x32\x1b.gameclub.catalog.v1.Tariff\")\n\x14PublishTariffRequest\x12\x11\n\ttariff_id\x18\x01 \x01(\t\")\n\x14\x41rchiveTariffRequest\x12\x11\n\ttariff_id\x18\x01 \x01(\t\"\xc1\x01\n\x0c\x44iscountRule\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08\x63\x61tegory\x18\x02 \x01(\t\x12\x13\n\x0bpercent_bps\x18\x03 \x01(\x05\x12\x10\n\x08priority\x18\x04 \x01(\x05\x12.\n\nvalid_from\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06\x61\x63tive\x18\x07 \x01(\x08\"\xb2\x01\n\x19\x43reateDiscountRuleRequest\x12\x10\n\x08\x63\x61tegory\x18\x01 \x01(\t\x12\x13\n\x0bpercent_bps\x18\x02 \x01(\x05\x12\x10\n\x08priority\x18\x03 \x01(\x05\x12.\n\nvalid_from\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08valid_to\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x1a\n\x18ListDiscountRulesRequest\"M\n\x19ListDiscountRulesResponse\x12\x30\n\x05rules\x18\x01 \x03(\x0b\x32!.gameclub.catalog.v1.DiscountRule\"\x1b\n\x19GetCatalogSnapshotRequest\"z\n\x0f\x43\x61talogSnapshot\x12,\n\x07tariffs\x18\x01 \x03(\x0b\x32\x1b.gameclub.catalog.v1.Tariff\x12\x39\n\x0e\x64iscount_rules\x18\x02 \x03(\x0b\x32!.gameclub.catalog.v1.DiscountRule\"\x81\x01\n\x0cQuoteRequest\x12\x18\n\x10\x64uration_minutes\x18\x01 \x01(\x05\x12\x10\n\x08group_id\x18\x02 \x01(\t\x12*\n\x06moment\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x11\x64iscount_category\x18\x04 \x01(\t\"\xce\x01\n\rQuoteResponse\x12\x11\n\ttariff_id\x18\x01 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x02 \x01(\x05\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\x12#\n\x1bprice_before_discount_cents\x18\x04 \x01(\x03\x12\x1d\n\x15\x64iscount_amount_cents\x18\x05 \x01(\x03\x12\x1c\n\x14\x64iscount_percent_bps\x18\x06 \x01(\x05\x12\x19\n\x11\x64iscount_category\x18\x07 \x01(\t*`\n\x0b\x42illingMode\x12\x1c\n\x18\x42ILLING_MODE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x42ILLING_MODE_BLOCK\x10\x01\x12\x1b\n\x17\x42ILLING_MODE_PER_MINUTE\x10\x02*\x8e\x01\n\x0fTariffLifecycle\x12 \n\x1cTARIFF_LIFECYCLE_UNSPECIFIED\x10\x00\x12\x1a\n\x16TARIFF_LIFECYCLE_DRAFT\x10\x01\x12\x1e\n\x1aTARIFF_LIFECYCLE_PUBLISHED\x10\x02\x12\x1d\n\x19TARIFF_LIFECYCLE_ARCHIVED\x10\x03\x32\xd3\x07\n\x0e\x43\x61talogService\x12X\n\rCreateProduct\x12).gameclub.catalog.v1.CreateProductRequest\x1a\x1c.gameclub.catalog.v1.Product\x12\x63\n\x0cListProducts\x12(.gameclub.catalog.v1.ListProductsRequest\x1a).gameclub.catalog.v1.ListProductsResponse\x12U\n\x0c\x43reateTariff\x12(.gameclub.catalog.v1.CreateTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12`\n\x0bListTariffs\x12\'.gameclub.catalog.v1.ListTariffsRequest\x1a(.gameclub.catalog.v1.ListTariffsResponse\x12W\n\rPublishTariff\x12).gameclub.catalog.v1.PublishTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12W\n\rArchiveTariff\x12).gameclub.catalog.v1.ArchiveTariffRequest\x1a\x1b.gameclub.catalog.v1.Tariff\x12g\n\x12\x43reateDiscountRule\x12..gameclub.catalog.v1.CreateDiscountRuleRequest\x1a!.gameclub.catalog.v1.DiscountRule\x12r\n\x11ListDiscountRules\x12-.gameclub.catalog.v1.ListDiscountRulesRequest\x1a..gameclub.catalog.v1.ListDiscountRulesResponse\x12j\n\x12GetCatalogSnapshot\x12..gameclub.catalog.v1.GetCatalogSnapshotRequest\x1a$.gameclub.catalog.v1.CatalogSnapshot\x12N\n\x05Quote\x12!.gameclub.catalog.v1.QuoteRequest\x1a\".gameclub.catalog.v1.QuoteResponseB\'\xaa\x02$GameClub.Client.Contracts.Catalog.V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,10 +33,10 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gameclub.v1.catalog_pb2', _
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\252\002$GameClub.Client.Contracts.Catalog.V1'
-  _globals['_BILLINGMODE']._serialized_start=2436
-  _globals['_BILLINGMODE']._serialized_end=2532
-  _globals['_TARIFFLIFECYCLE']._serialized_start=2535
-  _globals['_TARIFFLIFECYCLE']._serialized_end=2677
+  _globals['_BILLINGMODE']._serialized_start=2710
+  _globals['_BILLINGMODE']._serialized_end=2806
+  _globals['_TARIFFLIFECYCLE']._serialized_start=2809
+  _globals['_TARIFFLIFECYCLE']._serialized_end=2951
   _globals['_PRODUCT']._serialized_start=84
   _globals['_PRODUCT']._serialized_end=224
   _globals['_CREATEPRODUCTREQUEST']._serialized_start=227
@@ -46,33 +46,33 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LISTPRODUCTSRESPONSE']._serialized_start=409
   _globals['_LISTPRODUCTSRESPONSE']._serialized_end=479
   _globals['_TARIFF']._serialized_start=482
-  _globals['_TARIFF']._serialized_end=895
-  _globals['_CREATETARIFFREQUEST']._serialized_start=898
-  _globals['_CREATETARIFFREQUEST']._serialized_end=1279
-  _globals['_LISTTARIFFSREQUEST']._serialized_start=1281
-  _globals['_LISTTARIFFSREQUEST']._serialized_end=1301
-  _globals['_LISTTARIFFSRESPONSE']._serialized_start=1303
-  _globals['_LISTTARIFFSRESPONSE']._serialized_end=1370
-  _globals['_PUBLISHTARIFFREQUEST']._serialized_start=1372
-  _globals['_PUBLISHTARIFFREQUEST']._serialized_end=1413
-  _globals['_ARCHIVETARIFFREQUEST']._serialized_start=1415
-  _globals['_ARCHIVETARIFFREQUEST']._serialized_end=1456
-  _globals['_DISCOUNTRULE']._serialized_start=1459
-  _globals['_DISCOUNTRULE']._serialized_end=1652
-  _globals['_CREATEDISCOUNTRULEREQUEST']._serialized_start=1655
-  _globals['_CREATEDISCOUNTRULEREQUEST']._serialized_end=1833
-  _globals['_LISTDISCOUNTRULESREQUEST']._serialized_start=1835
-  _globals['_LISTDISCOUNTRULESREQUEST']._serialized_end=1861
-  _globals['_LISTDISCOUNTRULESRESPONSE']._serialized_start=1863
-  _globals['_LISTDISCOUNTRULESRESPONSE']._serialized_end=1940
-  _globals['_GETCATALOGSNAPSHOTREQUEST']._serialized_start=1942
-  _globals['_GETCATALOGSNAPSHOTREQUEST']._serialized_end=1969
-  _globals['_CATALOGSNAPSHOT']._serialized_start=1971
-  _globals['_CATALOGSNAPSHOT']._serialized_end=2093
-  _globals['_QUOTEREQUEST']._serialized_start=2096
-  _globals['_QUOTEREQUEST']._serialized_end=2225
-  _globals['_QUOTERESPONSE']._serialized_start=2228
-  _globals['_QUOTERESPONSE']._serialized_end=2434
-  _globals['_CATALOGSERVICE']._serialized_start=2680
-  _globals['_CATALOGSERVICE']._serialized_end=3659
+  _globals['_TARIFF']._serialized_end=1032
+  _globals['_CREATETARIFFREQUEST']._serialized_start=1035
+  _globals['_CREATETARIFFREQUEST']._serialized_end=1553
+  _globals['_LISTTARIFFSREQUEST']._serialized_start=1555
+  _globals['_LISTTARIFFSREQUEST']._serialized_end=1575
+  _globals['_LISTTARIFFSRESPONSE']._serialized_start=1577
+  _globals['_LISTTARIFFSRESPONSE']._serialized_end=1644
+  _globals['_PUBLISHTARIFFREQUEST']._serialized_start=1646
+  _globals['_PUBLISHTARIFFREQUEST']._serialized_end=1687
+  _globals['_ARCHIVETARIFFREQUEST']._serialized_start=1689
+  _globals['_ARCHIVETARIFFREQUEST']._serialized_end=1730
+  _globals['_DISCOUNTRULE']._serialized_start=1733
+  _globals['_DISCOUNTRULE']._serialized_end=1926
+  _globals['_CREATEDISCOUNTRULEREQUEST']._serialized_start=1929
+  _globals['_CREATEDISCOUNTRULEREQUEST']._serialized_end=2107
+  _globals['_LISTDISCOUNTRULESREQUEST']._serialized_start=2109
+  _globals['_LISTDISCOUNTRULESREQUEST']._serialized_end=2135
+  _globals['_LISTDISCOUNTRULESRESPONSE']._serialized_start=2137
+  _globals['_LISTDISCOUNTRULESRESPONSE']._serialized_end=2214
+  _globals['_GETCATALOGSNAPSHOTREQUEST']._serialized_start=2216
+  _globals['_GETCATALOGSNAPSHOTREQUEST']._serialized_end=2243
+  _globals['_CATALOGSNAPSHOT']._serialized_start=2245
+  _globals['_CATALOGSNAPSHOT']._serialized_end=2367
+  _globals['_QUOTEREQUEST']._serialized_start=2370
+  _globals['_QUOTEREQUEST']._serialized_end=2499
+  _globals['_QUOTERESPONSE']._serialized_start=2502
+  _globals['_QUOTERESPONSE']._serialized_end=2708
+  _globals['_CATALOGSERVICE']._serialized_start=2954
+  _globals['_CATALOGSERVICE']._serialized_end=3933
 # @@protoc_insertion_point(module_scope)

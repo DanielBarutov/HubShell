@@ -35,6 +35,10 @@ class SessionMeterModel(BillingBase):
     last_operation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    package_minutes: Mapped[int] = mapped_column(Integer(), default=0)
+    active_entitlement_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
 
     def to_domain(self) -> SessionMeter:
         return SessionMeter(
@@ -47,6 +51,8 @@ class SessionMeterModel(BillingBase):
             last_operation_id=self.last_operation_id,
             created_at=self.created_at,
             updated_at=self.updated_at,
+            package_minutes=self.package_minutes,
+            active_entitlement_id=self.active_entitlement_id,
         )
 
     @classmethod
@@ -61,6 +67,8 @@ class SessionMeterModel(BillingBase):
             last_operation_id=meter.last_operation_id,
             created_at=meter.created_at,
             updated_at=meter.updated_at,
+            package_minutes=meter.package_minutes,
+            active_entitlement_id=meter.active_entitlement_id,
         )
 
 
@@ -102,6 +110,7 @@ class PostgresMeterRepository:
                     if (
                         meter.billed_minutes < model.billed_minutes
                         or meter.billed_cents < model.billed_cents
+                        or meter.package_minutes < model.package_minutes
                     ):
                         raise ValueError("Session meter cannot move backwards")
                     model.client_id = meter.client_id
@@ -111,6 +120,8 @@ class PostgresMeterRepository:
                     model.status = meter.status.value
                     model.last_operation_id = meter.last_operation_id
                     model.updated_at = meter.updated_at
+                    model.package_minutes = meter.package_minutes
+                    model.active_entitlement_id = meter.active_entitlement_id
                 return meter
 
 

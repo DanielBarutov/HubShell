@@ -38,6 +38,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _portalPin = string.Empty;
     private string _portalRegistrationPin = string.Empty;
     private string _portalMessage = string.Empty;
+    private string _transferTargetWorkstationId = string.Empty;
+    private string _incomingTransferOfferId = string.Empty;
+    private string _incomingTransferToken = string.Empty;
+    private string _sessionNotification = string.Empty;
+    private CancellationTokenSource? _sessionNotificationLifetime;
 
     public MainViewModel(
         ClientSessionCoordinator session,
@@ -263,6 +268,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         .Select(session =>
             $"{session.StartedAt} · место {session.WorkstationId} · тариф {session.TariffName ?? session.TariffId ?? "—"} × {session.TariffQuantity} · {session.Status}")
         .ToArray() ?? Array.Empty<string>();
+    public IReadOnlyList<string> PortalEntitlementQueue => _portalSnapshot?.Entitlements
+        .OrderBy(item => item.QueuePosition)
+        .Select(item =>
+            $"{item.TariffName ?? "Пакет"} · {item.Status} · {item.RemainingMinutes} из {item.DurationMinutes} мин")
+        .ToArray() ?? Array.Empty<string>();
+    public bool CanActivatePortalEntitlement => _portalSnapshot?.Entitlements
+        .Any(item => item.Status == "queued") == true
+        && !string.IsNullOrWhiteSpace(DeviceId);
     public string DeviceStatus => string.IsNullOrWhiteSpace(DeviceId)
         ? "Device identity не настроена"
         : $"Device: {DeviceId}";
@@ -273,6 +286,58 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string ActiveSessionDescription => _activeSession is null
         ? string.Empty
         : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
+    public string TransferTargetWorkstationId
+    {
+        get => _transferTargetWorkstationId;
+        set
+        {
+            if (_transferTargetWorkstationId == value)
+            {
+                return;
+            }
+            _transferTargetWorkstationId = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanCreateTransferOffer));
+        }
+    }
+    public string IncomingTransferOfferId
+    {
+        get => _incomingTransferOfferId;
+        set
+        {
+            if (_incomingTransferOfferId == value)
+            {
+                return;
+            }
+            _incomingTransferOfferId = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanConfirmTransfer));
+        }
+    }
+    public string IncomingTransferToken
+    {
+        get => _incomingTransferToken;
+        set
+        {
+            if (_incomingTransferToken == value)
+            {
+                return;
+            }
+            _incomingTransferToken = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanConfirmTransfer));
+        }
+    }
+    public bool CanCreateTransferOffer => _activeSession is not null
+        && !string.IsNullOrWhiteSpace(DeviceId)
+        && !string.IsNullOrWhiteSpace(_transferTargetWorkstationId);
+    public bool CanConfirmTransfer => !string.IsNullOrWhiteSpace(DeviceId)
+        && !string.IsNullOrWhiteSpace(_incomingTransferOfferId)
+        && !string.IsNullOrWhiteSpace(_incomingTransferToken);
+    public string TransferMessage => _sessionNotification;
+    public Visibility TransferMessageVisibility => string.IsNullOrWhiteSpace(_sessionNotification)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
     public IWorkstationSessionGateway BackendClient => _session.BackendClient;
     public string ThemeName
     {
@@ -375,6 +440,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         DeviceId = normalized;
         OnPropertyChanged(nameof(DeviceId));
         OnPropertyChanged(nameof(DeviceStatus));
+        OnPropertyChanged(nameof(CanCreateTransferOffer));
+        OnPropertyChanged(nameof(CanConfirmTransfer));
     }
 
     public async Task RunHeartbeatLoopAsync()
@@ -516,6 +583,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
     }
 
+    public async Task ActivateFirstPortalEntitlementAsync()
+    {
+        var entitlement = _portalSnapshot?.Entitlements
+            .OrderBy(item => item.QueuePosition)
+            .FirstOrDefault(item => item.Status == "queued");
+        if (entitlement is null || string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return;
+        }
+
+        try
+        {
+            SetPortalSnapshot(await _clientPortal.ActivateEntitlementAsync(
+                DeviceId,
+                entitlement.Id,
+                _lifetime.Token));
+            _portalMessage = string.Empty;
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            _portalMessage = "Не удалось активировать пакет. Обновите снимок и повторите.";
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+    }
+
     public void CancelManagerLogin()
     {
         _isManagerLoginRequested = false;
@@ -594,6 +690,78 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         return true;
     }
 
+    public async Task<bool> CreateTransferOfferAsync(CancellationToken cancellationToken = default)
+    {
+        var activeSession = _activeSession;
+        var deviceId = DeviceId;
+        var target = _transferTargetWorkstationId.Trim();
+        if (activeSession is null || string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        try
+        {
+            var offer = await _session.BackendClient.CreateTransferOfferAsync(
+                activeSession.Id,
+                target,
+                deviceId,
+                $"win-transfer-{Guid.NewGuid():N}",
+                cancellationToken);
+            IncomingTransferOfferId = offer.Id;
+            IncomingTransferToken = offer.Token;
+            ShowSessionNotification(offer.RequiresPackageBurn
+                ? $"Перенос подготовлен. Внимание: пакет будет сожжён при подтверждении. Код: {offer.Token}"
+                : $"Перенос подготовлен. Передайте на новый ПК ID {offer.Id} и код {offer.Token}");
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            ShowSessionNotification("Не удалось подготовить перенос: проверьте целевое место и повторите.");
+            return false;
+        }
+    }
+
+    public async Task<bool> ConfirmTransferAsync(CancellationToken cancellationToken = default)
+    {
+        var deviceId = DeviceId;
+        var offerId = _incomingTransferOfferId.Trim();
+        var token = _incomingTransferToken.Trim();
+        if (string.IsNullOrWhiteSpace(deviceId)
+            || string.IsNullOrWhiteSpace(offerId)
+            || string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        try
+        {
+            var result = await _session.BackendClient.ConfirmTransferAsync(
+                offerId,
+                deviceId,
+                token,
+                $"win-transfer-confirm-{Guid.NewGuid():N}",
+                cancellationToken);
+            _activeSession = result.Session;
+            PublishSessionState();
+            ShowSessionNotification("Сессия перенесена на этот ПК. Старый ПК будет перезапущен.");
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            ShowSessionNotification("Не удалось подтвердить перенос: проверьте ID предложения и код.");
+            return false;
+        }
+    }
+
     public Task RunWorkstationHeartbeatLoopAsync(
         Action<string>? onThemeReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
@@ -607,7 +775,45 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 onThemeReceived,
                 onManagerPasswordVerifierReceived,
                 onLockdownPolicyReceived,
+                RefreshActiveSessionSnapshotAsync,
                 _lifetime.Token);
+
+    private async Task RefreshActiveSessionSnapshotAsync()
+    {
+        var activeSession = _activeSession;
+        if (activeSession is null || string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return;
+        }
+
+        var snapshot = await _session.BackendClient.GetSessionSnapshotAsync(
+            activeSession.Id,
+            DeviceId,
+            _lifetime.Token);
+        if (snapshot.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase)
+            || snapshot.Status.Equals("SESSION_STATUS_COMPLETED", StringComparison.OrdinalIgnoreCase))
+        {
+            RegisterSessionStopped(snapshot);
+            return;
+        }
+
+        ApplyActiveSessionSnapshot(snapshot);
+        var replay = await _session.ReplayOfflineOperationsAsync(
+            snapshot,
+            DeviceId,
+            _lifetime.Token);
+        if (replay?.Snapshot is not null)
+        {
+            ApplyActiveSessionSnapshot(replay.Snapshot);
+        }
+    }
+
+    public void DismissSessionNotification()
+    {
+        _sessionNotificationLifetime?.Cancel();
+        _sessionNotification = string.Empty;
+        PublishSessionNotification();
+    }
 
     public Task RunCommandLoopAsync(IWorkstationCommandExecutor executor) =>
         string.IsNullOrWhiteSpace(DeviceId)
@@ -618,6 +824,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _sessionNotificationLifetime?.Cancel();
+        _sessionNotificationLifetime?.Dispose();
         await _lifetime.CancelAsync();
         try
         {
@@ -669,6 +877,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalPurchaseHistory));
         OnPropertyChanged(nameof(PortalChargeHistory));
         OnPropertyChanged(nameof(PortalSessionHistory));
+        OnPropertyChanged(nameof(PortalEntitlementQueue));
+        OnPropertyChanged(nameof(CanActivatePortalEntitlement));
     }
 
     private static string FormatMoney(long cents) =>
@@ -686,6 +896,56 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(ActiveSessionVisibility));
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
+        OnPropertyChanged(nameof(CanCreateTransferOffer));
+        OnPropertyChanged(nameof(CanConfirmTransfer));
+    }
+
+    private void ApplyActiveSessionSnapshot(SessionSnapshot snapshot)
+    {
+        var previous = _activeSession;
+        _activeSession = snapshot;
+        if (previous?.ActivePackage?.Id is not null
+            && snapshot.ActivePackage?.Id is not null
+            && previous.ActivePackage.Id != snapshot.ActivePackage.Id)
+        {
+            var remaining = snapshot.PackageQueue?.Count ?? 0;
+            ShowSessionNotification(
+                $"Автоматически активирован пакет {snapshot.ActivePackage.TariffId}. В очереди осталось {remaining}.");
+        }
+        PublishSessionState();
+    }
+
+    private void ShowSessionNotification(string message)
+    {
+        _sessionNotificationLifetime?.Cancel();
+        _sessionNotificationLifetime?.Dispose();
+        var lifetime = new CancellationTokenSource();
+        _sessionNotificationLifetime = lifetime;
+        _sessionNotification = message;
+        PublishSessionNotification();
+        _ = ClearSessionNotificationAsync(lifetime);
+    }
+
+    private async Task ClearSessionNotificationAsync(CancellationTokenSource lifetime)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), lifetime.Token);
+            if (!lifetime.IsCancellationRequested && ReferenceEquals(_sessionNotificationLifetime, lifetime))
+            {
+                _sessionNotification = string.Empty;
+                PublishSessionNotification();
+            }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void PublishSessionNotification()
+    {
+        OnPropertyChanged(nameof(TransferMessage));
+        OnPropertyChanged(nameof(TransferMessageVisibility));
     }
 
     private void ApplySessionStopPolicy()

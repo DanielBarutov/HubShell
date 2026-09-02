@@ -75,7 +75,7 @@ class ListProductsResponse(_message.Message):
     def __init__(self, products: _Optional[_Iterable[_Union[Product, _Mapping]]] = ...) -> None: ...
 
 class Tariff(_message.Message):
-    __slots__ = ("id", "name", "group_id", "duration_minutes", "price_cents", "valid_from", "valid_to", "active", "tariff_key", "version", "lifecycle", "billing_mode", "price_per_minute_cents", "free_minutes")
+    __slots__ = ("id", "name", "group_id", "duration_minutes", "price_cents", "valid_from", "valid_to", "active", "tariff_key", "version", "lifecycle", "billing_mode", "price_per_minute_cents", "free_minutes", "window_start_minute", "window_end_minute", "window_timezone")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     GROUP_ID_FIELD_NUMBER: _ClassVar[int]
@@ -90,6 +90,9 @@ class Tariff(_message.Message):
     BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
     PRICE_PER_MINUTE_CENTS_FIELD_NUMBER: _ClassVar[int]
     FREE_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     group_id: str
@@ -104,10 +107,13 @@ class Tariff(_message.Message):
     billing_mode: BillingMode
     price_per_minute_cents: int
     free_minutes: int
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., valid_from: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., valid_to: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., active: _Optional[bool] = ..., tariff_key: _Optional[str] = ..., version: _Optional[int] = ..., lifecycle: _Optional[_Union[TariffLifecycle, str]] = ..., billing_mode: _Optional[_Union[BillingMode, str]] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ...) -> None: ...
+    window_start_minute: int
+    window_end_minute: int
+    window_timezone: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., valid_from: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., valid_to: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., active: _Optional[bool] = ..., tariff_key: _Optional[str] = ..., version: _Optional[int] = ..., lifecycle: _Optional[_Union[TariffLifecycle, str]] = ..., billing_mode: _Optional[_Union[BillingMode, str]] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ..., window_start_minute: _Optional[int] = ..., window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ...) -> None: ...
 
 class CreateTariffRequest(_message.Message):
-    __slots__ = ("name", "group_id", "duration_minutes", "price_cents", "valid_from", "valid_to", "tariff_key", "lifecycle", "billing_mode", "price_per_minute_cents", "free_minutes")
+    __slots__ = ("name", "group_id", "duration_minutes", "price_cents", "valid_from", "valid_to", "tariff_key", "lifecycle", "billing_mode", "price_per_minute_cents", "free_minutes", "window_start_minute", "window_end_minute", "window_timezone")
     NAME_FIELD_NUMBER: _ClassVar[int]
     GROUP_ID_FIELD_NUMBER: _ClassVar[int]
     DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
@@ -119,6 +125,9 @@ class CreateTariffRequest(_message.Message):
     BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
     PRICE_PER_MINUTE_CENTS_FIELD_NUMBER: _ClassVar[int]
     FREE_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
     name: str
     group_id: str
     duration_minutes: int
@@ -130,7 +139,10 @@ class CreateTariffRequest(_message.Message):
     billing_mode: BillingMode
     price_per_minute_cents: int
     free_minutes: int
-    def __init__(self, name: _Optional[str] = ..., group_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., valid_from: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., valid_to: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_key: _Optional[str] = ..., lifecycle: _Optional[_Union[TariffLifecycle, str]] = ..., billing_mode: _Optional[_Union[BillingMode, str]] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ...) -> None: ...
+    window_start_minute: int
+    window_end_minute: int
+    window_timezone: str
+    def __init__(self, name: _Optional[str] = ..., group_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., valid_from: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., valid_to: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_key: _Optional[str] = ..., lifecycle: _Optional[_Union[TariffLifecycle, str]] = ..., billing_mode: _Optional[_Union[BillingMode, str]] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ..., window_start_minute: _Optional[int] = ..., window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ...) -> None: ...
 
 class ListTariffsRequest(_message.Message):
     __slots__ = ()

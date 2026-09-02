@@ -144,6 +144,18 @@ public sealed class WindowsCommandExecutor : IWorkstationCommandExecutor
                 cancellationToken,
                 tariffId,
                 tariffQuantity);
+            try
+            {
+                session = await _sessionGateway.GetSessionSnapshotAsync(
+                    session.Id,
+                    deviceId,
+                    cancellationToken);
+            }
+            catch (Exception)
+            {
+                // The start result remains usable if the follow-up snapshot is
+                // temporarily unavailable; the next heartbeat can refresh it.
+            }
             _sessionStarted?.Invoke(session);
             return new CommandExecutionResult(true, $"Сессия {session.Id} открыта");
         }
@@ -176,6 +188,17 @@ public sealed class WindowsCommandExecutor : IWorkstationCommandExecutor
                 sessionId,
                 deviceId,
                 cancellationToken);
+            try
+            {
+                session = await _sessionGateway.GetSessionSnapshotAsync(
+                    session.Id,
+                    deviceId,
+                    cancellationToken);
+            }
+            catch (Exception)
+            {
+                // Keep the confirmed stop result when snapshot refresh is down.
+            }
             _sessionStopped?.Invoke(session);
             return new CommandExecutionResult(true, $"Сессия {session.Id} завершена");
         }

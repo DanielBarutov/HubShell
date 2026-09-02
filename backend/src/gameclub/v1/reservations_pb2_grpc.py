@@ -39,6 +39,11 @@ class ReservationServiceStub:
                 request_serializer=gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityResponse.FromString,
                 _registered_method=True)
+        self.CheckEntry = channel.unary_unary(
+                '/gameclub.reservations.v1.ReservationService/CheckEntry',
+                request_serializer=gameclub_dot_v1_dot_reservations__pb2.CheckEntryRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_reservations__pb2.CheckEntryResponse.FromString,
+                _registered_method=True)
         self.Create = channel.unary_unary(
                 '/gameclub.reservations.v1.ReservationService/Create',
                 request_serializer=gameclub_dot_v1_dot_reservations__pb2.CreateReservationRequest.SerializeToString,
@@ -85,6 +90,12 @@ class ReservationServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def CheckAvailability(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CheckEntry(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -145,6 +156,11 @@ def add_ReservationServiceServicer_to_server(servicer, server):
                     servicer.CheckAvailability,
                     request_deserializer=gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityRequest.FromString,
                     response_serializer=gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityResponse.SerializeToString,
+            ),
+            'CheckEntry': grpc.unary_unary_rpc_method_handler(
+                    servicer.CheckEntry,
+                    request_deserializer=gameclub_dot_v1_dot_reservations__pb2.CheckEntryRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_reservations__pb2.CheckEntryResponse.SerializeToString,
             ),
             'Create': grpc.unary_unary_rpc_method_handler(
                     servicer.Create,
@@ -214,6 +230,33 @@ class ReservationService:
             '/gameclub.reservations.v1.ReservationService/CheckAvailability',
             gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityRequest.SerializeToString,
             gameclub_dot_v1_dot_reservations__pb2.CheckAvailabilityResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CheckEntry(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.reservations.v1.ReservationService/CheckEntry',
+            gameclub_dot_v1_dot_reservations__pb2.CheckEntryRequest.SerializeToString,
+            gameclub_dot_v1_dot_reservations__pb2.CheckEntryResponse.FromString,
             options,
             channel_credentials,
             insecure,

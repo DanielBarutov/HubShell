@@ -60,6 +60,9 @@ class TariffRequest(BaseModel):
     billing_mode: BillingMode = BillingMode.BLOCK
     price_per_minute_cents: int = Field(default=0, ge=0)
     free_minutes: int = Field(default=0, ge=0)
+    window_start_minute: int | None = Field(default=None, ge=0, lt=1440)
+    window_end_minute: int | None = Field(default=None, ge=0, lt=1440)
+    window_timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class DiscountRuleRequest(BaseModel):
@@ -106,6 +109,9 @@ class TariffResponse(BaseModel):
     billing_mode: BillingMode
     price_per_minute_cents: int
     free_minutes: int
+    window_start_minute: int | None
+    window_end_minute: int | None
+    window_timezone: str | None
 
     @classmethod
     def from_domain(cls, tariff: Tariff) -> "TariffResponse":

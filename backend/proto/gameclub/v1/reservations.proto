@@ -8,6 +8,7 @@ import "google/protobuf/timestamp.proto";
 
 service ReservationService {
   rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+  rpc CheckEntry(CheckEntryRequest) returns (CheckEntryResponse);
   rpc Create(CreateReservationRequest) returns (Reservation);
   rpc List(ListReservationsRequest) returns (ListReservationsResponse);
   rpc Get(GetReservationRequest) returns (Reservation);
@@ -53,6 +54,22 @@ message CheckAvailabilityResponse {
   bool available = 1;
   repeated string conflicting_reservation_ids = 2;
   string reason = 3;
+}
+
+message CheckEntryRequest {
+  string workstation_id = 1;
+  string client_id = 2;
+  string guest_id = 3;
+  google.protobuf.Timestamp at = 4;
+}
+
+message CheckEntryResponse {
+  bool allowed = 1;
+  string reason = 2;
+  string reservation_id = 3;
+  string assigned_client_id = 4;
+  google.protobuf.Timestamp starts_at = 5;
+  google.protobuf.Timestamp ends_at = 6;
 }
 
 message CreateReservationRequest {

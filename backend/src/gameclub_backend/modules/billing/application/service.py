@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import uuid
 
@@ -10,6 +11,7 @@ from gameclub_backend.modules.billing.application.ports import (
     ChargeRepository,
     ClientBilling,
     Clock,
+    EntitlementMeter,
     MeterRepository,
     SessionLookup,
     WorkstationLookup,
@@ -43,6 +45,7 @@ class BillingService:
         clock: Clock | None = None,
         reconciliation: ChargeReconciliationRepository | None = None,
         meter_repository: MeterRepository | None = None,
+        entitlements: EntitlementMeter | None = None,
     ) -> None:
         self._repository = repository
         self._sessions = sessions
@@ -52,6 +55,7 @@ class BillingService:
         self._clock = clock or UtcClock()
         self._reconciliation = reconciliation
         self._meter_repository = meter_repository
+        self._entitlements = entitlements
 
     async def get_meter(self, session_id: uuid.UUID) -> SessionMeter:
         if self._meter_repository is None:
@@ -102,10 +106,20 @@ class BillingService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Session not found")
         if session.status is not SessionStatus.ACTIVE and not allow_completed:
             raise ApplicationError(ErrorCode.CONFLICT, "Only an active session can be metered")
-        if session.client_id is None or session.tariff_id is None:
+        if session.client_id is None:
             return None
-        tariff = await self._catalog.get_tariff(session.tariff_id)
-        if tariff is None or tariff.billing_mode is not BillingMode.PER_MINUTE:
+        tariff_id = session.tariff_id
+        active_entitlement = None
+        if tariff_id is None and self._entitlements is not None:
+            active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
+            if active_entitlement is not None:
+                tariff_id = active_entitlement.tariff_id
+        elif self._entitlements is not None:
+            active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
+        if tariff_id is None:
+            return None
+        tariff = await self._catalog.get_tariff(tariff_id)
+        if tariff is None:
             return None
         workstation = await self._workstations.get(session.workstation_id)
         if workstation is None:
@@ -114,15 +128,8 @@ class BillingService:
         moment = now or self._clock.now()
         end_at = session.ended_at or moment
         elapsed_minutes = self._elapsed_minutes(session.started_at, end_at)
-        billable_minutes = max(0, elapsed_minutes - tariff.free_minutes)
-        quote = await self._catalog.quote_for_tariff(
-            tariff_id=tariff.id,
-            group_id=workstation.group_id,
-            moment=session.started_at,
-            discount_category=client.discount_category,
-            duration_minutes=elapsed_minutes or 1,
-        )
         current = await self._meter_repository.get(session.id)
+        meter_was_created = current is None
         if current is None:
             current = await self._meter_repository.ensure(
                 SessionMeter(
@@ -139,7 +146,86 @@ class BillingService:
             )
         if current.status is MeterStatus.EXHAUSTED:
             return current
-        target_cents = quote.price_cents
+        package_minutes = current.package_minutes
+        active_entitlement_id = current.active_entitlement_id
+        if self._entitlements is not None:
+            package_anchor = session.started_at if meter_was_created else current.updated_at
+            grant_end = session.started_at + datetime.timedelta(minutes=session.login_grant_minutes)
+            package_anchor = max(package_anchor, grant_end)
+            if active_entitlement is not None and active_entitlement.activated_at is not None:
+                package_anchor = max(package_anchor, active_entitlement.activated_at)
+            package_delta = self._eligible_package_minutes(
+                active_entitlement,
+                package_anchor,
+                end_at,
+            )
+            if package_delta:
+                package_moment = self._latest_package_moment(
+                    active_entitlement,
+                    package_anchor,
+                    end_at,
+                )
+                package_result = await self._entitlements.consume_for_session(
+                    client_id=session.client_id,
+                    zone_id=workstation.group_id,
+                    minutes=package_delta,
+                    now=package_moment or moment,
+                    initial_entitlement_id=(
+                        session.entitlement_id if current.package_minutes == 0 else None
+                    ),
+                )
+                package_minutes += package_result.consumed_minutes
+                active_entitlement_id = package_result.active_entitlement_id
+        package_progressed = package_minutes > current.package_minutes
+        if tariff.billing_mode is not BillingMode.PER_MINUTE:
+            if not package_progressed:
+                if (
+                    session.status is SessionStatus.COMPLETED
+                    and current.status is not MeterStatus.SETTLED
+                ):
+                    return await self._meter_repository.save(
+                        current.advance(
+                            billed_minutes=current.billed_minutes,
+                            billed_cents=current.billed_cents,
+                            operation_id=current.last_operation_id,
+                            now=moment,
+                            status=MeterStatus.SETTLED,
+                            package_minutes=package_minutes,
+                            active_entitlement_id=active_entitlement_id,
+                        )
+                    )
+                return None
+            status = (
+                MeterStatus.SETTLED
+                if session.status is SessionStatus.COMPLETED
+                else MeterStatus.RUNNING
+            )
+            return await self._meter_repository.save(
+                current.advance(
+                    billed_minutes=current.billed_minutes,
+                    billed_cents=current.billed_cents,
+                    operation_id=current.last_operation_id,
+                    now=moment,
+                    status=status,
+                    package_minutes=package_minutes,
+                    active_entitlement_id=active_entitlement_id,
+                )
+            )
+        billable_minutes = max(
+            0,
+            elapsed_minutes - tariff.free_minutes - session.login_grant_minutes - package_minutes,
+        )
+        quote = await self._catalog.quote_for_tariff(
+            tariff_id=tariff.id,
+            group_id=workstation.group_id,
+            moment=session.started_at,
+            discount_category=client.discount_category,
+            duration_minutes=max(
+                1,
+                elapsed_minutes - session.login_grant_minutes - package_minutes,
+            ),
+        )
+        target_cents = quote.price_cents if billable_minutes > 0 else 0
         operation_id: uuid.UUID | None = current.last_operation_id
         if target_cents > current.billed_cents:
             client, operation = await self._debit_meter_delta(
@@ -163,8 +249,48 @@ class BillingService:
                 operation_id=operation_id,
                 now=moment,
                 status=status,
+                package_minutes=package_minutes,
+                active_entitlement_id=active_entitlement_id,
             )
         )
+
+    @staticmethod
+    def _eligible_package_minutes(
+        entitlement,
+        start_at: datetime.datetime,
+        end_at: datetime.datetime,
+    ) -> int:
+        """Count whole elapsed minutes that fall inside the active package window.
+
+        Metering is minute-granular. Iterating the minute ticks keeps DST behavior
+        delegated to the entitlement's timezone-aware availability predicate and
+        prevents a package bought or activated mid-session from consuming prior
+        minutes.
+        """
+        if end_at <= start_at:
+            return 0
+        total_minutes = int((end_at - start_at).total_seconds() // 60)
+        if entitlement is None or entitlement.window_start_minute is None:
+            return max(0, total_minutes)
+        return sum(
+            entitlement.is_available_at(start_at + datetime.timedelta(minutes=offset))
+            for offset in range(total_minutes)
+        )
+
+    @staticmethod
+    def _latest_package_moment(
+        entitlement,
+        start_at: datetime.datetime,
+        end_at: datetime.datetime,
+    ) -> datetime.datetime | None:
+        if entitlement is None or entitlement.window_start_minute is None:
+            return end_at
+        total_minutes = int((end_at - start_at).total_seconds() // 60)
+        for offset in range(total_minutes - 1, -1, -1):
+            candidate = start_at + datetime.timedelta(minutes=offset)
+            if entitlement.is_available_at(candidate):
+                return candidate
+        return None
 
     async def _debit_meter_delta(
         self,
@@ -193,6 +319,8 @@ class BillingService:
                             operation_id=None,
                             now=self._clock.now(),
                             status=MeterStatus.EXHAUSTED,
+                            package_minutes=meter.package_minutes,
+                            active_entitlement_id=meter.active_entitlement_id,
                         )
                     )
             raise
@@ -286,10 +414,17 @@ class BillingService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         client = await self._clients.get(session.client_id)
         duration_minutes = self._billable_minutes(session.started_at, session.ended_at)
-        meter: SessionMeter | None = None
+        meter: SessionMeter | None = (
+            await self._meter_repository.get(session.id)
+            if self._meter_repository is not None
+            else None
+        )
         if session.tariff_id is not None:
             tariff = await self._catalog.get_tariff(session.tariff_id)
-            if tariff is not None and tariff.billing_mode is BillingMode.PER_MINUTE:
+            if tariff is not None and (
+                tariff.billing_mode is BillingMode.PER_MINUTE
+                or (meter is not None and meter.package_minutes > 0)
+            ):
                 meter = await self.meter_session(
                     session.id,
                     now=session.ended_at,
@@ -333,6 +468,9 @@ class BillingService:
 
         ledger_key = f"session-charge:{session.id}"
         try:
+            package_only = (
+                meter is not None and meter.package_minutes > 0 and meter.billed_cents == 0
+            )
             if meter is None:
                 charged_client, operation = await self._clients.debit(
                     client_id=client.id,
@@ -352,6 +490,14 @@ class BillingService:
                 charged_client = await self._clients.get(client.id)
                 amount_cents = meter.billed_cents
                 balance_operation_id = meter.last_operation_id or uuid.UUID(int=0)
+                if package_only:
+                    quote = dataclasses.replace(
+                        quote,
+                        price_cents=0,
+                        price_before_discount_cents=0,
+                        discount_amount_cents=0,
+                        discount_percent_bps=0,
+                    )
             charge = SessionCharge(
                 id=uuid.uuid4(),
                 session_id=session.id,

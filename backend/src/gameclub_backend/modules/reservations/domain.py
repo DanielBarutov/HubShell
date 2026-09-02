@@ -21,6 +21,22 @@ class ReservationAvailability:
 
 
 @dataclasses.dataclass(frozen=True)
+class EntryDecision:
+    """Server decision whether a user may enter one workstation now."""
+
+    allowed: bool
+    reason: str
+    reservation_id: uuid.UUID | None = None
+    assigned_client_id: uuid.UUID | None = None
+    starts_at: datetime.datetime | None = None
+    ends_at: datetime.datetime | None = None
+
+    def __post_init__(self) -> None:
+        if not self.reason.strip():
+            raise ValueError("Entry decision reason is required")
+
+
+@dataclasses.dataclass(frozen=True)
 class Reservation:
     id: uuid.UUID
     workstation_ids: tuple[uuid.UUID, ...]

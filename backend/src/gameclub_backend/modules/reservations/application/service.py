@@ -13,6 +13,7 @@ from gameclub_backend.modules.reservations.application.ports import (
     WorkstationLookup,
 )
 from gameclub_backend.modules.reservations.domain import (
+    EntryDecision,
     Reservation,
     ReservationAvailability,
     ReservationStatus,
@@ -26,6 +27,8 @@ class UtcClock:
 
 
 class ReservationService:
+    ENTRY_PROTECTION_MINUTES = 30
+
     def __init__(
         self,
         repository: ReservationRepository,
@@ -72,6 +75,64 @@ class ReservationService:
             end_at,
         )
         return availability
+
+    async def check_entry(
+        self,
+        workstation_id: uuid.UUID,
+        client_id: uuid.UUID | None = None,
+        guest_id: uuid.UUID | None = None,
+        now: datetime.datetime | None = None,
+    ) -> EntryDecision:
+        """Return the authoritative reservation decision for a workstation."""
+        current_time = now or self._clock.now()
+        if current_time.tzinfo is None:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Entry decision time must include timezone",
+            )
+        if client_id is not None and guest_id is not None:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Client and guest cannot be used together",
+            )
+        workstation = await self._workstations.get(workstation_id)
+        if workstation is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.status is WorkstationStatus.DISABLED:
+            return EntryDecision(False, "workstation_disabled")
+
+        protection_end = current_time + datetime.timedelta(minutes=self.ENTRY_PROTECTION_MINUTES)
+        candidates = [
+            item
+            for item in await self._repository.list(current_time, protection_end)
+            if item.status in {ReservationStatus.CONFIRMED, ReservationStatus.ACTIVE}
+            and workstation_id in item.workstation_ids
+            and item.end_at > current_time
+            and item.start_at <= protection_end
+        ]
+        candidates.sort(key=lambda item: (item.start_at, str(item.id)))
+        for reservation in candidates:
+            if reservation.client_id is not None:
+                if client_id == reservation.client_id:
+                    continue
+                reason = (
+                    "reservation_client_mismatch"
+                    if client_id is not None
+                    else "reservation_client_required"
+                )
+            else:
+                # Guest reservations are intentionally anonymous. No guest identity
+                # may bypass the protection window.
+                reason = "guest_reservation_protected"
+            return EntryDecision(
+                allowed=False,
+                reason=reason,
+                reservation_id=reservation.id,
+                assigned_client_id=reservation.client_id,
+                starts_at=reservation.start_at,
+                ends_at=reservation.end_at,
+            )
+        return EntryDecision(allowed=True, reason="allowed")
 
     async def create(
         self,

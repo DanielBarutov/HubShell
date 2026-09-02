@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, Query, status
 from pydantic import BaseModel, Field
 
 from gameclub_backend.modules.auth.domain import Principal
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.domain import ProductSale
 from gameclub_backend.presentation.http.auth import require_permissions
@@ -17,8 +18,29 @@ class ProductSaleRequest(BaseModel):
     product_id: uuid.UUID
     quantity: int = Field(gt=0, le=10_000)
     client_id: uuid.UUID | None = None
-    payment_method: str = Field(pattern="^(balance|cash)$")
+    payment_method: str = Field(pattern="^(balance|cash|mixed)$")
     cash_shift_id: uuid.UUID | None = None
+    payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class PaymentPartRequest(BaseModel):
+    method: str = Field(min_length=1, max_length=64)
+    amount_cents: int = Field(gt=0)
+    reference: str | None = Field(default=None, max_length=256)
+
+
+class PaymentPartResponse(BaseModel):
+    method: str
+    amount_cents: int
+    reference: str | None
+
+    @classmethod
+    def from_domain(cls, part: PaymentPart) -> "PaymentPartResponse":
+        return cls(
+            method=part.method,
+            amount_cents=part.amount_cents,
+            reference=part.reference,
+        )
 
 
 class ProductSaleResponse(BaseModel):
@@ -40,6 +62,8 @@ class ProductSaleResponse(BaseModel):
     idempotency_key: str
     created_at: datetime.datetime
     completed_at: datetime.datetime | None
+    payment_parts: list[PaymentPartResponse]
+    settlement_error: str | None
 
     @classmethod
     def from_domain(cls, sale: ProductSale) -> "ProductSaleResponse":
@@ -62,6 +86,8 @@ class ProductSaleResponse(BaseModel):
             idempotency_key=sale.idempotency_key,
             created_at=sale.created_at,
             completed_at=sale.completed_at,
+            payment_parts=[PaymentPartResponse.from_domain(part) for part in sale.payment_parts],
+            settlement_error=sale.settlement_error,
         )
 
 
@@ -82,6 +108,7 @@ def create_router(service: ProductSaleService) -> APIRouter:
             cash_shift_id=body.cash_shift_id,
             sold_by=principal.subject_id,
             idempotency_key=idempotency_key,
+            payment_parts=[part.model_dump() for part in body.payment_parts],
         )
         return ProductSaleResponse.from_domain(sale)
 

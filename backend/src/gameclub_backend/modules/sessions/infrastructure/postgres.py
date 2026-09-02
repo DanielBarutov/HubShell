@@ -45,6 +45,9 @@ class SessionModel(SessionBase):
     )
     tariff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     tariff_quantity: Mapped[int] = mapped_column(Integer(), default=1)
+    guest_payment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    login_grant_minutes: Mapped[int] = mapped_column(Integer(), default=0)
+    entitlement_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     def to_domain(self) -> Session:
         return Session(
@@ -63,6 +66,9 @@ class SessionModel(SessionBase):
             idempotency_key=self.idempotency_key,
             tariff_id=self.tariff_id,
             tariff_quantity=self.tariff_quantity,
+            guest_payment_id=self.guest_payment_id,
+            login_grant_minutes=self.login_grant_minutes,
+            entitlement_id=self.entitlement_id,
         )
 
     @classmethod
@@ -83,6 +89,9 @@ class SessionModel(SessionBase):
             idempotency_key=session.idempotency_key,
             tariff_id=session.tariff_id,
             tariff_quantity=session.tariff_quantity,
+            guest_payment_id=session.guest_payment_id,
+            login_grant_minutes=session.login_grant_minutes,
+            entitlement_id=session.entitlement_id,
         )
 
 
@@ -101,6 +110,19 @@ class PostgresSessionRepository:
                 select(SessionModel)
                 .where(
                     SessionModel.workstation_id == workstation_id,
+                    SessionModel.status == SessionStatus.ACTIVE.value,
+                )
+                .order_by(SessionModel.started_at.desc())
+                .limit(1)
+            )
+            return model.to_domain() if model else None
+
+    async def get_active_for_client(self, client_id: uuid.UUID) -> Session | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(
+                select(SessionModel)
+                .where(
+                    SessionModel.client_id == client_id,
                     SessionModel.status == SessionStatus.ACTIVE.value,
                 )
                 .order_by(SessionModel.started_at.desc())
@@ -165,6 +187,11 @@ class PostgresSessionRepository:
                         return repeated.to_domain()
                 if model is None:
                     if session.status is SessionStatus.ACTIVE:
+                        if session.client_id is not None:
+                            await db_session.execute(
+                                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                                {"lock_key": (f"gaming-session-client:{session.client_id}")},
+                            )
                         active = await db_session.scalar(
                             select(SessionModel)
                             .where(
@@ -175,6 +202,17 @@ class PostgresSessionRepository:
                         )
                         if active is not None:
                             raise ValueError("Workstation already has an active session")
+                        if session.client_id is not None:
+                            active_client = await db_session.scalar(
+                                select(SessionModel)
+                                .where(
+                                    SessionModel.client_id == session.client_id,
+                                    SessionModel.status == SessionStatus.ACTIVE.value,
+                                )
+                                .with_for_update()
+                            )
+                            if active_client is not None:
+                                raise ValueError("Client already has an active session")
                     db_session.add(SessionModel.from_domain(session))
                     return session
 

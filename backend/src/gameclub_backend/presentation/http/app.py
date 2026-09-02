@@ -74,6 +74,41 @@ from gameclub_backend.modules.clients.presentation.http import (
 from gameclub_backend.modules.clients.presentation.http import (
     create_router as create_clients_router,
 )
+from gameclub_backend.modules.direct_payments.application.service import (
+    GuestSessionPaymentService,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.cash import (
+    CashShiftGuestPaymentSettlement,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.memory import (
+    InMemoryGuestSessionPaymentRepository,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.postgres import (
+    PostgresGuestSessionPaymentRepository,
+)
+from gameclub_backend.modules.direct_payments.presentation.http import (
+    create_router as create_guest_payment_router,
+)
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.memory import (
+    InMemoryEntitlementRepository,
+)
+from gameclub_backend.modules.entitlements.infrastructure.postgres import (
+    PostgresEntitlementRepository,
+)
+from gameclub_backend.modules.entitlements.presentation.http import (
+    create_router as create_entitlements_router,
+)
+from gameclub_backend.modules.offline.application.service import OfflineReplayService
+from gameclub_backend.modules.offline.infrastructure.memory import (
+    InMemoryOfflineReplayRepository,
+)
+from gameclub_backend.modules.offline.infrastructure.postgres import (
+    PostgresOfflineReplayRepository,
+)
+from gameclub_backend.modules.offline.presentation.http import (
+    create_router as create_offline_router,
+)
 from gameclub_backend.modules.payment_methods.application.service import PaymentMethodService
 from gameclub_backend.modules.payment_methods.infrastructure.memory import (
     InMemoryPaymentMethodRepository,
@@ -100,10 +135,22 @@ from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProduct
 from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 from gameclub_backend.modules.sales.presentation.http import create_router as create_sales_router
 from gameclub_backend.modules.sessions.application.service import SessionService
-from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
+from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
+from gameclub_backend.modules.sessions.infrastructure.memory import (
+    InMemorySessionRepository,
+)
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
+from gameclub_backend.modules.sessions.infrastructure.transfers_memory import (
+    InMemorySessionTransferRepository,
+)
+from gameclub_backend.modules.sessions.infrastructure.transfers_postgres import (
+    PostgresSessionTransferRepository,
+)
 from gameclub_backend.modules.sessions.presentation.http import (
     create_router as create_sessions_router,
+)
+from gameclub_backend.modules.sessions.presentation.transfer_http import (
+    create_router as create_session_transfer_router,
 )
 from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
@@ -199,6 +246,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cash_approval_repository = PostgresCashApprovalRepository(postgres_engine_provider)
         sales_repository = PostgresProductSaleRepository(postgres_engine_provider)
         payment_method_repository = PostgresPaymentMethodRepository(postgres_engine_provider)
+        entitlement_repository = PostgresEntitlementRepository(postgres_engine_provider)
+        guest_payment_repository = PostgresGuestSessionPaymentRepository(postgres_engine_provider)
+        transfer_repository = PostgresSessionTransferRepository(postgres_engine_provider)
+        offline_repository = PostgresOfflineReplayRepository(postgres_engine_provider)
     else:
         workstation_repository = InMemoryWorkstationRepository()
         workstation_group_repository = InMemoryWorkstationGroupRepository()
@@ -215,6 +266,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cash_approval_repository = InMemoryCashApprovalRepository()
         sales_repository = InMemoryProductSaleRepository()
         payment_method_repository = InMemoryPaymentMethodRepository()
+        entitlement_repository = InMemoryEntitlementRepository()
+        guest_payment_repository = InMemoryGuestSessionPaymentRepository()
+        transfer_repository = InMemorySessionTransferRepository()
+        offline_repository = InMemoryOfflineReplayRepository()
     if current_settings.postgres_dsn:
         audit_repository = PostgresAuditRepository(engine_provider)
         analytics_repository = PostgresAnalyticsRepository(engine_provider)
@@ -243,19 +298,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     clients = ClientService(client_repository)
     guests = GuestService(guest_repository)
     catalog = CatalogService(catalog_repository)
+    entitlements = EntitlementService(
+        entitlement_repository,
+        tariffs=catalog,
+        clients=clients,
+        active_sessions=session_repository,
+        workstations=workstation_repository,
+    )
     reservations = ReservationService(
         reservation_repository,
         workstations=workstation_repository,
         clients=client_repository,
         guests=guest_repository,
         grace_period_minutes=current_settings.reservation_grace_period_minutes,
-    )
-    sessions = SessionService(
-        session_repository,
-        workstations=workstation_repository,
-        clients=client_repository,
-        reservations=reservations,
-        guests=guest_repository,
     )
     billing = BillingService(
         billing_repository,
@@ -265,8 +320,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         catalog=catalog,
         reconciliation=billing_reconciliation_repository,
         meter_repository=meter_repository,
+        entitlements=entitlements,
     )
     cash_shifts = CashShiftService(cash_shift_repository, approvals=cash_approval_repository)
+    guest_payments = GuestSessionPaymentService(
+        guest_payment_repository,
+        tariffs=catalog,
+        cash=CashShiftGuestPaymentSettlement(cash_shifts),
+    )
+    sessions = SessionService(
+        session_repository,
+        workstations=workstation_repository,
+        clients=client_repository,
+        reservations=reservations,
+        guests=guest_repository,
+        guest_payments=guest_payments,
+        entitlements=entitlements,
+        meters=meter_repository,
+    )
+    offline = OfflineReplayService(
+        offline_repository,
+        sessions=sessions,
+        session_repository=session_repository,
+        workstations=workstation_repository,
+        billing=billing,
+    )
     sales = ProductSaleService(
         sales_repository,
         products=catalog,
@@ -281,11 +359,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         notifier=InMemoryCommandNotifier(),
         command_ttl_seconds=current_settings.workstation_command_ttl_seconds,
     )
+    session_transfers = SessionTransferService(
+        transfer_repository,
+        sessions=session_repository,
+        workstations=workstation_repository,
+        reservations=reservations,
+        entitlements=entitlements,
+        commands=command_service,
+    )
     application.state.workstations = workstations
     application.state.workstation_groups = workstation_groups
     application.state.clients = clients
     application.state.guests = guests
     application.state.catalog = catalog
+    application.state.entitlements = entitlements
+    application.state.offline = offline
+    application.state.guest_payments = guest_payments
     application.state.reservations = reservations
     application.state.sessions = sessions
     application.state.billing = billing
@@ -294,6 +383,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.sales = sales
     application.state.payment_methods = payment_methods
     application.state.analytics = analytics
+    application.state.session_transfers = session_transfers
     application.state.audit_repository = audit_repository
     application.state.refresh_tokens = refresh_tokens
     application.include_router(auth_router)
@@ -301,10 +391,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_workstations_router(workstations, command_service))
     application.include_router(create_workstation_groups_router(workstation_groups))
     application.include_router(create_clients_router(clients))
+    application.include_router(create_entitlements_router(entitlements))
+    application.include_router(create_offline_router(offline))
+    application.include_router(create_guest_payment_router(guest_payments))
     application.include_router(create_guest_router(guests))
     application.include_router(create_catalog_router(catalog))
     application.include_router(create_reservations_router(reservations))
     application.include_router(create_sessions_router(sessions))
+    application.include_router(create_session_transfer_router(session_transfers))
     application.include_router(create_billing_router(billing))
     application.include_router(create_cash_shifts_router(cash_shifts))
     application.include_router(create_sales_router(sales))
@@ -348,10 +442,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/api/v1/workstations",
             "/api/v1/workstation-groups",
             "/api/v1/clients",
+            "/api/v1/clients/",
+            "/api/v1/guest-payments",
             "/api/v1/guests",
             "/api/v1/catalog",
             "/api/v1/reservations",
             "/api/v1/sessions",
+            "/api/v1/session-transfers",
+            "/api/v1/offline",
             "/api/v1/billing",
             "/api/v1/cash-shifts",
             "/api/v1/sales",

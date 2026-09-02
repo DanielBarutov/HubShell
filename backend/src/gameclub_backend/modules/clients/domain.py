@@ -3,6 +3,8 @@ import datetime
 import enum
 import uuid
 
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
+
 
 def normalize_phone(value: str) -> str:
     digits = "".join(character for character in value if character.isdigit())
@@ -80,6 +82,7 @@ class BalanceOperation:
     idempotency_key: str
     created_at: datetime.datetime
     operation_type: BalanceOperationType = BalanceOperationType.TOP_UP
+    payment_parts: tuple[PaymentPart, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.reason.strip():
@@ -91,6 +94,10 @@ class BalanceOperation:
         object.__setattr__(self, "reason", self.reason.strip())
         object.__setattr__(self, "actor_id", self.actor_id.strip())
         object.__setattr__(self, "idempotency_key", self.idempotency_key.strip())
+        parts = tuple(self.payment_parts)
+        if parts and sum(part.amount_cents for part in parts) != abs(self.amount_cents):
+            raise ValueError("Payment parts total must match the operation amount")
+        object.__setattr__(self, "payment_parts", parts)
 
 
 @dataclasses.dataclass(frozen=True)

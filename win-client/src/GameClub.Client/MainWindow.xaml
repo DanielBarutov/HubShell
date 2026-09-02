@@ -32,13 +32,14 @@
             </StackPanel>
             <Button
                 Grid.Column="1"
-                Visibility="Collapsed"
+                Click="HideToTray"
+                Visibility="{Binding SecuredContentVisibility}"
                 Padding="10,7"
                 Background="{ThemeResource CardBackgroundBrush}"
                 AutomationProperties.Name="{Binding WindowModeActionLabel}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="↗" FontSize="16" />
-                    <TextBlock Text="{Binding WindowModeActionLabel}" FontSize="11" VerticalAlignment="Center" />
+                    <TextBlock Text="—" FontSize="16" />
+                    <TextBlock Text="Скрыть в трей" FontSize="11" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
         </Grid>
@@ -91,6 +92,24 @@
                         <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <Button Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
                             <TextBlock Text="Завершить сессию и перезапустить ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="9">
+                        <TextBlock Text="Перенос сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
+                        <Button Click="DismissSessionNotification" Visibility="{Binding TransferMessageVisibility}" HorizontalAlignment="Left" Padding="6,4" Background="Transparent">
+                            <TextBlock Text="Закрыть уведомление" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                        </Button>
+                        <TextBox Header="Место на новом ПК (ID)" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
+                        <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,9">
+                            <TextBlock Text="Подготовить перенос с этого ПК" FontSize="11" />
+                        </Button>
+                        <TextBox Header="ID предложения на новом ПК" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" PlaceholderText="Вставьте ID предложения" />
+                        <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" PlaceholderText="Вставьте одноразовый код" />
+                        <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,9" Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Подтвердить перенос на этот ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
                         </Button>
                     </StackPanel>
                 </Border>
@@ -225,6 +244,15 @@
                         <TextBlock Text="{Binding PortalAccountSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" />
                         <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="14" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Пакеты времени" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding PortalEntitlementQueue}" />
+                        <Button Click="ActivateFirstPortalEntitlement" IsEnabled="{Binding CanActivatePortalEntitlement}" Padding="8,6">
+                            <TextBlock Text="Активировать ближайший пакет" />
+                        </Button>
                     </StackPanel>
                 </Border>
                 <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">

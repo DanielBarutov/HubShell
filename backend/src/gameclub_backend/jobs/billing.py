@@ -18,6 +18,10 @@ from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.postgres import PostgresClientRepository
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.postgres import (
+    PostgresEntitlementRepository,
+)
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
@@ -72,6 +76,13 @@ async def reconcile_billing_charges(
         workstations = PostgresWorkstationRepository(engine_provider)
         clients = ClientService(PostgresClientRepository(engine_provider))
         catalog = CatalogService(PostgresCatalogRepository(engine_provider))
+        entitlements = EntitlementService(
+            PostgresEntitlementRepository(engine_provider),
+            tariffs=catalog,
+            clients=clients,
+            active_sessions=sessions,
+            workstations=workstations,
+        )
         billing = BillingService(
             PostgresChargeRepository(engine_provider),
             sessions=sessions,
@@ -80,6 +91,7 @@ async def reconcile_billing_charges(
             catalog=catalog,
             reconciliation=reconciliation,
             meter_repository=PostgresMeterRepository(engine_provider),
+            entitlements=entitlements,
         )
         items = await reconciliation.list_due(_parse_sweep_time(now_iso), limit)
         completed = 0
@@ -127,10 +139,19 @@ async def meter_active_sessions() -> None:
         client_repository = PostgresClientRepository(engine_provider)
         clients = ClientService(client_repository)
         catalog = CatalogService(PostgresCatalogRepository(engine_provider))
+        entitlements = EntitlementService(
+            PostgresEntitlementRepository(engine_provider),
+            tariffs=catalog,
+            clients=clients,
+            active_sessions=session_repository,
+            workstations=workstation_repository,
+        )
         sessions = SessionService(
             session_repository,
             workstations=workstation_repository,
             clients=client_repository,
+            entitlements=entitlements,
+            meters=PostgresMeterRepository(engine_provider),
         )
         commands = WorkstationCommandService(
             PostgresWorkstationCommandRepository(engine_provider),
@@ -145,6 +166,7 @@ async def meter_active_sessions() -> None:
             clients=clients,
             catalog=catalog,
             meter_repository=PostgresMeterRepository(engine_provider),
+            entitlements=entitlements,
         )
         stopped = 0
         for session in await session_repository.list(active_only=True):

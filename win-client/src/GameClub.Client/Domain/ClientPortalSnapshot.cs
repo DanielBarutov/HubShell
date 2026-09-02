@@ -15,7 +15,8 @@ public sealed record ClientPortalSnapshot(
     IReadOnlyList<ClientPortalBalanceOperation> BalanceOperations,
     IReadOnlyList<ClientPortalSession> Sessions,
     IReadOnlyList<ClientPortalCharge> Charges,
-    IReadOnlyList<ClientPortalPurchase> Purchases);
+    IReadOnlyList<ClientPortalPurchase> Purchases,
+    IReadOnlyList<ClientPortalEntitlement> Entitlements);
 
 public sealed record ClientPortalBalanceOperation(
     string Id,
@@ -51,3 +52,16 @@ public sealed record ClientPortalPurchase(
     long TotalPriceCents,
     string PaymentMethod,
     string CreatedAt);
+
+public sealed record ClientPortalEntitlement(
+    string Id,
+    string TariffId,
+    string? ZoneId,
+    string Status,
+    int DurationMinutes,
+    int RemainingMinutes,
+    long PriceCents,
+    int QueuePosition,
+    string? TariffName,
+    string PurchasedAt,
+    string? ActivatedAt);

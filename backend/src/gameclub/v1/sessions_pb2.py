@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1agameclub/v1/sessions.proto\x12\x14gameclub.sessions.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x02\n\x07Session\x12\n\n\x02id\x18\x01 \x01(\t\x12\x16\n\x0eworkstation_id\x18\x02 \x01(\t\x12\x11\n\tclient_id\x18\x03 \x01(\t\x12\x12\n\nguest_name\x18\x04 \x01(\t\x12\x33\n\x06status\x18\x05 \x01(\x0e\x32#.gameclub.sessions.v1.SessionStatus\x12.\n\nstarted_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nded_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06source\x18\x08 \x01(\t\x12\x12\n\ncreated_by\x18\t \x01(\t\x12\x16\n\x0ereservation_id\x18\n \x01(\t\x12\x17\n\x0fidempotency_key\x18\x0b \x01(\t\x12\x10\n\x08guest_id\x18\x0c \x01(\t\x12\x11\n\ttariff_id\x18\r \x01(\t\x12\x17\n\x0ftariff_quantity\x18\x0e \x01(\x05\"\xe6\x01\n\x13StartSessionRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x12\n\nguest_name\x18\x03 \x01(\t\x12\x0e\n\x06source\x18\x04 \x01(\t\x12\x16\n\x0ereservation_id\x18\x05 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x06 \x01(\t\x12\x11\n\tdevice_id\x18\x07 \x01(\t\x12\x10\n\x08guest_id\x18\x08 \x01(\t\x12\x11\n\ttariff_id\x18\t \x01(\t\x12\x17\n\x0ftariff_quantity\x18\n \x01(\x05\"\'\n\x11GetSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"B\n\x13ListSessionsRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61\x63tive_only\x18\x02 \x01(\x08\"G\n\x14ListSessionsResponse\x12/\n\x08sessions\x18\x01 \x03(\x0b\x32\x1d.gameclub.sessions.v1.Session\";\n\x12StopSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t*h\n\rSessionStatus\x12\x1e\n\x1aSESSION_STATUS_UNSPECIFIED\x10\x00\x12\x19\n\x15SESSION_STATUS_ACTIVE\x10\x01\x12\x1c\n\x18SESSION_STATUS_COMPLETED\x10\x02\x32\xe2\x02\n\x0eSessionService\x12Q\n\x05Start\x12).gameclub.sessions.v1.StartSessionRequest\x1a\x1d.gameclub.sessions.v1.Session\x12M\n\x03Get\x12\'.gameclub.sessions.v1.GetSessionRequest\x1a\x1d.gameclub.sessions.v1.Session\x12]\n\x04List\x12).gameclub.sessions.v1.ListSessionsRequest\x1a*.gameclub.sessions.v1.ListSessionsResponse\x12O\n\x04Stop\x12(.gameclub.sessions.v1.StopSessionRequest\x1a\x1d.gameclub.sessions.v1.SessionB(\xaa\x02%GameClub.Client.Contracts.Sessions.V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1agameclub/v1/sessions.proto\x12\x14gameclub.sessions.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc9\x03\n\x07Session\x12\n\n\x02id\x18\x01 \x01(\t\x12\x16\n\x0eworkstation_id\x18\x02 \x01(\t\x12\x11\n\tclient_id\x18\x03 \x01(\t\x12\x12\n\nguest_name\x18\x04 \x01(\t\x12\x33\n\x06status\x18\x05 \x01(\x0e\x32#.gameclub.sessions.v1.SessionStatus\x12.\n\nstarted_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nded_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06source\x18\x08 \x01(\t\x12\x12\n\ncreated_by\x18\t \x01(\t\x12\x16\n\x0ereservation_id\x18\n \x01(\t\x12\x17\n\x0fidempotency_key\x18\x0b \x01(\t\x12\x10\n\x08guest_id\x18\x0c \x01(\t\x12\x11\n\ttariff_id\x18\r \x01(\t\x12\x17\n\x0ftariff_quantity\x18\x0e \x01(\x05\x12\x18\n\x10guest_payment_id\x18\x0f \x01(\t\x12\x1b\n\x13login_grant_minutes\x18\x10 \x01(\x05\x12\x16\n\x0e\x65ntitlement_id\x18\x11 \x01(\t\"\x98\x02\n\x13StartSessionRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x12\n\nguest_name\x18\x03 \x01(\t\x12\x0e\n\x06source\x18\x04 \x01(\t\x12\x16\n\x0ereservation_id\x18\x05 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x06 \x01(\t\x12\x11\n\tdevice_id\x18\x07 \x01(\t\x12\x10\n\x08guest_id\x18\x08 \x01(\t\x12\x11\n\ttariff_id\x18\t \x01(\t\x12\x17\n\x0ftariff_quantity\x18\n \x01(\x05\x12\x18\n\x10guest_payment_id\x18\x0b \x01(\t\x12\x16\n\x0e\x65ntitlement_id\x18\x0c \x01(\t\"\'\n\x11GetSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"B\n\x19GetSessionSnapshotRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\"\xef\x01\n\x0fPackageSnapshot\x12\n\n\x02id\x18\x01 \x01(\t\x12\x11\n\ttariff_id\x18\x02 \x01(\t\x12\x0f\n\x07zone_id\x18\x03 \x01(\t\x12\x18\n\x10\x64uration_minutes\x18\x04 \x01(\x05\x12\x19\n\x11remaining_minutes\x18\x05 \x01(\x05\x12\x16\n\x0equeue_position\x18\x06 \x01(\x05\x12\x0e\n\x06status\x18\x07 \x01(\t\x12\x1b\n\x13window_start_minute\x18\x08 \x01(\x05\x12\x19\n\x11window_end_minute\x18\t \x01(\x05\x12\x17\n\x0fwindow_timezone\x18\n \x01(\t\"\xd0\x01\n\x14SessionMeterSnapshot\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x16\n\x0e\x62illed_minutes\x18\x02 \x01(\x05\x12\x14\n\x0c\x62illed_cents\x18\x03 \x01(\x03\x12\x17\n\x0fpackage_minutes\x18\x04 \x01(\x05\x12\x1d\n\x15\x61\x63tive_entitlement_id\x18\x05 \x01(\t\x12\x0e\n\x06status\x18\x06 \x01(\t\x12.\n\nupdated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd8\x03\n\x0fSessionSnapshot\x12\x16\n\x0eschema_version\x18\x01 \x01(\x05\x12/\n\x0bserver_time\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\x07session\x18\x03 \x01(\x0b\x32\x1d.gameclub.sessions.v1.Session\x12\x16\n\x0eworkstation_id\x18\x04 \x01(\t\x12\x0f\n\x07zone_id\x18\x05 \x01(\t\x12\x11\n\tclient_id\x18\x06 \x01(\t\x12\x15\n\rbalance_cents\x18\x07 \x01(\x03\x12\x15\n\rbalance_bonus\x18\x08 \x01(\x03\x12=\n\x0e\x61\x63tive_package\x18\t \x01(\x0b\x32%.gameclub.sessions.v1.PackageSnapshot\x12<\n\rpackage_queue\x18\n \x03(\x0b\x32%.gameclub.sessions.v1.PackageSnapshot\x12\x39\n\x05meter\x18\x0b \x01(\x0b\x32*.gameclub.sessions.v1.SessionMeterSnapshot\x12\x17\n\x0f\x61llowed_actions\x18\x0c \x03(\t\x12\x11\n\tdevice_id\x18\r \x01(\t\"B\n\x13ListSessionsRequest\x12\x16\n\x0eworkstation_id\x18\x01 \x01(\t\x12\x13\n\x0b\x61\x63tive_only\x18\x02 \x01(\x08\"G\n\x14ListSessionsResponse\x12/\n\x08sessions\x18\x01 \x03(\x0b\x32\x1d.gameclub.sessions.v1.Session\";\n\x12StopSessionRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\"{\n\x1a\x43reateTransferOfferRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x1d\n\x15target_workstation_id\x18\x02 \x01(\t\x12\x11\n\tdevice_id\x18\x03 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x04 \x01(\t\"M\n\x17GetTransferOfferRequest\x12\x10\n\x08offer_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\r\n\x05token\x18\x03 \x01(\t\"e\n\x16\x43onfirmTransferRequest\x12\x10\n\x08offer_id\x18\x01 \x01(\t\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\r\n\x05token\x18\x03 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x04 \x01(\t\"\xe1\x02\n\rTransferOffer\x12\n\n\x02id\x18\x01 \x01(\t\x12\x12\n\nsession_id\x18\x02 \x01(\t\x12\x11\n\tclient_id\x18\x03 \x01(\t\x12\x1d\n\x15source_workstation_id\x18\x04 \x01(\t\x12\x1d\n\x15target_workstation_id\x18\x05 \x01(\t\x12\r\n\x05token\x18\x06 \x01(\t\x12\x0e\n\x06status\x18\x07 \x01(\t\x12\x1d\n\x15requires_package_burn\x18\x08 \x01(\x08\x12\x0f\n\x07warning\x18\t \x01(\t\x12.\n\ncreated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nexpires_at\x18\x0b \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0c\x63onfirmed_at\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"t\n\x0eTransferResult\x12\x32\n\x05offer\x18\x01 \x01(\x0b\x32#.gameclub.sessions.v1.TransferOffer\x12.\n\x07session\x18\x02 \x01(\x0b\x32\x1d.gameclub.sessions.v1.Session\"\x98\x01\n\x19ReplayOfflineBatchRequest\x12\x18\n\x10protocol_version\x18\x01 \x01(\x05\x12\x11\n\tdevice_id\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12:\n\noperations\x18\x04 \x03(\x0b\x32&.gameclub.sessions.v1.OfflineOperation\"\xc9\x01\n\x10OfflineOperation\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08sequence\x18\x02 \x01(\x03\x12\x0c\n\x04kind\x18\x03 \x01(\t\x12\x14\n\x0cpayload_json\x18\x04 \x01(\t\x12\x18\n\x10snapshot_version\x18\x05 \x01(\x05\x12\x17\n\x0fidempotency_key\x18\x06 \x01(\t\x12\x10\n\x08\x63hecksum\x18\x07 \x01(\t\x12.\n\ncreated_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x91\x01\n\x16OfflineOperationResult\x12\x14\n\x0coperation_id\x18\x01 \x01(\t\x12\x10\n\x08sequence\x18\x02 \x01(\x03\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x0f\n\x07message\x18\x04 \x01(\t\x12.\n\napplied_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xc2\x01\n\x1aReplayOfflineBatchResponse\x12\x18\n\x10protocol_version\x18\x01 \x01(\x05\x12\x12\n\nsession_id\x18\x02 \x01(\t\x12=\n\x07results\x18\x03 \x03(\x0b\x32,.gameclub.sessions.v1.OfflineOperationResult\x12\x37\n\x08snapshot\x18\x04 \x01(\x0b\x32%.gameclub.sessions.v1.SessionSnapshot*h\n\rSessionStatus\x12\x1e\n\x1aSESSION_STATUS_UNSPECIFIED\x10\x00\x12\x19\n\x15SESSION_STATUS_ACTIVE\x10\x01\x12\x1c\n\x18SESSION_STATUS_COMPLETED\x10\x02\x32\xff\x06\n\x0eSessionService\x12Q\n\x05Start\x12).gameclub.sessions.v1.StartSessionRequest\x1a\x1d.gameclub.sessions.v1.Session\x12M\n\x03Get\x12\'.gameclub.sessions.v1.GetSessionRequest\x1a\x1d.gameclub.sessions.v1.Session\x12\x65\n\x0bGetSnapshot\x12/.gameclub.sessions.v1.GetSessionSnapshotRequest\x1a%.gameclub.sessions.v1.SessionSnapshot\x12]\n\x04List\x12).gameclub.sessions.v1.ListSessionsRequest\x1a*.gameclub.sessions.v1.ListSessionsResponse\x12O\n\x04Stop\x12(.gameclub.sessions.v1.StopSessionRequest\x1a\x1d.gameclub.sessions.v1.Session\x12l\n\x13\x43reateTransferOffer\x12\x30.gameclub.sessions.v1.CreateTransferOfferRequest\x1a#.gameclub.sessions.v1.TransferOffer\x12\x66\n\x10GetTransferOffer\x12-.gameclub.sessions.v1.GetTransferOfferRequest\x1a#.gameclub.sessions.v1.TransferOffer\x12\x65\n\x0f\x43onfirmTransfer\x12,.gameclub.sessions.v1.ConfirmTransferRequest\x1a$.gameclub.sessions.v1.TransferResult\x12w\n\x12ReplayOfflineBatch\x12/.gameclub.sessions.v1.ReplayOfflineBatchRequest\x1a\x30.gameclub.sessions.v1.ReplayOfflineBatchResponseB(\xaa\x02%GameClub.Client.Contracts.Sessions.V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,20 +33,46 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gameclub.v1.sessions_pb2', 
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\252\002%GameClub.Client.Contracts.Sessions.V1'
-  _globals['_SESSIONSTATUS']._serialized_start=942
-  _globals['_SESSIONSTATUS']._serialized_end=1046
+  _globals['_SESSIONSTATUS']._serialized_start=3552
+  _globals['_SESSIONSTATUS']._serialized_end=3656
   _globals['_SESSION']._serialized_start=86
-  _globals['_SESSION']._serialized_end=464
-  _globals['_STARTSESSIONREQUEST']._serialized_start=467
-  _globals['_STARTSESSIONREQUEST']._serialized_end=697
-  _globals['_GETSESSIONREQUEST']._serialized_start=699
-  _globals['_GETSESSIONREQUEST']._serialized_end=738
-  _globals['_LISTSESSIONSREQUEST']._serialized_start=740
-  _globals['_LISTSESSIONSREQUEST']._serialized_end=806
-  _globals['_LISTSESSIONSRESPONSE']._serialized_start=808
-  _globals['_LISTSESSIONSRESPONSE']._serialized_end=879
-  _globals['_STOPSESSIONREQUEST']._serialized_start=881
-  _globals['_STOPSESSIONREQUEST']._serialized_end=940
-  _globals['_SESSIONSERVICE']._serialized_start=1049
-  _globals['_SESSIONSERVICE']._serialized_end=1403
+  _globals['_SESSION']._serialized_end=543
+  _globals['_STARTSESSIONREQUEST']._serialized_start=546
+  _globals['_STARTSESSIONREQUEST']._serialized_end=826
+  _globals['_GETSESSIONREQUEST']._serialized_start=828
+  _globals['_GETSESSIONREQUEST']._serialized_end=867
+  _globals['_GETSESSIONSNAPSHOTREQUEST']._serialized_start=869
+  _globals['_GETSESSIONSNAPSHOTREQUEST']._serialized_end=935
+  _globals['_PACKAGESNAPSHOT']._serialized_start=938
+  _globals['_PACKAGESNAPSHOT']._serialized_end=1177
+  _globals['_SESSIONMETERSNAPSHOT']._serialized_start=1180
+  _globals['_SESSIONMETERSNAPSHOT']._serialized_end=1388
+  _globals['_SESSIONSNAPSHOT']._serialized_start=1391
+  _globals['_SESSIONSNAPSHOT']._serialized_end=1863
+  _globals['_LISTSESSIONSREQUEST']._serialized_start=1865
+  _globals['_LISTSESSIONSREQUEST']._serialized_end=1931
+  _globals['_LISTSESSIONSRESPONSE']._serialized_start=1933
+  _globals['_LISTSESSIONSRESPONSE']._serialized_end=2004
+  _globals['_STOPSESSIONREQUEST']._serialized_start=2006
+  _globals['_STOPSESSIONREQUEST']._serialized_end=2065
+  _globals['_CREATETRANSFEROFFERREQUEST']._serialized_start=2067
+  _globals['_CREATETRANSFEROFFERREQUEST']._serialized_end=2190
+  _globals['_GETTRANSFEROFFERREQUEST']._serialized_start=2192
+  _globals['_GETTRANSFEROFFERREQUEST']._serialized_end=2269
+  _globals['_CONFIRMTRANSFERREQUEST']._serialized_start=2271
+  _globals['_CONFIRMTRANSFERREQUEST']._serialized_end=2372
+  _globals['_TRANSFEROFFER']._serialized_start=2375
+  _globals['_TRANSFEROFFER']._serialized_end=2728
+  _globals['_TRANSFERRESULT']._serialized_start=2730
+  _globals['_TRANSFERRESULT']._serialized_end=2846
+  _globals['_REPLAYOFFLINEBATCHREQUEST']._serialized_start=2849
+  _globals['_REPLAYOFFLINEBATCHREQUEST']._serialized_end=3001
+  _globals['_OFFLINEOPERATION']._serialized_start=3004
+  _globals['_OFFLINEOPERATION']._serialized_end=3205
+  _globals['_OFFLINEOPERATIONRESULT']._serialized_start=3208
+  _globals['_OFFLINEOPERATIONRESULT']._serialized_end=3353
+  _globals['_REPLAYOFFLINEBATCHRESPONSE']._serialized_start=3356
+  _globals['_REPLAYOFFLINEBATCHRESPONSE']._serialized_end=3550
+  _globals['_SESSIONSERVICE']._serialized_start=3659
+  _globals['_SESSIONSERVICE']._serialized_end=4554
 # @@protoc_insertion_point(module_scope)

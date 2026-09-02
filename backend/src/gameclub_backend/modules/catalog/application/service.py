@@ -147,6 +147,9 @@ class CatalogService:
         billing_mode: BillingMode = BillingMode.BLOCK,
         price_per_minute_cents: int = 0,
         free_minutes: int = 0,
+        window_start_minute: int | None = None,
+        window_end_minute: int | None = None,
+        window_timezone: str | None = None,
     ) -> Tariff:
         try:
             lifecycle = TariffLifecycle(lifecycle)
@@ -194,6 +197,9 @@ class CatalogService:
             billing_mode=billing_mode,
             price_per_minute_cents=price_per_minute_cents,
             free_minutes=free_minutes,
+            window_start_minute=window_start_minute,
+            window_end_minute=window_end_minute,
+            window_timezone=window_timezone.strip() if window_timezone else None,
         )
         return await self._repository.create_tariff(tariff)
 

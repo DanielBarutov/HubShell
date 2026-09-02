@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import secrets
 import uuid
+from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.clients.application.ports import ClientRepository, Clock
@@ -14,6 +15,7 @@ from gameclub_backend.modules.clients.domain import (
     PhoneNumber,
     normalize_phone,
 )
+from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
 
 
 class UtcClock:
@@ -234,10 +236,15 @@ class ClientService:
         reason: str,
         actor_id: str,
         idempotency_key: str,
+        payment_parts: Sequence[PaymentPart | Mapping[str, object]] | None = None,
     ) -> tuple[Client, BalanceOperation]:
         normalized_key = self._required_idempotency_key(idempotency_key)
         normalized_reason = reason.strip()
         normalized_actor = actor_id.strip()
+        try:
+            normalized_parts = normalize_payment_parts(payment_parts, amount_cents)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
         existing = await self._repository.get_operation_by_key(normalized_key)
         if existing is not None:
             self._validate_existing_operation(
@@ -248,6 +255,7 @@ class ClientService:
                 reason=normalized_reason,
                 actor_id=normalized_actor,
                 operation_type=BalanceOperationType.TOP_UP,
+                payment_parts=normalized_parts,
             )
             return await self.get(client_id), existing
         client = await self.get(client_id)
@@ -266,6 +274,7 @@ class ClientService:
                 idempotency_key=normalized_key,
                 created_at=self._clock.now(),
                 operation_type=BalanceOperationType.TOP_UP,
+                payment_parts=normalized_parts,
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
@@ -285,6 +294,7 @@ class ClientService:
             reason=normalized_reason,
             actor_id=normalized_actor,
             operation_type=BalanceOperationType.TOP_UP,
+            payment_parts=normalized_parts,
         )
         return applied_client, applied_operation
 
@@ -309,6 +319,7 @@ class ClientService:
                 reason=normalized_reason,
                 actor_id=normalized_actor,
                 operation_type=BalanceOperationType.DEBIT,
+                payment_parts=(),
             )
             return await self.get(client_id), existing
         client = await self.get(client_id)
@@ -327,6 +338,7 @@ class ClientService:
                 idempotency_key=normalized_key,
                 created_at=self._clock.now(),
                 operation_type=BalanceOperationType.DEBIT,
+                payment_parts=(),
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
@@ -346,6 +358,7 @@ class ClientService:
             reason=normalized_reason,
             actor_id=normalized_actor,
             operation_type=BalanceOperationType.DEBIT,
+            payment_parts=(),
         )
         return applied_client, applied_operation
 
@@ -366,6 +379,7 @@ class ClientService:
         reason: str,
         actor_id: str,
         operation_type: BalanceOperationType,
+        payment_parts: tuple[PaymentPart, ...] = (),
     ) -> None:
         if operation.client_id != client_id:
             raise ApplicationError(
@@ -378,6 +392,7 @@ class ClientService:
             or operation.bonus_amount != bonus_amount
             or operation.reason != reason
             or operation.actor_id != actor_id
+            or operation.payment_parts != payment_parts
         ):
             raise ApplicationError(
                 ErrorCode.CONFLICT,
