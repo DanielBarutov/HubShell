@@ -15,6 +15,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />
+    <GameClubEnvironment Condition="'$(GameClubEnvironment)' == ''">production</GameClubEnvironment>
+    <GameClubAuthAddress Condition="'$(GameClubAuthAddress)' == ''">https://api.gameclub.local:8100</GameClubAuthAddress>
+    <GameClubGrpcAddress Condition="'$(GameClubGrpcAddress)' == ''">https://api.gameclub.local:51051</GameClubGrpcAddress>
 
     <!--
       WinUI XAML Pass1 inspects the C# project before the regular C# compile.
@@ -28,6 +31,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="GameClubEnvironment" Value="$(GameClubEnvironment)" />
+    <AssemblyMetadata Include="GameClubAuthAddress" Value="$(GameClubAuthAddress)" />
+    <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.240829007" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.3916" />
     <PackageReference Include="Grpc.Net.Client" Version="2.66.0" />

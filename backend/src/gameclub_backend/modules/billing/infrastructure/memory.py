@@ -59,6 +59,13 @@ class InMemoryChargeRepository:
         charge_id = self._by_key.get(idempotency_key)
         return self._items.get(charge_id) if charge_id else None
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[SessionCharge]:
+        return sorted(
+            (item for item in self._items.values() if item.client_id == client_id),
+            key=lambda item: item.created_at,
+            reverse=True,
+        )[:limit]
+
     async def save(self, charge: SessionCharge) -> SessionCharge:
         async with self._lock:
             existing_by_key = self._by_key.get(charge.idempotency_key)

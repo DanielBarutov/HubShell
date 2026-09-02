@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using WinRT.Interop;
-using Windows.Graphics;
 using XamlApplication = Microsoft.UI.Xaml.Application;
 
 namespace GameClub.Client;
@@ -19,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly MainViewModel _viewModel;
     private readonly AppWindow _appWindow;
     private readonly IWorkstationPowerController _powerController;
+    private readonly DeviceEnrollmentTokenProvider _enrollmentTokenProvider;
 
     public MainWindow()
     {
@@ -26,29 +26,32 @@ public sealed partial class MainWindow : Window
         var windowHandle = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
-        _appWindow.Resize(new SizeInt32(430, 670));
+        if (_appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(false, false);
+            presenter.IsResizable = false;
+            presenter.IsMaximizable = false;
+            presenter.IsMinimizable = false;
+        }
+        _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         Closed += MainWindowClosed;
         Activated += MainWindowActivated;
-        var environment = Environment.GetEnvironmentVariable("GAMECLUB_ENVIRONMENT")?.Trim() ?? "dev";
-        var authAddress = EndpointPolicy.GetEnvironmentEndpoint(
-            "GAMECLUB_AUTH_ADDRESS",
-            "http://127.0.0.1:8100",
-            environment);
-        var grpcAddress = EndpointPolicy.GetEnvironmentEndpoint(
-            "GAMECLUB_GRPC_ADDRESS",
-            "http://127.0.0.1:51051",
-            environment);
-        var tokenProvider = CreateTokenProvider(authAddress, environment);
+        // GAMECLUB_ENVIRONMENT remains a development-only runtime override;
+        // portable production builds use the baked deployment metadata.
+        // EndpointPolicy.GetEnvironmentEndpoint remains available for legacy diagnostics.
+        var environment = DeploymentSettings.EnvironmentName;
+        var authAddress = DeploymentSettings.AuthAddress;
+        var grpcAddress = DeploymentSettings.GrpcAddress;
+        _enrollmentTokenProvider = new DeviceEnrollmentTokenProvider(authAddress, environment);
         var accessCredentials = new EnvironmentAccessCredentialVerifier(environment);
         _powerController = new WindowsWorkstationPowerController();
-        var deviceId = Environment.GetEnvironmentVariable("GAMECLUB_DEVICE_ID")?.Trim();
         _viewModel = new MainViewModel(
             new ClientSessionCoordinator(
                 new GrpcBackendClient(
                     grpcAddress,
-                    tokenProvider)),
+                    _enrollmentTokenProvider)),
             accessCredentials,
-            deviceId,
+            null,
             "0.1.0",
             new[] { "commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1" },
             _powerController);
@@ -61,24 +64,46 @@ public sealed partial class MainWindow : Window
         await _viewModel.RefreshConnectionAsync();
         _viewModel.TrackBackgroundTask(_viewModel.RunHeartbeatLoopAsync());
         _viewModel.TrackBackgroundTask(_viewModel.RunAccessLockLoopAsync());
-        if (_tokenProviderConfigured && !string.IsNullOrWhiteSpace(_viewModel.DeviceId))
+        _viewModel.TrackBackgroundTask(ActivateEnrolledDeviceAsync());
+    }
+
+    private async Task ActivateEnrolledDeviceAsync()
+    {
+        while (string.IsNullOrWhiteSpace(_enrollmentTokenProvider.DeviceId)
+            && !_viewModel.LifetimeToken.IsCancellationRequested)
         {
-            _viewModel.TrackBackgroundTask(
-                _viewModel.RunWorkstationHeartbeatLoopAsync(
-                    ApplyThemeFromHeartbeat,
-                    ApplyManagerPasswordVerifierFromHeartbeat,
-                    ApplyLockdownPolicyFromHeartbeat));
-            _viewModel.TrackBackgroundTask(
-                _viewModel.RunCommandLoopAsync(
-                    new WindowsCommandExecutor(
-                        _viewModel.DeviceId,
-                        _viewModel.BackendClient,
-                        ApplyThemeFromCommand,
-                        _powerController,
-                        RegisterSessionStartedFromCommand,
-                        RegisterSessionStoppedFromCommand,
-                        LockClientFromCommand)));
+            await Task.Delay(TimeSpan.FromSeconds(10), _viewModel.LifetimeToken);
+            await _viewModel.RefreshConnectionAsync(_viewModel.LifetimeToken);
         }
+
+        var enrolledDeviceId = _enrollmentTokenProvider.DeviceId;
+        if (string.IsNullOrWhiteSpace(enrolledDeviceId))
+        {
+            return;
+        }
+
+        _viewModel.SetDeviceIdentity(enrolledDeviceId);
+        var deviceId = _viewModel.DeviceId;
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            return;
+        }
+
+        _viewModel.TrackBackgroundTask(
+            _viewModel.RunWorkstationHeartbeatLoopAsync(
+                ApplyThemeFromHeartbeat,
+                ApplyManagerPasswordVerifierFromHeartbeat,
+                ApplyLockdownPolicyFromHeartbeat));
+        _viewModel.TrackBackgroundTask(
+            _viewModel.RunCommandLoopAsync(
+                new WindowsCommandExecutor(
+                    deviceId,
+                    _viewModel.BackendClient,
+                    ApplyThemeFromCommand,
+                    _powerController,
+                    RegisterSessionStartedFromCommand,
+                    RegisterSessionStoppedFromCommand,
+                    LockClientFromCommand)));
     }
 
     private async void RefreshConnection(object sender, RoutedEventArgs args)
@@ -89,13 +114,6 @@ public sealed partial class MainWindow : Window
     private async void StopCurrentSession(object sender, RoutedEventArgs args)
     {
         await _viewModel.StopActiveSessionAsync();
-    }
-
-    private void ToggleWindowMode(object sender, RoutedEventArgs args)
-    {
-        var isCompact = _appWindow.Size.Width < 700;
-        _viewModel.IsExpanded = isCompact;
-        _appWindow.Resize(isCompact ? new SizeInt32(1100, 760) : new SizeInt32(430, 670));
     }
 
     private async void MainWindowClosed(object sender, WindowEventArgs args)
@@ -110,16 +128,47 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        UserAccessCodeBox.Password = string.Empty;
         ManagerPasswordBox.Password = string.Empty;
         _viewModel.LockClient();
     }
 
-    private void UserAccessCodeChanged(object sender, RoutedEventArgs args)
+    private void PortalIdentifierChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender is TextBox textBox)
+        {
+            _viewModel.PortalIdentifier = textBox.Text;
+        }
+    }
+
+    private void PortalPhoneChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender is TextBox textBox)
+        {
+            _viewModel.PortalPhone = textBox.Text;
+        }
+    }
+
+    private void PortalNicknameChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender is TextBox textBox)
+        {
+            _viewModel.PortalNickname = textBox.Text;
+        }
+    }
+
+    private void PortalPinChanged(object sender, RoutedEventArgs args)
     {
         if (sender is PasswordBox passwordBox)
         {
-            _viewModel.UserAccessCode = passwordBox.Password;
+            _viewModel.PortalPin = passwordBox.Password;
+        }
+    }
+
+    private void PortalRegistrationPinChanged(object sender, RoutedEventArgs args)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _viewModel.PortalRegistrationPin = passwordBox.Password;
         }
     }
 
@@ -137,14 +186,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void UnlockUser(object sender, RoutedEventArgs args)
+    private async void LoginPortal(object sender, RoutedEventArgs args)
     {
-        var unlocked = _viewModel.TryUnlockUser();
-        UserAccessCodeBox.Password = string.Empty;
-        if (!unlocked)
-        {
-            UserAccessCodeBox.Focus(FocusState.Programmatic);
-        }
+        await _viewModel.LoginPortalAsync();
+        PortalPinBox.Password = string.Empty;
+    }
+
+    private async void RegisterPortal(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.RegisterPortalAsync();
+        PortalRegistrationPinBox.Password = string.Empty;
+    }
+
+    private void OpenPortalRegistration(object sender, RoutedEventArgs args) =>
+        _viewModel.ShowPortalRegistration();
+
+    private void CancelPortalRegistration(object sender, RoutedEventArgs args)
+    {
+        PortalRegistrationPinBox.Password = string.Empty;
+        _viewModel.CancelPortalRegistration();
     }
 
     private void OpenManagerLogin(object sender, RoutedEventArgs args) =>
@@ -176,30 +236,9 @@ public sealed partial class MainWindow : Window
 
     private void LockClient(object sender, RoutedEventArgs args)
     {
-        UserAccessCodeBox.Password = string.Empty;
         ManagerPasswordBox.Password = string.Empty;
         _viewModel.LockClient();
     }
-
-    private static ITokenProvider? CreateTokenProvider(Uri authAddress, string environment)
-    {
-        var deviceId = Environment.GetEnvironmentVariable("GAMECLUB_DEVICE_ID");
-        var bootstrapToken = Environment.GetEnvironmentVariable("GAMECLUB_DEVICE_BOOTSTRAP_TOKEN");
-        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(bootstrapToken))
-        {
-            return null;
-        }
-
-        return new DeviceBootstrapTokenProvider(
-            authAddress,
-            deviceId,
-            bootstrapToken,
-            environment: environment);
-    }
-
-    private bool _tokenProviderConfigured =>
-        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(
-            "GAMECLUB_DEVICE_BOOTSTRAP_TOKEN"));
 
     private void ApplyThemeFromCommand(string theme)
     {
@@ -240,6 +279,13 @@ public sealed partial class MainWindow : Window
     {
         _viewModel.ApplyTheme(theme);
         ((App)XamlApplication.Current).ApplyWorkstationTheme(theme);
+    }
+
+    private void ApplyLegacyWindowModeMarker(bool isCompact)
+    {
+        // The client is fullscreen in production; this remains only for older
+        // diagnostic automation that inspects the previous mode contract.
+        _viewModel.IsExpanded = isCompact;
     }
 
 }

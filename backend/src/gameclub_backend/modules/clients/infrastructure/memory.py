@@ -14,6 +14,16 @@ class InMemoryClientRepository:
     async def get(self, client_id: uuid.UUID) -> Client | None:
         return self._items.get(client_id)
 
+    async def get_by_nickname(self, nickname: str) -> Client | None:
+        normalized = nickname.strip().lower()
+        return next(
+            (item for item in self._items.values() if item.nickname.lower() == normalized),
+            None,
+        )
+
+    async def get_by_phone(self, phone: str) -> Client | None:
+        return next((item for item in self._items.values() if item.phone == phone), None)
+
     async def list_clients(self) -> list[Client]:
         return sorted(
             (item for item in self._items.values() if item.blocked_at is None),

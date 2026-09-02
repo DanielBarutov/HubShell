@@ -22,6 +22,9 @@ class ChargeRepository(typing.Protocol):
     async def get_by_idempotency_key(self, idempotency_key: str) -> SessionCharge | None:
         """Return a charge created by the same request key."""
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[SessionCharge]:
+        """Return recent session charges belonging to one client."""
+
     async def save(self, charge: SessionCharge) -> SessionCharge:
         """Persist a charge or return a concurrently created equivalent."""
 

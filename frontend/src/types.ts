@@ -14,6 +14,8 @@ export type Workstation = {
   position?: number | null;
   groupId?: string | null;
   deviceId?: string;
+  macAddress?: string | null;
+  installationBound?: boolean;
 };
 
 export type Booking = {

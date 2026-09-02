@@ -3,7 +3,11 @@ param(
     [ValidateSet("x86", "x64", "ARM64")]
     [string]$Architecture = "x64",
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [ValidateSet("dev", "staging", "production")]
+    [string]$EnvironmentName = "production",
+    [string]$AuthAddress = "https://api.gameclub.local:8100",
+    [string]$GrpcAddress = "https://api.gameclub.local:51051"
 )
 
 Set-StrictMode -Version Latest
@@ -36,7 +40,8 @@ else {
 }
 
 try {
-    & $publishScript -Architecture $Architecture -Configuration $Configuration -OutputPath $temporaryPath -SingleFile
+    & $publishScript -Architecture $Architecture -Configuration $Configuration -OutputPath $temporaryPath -SingleFile `
+        -EnvironmentName $EnvironmentName -AuthAddress $AuthAddress -GrpcAddress $GrpcAddress
     if ($LASTEXITCODE -ne 0) {
         throw "Публикация portable EXE завершилась с кодом $LASTEXITCODE."
     }
@@ -54,7 +59,7 @@ try {
     Write-Host $targetExecutable
     Write-Host "SHA-256: $hash"
     Write-Host "На клиентском ПК не нужны Visual Studio, .NET SDK или Windows App SDK."
-    Write-Host "Перед запуском настройте только переменные окружения конкретного workstation."
+    Write-Host "На игровом ПК не нужны env-переменные: клиент сам запросит привязку по MAC."
 }
 finally {
     if (Test-Path -LiteralPath $temporaryPath) {

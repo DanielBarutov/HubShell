@@ -236,6 +236,16 @@ class PostgresChargeRepository:
             )
             return model.to_domain() if model else None
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[SessionCharge]:
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(SessionChargeModel)
+                .where(SessionChargeModel.client_id == client_id)
+                .order_by(SessionChargeModel.created_at.desc())
+                .limit(max(1, min(limit, 100)))
+            )
+            return [model.to_domain() for model in result]
+
     async def save(self, charge: SessionCharge) -> SessionCharge:
         async with open_session(self._engine_provider) as db_session:
             async with db_session.begin():

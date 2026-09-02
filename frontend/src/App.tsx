@@ -313,6 +313,7 @@ function App() {
         }
         return api.updateWorkstation(pc.id, {
           name: pc.name,
+          mac_address: pc.macAddress ?? null,
           group_id: pc.groupId ?? null,
           position: change.position,
         });
@@ -656,6 +657,7 @@ function WorkstationTable({ pcs, onPc }: { pcs: Workstation[]; onPc: (pc: Workst
 
 function WorkstationPanel({ api, workstation, onClose, onSaved }: { api: GameClubApi; workstation?: Workstation; onClose: () => void; onSaved: () => void }) {
   const [deviceId, setDeviceId] = useState(workstation?.deviceId ?? "");
+  const [macAddress, setMacAddress] = useState(workstation?.macAddress ?? "");
   const [name, setName] = useState(workstation?.name ?? "");
   const [groupId, setGroupId] = useState(workstation?.groupId ?? (workstation?.group === "VIP-зона" ? "vip" : "main"));
   const [position, setPosition] = useState(workstation?.position && workstation.position > 0 ? String(workstation.position) : "");
@@ -676,18 +678,19 @@ function WorkstationPanel({ api, workstation, onClose, onSaved }: { api: GameClu
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const parsedPosition = position.trim() ? Number(position) : null;
-    if ((!workstation && !deviceId.trim()) || !name.trim() || (parsedPosition !== null && (!Number.isInteger(parsedPosition) || parsedPosition < 1))) {
-      setError(workstation ? "Укажите название и корректную позицию" : "Укажите device ID, название и корректную позицию");
+    if ((!workstation && !macAddress.trim()) || !name.trim() || (parsedPosition !== null && (!Number.isInteger(parsedPosition) || parsedPosition < 1))) {
+      setError(workstation ? "Укажите название и корректную позицию" : "Укажите MAC-адрес, название и корректную позицию");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
       if (workstation) {
-        await api.updateWorkstation(workstation.id, { name: name.trim(), group_id: groupId || null, position: parsedPosition });
+        await api.updateWorkstation(workstation.id, { name: name.trim(), mac_address: macAddress.trim() || null, group_id: groupId || null, position: parsedPosition });
       } else {
         await api.registerWorkstation({
-          device_id: deviceId.trim(),
+          device_id: deviceId.trim() || undefined,
+          mac_address: macAddress.trim(),
           name: name.trim(),
           group_id: groupId || null,
           position: parsedPosition,
@@ -702,7 +705,7 @@ function WorkstationPanel({ api, workstation, onClose, onSaved }: { api: GameClu
     }
   };
 
-  return <div className="panel-inner"><div className="panel-header"><div><p>Оборудование</p><h2>{workstation ? "Редактировать игровое место" : "Новое игровое место"}</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}>{!workstation && <label>Device ID<input value={deviceId} onChange={(event) => setDeviceId(event.target.value)} placeholder="pc-001" autoFocus /></label>}{workstation && <div className="detail-row"><span>Device ID</span><strong>{deviceId}</strong></div>}<label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="VIP-01" autoFocus={Boolean(workstation)} /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{availableGroups.length ? availableGroups.map((item) => <option value={item.id} key={item.id}>{item.name}</option>) : <><option value="main">Обычный зал</option><option value="vip">VIP-зона</option></>}</select></label><label>Позиция на карте<input type="number" min="1" step="1" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Не задана" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : workstation ? "Сохранить изменения" : "Добавить место"}</button><p className="subheading">Позиция задаёт место на рабочей карте; на карте место можно перетащить мышью.</p></form></div>;
+  return <div className="panel-inner"><div className="panel-header"><div><p>Оборудование</p><h2>{workstation ? "Редактировать игровое место" : "Новое игровое место"}</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}>{!workstation && <label>MAC-адрес игрового ПК<input value={macAddress} onChange={(event) => setMacAddress(event.target.value)} placeholder="AA:BB:CC:DD:EE:FF" autoFocus /></label>}{workstation && <><div className="detail-row"><span>MAC-адрес</span><strong>{macAddress || "Не назначен"}</strong></div><label>MAC-адрес игрового ПК<input value={macAddress} onChange={(event) => setMacAddress(event.target.value)} placeholder="AA:BB:CC:DD:EE:FF" /></label><div className="detail-row"><span>Состояние привязки</span><strong>{workstation.installationBound ? "Клиент привязан" : "Ожидает запуска клиента"}</strong></div>{workstation.installationBound && <p className="subheading">Это место уже связано с установкой. Смена MAC доступна через отдельную операцию перепривязки, чтобы не потерять защиту устройства.</p>}</>}{workstation && <div className="detail-row"><span>Device ID</span><strong>{deviceId}</strong></div>}<label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="VIP-01" autoFocus={Boolean(workstation)} /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{availableGroups.length ? availableGroups.map((item) => <option value={item.id} key={item.id}>{item.name}</option>) : <><option value="main">Обычный зал</option><option value="vip">VIP-зона</option></>}</select></label><label>Позиция на карте<input type="number" min="1" step="1" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Не задана" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : workstation ? "Сохранить изменения" : "Добавить место"}</button><p className="subheading">После запуска EXE клиент сам найдёт это место по MAC и получит настройки группы.</p></form></div>;
 }
 
 function BookingsView({ api, pcs, clients, zoneOptions, onNewBooking, onEditBooking, refreshKey }: { api?: GameClubApi; pcs: Workstation[]; clients: Client[]; zoneOptions: string[]; onNewBooking: () => void; onEditBooking: (reservation: Reservation) => void; refreshKey: number }) {

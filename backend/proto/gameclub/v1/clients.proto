@@ -18,6 +18,12 @@ service ClientService {
   rpc ListGuests(ListGuestsRequest) returns (ListGuestsResponse);
 }
 
+service ClientPortalService {
+  rpc Register(RegisterPortalRequest) returns (ClientPortalSession);
+  rpc Login(LoginPortalRequest) returns (ClientPortalSession);
+  rpc Get(GetPortalRequest) returns (ClientPortalSnapshot);
+}
+
 message Client {
   string id = 1;
   string nickname = 2;
@@ -126,4 +132,76 @@ message ListGuestsRequest {}
 
 message ListGuestsResponse {
   repeated Guest guests = 1;
+}
+
+message RegisterPortalRequest {
+  string nickname = 1;
+  string phone = 2;
+  string pin = 3;
+  string device_id = 4;
+}
+
+message LoginPortalRequest {
+  string identifier = 1;
+  string pin = 2;
+  string device_id = 3;
+}
+
+message GetPortalRequest {
+  string device_id = 1;
+  int32 limit = 2;
+}
+
+message ClientPortalSession {
+  string access_token = 1;
+  int32 expires_in = 2;
+  ClientPortalSnapshot snapshot = 3;
+}
+
+message ClientPortalSnapshot {
+  Client client = 1;
+  repeated PortalBalanceOperation balance_operations = 2;
+  repeated PortalSession sessions = 3;
+  repeated PortalCharge charges = 4;
+  repeated PortalPurchase purchases = 5;
+  int64 available_time_minutes = 6;
+}
+
+message PortalBalanceOperation {
+  string id = 1;
+  string operation_type = 2;
+  int64 amount_cents = 3;
+  int64 bonus_amount = 4;
+  string reason = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message PortalSession {
+  string id = 1;
+  string workstation_id = 2;
+  string status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp ended_at = 5;
+  string tariff_id = 6;
+  int32 tariff_quantity = 7;
+  string tariff_name = 8;
+}
+
+message PortalCharge {
+  string id = 1;
+  string session_id = 2;
+  string tariff_id = 3;
+  int32 duration_minutes = 4;
+  int64 amount_cents = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string tariff_name = 7;
+}
+
+message PortalPurchase {
+  string id = 1;
+  string product_name = 2;
+  int32 quantity = 3;
+  int64 total_price_cents = 4;
+  string payment_method = 5;
+  google.protobuf.Timestamp created_at = 6;
 }

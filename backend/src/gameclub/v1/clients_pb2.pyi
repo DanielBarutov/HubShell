@@ -193,3 +193,129 @@ class ListGuestsResponse(_message.Message):
     GUESTS_FIELD_NUMBER: _ClassVar[int]
     guests: _containers.RepeatedCompositeFieldContainer[Guest]
     def __init__(self, guests: _Optional[_Iterable[_Union[Guest, _Mapping]]] = ...) -> None: ...
+
+class RegisterPortalRequest(_message.Message):
+    __slots__ = ("nickname", "phone", "pin", "device_id")
+    NICKNAME_FIELD_NUMBER: _ClassVar[int]
+    PHONE_FIELD_NUMBER: _ClassVar[int]
+    PIN_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    nickname: str
+    phone: str
+    pin: str
+    device_id: str
+    def __init__(self, nickname: _Optional[str] = ..., phone: _Optional[str] = ..., pin: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
+
+class LoginPortalRequest(_message.Message):
+    __slots__ = ("identifier", "pin", "device_id")
+    IDENTIFIER_FIELD_NUMBER: _ClassVar[int]
+    PIN_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    identifier: str
+    pin: str
+    device_id: str
+    def __init__(self, identifier: _Optional[str] = ..., pin: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
+
+class GetPortalRequest(_message.Message):
+    __slots__ = ("device_id", "limit")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    limit: int
+    def __init__(self, device_id: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class ClientPortalSession(_message.Message):
+    __slots__ = ("access_token", "expires_in", "snapshot")
+    ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    SNAPSHOT_FIELD_NUMBER: _ClassVar[int]
+    access_token: str
+    expires_in: int
+    snapshot: ClientPortalSnapshot
+    def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ...) -> None: ...
+
+class ClientPortalSnapshot(_message.Message):
+    __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes")
+    CLIENT_FIELD_NUMBER: _ClassVar[int]
+    BALANCE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    SESSIONS_FIELD_NUMBER: _ClassVar[int]
+    CHARGES_FIELD_NUMBER: _ClassVar[int]
+    PURCHASES_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_TIME_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    client: Client
+    balance_operations: _containers.RepeatedCompositeFieldContainer[PortalBalanceOperation]
+    sessions: _containers.RepeatedCompositeFieldContainer[PortalSession]
+    charges: _containers.RepeatedCompositeFieldContainer[PortalCharge]
+    purchases: _containers.RepeatedCompositeFieldContainer[PortalPurchase]
+    available_time_minutes: int
+    def __init__(self, client: _Optional[_Union[Client, _Mapping]] = ..., balance_operations: _Optional[_Iterable[_Union[PortalBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[PortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[PortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[PortalPurchase, _Mapping]]] = ..., available_time_minutes: _Optional[int] = ...) -> None: ...
+
+class PortalBalanceOperation(_message.Message):
+    __slots__ = ("id", "operation_type", "amount_cents", "bonus_amount", "reason", "created_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    AMOUNT_CENTS_FIELD_NUMBER: _ClassVar[int]
+    BONUS_AMOUNT_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    operation_type: str
+    amount_cents: int
+    bonus_amount: int
+    reason: str
+    created_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., operation_type: _Optional[str] = ..., amount_cents: _Optional[int] = ..., bonus_amount: _Optional[int] = ..., reason: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class PortalSession(_message.Message):
+    __slots__ = ("id", "workstation_id", "status", "started_at", "ended_at", "tariff_id", "tariff_quantity", "tariff_name")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    STARTED_AT_FIELD_NUMBER: _ClassVar[int]
+    ENDED_AT_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    workstation_id: str
+    status: str
+    started_at: _timestamp_pb2.Timestamp
+    ended_at: _timestamp_pb2.Timestamp
+    tariff_id: str
+    tariff_quantity: int
+    tariff_name: str
+    def __init__(self, id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., status: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., ended_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_id: _Optional[str] = ..., tariff_quantity: _Optional[int] = ..., tariff_name: _Optional[str] = ...) -> None: ...
+
+class PortalCharge(_message.Message):
+    __slots__ = ("id", "session_id", "tariff_id", "duration_minutes", "amount_cents", "created_at", "tariff_name")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    AMOUNT_CENTS_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    session_id: str
+    tariff_id: str
+    duration_minutes: int
+    amount_cents: int
+    created_at: _timestamp_pb2.Timestamp
+    tariff_name: str
+    def __init__(self, id: _Optional[str] = ..., session_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., amount_cents: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_name: _Optional[str] = ...) -> None: ...
+
+class PortalPurchase(_message.Message):
+    __slots__ = ("id", "product_name", "quantity", "total_price_cents", "payment_method", "created_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PRODUCT_NAME_FIELD_NUMBER: _ClassVar[int]
+    QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_METHOD_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    product_name: str
+    quantity: int
+    total_price_cents: int
+    payment_method: str
+    created_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., product_name: _Optional[str] = ..., quantity: _Optional[int] = ..., total_price_cents: _Optional[int] = ..., payment_method: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...

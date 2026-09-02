@@ -9,6 +9,12 @@ class ClientRepository(typing.Protocol):
     async def get(self, client_id: uuid.UUID) -> Client | None:
         """Return a client by ID."""
 
+    async def get_by_nickname(self, nickname: str) -> Client | None:
+        """Return a client by case-insensitive nickname."""
+
+    async def get_by_phone(self, phone: str) -> Client | None:
+        """Return a client by canonical phone."""
+
     async def list_clients(self) -> list[Client]:
         """Return clients ordered for operator display."""
 

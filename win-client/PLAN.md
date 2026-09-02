@@ -1,4 +1,4 @@
-# Windows client — виджет игрового ПК
+# Windows client — полноэкранная оболочка игрового ПК
 
 Статус: `in_progress`  
 Приоритет: `P0`  
@@ -9,14 +9,19 @@
 
 ## Цель
 
-Создать Windows-клиент в виде компактного рабочего виджета на C#/.NET и WinUI 3, который безопасно связывается с backend по gRPC, получает настройки группы ПК и может развернуться во всё окно.
+Создать Windows-клиент на C#/.NET и WinUI 3, который после запуска сам
+подключается к backend, назначается администратором по MAC, получает настройки
+группы и стартует в полноэкранном заблокированном режиме. Компактный виджет
+остаётся служебным режимом, а не основным пользовательским сценарием.
+
+Подробный целевой flow и личный кабинет: [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md).
 
 ## Входит в план
 
-- WinUI 3 shell и окно-виджет;
-- compact/full-window modes;
+- WinUI 3 shell и fullscreen locked window;
+- borderless fullscreen locked shell; compact mode only for maintenance/diagnostics;
 - gRPC connection и generated client;
-- device identity и bootstrap auth flow;
+- automatic MAC enrollment and device identity;
 - heartbeat, reconnect, cancellation и network status;
 - получение темы/конфигурации группы ПК;
 - обработка команд и acknowledgement;
@@ -34,8 +39,10 @@
 
 ## UX и технические правила
 
-- обычный режим — компактный виджет, не fullscreen;
-- full-window режим сохраняет контекст и основные действия;
+- обычный режим — полноэкранная locked-оболочка без стандартного chrome окна;
+- компактный режим доступен только после manager flow для обслуживания;
+- клиент не требует ручных env-переменных, PIN-хэшей или bootstrap token при
+  обычной установке;
 - тема выбирается серверной конфигурацией группы, например VIP/обычный зал;
 - смена темы не требует новой версии клиента;
 - при потере сети клиент показывает offline/reconnecting и не создаёт ложный success;
@@ -48,7 +55,8 @@
 1. [x] Зафиксировать Windows support matrix, .NET/WinUI versions и способ сборки.
 2. [x] Создать solution с UI, application logic, domain models и infrastructure adapters.
 3. [x] Реализовать generated gRPC client и auth metadata boundary.
-4. [x] Реализовать widget/full-window window state.
+4. [x] Реализовать borderless fullscreen window state; compact режим оставить
+   только для manager maintenance/диагностики.
 5. [x] Реализовать heartbeat, reconnect, timeout и graceful shutdown boundary.
 6. [x] Реализовать локальный theme shell с safe defaults; versioned server configuration остаётся.
 7. [x] Реализовать gRPC command receiver/ack boundary, capabilities reporting, reconnect-backoff и ограниченный журнал результатов для защиты от повторного side effect; безопасный executor поддерживает `display.lock`/`theme.apply`.
@@ -62,8 +70,8 @@
 12. [x] Реализовать device-authenticated SessionService gateway, capability `sessions.v1` и структурированный `session.start/stop` executor; локальные игровые процессы остаются вне этого среза.
 13. [x] Получать theme key группы в ответе heartbeat, применять безопасную палитру
     WinUI и сохранять safe default для неизвестной темы.
-14. [x] Синхронизировать состояние `IsExpanded` с resize-переключателем и добавить
-    доступную подпись действия для compact/full-window кнопки.
+14. [x] Убрать пользовательский compact/full-window переключатель из Locked-flow;
+    старый marker сохранён только как source-compatibility boundary.
 15. [x] Зафиксировать endpoint transport policy: loopback HTTP только в dev,
     production требует HTTPS для auth и gRPC.
 16. [x] Реализовать access-gate: клиент стартует заблокированным, пользователь
@@ -86,7 +94,7 @@
     login, lock действий до входа, обработку завершения/исчерпания баланса и
     контролируемый restart после подтверждённой сервером остановки сессии.
     Команда `session.start` также передаёт `tariff_id`/`tariff_quantity`, а
-    виджет показывает активную сессию и позволяет завершить её самостоятельно.
+    клиент показывает активную сессию и позволяет завершить её самостоятельно.
 20. [x] Подготовить Windows deployment script/installer bootstrap, который
     регистрирует автозапуск клиента и опциональные recovery policy; настоящий
     Assigned Access/Shell Launcher и native installer smoke требуют Windows.
@@ -99,8 +107,12 @@
     разделить app-level shell lock и Windows security boundary, добавить
     декларативную policy группы, безопасный session lock и обратимый provisioning
     Assigned Access/Shell Launcher.
+23. [x] Реализовать исходный срез плана [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md):
+    automatic MAC enrollment, server-backed user login/registration, fullscreen
+    shell и личный кабинет с историей операций. Native Windows и production
+    hardening остаются отдельными checks.
 
-Текущий срез: gRPC-клиент получает device JWT через dev bootstrap, передаёт bearer
+Текущий срез: gRPC-клиент получает device JWT через MAC enrollment, передаёт bearer
 metadata, heartbeat и server-streaming команды с acknowledgement. Клиент проверяет
 `expires_at` перед исполнением и отрицательно подтверждает просроченную команду.
 После потери stream клиент переподключается с backoff до 30 секунд, а результат
@@ -125,7 +137,7 @@ App-level access-gate и тестируемая проверка PBKDF2-хеше
 
 ## Критерии готовности
 
-- клиент запускается как виджет и разворачивается во всё окно;
+- клиент запускается fullscreen в borderless Locked shell;
 - устанавливает защищённое соединение и сообщает heartbeat;
 - переживает временное отключение сети без ложного success;
 - получает тему группы ПК без новой сборки;

@@ -21,7 +21,8 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("workstations
 
 
 class RegisterWorkstationRequest(BaseModel):
-    device_id: str = Field(min_length=1, max_length=128)
+    device_id: str | None = Field(default=None, max_length=128)
+    mac_address: str | None = Field(default=None, max_length=32)
     name: str = Field(min_length=1, max_length=128)
     group_id: str | None = Field(default=None, max_length=128)
     position: int | None = Field(default=None, ge=0)
@@ -33,6 +34,7 @@ class UpdateWorkstationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     group_id: str | None = Field(default=None, max_length=128)
     position: int | None = Field(default=None, ge=0)
+    mac_address: str | None = Field(default=None, max_length=32)
 
 
 class HeartbeatRequest(BaseModel):
@@ -93,6 +95,8 @@ class WorkstationResponse(BaseModel):
     capabilities: tuple[str, ...]
     theme: str
     archived_at: str | None
+    mac_address: str | None
+    installation_bound: bool
 
     @classmethod
     def from_domain(cls, workstation: Workstation) -> "WorkstationResponse":
@@ -109,6 +113,8 @@ class WorkstationResponse(BaseModel):
             capabilities=workstation.capabilities,
             theme=workstation.theme,
             archived_at=workstation.archived_at.isoformat() if workstation.archived_at else None,
+            mac_address=workstation.mac_address,
+            installation_bound=workstation.installation_id is not None,
         )
 
 

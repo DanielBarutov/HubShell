@@ -30,6 +30,8 @@ export function toUiWorkstation(
     position: workstation.position,
     groupId: workstation.group_id,
     deviceId: workstation.device_id,
+    macAddress: workstation.mac_address,
+    installationBound: workstation.installation_bound,
   };
 }
 

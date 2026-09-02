@@ -1,72 +1,64 @@
 # Windows client — support matrix
 
-Документ фиксирует целевую платформу по текущему `.csproj`. Фактический запуск
-нужно подтвердить на Windows перед выпуском.
+Документ фиксирует целевую платформу и границы доказательств. Фактический
+запуск нужно подтвердить на Windows перед выпуском.
 
-| Область | Целевое значение | Подтверждение |
+| Область | Целевое значение | Статус в Linux checkout |
 | --- | --- | --- |
-| Runtime | .NET 8 | project target framework |
-| UI framework | WinUI 3 / Windows App SDK 1.6 | project package reference |
-| Target framework | `net8.0-windows10.0.19041.0` | project target framework |
-| Минимальная ОС | Windows 10 build 17763 | `TargetPlatformMinVersion` |
-| Windows build для разработки | Windows 10/11 SDK 19041+ | target framework and SDK tooling |
-| Архитектуры | x86, x64, ARM64 | `Platforms`/`RuntimeIdentifiers` |
-| Транспорт | gRPC over configured endpoint; dev loopback HTTP, production HTTPS | `EndpointPolicy` и generated protobuf consumers |
-| Auth | device JWT через dev bootstrap | runtime configuration |
-| Режим окна | компактный виджет / full-window | `MainWindow` resize flow |
-| Access gate | Locked до кода пользователя, отдельный Maintenance для менеджера | `AccessGateCoordinator` + PBKDF2 verifier |
-| Kiosk boundary | Assigned Access/Shell Launcher для запрета выхода в Windows desktop | deployment policy, не WinUI-код |
-| Portable delivery | unpackaged self-contained single-file `GameClub.Client.exe` | `scripts/build-portable-exe.ps1`; native publish/runtime требуют Windows |
+| Runtime | .NET 8 | source-level |
+| UI framework | WinUI 3 / Windows App SDK 1.6 | source-level |
+| Target framework | `net8.0-windows10.0.19041.0` | project config |
+| Минимальная ОС | Windows 10 build 17763 | project config |
+| Архитектуры | x86, x64, ARM64 | project config; native runtime не проверен |
+| Транспорт | gRPC/Protobuf, enrollment через HTTPS | source-level; TLS runtime не проверен |
+| Device auth | MAC enrollment → device-scoped JWT | source-level |
+| User auth | server-backed register/login → client-scoped JWT | source-level |
+| Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
+| Manager access | `Ctrl+Alt+P`, отдельный manager password | source-level; native smoke не выполнен |
+| Kiosk boundary | Assigned Access/Shell Launcher | не проверено |
+| Delivery | self-contained single-file `GameClub.Client.exe` | publish требует Windows |
 
-## Что проверено в текущей Linux-среде
+## Целевой deployment flow
 
-- структура слоёв и исходных файлов;
-- наличие source-of-truth protobuf и C# `Protobuf Include` для актуальных
-  contracts, включая billing;
-- статическая граница device JWT, heartbeat, command stream, expiry и ACK;
-- app-level access-gate: locked startup, manager boundary, idle relock и throttling;
-- конфигурационные значения из проекта.
+1. Администратор собирает EXE с реальными `AuthAddress` и `GrpcAddress`.
+2. EXE копируется на игровой ПК и запускается обычным пользователем.
+3. Клиент создаёт технический installation id в AppData и отправляет MAC.
+4. До назначения в админке отображается `Ожидает назначения`.
+5. После назначения workstation по MAC backend выдаёт device JWT и настройки
+   группы через heartbeat.
+6. Клиент открывает Locked shell; пользователь регистрируется или входит и
+   получает свой профиль/историю.
 
-## Что требует Windows
+На клиентском ПК не должны выполняться `dotnet`, PowerShell setup, ввод
+`device_id`, bootstrap-токена или локальных PIN-хэшей.
 
-- `dotnet restore` и `dotnet build` WinUI solution;
-- запуск под обычным пользователем;
-- `dotnet test` для coordinator/access-gate тестов;
-- проверка компактного и full-window режимов;
-- старт без рабочих действий до user unlock и вход в maintenance только отдельным
-  manager password;
-- запуск в Assigned Access/Shell Launcher и проверка, что обычный пользователь не
-  получает desktop, shell, Alt+Tab и произвольные приложения;
-- фактический app-shell lock, применение theme resources и восстановление после
-  перезапуска;
-- проверка device stream и heartbeat на целевых Windows builds.
-- проверка загрузки production-конфигурации с HTTPS и отклонения HTTP.
+## Что проверено в текущем Linux checkout
 
-`scripts/configure-windows-kiosk.ps1` по умолчанию только создаёт preview XML.
-Применение или восстановление требует явного `-Apply`, администратора,
-контекста `SYSTEM`, существующей стандартной kiosk-учётной записи и
-поддерживаемой редакции Enterprise/Education/IoT. Скрипт сохраняет backup перед
-заменой Shell Launcher policy.
+- структура слоёв и source-of-truth protobuf;
+- MAC enrollment, installation binding и состояния `pending/approved/disabled`;
+- device/client JWT claims и device binding на source-level;
+- fullscreen presenter, locked flow, portal view и `Ctrl+Alt+P` на source-level;
+- allowlist команд, deadline, expiry, ACK и reconnect boundaries;
+- portable publish parameters и отсутствие секретов в deployment script.
 
-Автоматизированная последовательность restore/build и ручной checklist находятся в
-[`../scripts/verify-windows.ps1`](../scripts/verify-windows.ps1). Запускать из
-PowerShell в каталоге `win-client`:
+Это не подтверждает запуск WinUI, XAML compilation, Windows networking или
+поведение полноэкранного окна.
 
-```powershell
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
-```
+## Что требует реального Windows-ПК
 
-Для передачи одного EXE после native smoke используйте:
+- `dotnet restore`, `dotnet build`, `dotnet test` для solution;
+- запуск EXE на чистом ПК без SDK и без прав администратора;
+- pending → assignment в web-админке → approved heartbeat;
+- fullscreen/borderless, отсутствие desktop-фона и корректный focus;
+- регистрация, login, logout, relock и отображение только своего профиля;
+- reconnect, theme/policy, session lifecycle и повторный запуск;
+- portable single-file запуск на чистом профиле;
+- Assigned Access/Shell Launcher: Explorer, Start, desktop, Alt+Tab,
+  произвольные приложения, recovery и restore;
+- production HTTPS/gRPC TLS и сертификатная цепочка.
 
-```powershell
-.\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
-```
+Автоматизированная последовательность и ручные отметки находятся в
+[REAL-PC-VERIFICATION.md](REAL-PC-VERIFICATION.md).
 
-Скрипт передаёт архитектуру как `-p:Platform`, потому что `--arch` для solution
-не поддерживается SDK; publish использует отдельный runtime `win-x64`/`win-x86`/
-`win-arm64`.
-
-В текущем Linux-окружении .NET 8 SDK доступен локально в `/tmp/hubshell-dotnet`,
-но native WinUI/Windows App SDK XAML-компилятор Windows не запускается. `csc` и
-`msbuild` не находятся в системном PATH. Это ограничение проверки, а не
-разрешение считать native build успешным.
+Для native solution используется `-p:Platform=x64`; `--arch` для solution не
+является эквивалентом и приводит к `NETSDK1134`.

@@ -5,6 +5,7 @@ using GameClub.Client.Application.Ports;
 using GameClub.Client.Contracts;
 using Workstations = GameClub.Client.Contracts.Workstations.V1;
 using Sessions = GameClub.Client.Contracts.Sessions.V1;
+using Clients = GameClub.Client.Contracts.Clients.V1;
 using GameClub.Client.Domain;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -18,7 +19,10 @@ public sealed class GrpcBackendClient : IBackendClient
     private readonly SystemService.SystemServiceClient _systemClient;
     private readonly Workstations.WorkstationService.WorkstationServiceClient _workstationClient;
     private readonly Sessions.SessionService.SessionServiceClient _sessionClient;
+    private readonly Clients.ClientPortalService.ClientPortalServiceClient _clientPortalClient;
     private readonly ITokenProvider? _tokenProvider;
+    private string? _clientPortalAccessToken;
+    private DateTimeOffset _clientPortalExpiresAt;
 
     public GrpcBackendClient(Uri backendAddress, ITokenProvider? tokenProvider = null)
     {
@@ -26,8 +30,67 @@ public sealed class GrpcBackendClient : IBackendClient
         _systemClient = new SystemService.SystemServiceClient(_channel);
         _workstationClient = new Workstations.WorkstationService.WorkstationServiceClient(_channel);
         _sessionClient = new Sessions.SessionService.SessionServiceClient(_channel);
+        _clientPortalClient = new Clients.ClientPortalService.ClientPortalServiceClient(_channel);
         _tokenProvider = tokenProvider;
     }
+
+    public async Task<ClientPortalAuthenticationSnapshot> RegisterAsync(
+        string nickname,
+        string phone,
+        string pin,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.RegisterAsync(
+            new Clients.RegisterPortalRequest
+            {
+                Nickname = nickname,
+                Phone = phone,
+                Pin = pin,
+                DeviceId = deviceId,
+            },
+            headers: await CreateDeviceMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        SetClientPortalToken(response);
+        return ToPortalAuthenticationSnapshot(response);
+    }
+
+    public async Task<ClientPortalAuthenticationSnapshot> LoginAsync(
+        string identifier,
+        string pin,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.LoginAsync(
+            new Clients.LoginPortalRequest
+            {
+                Identifier = identifier,
+                Pin = pin,
+                DeviceId = deviceId,
+            },
+            headers: await CreateDeviceMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        SetClientPortalToken(response);
+        return ToPortalAuthenticationSnapshot(response);
+    }
+
+    public async Task<ClientPortalSnapshot> RefreshAsync(
+        string deviceId,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var metadata = await CreateClientPortalMetadataAsync(cancellationToken);
+        var response = await _clientPortalClient.GetAsync(
+            new Clients.GetPortalRequest { DeviceId = deviceId, Limit = limit },
+            headers: metadata,
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return ToPortalSnapshot(response);
+    }
+
+    public void Logout() => (_clientPortalAccessToken, _clientPortalExpiresAt) = (null, default);
 
     public async Task<ClientConnectionSnapshot> CheckConnectionAsync(
         CancellationToken cancellationToken = default)
@@ -195,6 +258,11 @@ public sealed class GrpcBackendClient : IBackendClient
 
     private async Task<Metadata> CreateMetadataAsync(CancellationToken cancellationToken)
     {
+        return await CreateDeviceMetadataAsync(cancellationToken);
+    }
+
+    private async Task<Metadata> CreateDeviceMetadataAsync(CancellationToken cancellationToken)
+    {
         var metadata = new Metadata();
         var token = await (_tokenProvider?.GetAccessTokenAsync(cancellationToken)
             ?? ValueTask.FromResult<string?>(null));
@@ -204,6 +272,74 @@ public sealed class GrpcBackendClient : IBackendClient
         }
         return metadata;
     }
+
+    private Task<Metadata> CreateClientPortalMetadataAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(_clientPortalAccessToken)
+            || _clientPortalExpiresAt <= DateTimeOffset.UtcNow.AddSeconds(30))
+        {
+            throw new DeviceAuthenticationRequiredException(
+                new InvalidOperationException("Client portal authentication has expired"));
+        }
+
+        var metadata = new Metadata
+        {
+            { "authorization", $"Bearer {_clientPortalAccessToken}" },
+        };
+        return Task.FromResult(metadata);
+    }
+
+    private void SetClientPortalToken(Clients.ClientPortalSession response)
+    {
+        _clientPortalAccessToken = response.AccessToken;
+        _clientPortalExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(response.ExpiresIn, 1));
+    }
+
+    private static ClientPortalAuthenticationSnapshot ToPortalAuthenticationSnapshot(
+        Clients.ClientPortalSession response) =>
+        new(response.AccessToken, response.ExpiresIn, ToPortalSnapshot(response.Snapshot));
+
+    private static ClientPortalSnapshot ToPortalSnapshot(Clients.ClientPortalSnapshot source) =>
+        new(
+            source.Client.Id,
+            source.Client.Nickname,
+            source.Client.Phone,
+            source.Client.BalanceCents,
+            source.Client.BalanceBonus,
+            source.AvailableTimeMinutes,
+            source.BalanceOperations.Select(operation => new ClientPortalBalanceOperation(
+                operation.Id,
+                operation.OperationType,
+                operation.AmountCents,
+                operation.BonusAmount,
+                operation.Reason,
+                ToIsoTimestamp(operation.CreatedAt))).ToArray(),
+            source.Sessions.Select(session => new ClientPortalSession(
+                session.Id,
+                session.WorkstationId,
+                session.Status,
+                ToIsoTimestamp(session.StartedAt),
+                session.EndedAt is null ? null : ToIsoTimestamp(session.EndedAt),
+                string.IsNullOrWhiteSpace(session.TariffId) ? null : session.TariffId,
+                string.IsNullOrWhiteSpace(session.TariffName) ? null : session.TariffName,
+                session.TariffQuantity)).ToArray(),
+            source.Charges.Select(charge => new ClientPortalCharge(
+                charge.Id,
+                charge.SessionId,
+                charge.TariffId,
+                charge.DurationMinutes,
+                charge.AmountCents,
+                string.IsNullOrWhiteSpace(charge.TariffName) ? null : charge.TariffName,
+                ToIsoTimestamp(charge.CreatedAt))).ToArray(),
+            source.Purchases.Select(purchase => new ClientPortalPurchase(
+                purchase.Id,
+                purchase.ProductName,
+                purchase.Quantity,
+                purchase.TotalPriceCents,
+                purchase.PaymentMethod,
+                ToIsoTimestamp(purchase.CreatedAt))).ToArray());
 
     private static WorkstationCommandSnapshot ToSnapshot(Workstations.WorkstationCommand command) =>
         new(

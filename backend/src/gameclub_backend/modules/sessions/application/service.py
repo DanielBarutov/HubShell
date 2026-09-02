@@ -201,6 +201,9 @@ class SessionService:
     ) -> list[Session]:
         return await self._repository.list(workstation_id, active_only)
 
+    async def list_for_client(self, client_id: uuid.UUID, limit: int = 50) -> list[Session]:
+        return await self._repository.list_for_client(client_id, max(1, min(limit, 100)))
+
     @staticmethod
     def _validate_idempotent_session(
         existing: Session,

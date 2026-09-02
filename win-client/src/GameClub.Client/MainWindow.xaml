@@ -32,7 +32,7 @@
             </StackPanel>
             <Button
                 Grid.Column="1"
-                Click="ToggleWindowMode"
+                Visibility="Collapsed"
                 Padding="10,7"
                 Background="{ThemeResource CardBackgroundBrush}"
                 AutomationProperties.Name="{Binding WindowModeActionLabel}">
@@ -118,19 +118,31 @@
                         <TextBlock Text="{Binding AccessSubtitle}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
                     </StackPanel>
                     <StackPanel Spacing="10" Visibility="{Binding UserLoginVisibility}">
+                        <TextBox
+                            Header="Ник или телефон"
+                            TextChanged="PortalIdentifierChanged"
+                            PlaceholderText="Введите ник или телефон"
+                            MaxLength="64" />
                         <PasswordBox
-                            x:Name="UserAccessCodeBox"
-                            Header="Код доступа"
-                            PasswordChanged="UserAccessCodeChanged"
-                            PlaceholderText="Введите персональный код"
+                            x:Name="PortalPinBox"
+                            Header="PIN"
+                            PasswordChanged="PortalPinChanged"
+                            PlaceholderText="Введите PIN"
                             MaxLength="32" />
                         <Button
-                            Click="UnlockUser"
-                            IsEnabled="{Binding CanUnlockUser}"
+                            Click="LoginPortal"
+                            IsEnabled="{Binding CanLoginPortal}"
                             HorizontalAlignment="Stretch"
                             Padding="0,11"
                             Background="{ThemeResource AccentBrush}">
-                            <TextBlock Text="Войти" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="Войти в аккаунт" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                        </Button>
+                        <Button
+                            Click="OpenPortalRegistration"
+                            HorizontalAlignment="Center"
+                            Padding="6,4"
+                            Background="Transparent">
+                            <TextBlock Text="Зарегистрироваться" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
                         <Button
                             Click="OpenManagerLogin"
@@ -139,6 +151,35 @@
                             Padding="6,4"
                             Background="Transparent">
                             <TextBlock Text="Режим обслуживания" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Spacing="10" Visibility="{Binding PortalRegistrationVisibility}">
+                        <TextBox
+                            Header="Ник"
+                            TextChanged="PortalNicknameChanged"
+                            PlaceholderText="От 3 символов"
+                            MaxLength="64" />
+                        <TextBox
+                            Header="Телефон"
+                            TextChanged="PortalPhoneChanged"
+                            PlaceholderText="+7 или 8XXXXXXXXXX"
+                            MaxLength="32" />
+                        <PasswordBox
+                            x:Name="PortalRegistrationPinBox"
+                            Header="PIN"
+                            PasswordChanged="PortalRegistrationPinChanged"
+                            PlaceholderText="От 4 цифр"
+                            MaxLength="32" />
+                        <Button
+                            Click="RegisterPortal"
+                            IsEnabled="{Binding CanRegisterPortal}"
+                            HorizontalAlignment="Stretch"
+                            Padding="0,11"
+                            Background="{ThemeResource AccentBrush}">
+                            <TextBlock Text="Создать аккаунт" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Click="CancelPortalRegistration" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
+                            <TextBlock Text="Назад ко входу" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
                     </StackPanel>
                     <StackPanel Spacing="10" Visibility="{Binding ManagerLoginVisibility}">
@@ -169,9 +210,46 @@
                         </Button>
                     </StackPanel>
                     <TextBlock Text="{Binding AccessMessage}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
-                    <TextBlock Text="Код и пароль не сохраняются на компьютере." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                    <TextBlock Text="PIN проверяется сервером и не сохраняется в клиенте." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </Grid>
+        <ScrollViewer
+            Grid.RowSpan="2"
+            Padding="18,118,18,18"
+            Visibility="{Binding PortalContentVisibility}">
+            <StackPanel Spacing="13">
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Ваш аккаунт" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
+                        <TextBlock Text="{Binding PortalAccountSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" />
+                        <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="14" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="История пополнений и списаний" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding PortalBalanceHistory}" />
+                        <ItemsControl ItemsSource="{Binding PortalChargeHistory}" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Купленные товары" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding PortalPurchaseHistory}" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="История тарифов и игровых сессий" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding PortalSessionHistory}" />
+                    </StackPanel>
+                </Border>
+                <Button Click="LockClient" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
+                    <TextBlock Text="Выйти и заблокировать место" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Window>

@@ -7,6 +7,7 @@ public enum ClientConnectionState
     Reconnecting,
     Offline,
     AuthenticationRequired,
+    WaitingForAssignment,
 }
 
 public sealed record ClientConnectionSnapshot(

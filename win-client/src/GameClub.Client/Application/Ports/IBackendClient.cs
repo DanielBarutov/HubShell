@@ -2,7 +2,7 @@ using GameClub.Client.Domain;
 
 namespace GameClub.Client.Application.Ports;
 
-public interface IBackendClient : IAsyncDisposable, IWorkstationSessionGateway
+public interface IBackendClient : IAsyncDisposable, IWorkstationSessionGateway, IClientPortalGateway
 {
     Task<ClientConnectionSnapshot> CheckConnectionAsync(
         CancellationToken cancellationToken = default);

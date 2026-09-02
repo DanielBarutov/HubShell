@@ -231,6 +231,13 @@ class BillingService:
             )
         return await self._repository.revenue_between(start_at, end_at)
 
+    async def list_charges_for_client(
+        self,
+        client_id: uuid.UUID,
+        limit: int = 50,
+    ) -> list[SessionCharge]:
+        return await self._repository.list_for_client(client_id, max(1, min(limit, 100)))
+
     async def charge_session(
         self,
         session_id: uuid.UUID,

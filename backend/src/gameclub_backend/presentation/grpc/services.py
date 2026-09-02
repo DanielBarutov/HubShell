@@ -58,6 +58,10 @@ from gameclub_backend.modules.catalog.domain import (
     TariffLifecycle,
 )
 from gameclub_backend.modules.clients.application.guests import GuestService
+from gameclub_backend.modules.clients.application.portal import (
+    ClientPortalService,
+    ClientPortalSnapshot,
+)
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
 from gameclub_backend.modules.reservations.application.service import ReservationService
@@ -140,6 +144,26 @@ async def require_device(
         or not principal.can("workstations.connect")
     ):
         await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Device identity is not permitted")
+    return principal
+
+
+async def require_client_portal(
+    context: grpc.aio.ServicerContext,
+    token_service: JwtTokenService | None,
+    client_id: str,
+    device_id: str,
+) -> Principal:
+    principal = await require_principal(context, token_service)
+    if (
+        principal.subject_type is not SubjectType.CLIENT
+        or principal.subject_id != client_id
+        or principal.device_id != device_id
+        or not principal.can("client.portal")
+    ):
+        await context.abort(
+            grpc.StatusCode.PERMISSION_DENIED,
+            "Client portal identity is not permitted",
+        )
     return principal
 
 
@@ -734,6 +758,65 @@ def to_balance_operation_proto(
     return response
 
 
+def to_portal_snapshot_proto(
+    snapshot: ClientPortalSnapshot,
+) -> clients_pb2.ClientPortalSnapshot:
+    response = clients_pb2.ClientPortalSnapshot(
+        client=to_client_proto(snapshot.client),
+        balance_operations=[
+            clients_pb2.PortalBalanceOperation(
+                id=str(operation.id),
+                operation_type=operation.operation_type.value,
+                amount_cents=operation.amount_cents,
+                bonus_amount=operation.bonus_amount,
+                reason=operation.reason,
+                created_at=to_timestamp(operation.created_at),
+            )
+            for operation in snapshot.balance_operations
+        ],
+        sessions=[
+            clients_pb2.PortalSession(
+                id=str(session.id),
+                workstation_id=str(session.workstation_id),
+                status=session.status.value,
+                started_at=to_timestamp(session.started_at),
+                ended_at=to_timestamp(session.ended_at),
+                tariff_id=str(session.tariff_id) if session.tariff_id else "",
+                tariff_quantity=session.tariff_quantity,
+                tariff_name=(
+                    snapshot.tariff_names.get(session.tariff_id, "") if session.tariff_id else ""
+                ),
+            )
+            for session in snapshot.sessions
+        ],
+        charges=[
+            clients_pb2.PortalCharge(
+                id=str(charge.id),
+                session_id=str(charge.session_id),
+                tariff_id=str(charge.tariff_id),
+                duration_minutes=charge.duration_minutes,
+                amount_cents=charge.amount_cents,
+                created_at=to_timestamp(charge.created_at),
+                tariff_name=snapshot.tariff_names.get(charge.tariff_id, ""),
+            )
+            for charge in snapshot.charges
+        ],
+        purchases=[
+            clients_pb2.PortalPurchase(
+                id=str(purchase.id),
+                product_name=purchase.product_name,
+                quantity=purchase.quantity,
+                total_price_cents=purchase.total_price_cents,
+                payment_method=purchase.payment_method.value,
+                created_at=to_timestamp(purchase.created_at),
+            )
+            for purchase in snapshot.purchases
+        ],
+        available_time_minutes=snapshot.available_time_minutes,
+    )
+    return response
+
+
 class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
     def __init__(
         self,
@@ -904,6 +987,88 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Guest service is not configured")
         guests = await self._guest_service.list_guests()
         return clients_pb2.ListGuestsResponse(guests=[to_guest_proto(guest) for guest in guests])
+
+
+class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
+    def __init__(
+        self,
+        service: ClientPortalService,
+        token_service: JwtTokenService | None,
+    ) -> None:
+        self._service = service
+        self._token_service = token_service
+
+    async def Register(
+        self,
+        request: clients_pb2.RegisterPortalRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSession:
+        await require_device(context, self._token_service, request.device_id)
+        try:
+            client = await self._service.register(request.nickname, request.phone, request.pin)
+            return await self._issue_session(client, request.device_id)
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def Login(
+        self,
+        request: clients_pb2.LoginPortalRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSession:
+        await require_device(context, self._token_service, request.device_id)
+        try:
+            client = await self._service.authenticate(request.identifier, request.pin)
+            return await self._issue_session(client, request.device_id)
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def Get(
+        self,
+        request: clients_pb2.GetPortalRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSnapshot:
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.snapshot(
+                parse_uuid(principal.subject_id, "client_id"),
+                request.limit or 50,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_portal_snapshot_proto(snapshot)
+
+    async def _issue_session(
+        self,
+        client: Client,
+        device_id: str,
+    ) -> clients_pb2.ClientPortalSession:
+        if self._token_service is None:
+            raise ApplicationError(
+                ErrorCode.UNAUTHENTICATED,
+                "Authentication is not configured",
+            )
+        principal = Principal(
+            subject_id=str(client.id),
+            subject_type=SubjectType.CLIENT,
+            roles=frozenset({"client"}),
+            permissions=frozenset({"client.portal"}),
+            device_id=device_id,
+        )
+        access_token, expires_in = self._token_service.issue_access_token(principal)
+        snapshot = await self._service.snapshot(client.id)
+        return clients_pb2.ClientPortalSession(
+            access_token=access_token,
+            expires_in=expires_in,
+            snapshot=to_portal_snapshot_proto(snapshot),
+        )
 
 
 def to_product_proto(product: Product) -> catalog_pb2.Product:

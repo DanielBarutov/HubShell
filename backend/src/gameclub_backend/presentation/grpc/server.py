@@ -46,6 +46,7 @@ from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
 from gameclub_backend.modules.clients.application.guests import GuestService
+from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.guests_memory import InMemoryGuestRepository
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
@@ -60,6 +61,9 @@ from gameclub_backend.modules.reservations.infrastructure.memory import (
 from gameclub_backend.modules.reservations.infrastructure.postgres import (
     PostgresReservationRepository,
 )
+from gameclub_backend.modules.sales.application.service import ProductSaleService
+from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
+from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
@@ -94,6 +98,7 @@ from gameclub_backend.presentation.grpc.services import (
     CashShiftGrpcService,
     CatalogGrpcService,
     ClientGrpcService,
+    ClientPortalGrpcService,
     ReservationGrpcService,
     SessionGrpcService,
     WorkstationGrpcService,
@@ -178,6 +183,7 @@ def create_server(
         cash_shift_repository = PostgresCashShiftRepository(engine_provider)
         cash_approval_repository = PostgresCashApprovalRepository(engine_provider)
         analytics_repository = PostgresAnalyticsRepository(engine_provider)
+        sales_repository = PostgresProductSaleRepository(engine_provider)
     else:
         workstation_repository = InMemoryWorkstationRepository()
         workstation_group_repository = InMemoryWorkstationGroupRepository()
@@ -193,6 +199,7 @@ def create_server(
         cash_shift_repository = InMemoryCashShiftRepository()
         cash_approval_repository = InMemoryCashApprovalRepository()
         analytics_repository = InMemoryAnalyticsRepository()
+        sales_repository = InMemoryProductSaleRepository()
     workstation_service = WorkstationService(
         workstation_repository,
         stale_after_seconds=settings.workstation_stale_after_seconds,
@@ -231,6 +238,18 @@ def create_server(
         approvals=cash_approval_repository,
     )
     analytics_service = AnalyticsService(analytics_repository)
+    sales_service = ProductSaleService(
+        sales_repository,
+        products=catalog_service,
+        clients=client_service,
+    )
+    client_portal_service = ClientPortalService(
+        clients=client_service,
+        sessions=session_service,
+        charges=billing_service,
+        sales=sales_service,
+        tariffs=catalog_service,
+    )
     command_service = WorkstationCommandService(
         command_repository,
         workstations=workstation_repository,
@@ -248,6 +267,10 @@ def create_server(
     )
     clients_pb2_grpc.add_ClientServiceServicer_to_server(
         ClientGrpcService(client_service, token_service, guest_service),
+        server,
+    )
+    clients_pb2_grpc.add_ClientPortalServiceServicer_to_server(
+        ClientPortalGrpcService(client_portal_service, token_service),
         server,
     )
     catalog_pb2_grpc.add_CatalogServiceServicer_to_server(

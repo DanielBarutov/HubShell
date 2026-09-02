@@ -57,6 +57,57 @@ class ClientService:
         )
         return await self._repository.save(client)
 
+    async def register_portal(
+        self,
+        nickname: str,
+        phone: str,
+        pin: str,
+    ) -> Client:
+        normalized_nickname = nickname.strip()
+        normalized_phone = phone.strip()
+        self._validate_portal_pin(pin)
+        try:
+            Nickname(normalized_nickname)
+            canonical_phone = PhoneNumber(normalized_phone).value
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        if await self._repository.get_by_nickname(normalized_nickname) is not None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Nickname is already registered")
+        if await self._repository.get_by_phone(canonical_phone) is not None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Phone is already registered")
+
+        now = self._clock.now()
+        client = Client(
+            id=uuid.uuid4(),
+            nickname=normalized_nickname,
+            phone=canonical_phone,
+            discount_category=None,
+            balance_cents=0,
+            balance_bonus=0,
+            created_at=now,
+            updated_at=now,
+            password_hash=self._hash_password(pin),
+        )
+        return await self._repository.save(client)
+
+    async def authenticate_portal(self, identifier: str, pin: str) -> Client:
+        self._validate_portal_pin(pin)
+        normalized_identifier = identifier.strip()
+        if not normalized_identifier:
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        client = await self._repository.get_by_nickname(normalized_identifier)
+        if client is None:
+            canonical_phone = normalize_phone(normalized_identifier)
+            if len(canonical_phone) == 11 and canonical_phone.startswith("7"):
+                client = await self._repository.get_by_phone(canonical_phone)
+        if (
+            client is None
+            or client.blocked_at is not None
+            or not self._verify_password(pin, client.password_hash)
+        ):
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        return client
+
     async def update(
         self,
         client_id: uuid.UUID,
@@ -108,6 +159,33 @@ class ClientService:
             p=1,
         )
         return f"scrypt${salt.hex()}${digest.hex()}"
+
+    @staticmethod
+    def _verify_password(password: str, encoded: str | None) -> bool:
+        if not encoded or not encoded.startswith("scrypt$"):
+            return False
+        try:
+            _, salt_hex, digest_hex = encoded.split("$", maxsplit=2)
+            salt = bytes.fromhex(salt_hex)
+            expected = bytes.fromhex(digest_hex)
+            actual = hashlib.scrypt(
+                password.encode("utf-8"),
+                salt=salt,
+                n=2**14,
+                r=8,
+                p=1,
+            )
+        except (TypeError, ValueError):
+            return False
+        return secrets.compare_digest(actual, expected)
+
+    @staticmethod
+    def _validate_portal_pin(pin: str) -> None:
+        if not pin.isdigit() or not 4 <= len(pin) <= 32:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "PIN must contain from 4 to 32 digits",
+            )
 
     async def search(self, query: str, field: str) -> list[Client]:
         normalized_query = query.strip().lower()

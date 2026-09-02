@@ -4,7 +4,11 @@ param(
     [string]$Architecture = "x64",
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$SingleFile
+    [switch]$SingleFile,
+    [ValidateSet("dev", "staging", "production")]
+    [string]$EnvironmentName = "production",
+    [string]$AuthAddress = "https://api.gameclub.local:8100",
+    [string]$GrpcAddress = "https://api.gameclub.local:51051"
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +28,9 @@ $packagePath = Join-Path $clientRoot "win-client\artifacts\installer\$runtime\$C
 $publishArguments = @{
     Architecture = $Architecture
     Configuration = $Configuration
+    EnvironmentName = $EnvironmentName
+    AuthAddress = $AuthAddress
+    GrpcAddress = $GrpcAddress
 }
 if ($SingleFile) {
     $publishArguments.SingleFile = $true
@@ -37,4 +44,4 @@ Copy-Item -Path (Join-Path $PSScriptRoot "uninstall-windows.ps1") -Destination $
 Copy-Item -Path (Join-Path $PSScriptRoot "configure-windows-kiosk.ps1") -Destination $packagePath -Force
 
 Write-Host "Установочный пакет подготовлен: $packagePath"
-Write-Host "Запуск установки: .\install-windows.ps1 -DeviceId <id> -DeviceBootstrapToken <token>"
+Write-Host "Запуск установки без device/token setup: .\install-windows.ps1"

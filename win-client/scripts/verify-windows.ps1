@@ -52,12 +52,13 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Native build пройден. Далее выполните ручные проверки под обычным пользователем:"
 @(
-    "1. Запустить клиент без прав администратора и проверить компактный виджет.",
-    "2. Переключить compact/full-window режим и убедиться, что контекст сохраняется.",
-    "3. Применить theme.apply для VIP и обычной группы ПК; проверить safe default.",
-    "4. Остановить и восстановить backend или сеть; дождаться reconnect и heartbeat.",
-    "5. Перезапустить клиент; убедиться, что он стартует Locked без рабочих данных.",
-    "6. Проверить отдельный manager password, maintenance и idle relock.",
-    "7. Проверить device stream, ACK и отсутствие повторного локального side effect.",
-    "8. В Assigned Access/Shell Launcher проверить запрет выхода в desktop и shell."
+    "1. Запустить клиент обычным пользователем, без прав администратора: он должен стартовать Locked в полноэкранном borderless shell.",
+    "2. До назначения MAC проверить pending/waiting screen без user profile, баланса и рабочих действий.",
+    "3. Назначить MAC в админке, дождаться approved, heartbeat, device policy и theme.",
+    "4. Зарегистрировать пользователя, выполнить login/logout и проверить только его баланс и историю.",
+    "5. Остановить и восстановить backend или сеть; дождаться reconnect и heartbeat без ручного token setup.",
+    "6. Перезапустить клиент; убедиться, что он снова стартует Locked и сохраняет только installation identity.",
+    "7. Проверить отдельный manager password через Ctrl+Alt+P и возврат из maintenance в Locked.",
+    "8. Проверить session/product retry и отсутствие повторного debit, sale или active session.",
+    "9. В Assigned Access/Shell Launcher проверить запрет выхода в desktop и shell."
 ) | ForEach-Object { Write-Host $_ }
