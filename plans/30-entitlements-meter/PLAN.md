@@ -34,8 +34,8 @@ server-backed активации, сохранять остаток между �
 
 Уже есть migration `20260902_0036`, purchase/order/activation use cases,
 portal queue DTO и отдельное поле `login_grant_minutes` в session. Не хватает
-transactional consumption, time-window compatibility, auto-next и durable
-grant именно на успешный portal login.
+отдельного audit/idempotency evidence для повторного device session start;
+account-portal login без игровой сессии grant не выдаёт по текущему контракту.
 
 ## Реализовано в текущем срезе
 
@@ -43,8 +43,8 @@ grant именно на успешный portal login.
 для activation/consume/burn, auto-next, immediate activation при пустой
 очереди, monotonic meter package state и server snapshot. Device session
 получает durable `login_grant_minutes=5`; portal activation остаётся отдельным
-явным действием. Unit/API slice подтверждён 128 тестами; полный DSN suite после
-concurrency-коррекции прошёл 141 тест.
+явным действием. Unit/API slice подтверждён 129 тестами; полный DSN suite после
+concurrency-коррекции прошёл 144 теста.
 
 ## Входит в план
 
@@ -53,7 +53,7 @@ concurrency-коррекции прошёл 141 тест.
 - атомарный consume по монотонной delta meter;
 - автоматический переход к следующему compatible entitlement;
 - burn только для уже начатого пакета при explicit voluntary/operator stop;
-- отдельная сущность/идемпотентность login grant;
+- durable session grant/idempotency на device session start;
 - `SessionSnapshot` с активным пакетом, очередью, grant, meter и server time;
 - session/billing/portal unit и PostgreSQL concurrency checks.
 
@@ -77,7 +77,8 @@ concurrency-коррекции прошёл 141 тест.
 5. [x] Реализовать новый пакет во время active session: immediate activation
    только при пустой очереди, иначе ordered queue.
 6. [x] Перевести device login/session start на durable `login_grant` с
-   audit и повторным безопасным ответом.
+   повторным безопасным ответом; account-portal authentication не считается
+   игровым входом и не создаёт grant.
 7. [x] Расширить HTTP/gRPC snapshot DTO и versioned compatibility tests.
 8. [ ] Добавить PostgreSQL transaction/concurrency tests для двух meter ticks,
    auto-next, stop и параллельной активации.
@@ -102,12 +103,12 @@ concurrency-коррекции прошёл 141 тест.
 ## Открытые решения
 
 - точный формат recurring/local time window и timezone клуба;
-- какое событие считается успешным portal login для grant;
+- нужен ли отдельный audit read-model для повторного device session start;
 - нужно ли показывать оператору burn reason до подтверждения stop.
 
 ## Остаток и release blocker
 
-Нужно подтвердить реальную PostgreSQL-конкурентность и общий transaction/UoW
-для debit плюс package consume. Отдельно требуется довести fallback на
-поминутную ставку после исчерпания всех пакетов для session без явно выбранного
-per-minute tariff и решить, какое именно portal-login событие получает grant.
+Нужно подтвердить оставшиеся PostgreSQL-переходы auto-next/stop/activation и
+общий transaction/UoW для debit плюс package consume. Отдельно требуется
+довести fallback на поминутную ставку после исчерпания всех пакетов для session
+без явно выбранного per-minute tariff и добавить dedicated grant audit test.

@@ -45,7 +45,7 @@ borderless-виджет сессии с возможностью скрытия 
 | Область контракта | Фактическое состояние | Целевой результат |
 | --- | --- | --- |
 | Пакеты и права времени | Durable queue, activation, window-aware consumption и auto-next добавлены; PostgreSQL concurrency/UoW ещё не доказаны | Очередь купленных пакетов в PostgreSQL, совместимость по зоне/окну, активация и consumption state с integration evidence |
-| Login grant | Device-start получает отдельный 5-minute grant; portal-login event и durable cross-transport idempotency требуют уточнения | Однократный login grant с audit/idempotency и последующим per-minute charge |
+| Login grant | Device session start получает отдельный 5-minute grant; account-portal login сам по себе игровую сессию не запускает | Однократный server-backed grant на успешный device session start с idempotency и последующим per-minute charge |
 | Session invariants | Application guard и PostgreSQL partial unique index добавлены; текущий DSN suite прошёл | Транзакционная уникальность и объяснимая ошибка; специализированные новые concurrency cases остаются в backlog |
 | Гость и деньги | Guest fixed tariff требует подтверждённого direct payment и сохраняет payment link; guest metered billing отложен | Server decision после подтверждённой direct payment, без guest balance |
 | Payment parts | Provider-neutral parts, mixed `balance`/`cash`, immutable snapshots и `needs_review` boundary добавлены | Общая cross-owner reconciliation/worker без повторного cash side effect |
@@ -82,7 +82,7 @@ borderless-виджет сессии с возможностью скрытия 
   подтверждены отдельно в `plans/VERIFICATION.md`.
 
 Остаётся принципиально незакрытым: общий settlement/reconciliation UoW между
-ledger owners, portal-login grant event, heartbeat/read-model fixtures,
+ledger owners, dedicated grant audit/idempotency evidence, heartbeat/read-model fixtures,
 PostgreSQL concurrency/fault injection, headed browser evidence и native Windows
 build/runtime/kiosk/security evidence.
 
@@ -90,12 +90,12 @@ build/runtime/kiosk/security evidence.
 
 | Требование контракта | Что есть сейчас | Доказательство | Следующий плановый шаг |
 | --- | --- | --- | --- |
-| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary и `needs_review` | unit/API tests, `128 passed`; DSN suite `143 passed` | атомарная cross-part reconciliation/worker и настройки payment methods |
+| Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary и `needs_review` | unit/API tests, `129 passed`; DSN suite `144 passed` | атомарная cross-part reconciliation/worker и настройки payment methods |
 | Guest fixed tariff | direct payment с idempotency и ссылка в session start | unit/API tests | reconciliation payment record и cash movement |
 | Entry decision | backend `CheckEntry`, HTTP/gRPC и вызов из session start | unit/API/contract tests | одинаковый consumer в frontend/WinUI и heartbeat |
 | One active client session | application guard и PostgreSQL partial unique index | unit/concurrency test source; DB test skipped без DSN | реальный PostgreSQL concurrency run |
 | Entitlement queue | durable queue, purchase, ordering, explicit activation, window-aware session consumption и auto-next | unit и in-process gRPC smoke | PostgreSQL concurrency и общий debit/package transaction |
-| Login grant | поле session, отдельное вычитание в meter, device-start grant | unit tests | grant на успешный portal login с durable audit/idempotency |
+| Login grant | поле session, отдельное вычитание в meter, device-start grant | unit tests и PostgreSQL offline/meter evidence | отдельный audit/idempotency test для повторного device session start |
 | Transfer/offline/snapshot | HTTP/gRPC snapshot/transfer/replay, WinUI gateway/journal и frontend consumers добавлены | source/unit tests; PostgreSQL DSN suite проверяет transfer create/confirm race и offline duplicate debit | heartbeat/native integration, crash/fault-injection и reconnect evidence |
 
 ## Декомпозиция следующего среза
@@ -105,7 +105,7 @@ build/runtime/kiosk/security evidence.
 WinUI подключаются только после публикации DTO владельцем backend:
 
 1. [`30-entitlements-meter`](../30-entitlements-meter/PLAN.md) — state machine
-   пакетов, consumption, time windows, auto-next и portal-login grant.
+   пакетов, consumption, time windows, auto-next и device session-start grant.
 2. [`31-settlement-reconciliation`](../31-settlement-reconciliation/PLAN.md) —
    атомарные payment parts, cash/balance boundary и recovery.
 3. [`32-session-snapshot-entry`](../32-session-snapshot-entry/PLAN.md) — единые
@@ -166,8 +166,9 @@ WinUI подключаются только после публикации DTO 
   ordered state transitions.
 - [ ] Добавить use cases покупки/очереди/явной активации и session snapshot с
   balance, active package, queue, zone, meter и server timestamps.
-- [ ] Реализовать пять бесплатных минут на каждый успешный login с durable
-  grant/idempotency; отделить их от tariff configuration `free_minutes`.
+- [x] Реализовать пять бесплатных минут на каждый успешный device session start
+  с durable session field/idempotent start; отделить их от tariff configuration
+  `free_minutes`. Account-portal login без старта игровой сессии grant не выдаёт.
 - [ ] Встроить queue selection в session start, metered charge, zone change,
   voluntary/operator stop, exhaustion и next-compatible auto-start по backend
   правилам; queued unstarted packages не сжигать.

@@ -116,7 +116,8 @@ client invariant, transfer, session snapshot и offline batch protocol. В те�
 срезе backend имеет migrations `20260902_0034`–`0046`, payment parts,
 guest-payment prerequisite, `CheckEntry`, package consumption с time windows и
 auto-next, snapshot, transfer owner transaction, offline replay и
-one-active-client guard. Portal-login grant, общий cross-owner settlement UoW,
+one-active-client guard. Account-portal login не выдаёт игровой grant без
+device session start. Общий cross-owner settlement UoW,
 PostgreSQL concurrency и transport/native evidence остаются открытыми. Эти
 возможности не следует добавлять локальными обходами в BFF или WinUI; порядок
 реализации и transport boundaries описаны в планах 29–37.
