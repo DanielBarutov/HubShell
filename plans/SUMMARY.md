@@ -373,7 +373,7 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `128 passed, 15 skipped` без DSN; `143 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, locked delta, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q` | `129 passed, 15 skipped` без DSN; `144 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и memory-backed + текущие PostgreSQL flows, включая package windows/auto-next, locked delta, snapshot, transfer, offline replay, payment review, entry decision, guest paid-start и login grant |
 | `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
 | `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
 | `cd frontend && npm run typecheck` | успешно (повторено 2026-09-02) | TypeScript compile/type boundary |
@@ -390,7 +390,7 @@ security boundary. Детали — в
 
 | Направление | Почему не закрыто |
 | --- | --- |
-| PostgreSQL integration/concurrency | 15 тестов пропускаются без `GAMECLUB_TEST_POSTGRES_DSN` и Redis DSN; при dev DSN все 143 backend-теста проходят, включая package/transfer/offline concurrency |
+| PostgreSQL integration/concurrency | 15 тестов пропускаются без `GAMECLUB_TEST_POSTGRES_DSN` и Redis DSN; при dev DSN все 144 backend-теста проходят, включая package/transfer/offline concurrency |
 | Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime; `dotnet` отсутствует в PATH |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | сейчас подтверждён локальный headed smoke; полноценный набор браузеров и realtime transport не выполнялись |

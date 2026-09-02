@@ -225,6 +225,39 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_repeated_device_login_returns_the_same_grant() -> None:
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        _billing,
+        _meters,
+        _clients,
+    ) = await build_metered_services(clock)
+    first = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="meter-device-session-repeat",
+    )
+    repeated = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="meter-device-session-repeat",
+    )
+
+    assert repeated.id == first.id
+    assert repeated.login_grant_minutes == first.login_grant_minutes == 5
+
+
+@pytest.mark.asyncio
 async def test_metered_session_becomes_exhausted_without_overdraft() -> None:
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
