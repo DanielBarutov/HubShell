@@ -12,14 +12,13 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseRidGraph>true</UseRidGraph>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <UseWindowsForms>true</UseWindowsForms>
     <!--
-      This is a WinUI 3 project. Enabling UseWPF makes the WPF XAML compiler
-      process App.xaml/MainWindow.xaml and breaks WinUI-only members such as
-      ThemeDictionaries and PointerPressed. Windows Forms is kept only for
-      the tray NotifyIcon integration.
+      This is a WinUI 3 project. Do not enable WPF or Windows Forms here:
+      either Desktop UI pipeline can make Microsoft.WinFX.targets process
+      App.xaml/MainWindow.xaml as WPF. The tray uses native Shell_NotifyIcon.
     -->
     <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />

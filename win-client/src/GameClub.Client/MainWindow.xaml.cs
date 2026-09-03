@@ -8,8 +8,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using System.Drawing;
-using Forms = System.Windows.Forms;
 using WinRT.Interop;
 using XamlApplication = Microsoft.UI.Xaml.Application;
 
@@ -21,7 +19,7 @@ public sealed partial class MainWindow : Window
     private readonly AppWindow _appWindow;
     private readonly IWorkstationPowerController _powerController;
     private readonly DeviceEnrollmentTokenProvider _enrollmentTokenProvider;
-    private Forms.NotifyIcon? _trayIcon;
+    private NativeTrayIcon? _trayIcon;
     private bool _closing;
 
     public MainWindow()
@@ -145,7 +143,6 @@ public sealed partial class MainWindow : Window
         _closing = true;
         if (_trayIcon is not null)
         {
-            _trayIcon.Visible = false;
             _trayIcon.Dispose();
             _trayIcon = null;
         }
@@ -295,30 +292,20 @@ public sealed partial class MainWindow : Window
 
     private void InitializeTrayIcon()
     {
-        _trayIcon = new Forms.NotifyIcon
-        {
-            Icon = SystemIcons.Application,
-            Text = "GameClub",
-            Visible = true,
-            ContextMenuStrip = new Forms.ContextMenuStrip(),
-        };
-        _trayIcon.DoubleClick += RestoreFromTray;
-        _trayIcon.ContextMenuStrip.Items.Add("Показать", null, RestoreFromTray);
-        _trayIcon.ContextMenuStrip.Items.Add("Выйти", null, ExitFromTray);
+        _trayIcon = new NativeTrayIcon(
+            WindowNative.GetWindowHandle(this),
+            RestoreFromTray,
+            ExitFromTray);
     }
 
-    private void RestoreFromTray(object? sender, EventArgs args)
+    private void RestoreFromTray()
     {
-        _ = sender;
-        _ = args;
         _appWindow.Show();
         Activate();
     }
 
-    private void ExitFromTray(object? sender, EventArgs args)
+    private void ExitFromTray()
     {
-        _ = sender;
-        _ = args;
         _closing = true;
         Close();
     }

@@ -22,11 +22,29 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
     ).read_text()
     publish_script = (PROJECT_ROOT / "win-client" / "scripts" / "publish-windows.ps1").read_text()
     verify_script = (PROJECT_ROOT / "win-client" / "scripts" / "verify-windows.ps1").read_text()
+    main_window = (
+        PROJECT_ROOT / "win-client" / "src" / "GameClub.Client" / "MainWindow.xaml.cs"
+    ).read_text()
+    tray_source = (
+        PROJECT_ROOT
+        / "win-client"
+        / "src"
+        / "GameClub.Client"
+        / "Infrastructure"
+        / "NativeTrayIcon.cs"
+    ).read_text()
     assert "<Protobuf_ProtoRoot>..\\..\\..\\backend\\proto</Protobuf_ProtoRoot>" in csproj
-    assert "<UseWindowsForms>true</UseWindowsForms>" in csproj
+    assert "<UseWindowsForms>true</UseWindowsForms>" not in csproj
+    assert "<UseWindowsForms>false</UseWindowsForms>" in csproj
+    assert "<UseWPF>true</UseWPF>" not in csproj
     assert "<UseWPF>false</UseWPF>" in csproj
     assert "-p:UseWPF=false" in publish_script
+    assert "-p:UseWindowsForms=false" in publish_script
     assert "-p:UseWPF=false" in verify_script
+    assert "-p:UseWindowsForms=false" in verify_script
+    assert "NativeTrayIcon" in main_window
+    assert "System.Windows.Forms" not in main_window
+    assert "Shell_NotifyIcon" in tray_source
 
     for proto_path in proto_root.glob("*.proto"):
         assert (generated_root / f"{proto_path.stem}_pb2.py").exists()
