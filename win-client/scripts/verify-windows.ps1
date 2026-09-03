@@ -29,7 +29,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet --info завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source restore $solutionPath.Path
+& $dotnetCommand.Source restore $solutionPath.Path `
+    -p:UseWPF=false `
+    -p:UseWindowsForms=true
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet restore завершился с кодом $LASTEXITCODE."
 }
@@ -37,6 +39,8 @@ if ($LASTEXITCODE -ne 0) {
 & $dotnetCommand.Source build $solutionPath.Path `
     --configuration $Configuration `
     -p:Platform=$Architecture `
+    -p:UseWPF=false `
+    -p:UseWindowsForms=true `
     --no-restore
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build завершился с кодом $LASTEXITCODE."
@@ -45,6 +49,8 @@ if ($LASTEXITCODE -ne 0) {
 & $dotnetCommand.Source test $solutionPath.Path `
     --configuration $Configuration `
     -p:Platform=$Architecture `
+    -p:UseWPF=false `
+    -p:UseWindowsForms=true `
     --no-restore
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet test завершился с кодом $LASTEXITCODE."
