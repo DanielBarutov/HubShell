@@ -180,6 +180,29 @@ Alt+Tab и произвольных приложений, а также recovery
 нужны только для сценариев автозапуска/recovery; основной пользовательский
 сценарий остаётся «скопировать один EXE и запустить».
 
+### Если появляется MC6000 и `Microsoft.WinFX.targets`
+
+Этот WinUI 3 проект не использует WPF или Windows Forms: эффективные свойства
+`UseWPF` и `UseWindowsForms` должны быть `false`. После обновления checkout
+проверьте их и удалите только промежуточные каталоги проекта:
+
+```powershell
+dotnet msbuild .\src\GameClub.Client\GameClub.Client.csproj `
+  -getProperty:UseWPF,UseWindowsForms,TargetFramework
+Remove-Item .\src\GameClub.Client\bin -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item .\src\GameClub.Client\obj -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+Ожидаемый результат — `UseWPF=false` и `UseWindowsForms=false`. Затем повторите
+`verify-windows.ps1` или `build-portable-exe.ps1`; оба скрипта передают эти
+значения явно. Если при таких значениях ошибка повторяется, сохраните binlog:
+
+```powershell
+dotnet publish .\src\GameClub.Client\GameClub.Client.csproj `
+  -c Release -r win-x64 --self-contained true `
+  -p:UseWPF=false -p:UseWindowsForms=false -bl:gameclub-client.binlog
+```
+
 ## 10. Отчёт о проверке
 
 Зафиксируйте:

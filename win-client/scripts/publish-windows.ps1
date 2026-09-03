@@ -45,7 +45,7 @@ $singleFileValue = $SingleFile.IsPresent.ToString().ToLowerInvariant()
 Write-Host "Публикация GameClub Client: $runtime / $Configuration"
 Write-Host "Каталог результата: $outputPath"
 
-& $dotnetCommand.Source publish $projectPath --configuration $Configuration --runtime $runtime --self-contained true --output $outputPath -p:Platform=$Architecture -p:UseWPF=false -p:UseWindowsForms=true -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:SelfContained=true -p:GameClubEnvironment=$EnvironmentName -p:GameClubAuthAddress=$AuthAddress -p:GameClubGrpcAddress=$GrpcAddress -p:IncludeAllContentForSelfExtract=$singleFileValue -p:IncludeNativeLibrariesForSelfExtract=$singleFileValue -p:EnableCompressionInSingleFile=$singleFileValue -p:PublishTrimmed=false `
+& $dotnetCommand.Source publish $projectPath --configuration $Configuration --runtime $runtime --self-contained true --output $outputPath -p:Platform=$Architecture -p:UseWPF=false -p:UseWindowsForms=false -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:SelfContained=true -p:GameClubEnvironment=$EnvironmentName -p:GameClubAuthAddress=$AuthAddress -p:GameClubGrpcAddress=$GrpcAddress -p:IncludeAllContentForSelfExtract=$singleFileValue -p:IncludeNativeLibrariesForSelfExtract=$singleFileValue -p:EnableCompressionInSingleFile=$singleFileValue -p:PublishTrimmed=false `
     -p:PublishSingleFile=$singleFileValue
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish завершился с кодом $LASTEXITCODE."
