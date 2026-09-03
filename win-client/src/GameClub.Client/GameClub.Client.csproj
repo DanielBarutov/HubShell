@@ -16,6 +16,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />
+    <!--
+      The proto files live outside the project directory and use repository-
+      relative imports such as gameclub/v1/sessions.proto. Tell Grpc.Tools
+      which directory is the import root instead of relying on the individual
+      source file directories.
+    -->
+    <Protobuf_ProtoRoot>..\..\..\backend\proto</Protobuf_ProtoRoot>
     <GameClubEnvironment Condition="'$(GameClubEnvironment)' == ''">production</GameClubEnvironment>
     <GameClubAuthAddress Condition="'$(GameClubAuthAddress)' == ''">https://api.gameclub.local:8100</GameClubAuthAddress>
     <GameClubGrpcAddress Condition="'$(GameClubGrpcAddress)' == ''">https://api.gameclub.local:51051</GameClubGrpcAddress>
