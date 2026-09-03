@@ -13,6 +13,13 @@
     <UseRidGraph>true</UseRidGraph>
     <EnableMsixTooling>true</EnableMsixTooling>
     <UseWindowsForms>true</UseWindowsForms>
+    <!--
+      This is a WinUI 3 project. Enabling UseWPF makes the WPF XAML compiler
+      process App.xaml/MainWindow.xaml and breaks WinUI-only members such as
+      ThemeDictionaries and PointerPressed. Windows Forms is kept only for
+      the tray NotifyIcon integration.
+    -->
+    <UseWPF>false</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon />
