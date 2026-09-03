@@ -21,6 +21,8 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
         PROJECT_ROOT / "win-client" / "src" / "GameClub.Client" / "GameClub.Client.csproj"
     ).read_text()
     assert "<Protobuf_ProtoRoot>..\\..\\..\\backend\\proto</Protobuf_ProtoRoot>" in csproj
+    assert "<UseWindowsForms>true</UseWindowsForms>" in csproj
+    assert "<UseWPF>false</UseWPF>" in csproj
 
     for proto_path in proto_root.glob("*.proto"):
         assert (generated_root / f"{proto_path.stem}_pb2.py").exists()
