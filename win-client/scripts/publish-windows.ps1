@@ -31,9 +31,32 @@ if ($null -eq $dotnetCommand) {
 $clientRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $projectPath = Join-Path $clientRoot "win-client\src\GameClub.Client\GameClub.Client.csproj"
 $runtime = "win-$($Architecture.ToLowerInvariant())"
-$isProduction = $EnvironmentName -eq "production"
 if ([string]::IsNullOrWhiteSpace($AuthAddress) -or [string]::IsNullOrWhiteSpace($GrpcAddress)) {
     throw "Для publish нужно явно указать -AuthAddress и -GrpcAddress."
+}
+
+function Test-PrivateNetworkEndpoint {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Uri]$Uri
+    )
+
+    if ($Uri.IsLoopback) {
+        return $true
+    }
+
+    $address = $null
+    if (-not [System.Net.IPAddress]::TryParse($Uri.Host, [ref]$address)) {
+        return $false
+    }
+    if ($address.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        return $false
+    }
+
+    $bytes = $address.GetAddressBytes()
+    return $bytes[0] -eq 10 -or
+        ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31) -or
+        ($bytes[0] -eq 192 -and $bytes[1] -eq 168)
 }
 
 foreach ($endpoint in @(
@@ -47,16 +70,13 @@ foreach ($endpoint in @(
     if ($uri.Scheme -notin @("http", "https")) {
         throw "$($endpoint.Name) должен использовать http или https."
     }
-    $isDevLoopbackHttp = $EnvironmentName -eq "dev" -and $uri.Scheme -eq "http" -and $uri.IsLoopback
-    if ($uri.Scheme -eq "http" -and -not $isDevLoopbackHttp) {
-        throw "$($endpoint.Name) должен использовать HTTPS, кроме loopback HTTP в dev."
+    if ($uri.Scheme -eq "http" -and -not (Test-PrivateNetworkEndpoint -Uri $uri)) {
+        throw "$($endpoint.Name) для HTTP должен указывать loopback или приватную LAN IPv4-сеть (10/8, 172.16/12, 192.168/16). Для внешнего адреса используйте HTTPS."
     }
-    $isProductionInvalidHost = $uri.IsLoopback `
-        -or $uri.Host -in @("api.gameclub.local", "localhost") `
-        -or $uri.Host -match "(^|[.])example([.]|$)" `
-        -or $uri.Host -match "[.]local$"
-    if ($isProduction -and ($uri.Scheme -ne "https" -or $isProductionInvalidHost)) {
-        throw "$($endpoint.Name) для production должен быть реальным внешним HTTPS endpoint без placeholder/loopback host."
+    $isPlaceholderHost = $uri.Host -in @("api.gameclub.local") `
+        -or $uri.Host -match "(^|[.])example([.]|$)"
+    if ($EnvironmentName -eq "production" -and $isPlaceholderHost) {
+        throw "$($endpoint.Name) для production должен быть реальным адресом backend, а не placeholder hostname."
     }
 }
 

@@ -55,8 +55,9 @@ docker compose down
 docker compose down -v
 ```
 
-Это dev-compose. Для production нужны secret storage, TLS/reverse proxy,
-непредсказуемые credentials, backup/restore и отдельные deployment policies.
+Это dev-compose. Для закрытого private-LAN production нужны secret storage,
+непредсказуемые credentials, backup/restore и отдельные deployment policies;
+TLS/reverse proxy обязательны только при внешнем доступе к backend.
 Windows-клиент подключается к опубликованному host-порту gRPC `51051`, а не к
 имени `backend-grpc` из Docker-сети. Host-порты можно переопределить через
 `GAMECLUB_FRONTEND_PORT`, `GAMECLUB_HTTP_PORT`, `GAMECLUB_GRPC_PORT`,

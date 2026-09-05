@@ -36,11 +36,12 @@ discount category, device capabilities или состояние сессии. �
 
 ## Transport policy
 
-Локальный dev допускает insecure gRPC только на loopback, чтобы не усложнять
-разработку. Production gRPC обязан использовать сертификат и ключ через настройки
-`GAMECLUB_GRPC_TLS_*`; при необходимости включается mTLS. HTTP TLS завершается на
-контролируемом ingress/reverse proxy, который передаёт backend только защищённый
-внутренний маршрут.
+Закрытый deployment клуба может использовать insecure HTTP/gRPC на loopback или
+приватных LAN IPv4-адресах (`10/8`, `172.16/12`, `192.168/16`), включая
+`production`, если backend не доступен из внешней сети. Для внешнего доступа
+обязательны TLS через `GAMECLUB_GRPC_TLS_*` и контролируемый ingress/reverse
+proxy; при необходимости включается mTLS. Отсутствие белого IP не заменяет
+firewall и сетевую изоляцию.
 
 Bootstrap device token — временный dev-механизм. До production нужны per-device
 enrollment, rotation/revocation и защищённое хранилище Windows; bootstrap secret

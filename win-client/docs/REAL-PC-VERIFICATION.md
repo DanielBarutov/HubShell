@@ -24,7 +24,7 @@ smoke не включайте Assigned Access или Shell Launcher. У вас �
 
 - Windows 10 build 17763+ или Windows 11;
 - Release single-file EXE, собранный для архитектуры игрового ПК;
-- доступный backend по production HTTPS/gRPC либо согласованный dev backend;
+- доступный backend по production HTTP/gRPC в private LAN либо HTTPS для внешнего адреса;
 - операторский доступ к web-админке;
 - отдельные тестовые workstation, клиент/гость и тариф.
 
@@ -196,7 +196,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 - тип артефакта: folder-publish или single-file;
 - путь запуска;
 - результаты пунктов как `PASS`, `FAIL` или `NOT CHECKED`;
-- reconnect, restart, kiosk и production TLS отдельно;
+- reconnect, restart, kiosk и transport mode (private HTTP или external HTTPS) отдельно;
 - каталог диагностики, если EXE завершался с ошибкой.
 
 Native Windows-проверка считается закрытой только после фактического запуска и

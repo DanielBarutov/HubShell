@@ -28,6 +28,11 @@ public sealed class GrpcBackendClient : IBackendClient
 
     public GrpcBackendClient(Uri backendAddress, ITokenProvider? tokenProvider = null)
     {
+        if (string.Equals(backendAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+        }
+
         _channel = GrpcChannel.ForAddress(backendAddress);
         _systemClient = new SystemService.SystemServiceClient(_channel);
         _workstationClient = new Workstations.WorkstationService.WorkstationServiceClient(_channel);

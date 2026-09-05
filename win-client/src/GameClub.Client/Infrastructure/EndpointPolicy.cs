@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+
 namespace GameClub.Client.Infrastructure;
 
 public static class EndpointPolicy
@@ -30,15 +33,31 @@ public static class EndpointPolicy
             return endpoint;
         }
 
-        var isDevelopment = string.Equals(environment.Trim(), "dev", StringComparison.OrdinalIgnoreCase);
-        if (isDevelopment && IsLoopback(endpoint))
+        if (IsPrivateNetwork(endpoint))
         {
             return endpoint;
         }
 
         throw new InvalidOperationException(
-            $"{endpointName} must use HTTPS outside dev loopback configuration");
+            $"{endpointName} must use HTTPS outside a private local network");
     }
 
-    private static bool IsLoopback(Uri endpoint) => endpoint.IsLoopback;
+    private static bool IsPrivateNetwork(Uri endpoint)
+    {
+        if (endpoint.IsLoopback)
+        {
+            return true;
+        }
+
+        if (!IPAddress.TryParse(endpoint.Host, out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 10
+            || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
+            || (bytes[0] == 192 && bytes[1] == 168);
+    }
 }

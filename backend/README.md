@@ -129,14 +129,20 @@ Read-only выручка за период доступна через защи�
 `GET /api/v1/audit/events?limit=20` с permission `audit.read`. Read-модель не
 содержит payload запросов и персональные данные, которых нет в audit event.
 
-gRPC-сервер запускается командой `make run-grpc` на `127.0.0.1:51051`. В dev
-insecure transport разрешён только для локальной разработки; в окружении `prod`
-или `production` сервер требует `GAMECLUB_GRPC_TLS_CERT_FILE` и
+gRPC-сервер запускается командой `make run-grpc` на `127.0.0.1:51051`. В
+закрытом private-LAN deployment insecure transport допустим и в `production`;
+сервер может работать без TLS-файлов. Если backend доступен за пределами
+доверенной LAN, задайте `GAMECLUB_GRPC_TLS_CERT_FILE` и
 `GAMECLUB_GRPC_TLS_KEY_FILE`. mTLS можно включить через
 `GAMECLUB_GRPC_TLS_CLIENT_CA_FILE` и
 `GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE=true`. Клиент использует `https://`
-адрес для TLS-соединения. Источником истины для health и бизнес-контрактов являются
+адрес при TLS или `http://private-ip` для закрытой LAN. Источником истины для health и бизнес-контрактов являются
 versioned файлы в `proto/gameclub/v1/`; Python-типы генерируются командой `make proto`.
+
+Чтобы Windows-клиенты из LAN могли подключиться к контейнеру, задайте
+`GAMECLUB_HTTP_HOST=0.0.0.0` и `GAMECLUB_GRPC_HOST=0.0.0.0`, опубликуйте порты
+8100 и 51051 только в профиле private network Windows Firewall и используйте
+адрес сервера из RFC1918-сети в клиенте.
 
 Threat model, JWT policy, secret handling и границы доверия описаны в
 [`plans/04-auth-security/THREAT-MODEL.md`](../plans/04-auth-security/THREAT-MODEL.md).

@@ -21,11 +21,9 @@ class FakeContext:
         return self._code
 
 
-def test_grpc_tls_is_optional_only_for_dev_and_requires_a_certificate_pair() -> None:
+def test_grpc_tls_is_optional_for_private_deployments_and_requires_a_certificate_pair() -> None:
     assert create_grpc_server_credentials(Settings(environment="dev")) is None
-
-    with pytest.raises(ValueError, match="required in production"):
-        create_grpc_server_credentials(Settings(environment="production"))
+    assert create_grpc_server_credentials(Settings(environment="production")) is None
 
     with pytest.raises(ValueError, match="configured together"):
         create_grpc_server_credentials(Settings(grpc_tls_cert_file="server.crt", environment="dev"))

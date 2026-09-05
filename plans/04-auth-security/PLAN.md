@@ -45,8 +45,9 @@
 7. [x] Реализовать базовую use-case authorization matrix.
 8. [x] Спроектировать dev device bootstrap и reconnect boundary; per-device enrollment и rotation остаются.
 9. [x] Добавить audit для финансовых и административных операций через HTTP BFF и gRPC.
-10. [x] Добавить явную gRPC TLS-конфигурацию, запрет insecure gRPC в production,
-    secret handling и error redaction policy.
+10. [x] Добавить явную gRPC TLS-конфигурацию как опциональную защиту внешнего
+    deployment, разрешить insecure gRPC для закрытой private LAN, secret handling
+    и error redaction policy.
 
 Текущий срез добавил audit trail для изменяющих operator HTTP BFF- и gRPC-действий:
 сохраняются actor id (или `null` для неавторизованного запроса), operation, transport
@@ -58,8 +59,8 @@ SHA-256 хеша, атомарным consume, ротацией и logout-revoke;
 и key rotation остаются production-этапами; базовая TLS-конфигурация для gRPC уже
 реализована, а выпуск и управление production-сертификатами остаются deployment-задачей.
 
-gRPC в dev по-прежнему может работать на loopback без TLS. В `prod`/`production`
-окружении `create_server` требует сертификат и закрытый ключ через
+gRPC в private LAN может работать без TLS во всех окружениях. При внешнем доступе
+`create_server` использует сертификат и закрытый ключ через
 `GAMECLUB_GRPC_TLS_CERT_FILE` и `GAMECLUB_GRPC_TLS_KEY_FILE`; mTLS включается
 отдельно через client CA и `GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE`.
 

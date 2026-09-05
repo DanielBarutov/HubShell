@@ -143,10 +143,10 @@ class SystemService(system_pb2_grpc.SystemServiceServicer):
 def create_grpc_server_credentials(settings: Settings) -> grpc.ServerCredentials | None:
     cert_file = settings.grpc_tls_cert_file
     key_file = settings.grpc_tls_key_file
-    environment = settings.environment.strip().lower()
     if not cert_file and not key_file:
-        if environment in {"prod", "production"}:
-            raise ValueError("gRPC TLS certificate and key are required in production")
+        # A closed-club deployment may keep the backend on a private LAN and
+        # use insecure gRPC. TLS remains available when the service is exposed
+        # outside that trusted network.
         return None
     if not cert_file or not key_file:
         raise ValueError("gRPC TLS certificate and key must be configured together")
