@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess)]
+﻿[CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$ExecutablePath = (Join-Path $PSScriptRoot "GameClub.Client.exe"),
     [string]$KioskUser,
