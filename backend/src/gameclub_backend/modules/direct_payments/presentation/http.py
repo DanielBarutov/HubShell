@@ -24,7 +24,7 @@ class GuestSessionPaymentRequest(BaseModel):
     tariff_quantity: int = Field(default=1, ge=1, le=100)
     guest_id: uuid.UUID | None = None
     guest_name: str = Field(default="Гость", min_length=1, max_length=128)
-    cash_shift_id: uuid.UUID
+    cash_shift_id: uuid.UUID | None = None
     payment_parts: list[PaymentPartRequest] = Field(default_factory=list)
 
 
@@ -37,7 +37,7 @@ class GuestSessionPaymentResponse(BaseModel):
     guest_name: str
     total_price_cents: int
     payment_parts: list[PaymentPartRequest]
-    cash_shift_id: uuid.UUID
+    cash_shift_id: uuid.UUID | None
     status: str
     idempotency_key: str
     created_at: str

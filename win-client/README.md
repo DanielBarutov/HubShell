@@ -65,7 +65,8 @@ C:\Git\HubShell\win-client\artifacts
 - `dotnet build` не создаёт переносимый один EXE;
 - для отладки сначала использовать folder-publish с PDB;
 - для solution использовать `-p:Platform=x64`, не `--arch`;
-- production требует HTTPS для auth и gRPC;
+- production в изолированной приватной LAN может использовать HTTP для auth и gRPC;
+  для публичного или недоверенного адреса обязательно использовать HTTPS;
 - на игровом ПК не нужны SDK, Visual Studio, env-переменные, `device_id`,
   bootstrap token или PIN hash;
 - fullscreen WinUI не заменяет Assigned Access/Shell Launcher;

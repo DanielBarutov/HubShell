@@ -16,6 +16,7 @@ class ProductSaleStatus(enum.StrEnum):
 class ProductPaymentMethod(enum.StrEnum):
     BALANCE = "balance"
     CASH = "cash"
+    TRANSFER = "transfer"
     MIXED = "mixed"
 
 

@@ -173,12 +173,16 @@ class GuestSessionPaymentService:
     ) -> GuestSessionPayment:
         now = self._clock.now()
         try:
-            await self._cash.settle(
-                shift_id=payment.cash_shift_id,
-                amount_cents=payment.total_price_cents,
-                payment_idempotency_key=payment.idempotency_key,
-                actor_id=payment.created_by or actor_id,
+            cash_amount_cents = sum(
+                part.amount_cents for part in payment.payment_parts if part.method == "cash"
             )
+            if cash_amount_cents:
+                await self._cash.settle(
+                    shift_id=payment.cash_shift_id,
+                    amount_cents=cash_amount_cents,
+                    payment_idempotency_key=payment.idempotency_key,
+                    actor_id=payment.created_by or actor_id,
+                )
             result = await self._repository.save(payment.mark_confirmed(now))
             await self._record_audit(
                 action="guest_payment.settlement",
