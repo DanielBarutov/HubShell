@@ -81,7 +81,7 @@ services:
     environment:
       <<: *backend-environment
     ports:
-      - "127.0.0.1:${GAMECLUB_HTTP_PORT:-8100}:8100"
+      - "${GAMECLUB_BIND_HOST:-0.0.0.0}:${GAMECLUB_HTTP_PORT:-8100}:8100"
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
@@ -105,7 +105,7 @@ services:
     environment:
       <<: *backend-environment
     ports:
-      - "127.0.0.1:${GAMECLUB_GRPC_PORT:-51051}:51051"
+      - "${GAMECLUB_BIND_HOST:-0.0.0.0}:${GAMECLUB_GRPC_PORT:-51051}:51051"
     depends_on:
       backend-migrate:
         condition: service_completed_successfully
