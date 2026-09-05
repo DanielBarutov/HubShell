@@ -82,19 +82,22 @@ Invoke-WebRequest "http://127.0.0.1:8100/health/ready" -UseBasicParsing
 ```
 
 Для игрового ПК `127.0.0.1` указывает на сам игровой ПК и обычно неверен.
-Production-сборка должна получать доступные DNS/LAN-адреса с HTTPS:
+Для закрытой локальной сети production-сборка может получать обычные HTTP/gRPC
+адреса backend по приватному IPv4. Например, если сервер backend имеет адрес
+`192.168.0.47`:
 
 ```text
-AuthAddress = https://api.example.club:8100
-GrpcAddress = https://api.example.club:51051
+AuthAddress = http://192.168.0.47:8100
+GrpcAddress = http://192.168.0.47:51051
 ```
 
-`api.example.club` выше — только обозначение места для подстановки, не рабочий
-адрес. В реальной команде используйте DNS-имя или IP вашего backend.
+Для внешнего или недоверенного адреса используйте HTTPS. Скрипт разрешает HTTP
+только для loopback и приватных LAN IPv4-сетей `10/8`, `172.16/12` и
+`192.168/16`; публичный HTTP-адрес будет отклонён.
 
 В production клиенту не нужны PostgreSQL, Redis или внутренние порты backend.
-HTTP допускается только для `dev` с loopback-адресом; остальные HTTP-адреса
-клиент отклоняет политикой endpoint.
+При HTTP/gRPC без TLS изолируйте backend firewall-ом и не публикуйте порты в
+Интернет: отсутствие белого IP само по себе не заменяет сетевую изоляцию.
 
 ## 5. Native restore, build и tests
 
@@ -139,8 +142,9 @@ Set-Location "C:\Git\HubShell\win-client"
   -OutputPath "C:\GameClub\debug-publish"
 ```
 
-Для удалённого backend замените адреса на реальные HTTPS и используйте
-`-EnvironmentName production`.
+Для backend на приватном LAN замените адреса на `http://<private-ip>:<port>`;
+`-EnvironmentName production` при этом допустим. Для внешнего backend используйте
+`https://...`.
 
 Важно для WinUI: сборку и публикацию можно выполнять по SSH, но окно клиента
 нельзя валидно проверять из SSH-сеанса Windows Session 0. Запускать EXE нужно
@@ -283,8 +287,8 @@ Single-file Release не должен быть первым объектом о�
 примера и не записывайте в команды секреты:
 
 ```powershell
-$authAddress = Read-Host "Production AuthAddress (https://...)"
-$grpcAddress = Read-Host "Production GrpcAddress (https://...)"
+$authAddress = Read-Host "Production AuthAddress (http://private-LAN или https://external)"
+$grpcAddress = Read-Host "Production GrpcAddress (http://private-LAN или https://external)"
 ```
 
 ```powershell

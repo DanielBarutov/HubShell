@@ -328,8 +328,9 @@ Windows-клиент работает через gRPC. Для браузера �
   защищённому HTTP, а verifier — только в аутентифицированном heartbeat конкретного
   device и только в память Win-клиента;
 - персональные данные не выводятся в диагностические логи без необходимости;
-- соединения в production работают через TLS; gRPC должен использовать
-  `GAMECLUB_GRPC_TLS_*`, а insecure gRPC разрешён только для loopback dev;
+- в закрытой доверенной клубной LAN production может работать по обычному HTTP
+  и insecure gRPC на loopback/RFC1918-адресах (`10/8`, `172.16/12`,
+  `192.168/16`); при внешнем доступе обязательны TLS и защищённый ingress;
 - опасные команды Windows-клиенту требуют явного права и аудита;
 - изменяющие и финансовые действия имеют автора, время, correlation/request ID и результат;
 - ошибки наружу не раскрывают SQL, stack trace и внутренние секреты.
@@ -339,8 +340,9 @@ refresh token. В хранилище сохраняется только SHA-256
 токены атомарно consume-ятся, ротируются и отзываются через logout. Основной
 сценарий device — per-device enrollment по MAC с installation binding; старый
 device bootstrap выдаёт только access token и остаётся dev fallback до полного
-production hardening, защищённого хранения и key rotation. Production gRPC TLS включается
-через явную конфигурацию сертификата/ключа. Изменяющие HTTP BFF- и gRPC
+production hardening, защищённого хранения и key rotation. Production gRPC TLS
+остаётся доступным опциональным усилением через явную конфигурацию
+сертификата/ключа; для закрытой private LAN он не обязателен. Изменяющие HTTP BFF- и gRPC
 операции фиксируются в audit trail без request body/payload.
 
 ## 8. Правила frontend

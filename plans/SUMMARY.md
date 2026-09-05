@@ -180,7 +180,7 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Модуль | Что уже есть | Контракт / следующий шаг |
 | --- | --- | --- |
 | Foundation | async app, config, health, resources, error contract, audit, migrations, generated proto | план помечен `in_progress`; закрыть интеграционные и deployment-вопросы |
-| Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и сертификаты |
+| Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и внешняя TLS-конфигурация |
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
 | Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
 | Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | entitlement package consumption, time windows and next-compatible auto-start |
@@ -298,7 +298,8 @@ flows.
   подтверждённого stop;
 - deployment/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
   `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
-  зашитыми non-secret HTTPS endpoint metadata для передачи на клиентский ПК.
+  зашитыми non-secret HTTP/HTTPS endpoint metadata для передачи на клиентский ПК;
+  закрытая private LAN допускает HTTP без белого IP.
 - server-backed register/login/profile/history screen показывает баланс,
   операции, списания времени, товары, тарифы/сессии и доступное время; portal
   snapshot теперь передаёт ordered package queue и explicit activation RPC/UI.
@@ -354,7 +355,7 @@ security boundary. Детали — в
     - `ClientPortalService` в gRPC с device-scoped registration/login и
       client-scoped JWT, histories и available time;
     - WinUI pre-auth fullscreen gate и server-backed login/register/profile/history;
-    - portable publish получил baked HTTPS endpoint parameters и не требует
+    - portable publish получил baked HTTP/HTTPS endpoint parameters и не требует
       env/bootstrap/token/PIN setup на игровом ПК.
     - enrollment получает понятный rejected-state при конфликте installation id;
       уже привязанное место нельзя случайно изменить на другой MAC без отдельной
@@ -395,7 +396,7 @@ security boundary. Детали — в
 | Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime; `dotnet` отсутствует в PATH |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
-| Production security | нужны real secret storage, enrollment rate-limit/rebind, TLS/mTLS certificates, rotation/revocation, backups и deployment policy |
+| Production security | нужны real secret storage, enrollment rate-limit/rebind, backups и deployment policy; TLS/mTLS certificates обязательны только при внешнем доступе |
 | Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
 
 ## 11. Следующие задачи
@@ -421,8 +422,8 @@ security boundary. Детали — в
    Для передачи на клиентский ПК собрать portable-файл:
 
    ```powershell
-   $authAddress = Read-Host "Production AuthAddress (https://...)"
-   $grpcAddress = Read-Host "Production GrpcAddress (https://...)"
+   $authAddress = Read-Host "Production AuthAddress (http://private-LAN или https://external)"
+   $grpcAddress = Read-Host "Production GrpcAddress (http://private-LAN или https://external)"
    .\scripts\build-portable-exe.ps1 `
      -Architecture x64 `
      -Configuration Release `
@@ -440,7 +441,8 @@ security boundary. Детали — в
 
 - hardening per-device enrollment: rebind policy, rate limit, pairing, rotation;
 - access/refresh key rotation, revocation policy и полноценный secret storage;
-- production HTTPS/gRPC TLS, при необходимости mTLS, certificate issuance/rotation;
+- external production HTTPS/gRPC TLS, при необходимости mTLS, certificate issuance/rotation;
+  для закрытой private LAN допустим insecure HTTP/gRPC без белого IP;
 - Windows Credential Manager hardening и kiosk provisioning Assigned Access/
   Shell Launcher с обратимой политикой;
 - backup/restore, deployment/observability policy и load checks.

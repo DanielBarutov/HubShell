@@ -12,7 +12,7 @@ startup diagnostics находятся в
 | Target framework | `net8.0-windows10.0.19041.0` | project config |
 | Минимальная ОС | Windows 10 build 17763 | project config |
 | Архитектуры | x86, x64, ARM64 | project config; native runtime не проверен |
-| Транспорт | gRPC/Protobuf, enrollment через HTTPS | source-level; TLS runtime не проверен |
+| Транспорт | gRPC/Protobuf, HTTP/gRPC в private LAN или HTTPS при внешнем доступе | source-level; transport runtime требует Windows smoke |
 | Device auth | MAC enrollment → device-scoped JWT | source-level |
 | User auth | server-backed register/login → client-scoped JWT | source-level |
 | Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
@@ -69,7 +69,7 @@ C:\GameClub\Client\GameClub.Client.exe
 - portable single-file запуск на чистом профиле;
 - Assigned Access/Shell Launcher: Explorer, Start, desktop, Alt+Tab,
   произвольные приложения, recovery и restore;
-- production HTTPS/gRPC TLS и сертификатная цепочка.
+- private-LAN HTTP/gRPC либо production HTTPS/gRPC TLS и сертификатная цепочка для внешнего доступа.
 
 Автоматизированная сборка и запуск находятся в
 [WINDOWS-BUILD-AND-RUN.md](WINDOWS-BUILD-AND-RUN.md), а ручные отметки — в

@@ -292,7 +292,7 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert '"vip" => "VIP-зона"' in view_model_source
     assert "GAMECLUB_ENVIRONMENT" in window_source
     assert "EndpointPolicy.GetEnvironmentEndpoint" in window_source
-    assert "HTTPS outside dev loopback" in endpoint_policy_source
+    assert "HTTPS outside a private local network" in endpoint_policy_source
     assert "EndpointPolicy.Validate" in token_provider_source
 
 
@@ -355,7 +355,7 @@ def test_windows_access_gate_has_locked_start_and_manager_boundary() -> None:
     assert "Assigned Access" in docs
 
 
-def test_grpc_production_requires_explicit_tls_configuration() -> None:
+def test_grpc_tls_configuration_remains_available_for_private_deployments() -> None:
     config_source = (
         PROJECT_ROOT / "backend" / "src" / "gameclub_backend" / "config.py"
     ).read_text()
@@ -373,5 +373,5 @@ def test_grpc_production_requires_explicit_tls_configuration() -> None:
     assert "grpc_tls_cert_file" in config_source
     assert "grpc_tls_key_file" in config_source
     assert "create_grpc_server_credentials" in server_source
-    assert 'environment in {"prod", "production"}' in server_source
+    assert "A closed-club deployment may keep the backend on a private LAN" in server_source
     assert "`sub`" in threat_model

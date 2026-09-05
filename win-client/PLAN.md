@@ -80,8 +80,9 @@ Windows Desktop и показывает компактный borderless-видж
     WinUI и сохранять safe default для неизвестной темы.
 14. [x] Убрать пользовательский compact/full-window переключатель из Locked-flow;
     старый marker сохранён только как source-compatibility boundary.
-15. [x] Зафиксировать endpoint transport policy: loopback HTTP только в dev,
-    production требует HTTPS для auth и gRPC.
+15. [x] Зафиксировать endpoint transport policy: HTTP разрешён для loopback и
+    приватных LAN IPv4 (`10/8`, `172.16/12`, `192.168/16`) в закрытом deployment,
+    включая production; для внешних адресов используется HTTPS.
 16. [x] Реализовать access-gate: клиент стартует заблокированным, пользователь
     проходит вход до доступа к действиям, а после бездействия экран снова
     блокируется; основной content скрыт до снятия блокировки. Статический
