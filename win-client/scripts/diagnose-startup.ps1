@@ -35,6 +35,8 @@ $eventReadError = $null
 $events = @()
 $startupLogLines = @()
 $startupLogReadError = $null
+$processArchitecture = if ([Environment]::Is64BitProcess) { "x64" } else { "x86" }
+$osArchitecture = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
 
 try {
     $workingDirectory = Split-Path -Parent $resolvedExecutablePath
@@ -86,8 +88,8 @@ $lines.Add("ExecutableSHA256: $((Get-FileHash -LiteralPath $resolvedExecutablePa
 $lines.Add("FileVersion: $((Get-Item -LiteralPath $resolvedExecutablePath).VersionInfo.FileVersion)")
 $lines.Add("WorkingDirectory: $(Split-Path -Parent $resolvedExecutablePath)")
 $lines.Add("OS: $([Environment]::OSVersion.VersionString)")
-$lines.Add("ProcessArchitecture: $([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)")
-$lines.Add("OSArchitecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)")
+$lines.Add("ProcessArchitecture: $processArchitecture")
+$lines.Add("OSArchitecture: $osArchitecture")
 $lines.Add("TimeoutSeconds: $TimeoutSeconds")
 $lines.Add("StartupLogPath: $startupLogPath")
 
