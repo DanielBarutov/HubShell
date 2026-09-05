@@ -87,7 +87,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _viewModel.SetDeviceIdentity(enrolledDeviceId);
+        _viewModel.SetDeviceIdentity(enrolledDeviceId, _enrollmentTokenProvider.WorkstationId);
         var deviceId = _viewModel.DeviceId;
         if (string.IsNullOrWhiteSpace(deviceId))
         {

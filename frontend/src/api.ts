@@ -221,7 +221,7 @@ export type BackendProductSale = {
   unit_cost_price_cents: number;
   total_price_cents: number;
   total_cost_price_cents: number;
-  payment_method: "balance" | "cash" | "mixed";
+  payment_method: "balance" | "cash" | "transfer" | "mixed";
   cash_shift_id: string | null;
   status: "pending" | "completed" | "cancelled" | "needs_review";
   sold_by: string;
@@ -1033,7 +1033,7 @@ export class GameClubApi {
       tariff_quantity?: number;
       guest_id?: string;
       guest_name?: string;
-      cash_shift_id: string;
+      cash_shift_id?: string;
       payment_parts: BackendPaymentPart[];
     },
     idempotencyKey: string,
@@ -1112,7 +1112,7 @@ export class GameClubApi {
       product_id: string;
       quantity: number;
       client_id?: string;
-      payment_method: "balance" | "cash" | "mixed";
+      payment_method: "balance" | "cash" | "transfer" | "mixed";
       cash_shift_id?: string;
       payment_parts?: BackendPaymentPart[];
     },

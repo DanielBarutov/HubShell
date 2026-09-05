@@ -73,6 +73,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _connection.State == ClientConnectionState.WaitingForAssignment;
     public string ConnectionColor => IsOnline ? "#A8ED62" : "#E3A14E";
     public string? DeviceId { get; private set; }
+    public string? WorkstationId { get; private set; }
     public string ClientVersion { get; }
     public IReadOnlyCollection<string> Capabilities { get; }
     public AccessMode AccessMode => _accessGate.Snapshot.Mode;
@@ -278,7 +279,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !string.IsNullOrWhiteSpace(DeviceId);
     public string DeviceStatus => string.IsNullOrWhiteSpace(DeviceId)
         ? "Device identity не настроена"
-        : $"Device: {DeviceId}";
+        : $"Device: {DeviceId} · Workstation: {WorkstationId ?? "—"}";
     public Visibility ActiveSessionVisibility => _activeSession is null
         ? Visibility.Collapsed
         : Visibility.Visible;
@@ -429,19 +430,36 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(AccessSubtitle));
     }
 
-    public void SetDeviceIdentity(string deviceId)
+    public void SetDeviceIdentity(string deviceId, string? workstationId = null)
     {
         var normalized = deviceId.Trim();
-        if (!string.IsNullOrWhiteSpace(DeviceId) || string.IsNullOrWhiteSpace(normalized))
+        if (string.IsNullOrWhiteSpace(normalized))
         {
             return;
         }
 
-        DeviceId = normalized;
-        OnPropertyChanged(nameof(DeviceId));
-        OnPropertyChanged(nameof(DeviceStatus));
-        OnPropertyChanged(nameof(CanCreateTransferOffer));
-        OnPropertyChanged(nameof(CanConfirmTransfer));
+        var deviceChanged = string.IsNullOrWhiteSpace(DeviceId);
+        if (deviceChanged)
+        {
+            DeviceId = normalized;
+            OnPropertyChanged(nameof(DeviceId));
+        }
+
+        var normalizedWorkstationId = workstationId?.Trim();
+        var workstationChanged = string.IsNullOrWhiteSpace(WorkstationId)
+            && !string.IsNullOrWhiteSpace(normalizedWorkstationId);
+        if (workstationChanged)
+        {
+            WorkstationId = normalizedWorkstationId;
+            OnPropertyChanged(nameof(WorkstationId));
+        }
+
+        if (deviceChanged || workstationChanged)
+        {
+            OnPropertyChanged(nameof(DeviceStatus));
+            OnPropertyChanged(nameof(CanCreateTransferOffer));
+            OnPropertyChanged(nameof(CanConfirmTransfer));
+        }
     }
 
     public async Task RunHeartbeatLoopAsync()
@@ -588,10 +606,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task<bool> EnsureEntryAllowedAsync(string clientId)
     {
-        var deviceId = DeviceId;
-        if (string.IsNullOrWhiteSpace(deviceId))
+        var workstationId = WorkstationId;
+        if (string.IsNullOrWhiteSpace(workstationId))
         {
-            _portalMessage = "ПК ещё не привязан администратором";
+            _portalMessage = string.IsNullOrWhiteSpace(DeviceId)
+                ? "ПК ещё не привязан администратором"
+                : "ПК привязан, но backend не вернул ID игрового места";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
@@ -599,7 +619,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         try
         {
             var decision = await _session.BackendClient.CheckEntryAsync(
-                deviceId,
+                workstationId,
                 clientId,
                 guestId: null,
                 cancellationToken: _lifetime.Token);
@@ -1020,6 +1040,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         var previous = _activeSession;
         _activeSession = snapshot;
+        if (IsAccessLocked
+            && !IsMaintenanceMode
+            && snapshot.ClientId is null
+            && !string.IsNullOrWhiteSpace(snapshot.GuestName))
+        {
+            _clientPortal.Logout();
+            _portalSnapshot = null;
+            _portalMessage = string.Empty;
+            _accessGate.OpenUserSession("Гостевая сессия открыта");
+            PublishAccessState();
+            PublishPortalState();
+        }
         if (previous?.ActivePackage?.Id is not null
             && snapshot.ActivePackage?.Id is not null
             && previous.ActivePackage.Id != snapshot.ActivePackage.Id)

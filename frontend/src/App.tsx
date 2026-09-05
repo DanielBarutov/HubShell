@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
+  ArrowRightLeft,
   ArrowUpRight,
   BarChart3,
   Banknote,
@@ -1490,7 +1491,7 @@ function SettingsView({ api, pcs, refreshKey, onNewGroup, onEditGroup, onNewPaym
     return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба</p><h1>Настройки</h1><p className="subheading">Группы ПК, темы Windows-клиента и способы оплаты.</p></div></div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Темы групп</h3><p>В live-режиме здесь сохраняются настройки backend.</p></div></div><div className="settings-row"><div><strong>VIP-зона</strong><span>Тема по умолчанию для демонстрации</span></div><span className="active-chip">VIP-зона</span></div><div className="settings-row"><div><strong>Обычный зал</strong><span>Тема по умолчанию для демонстрации</span></div><span className="active-chip">Обычный зал</span></div></div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Демо-режим показывает базовые способы оплаты.</p></div></div><div className="settings-row"><div><strong>Баланс клиента</strong><span>balance</span></div><span className="active-chip">Включён</span></div><div className="settings-row"><div><strong>Наличные</strong><span>cash</span></div><span className="active-chip">Включён</span></div></div></>;
   }
 
-  return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба · Backend</p><h1>Настройки</h1><p className="subheading">Тема и пароль обслуживания назначаются группе ПК, а способы оплаты управляются отдельно.</p></div><div className="heading-actions"><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Способ оплаты</button><button className="primary-button" onClick={onNewGroup}><Plus size={17} /> Добавить группу</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="white-card product-list-card"><div className="card-heading"><div><h3>Группы игровых мест</h3><p>Изменения сохраняются в backend и применяются без новой версии клиента.</p></div></div>{visibleGroups.length ? visibleGroups.map((group) => <div className="settings-row" key={group.id}><div><strong>{group.name}</strong><span>{group.id} · обновлено {group.updated_at ? new Date(group.updated_at).toLocaleString("ru-RU") : "наследуемая настройка"}</span></div><span className="active-chip">{themeLabels[group.theme]}</span><button className="text-button" onClick={() => onEditGroup?.(group)}>Изменить</button></div>) : <div className="timeline-empty">Группы ещё не настроены</div>}</div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Настройка справочника для операций клуба. Фактические проводки сейчас используют balance и cash.</p></div><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Добавить</button></div>{paymentMethods.length ? paymentMethods.map((method) => <div className="settings-row payment-method-row" key={method.id}><div><strong>{method.name}</strong><span>{method.key} · порядок {method.sort_order}</span></div><span className={method.active ? "active-chip" : "inactive-chip"}>{method.active ? "Включён" : "Выключен"}</span><button className="text-button" onClick={() => onEditPaymentMethod?.(method)}>Изменить</button></div>) : <div className="timeline-empty">Способы оплаты ещё не настроены</div>}</div><p className="subheading settings-note">Новые способы оплаты сохраняются в настройках. Подключение внешнего провайдера к проведению платежа добавляется отдельным интеграционным модулем.</p></>;
+  return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба · Backend</p><h1>Настройки</h1><p className="subheading">Тема и пароль обслуживания назначаются группе ПК, а способы оплаты управляются отдельно.</p></div><div className="heading-actions"><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Способ оплаты</button><button className="primary-button" onClick={onNewGroup}><Plus size={17} /> Добавить группу</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="white-card product-list-card"><div className="card-heading"><div><h3>Группы игровых мест</h3><p>Изменения сохраняются в backend и применяются без новой версии клиента.</p></div></div>{visibleGroups.length ? visibleGroups.map((group) => <div className="settings-row" key={group.id}><div><strong>{group.name}</strong><span>{group.id} · обновлено {group.updated_at ? new Date(group.updated_at).toLocaleString("ru-RU") : "наследуемая настройка"}</span></div><span className="active-chip">{themeLabels[group.theme]}</span><button className="text-button" onClick={() => onEditGroup?.(group)}>Изменить</button></div>) : <div className="timeline-empty">Группы ещё не настроены</div>}</div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Баланс и наличные проводятся автоматически; перевод фиксируется оператором как подтверждённая ручная операция.</p></div><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Добавить</button></div>{paymentMethods.length ? paymentMethods.map((method) => <div className="settings-row payment-method-row" key={method.id}><div><strong>{method.name}</strong><span>{method.key} · порядок {method.sort_order}</span></div><span className={method.active ? "active-chip" : "inactive-chip"}>{method.active ? "Включён" : "Выключен"}</span><button className="text-button" onClick={() => onEditPaymentMethod?.(method)}>Изменить</button></div>) : <div className="timeline-empty">Способы оплаты ещё не настроены</div>}</div><p className="subheading settings-note">Для ключа transfer не требуется кассовая смена: оператор подтверждает, что перевод получен, а операция попадает в историю и аналитику.</p></>;
 }
 
 function GroupSettingsPanel({ api, group, onClose, onSaved }: { api: GameClubApi; group?: BackendWorkstationGroup; onClose: () => void; onSaved: () => void }) {
@@ -1624,7 +1625,7 @@ function PaymentMethodPanel({ api, method, onClose, onSaved }: { api: GameClubAp
     }
   };
 
-  return <div className="panel-inner"><PanelHeader title="Способ оплаты" subtitle={method ? "Изменение способа оплаты" : "Новый способ оплаты"} onClose={onClose} /><form className="booking-form" onSubmit={(event) => void submit(event)}><label>Системный ключ<input value={key} onChange={(event) => setKey(event.target.value)} placeholder="terminal" autoFocus /></label><label>Название в интерфейсе<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Терминал" /></label><label>Порядок отображения<input type="number" min="0" step="1" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></label><label className="settings-checkbox"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} /> Показывать как активный способ</label><p className="subheading">Ключ используется в контракте операций. В текущем checkout подключены встроенные ключи balance и cash; внешний провайдер подключается отдельным модулем.</p>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : method ? "Сохранить изменения" : "Добавить способ оплаты"}</button>{method && <button type="button" className="danger-button" onClick={() => void remove()} disabled={submitting}>Удалить способ оплаты</button>}</form></div>;
+  return <div className="panel-inner"><PanelHeader title="Способ оплаты" subtitle={method ? "Изменение способа оплаты" : "Новый способ оплаты"} onClose={onClose} /><form className="booking-form" onSubmit={(event) => void submit(event)}><label>Системный ключ<input value={key} onChange={(event) => setKey(event.target.value)} placeholder="transfer" autoFocus /></label><label>Название в интерфейсе<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Перевод" /></label><label>Порядок отображения<input type="number" min="0" step="1" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></label><label className="settings-checkbox"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} /> Показывать как активный способ</label><p className="subheading">Ключ transfer — ручной подтверждённый перевод без кассовой смены. Ключи balance и cash проводят баланс и наличные.</p>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : method ? "Сохранить изменения" : "Добавить способ оплаты"}</button>{method && <button type="button" className="danger-button" onClick={() => void remove()} disabled={submitting}>Удалить способ оплаты</button>}</form></div>;
 }
 
 function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubApi; groups: BackendWorkstationGroup[]; onClose: () => void; onSaved: () => void }) {
@@ -1822,7 +1823,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
   const [searchResults, setSearchResults] = useState<Client[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "mixed">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "transfer" | "mixed">("cash");
   const [balancePartAmount, setBalancePartAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -1968,6 +1969,10 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       setError("Продажа времени доступна из карточки игрового места");
       return;
     }
+    if (timeLines.length && pc && pc.status === "busy") {
+      setError("На этом месте уже идёт сессия. Удалите игровое время из заказа — товары можно оформить отдельно.");
+      return;
+    }
     if (timeLines.length && pc && pc.status !== "online") {
       setError("Новую сессию нельзя открыть: игровое место не в сети");
       return;
@@ -1991,7 +1996,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       return;
     }
     if (api && buyerMode === "guest" && timeLines.length) {
-      if (!activeShift) {
+      if ((paymentMethod === "cash" || paymentMethod === "mixed") && !activeShift) {
         setError("Для гостевого тарифа нужна открытая кассовая смена");
         return;
       }
@@ -2019,8 +2024,8 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
             tariff_id: timeLines[0].sourceId,
             tariff_quantity: timeLines[0].quantity,
             guest_name: "Гость",
-            cash_shift_id: activeShift!.id,
-            payment_parts: [{ method: "cash", amount_cents: timeTotalCents }],
+            cash_shift_id: paymentMethod === "cash" ? activeShift?.id : undefined,
+            payment_parts: [{ method: paymentMethod, amount_cents: timeTotalCents }],
           },
           `guest-payment-${sessionIdempotencyKey.current}`,
         );
@@ -2056,7 +2061,9 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
               { method: "balance", amount_cents: lineBalanceCents },
               { method: "cash", amount_cents: lineTotalCents - lineBalanceCents },
             ]
-            : undefined;
+            : paymentMethod === "transfer"
+              ? [{ method: "transfer", amount_cents: lineTotalCents }]
+              : undefined;
           const sale = await api.sellProduct({
             product_id: line.sourceId,
             quantity: line.quantity,
@@ -2110,7 +2117,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
           </div><div className="sale-line-info"><strong>{line.name}</strong><small>{line.detail}</small><b>{money(line.priceCents * line.quantity)}</b></div><div className="sale-quantity"><button type="button" aria-label={`Уменьшить ${line.name}`} onClick={() => changeQuantity(line.key, -1)}><Minus size={13} /></button><span>{line.quantity}</span><button type="button" aria-label={`Увеличить ${line.name}`} onClick={() => changeQuantity(line.key, 1)}><Plus size={13} /></button></div><button type="button" className="sale-remove-line" aria-label={`Удалить ${line.name}`} onClick={() => removeLine(line.key)}><X size={14} /></button></div>) : <div className="sale-empty-order"><Receipt size={24} /><strong>Заказ пока пуст</strong><span>Нажимайте на карточки слева, чтобы добавить время или товары</span></div>}</div>
           <div className="sale-order-summary"><div><span>Игровое время</span><strong>{totalMinutes ? formatDuration(totalMinutes) : "—"}</strong></div><div><span>Товары</span><strong>{productLines.length ? `${productLines.reduce((sum, line) => sum + line.quantity, 0)} шт.` : "—"}</strong></div><div className="sale-total-row"><span>Итого к оплате</span><strong>{money(totalCents)}</strong></div></div>
           {mixedTariffs && <div className="sale-inline-warning"><Tags size={16} /><span>В корзине разные тарифы. Визуально можно собрать заказ, но backend пока проводит только один тариф за старт.</span></div>}
-          <div className="sale-payment"><div className="sale-payment-heading"><span>Способ оплаты товаров</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
+          <div className="sale-payment"><div className="sale-payment-heading"><span>Способ оплаты товаров и гостевого времени</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")}><ArrowRightLeft size={15} /> Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
           {error && <div className="sale-form-error" role="alert">{error}</div>}
           {success && <div className="sale-form-success" role="status">{success}</div>}
           <button className="sale-submit-button" disabled={submitting || !lines.length || mixedTariffs}>{submitting ? "Проводим заказ…" : `Оформить продажу · ${money(totalCents)}`}<ChevronRight size={17} /></button>
@@ -2125,7 +2132,7 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
   const [quantity, setQuantity] = useState("1");
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "mixed">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "transfer" | "mixed">("cash");
   const [balancePartAmount, setBalancePartAmount] = useState("");
   const [cashShiftId, setCashShiftId] = useState(cashShifts.find((shift) => shift.status === "open")?.id ?? "");
   const [searchResults, setSearchResults] = useState<Client[]>([]);
@@ -2192,7 +2199,9 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
             { method: "balance", amount_cents: balancePartCents },
             { method: "cash", amount_cents: totalCents - balancePartCents },
           ]
-          : undefined,
+          : paymentMethod === "transfer"
+            ? [{ method: "transfer", amount_cents: totalCents }]
+            : undefined,
       }, "product-sale-" + crypto.randomUUID());
       if (sale.status === "needs_review") {
         setError(`Продажа сохранена для ручной сверки: ${sale.settlement_error ?? "неизвестный результат settlement"}`);
@@ -2206,7 +2215,7 @@ function ProductSalePanel({ api, product, clients, cashShifts, onClose, onSaved 
     }
   };
 
-  return <div className="panel-inner"><PanelHeader title="Продажа товара" subtitle="Магазин · операция" onClose={onClose} /><div className="sale-product-card"><div className="sale-product-icon"><ShoppingCart size={21} /></div><div><strong>{product.name}</strong><span>Остаток {product.stock_quantity} шт. · {(product.price_cents / 100).toLocaleString("ru-RU")} ₽/шт.</span></div></div><form className="booking-form product-sale-form" onSubmit={(event) => void submit(event)}><label>Количество, шт.<input type="number" min="1" max={product.stock_quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} autoFocus /></label><label>Клиент <span className="field-hint">необязательно для наличной оплаты</span><input value={clientQuery} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Ник или телефон" /></label>{searchResults.length > 0 && !client && <div className="sale-client-results">{searchResults.slice(0, 4).map((item) => <button type="button" className="client-result" key={item.id} onClick={() => { setClient(item); setClientQuery(item.nickname); setSearchResults([]); }}><span className="client-avatar">{item.nickname.slice(0, 2).toUpperCase()}</span><span><strong>{item.nickname}</strong><small>{formatRussianPhone(item.phone)}</small></span><ChevronRight size={14} /></button>)}</div>}<div className="sale-payment-picker"><span>Способ оплаты</span><div className="compact-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}>Наличные</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} onClick={() => setPaymentMethod("balance")} disabled={!client}>Баланс клиента</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((totalCents / 200).toFixed(2)); }} disabled={!client}>Смешанная</button></div></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}{(paymentMethod === "cash" || paymentMethod === "mixed") && <label>Кассовая смена<select value={cashShiftId} onChange={(event) => setCashShiftId(event.target.value)} disabled={!openShifts.length}><option value="">{openShifts.length ? "Выберите смену" : "Нет открытой смены"}</option>{openShifts.map((shift) => <option value={shift.id} key={shift.id}>{shift.register_id} · {(shift.expected_close_cents / 100).toLocaleString("ru-RU")} ₽</option>)}</select></label>}<div className="sale-total"><span>Итого</span><strong>{(totalCents / 100).toLocaleString("ru-RU")} ₽</strong></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Проводим продажу..." : "Продать товар"}</button><button type="button" className="secondary-button wide" onClick={onClose}>Отмена</button></form></div>;
+  return <div className="panel-inner"><PanelHeader title="Продажа товара" subtitle="Магазин · операция" onClose={onClose} /><div className="sale-product-card"><div className="sale-product-icon"><ShoppingCart size={21} /></div><div><strong>{product.name}</strong><span>Остаток {product.stock_quantity} шт. · {(product.price_cents / 100).toLocaleString("ru-RU")} ₽/шт.</span></div></div><form className="booking-form product-sale-form" onSubmit={(event) => void submit(event)}><label>Количество, шт.<input type="number" min="1" max={product.stock_quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} autoFocus /></label><label>Клиент <span className="field-hint">необязательно для наличной оплаты</span><input value={clientQuery} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Ник или телефон" /></label>{searchResults.length > 0 && !client && <div className="sale-client-results">{searchResults.slice(0, 4).map((item) => <button type="button" className="client-result" key={item.id} onClick={() => { setClient(item); setClientQuery(item.nickname); setSearchResults([]); }}><span className="client-avatar">{item.nickname.slice(0, 2).toUpperCase()}</span><span><strong>{item.nickname}</strong><small>{formatRussianPhone(item.phone)}</small></span><ChevronRight size={14} /></button>)}</div>}<div className="sale-payment-picker"><span>Способ оплаты</span><div className="compact-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}>Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")}>Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} onClick={() => setPaymentMethod("balance")} disabled={!client}>Баланс клиента</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((totalCents / 200).toFixed(2)); }} disabled={!client}>Смешанная</button></div></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}{(paymentMethod === "cash" || paymentMethod === "mixed") && <label>Кассовая смена<select value={cashShiftId} onChange={(event) => setCashShiftId(event.target.value)} disabled={!openShifts.length}><option value="">{openShifts.length ? "Выберите смену" : "Нет открытой смены"}</option>{openShifts.map((shift) => <option value={shift.id} key={shift.id}>{shift.register_id} · {(shift.expected_close_cents / 100).toLocaleString("ru-RU")} ₽</option>)}</select></label>}<div className="sale-total"><span>Итого</span><strong>{(totalCents / 100).toLocaleString("ru-RU")} ₽</strong></div>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Проводим продажу..." : "Продать товар"}</button><button type="button" className="secondary-button wide" onClick={onClose}>Отмена</button></form></div>;
 }
 
 function DiscountPanel({ api, onClose, onSaved }: { api: GameClubApi; onClose: () => void; onSaved: () => void }) {
@@ -2336,7 +2345,7 @@ function PcPanel({
   const [products, setProducts] = useState<BackendProduct[]>([]);
   const [saleProductId, setSaleProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
-  const [salePaymentMethod, setSalePaymentMethod] = useState<"balance" | "cash">("cash");
+  const [salePaymentMethod, setSalePaymentMethod] = useState<"balance" | "cash" | "transfer">("cash");
   const [saleCashShiftId, setSaleCashShiftId] = useState(cashShifts.find((shift) => shift.status === "open")?.id ?? "");
   const [stoppedSessionId, setStoppedSessionId] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
@@ -2390,7 +2399,7 @@ function PcPanel({
   }, [api, pc.sessionId, pc.status]);
 
   useEffect(() => {
-    if (!api || !clientField || pc.status === "busy") {
+    if (!api || !clientField) {
       setClientCandidate(undefined);
       return undefined;
     }
@@ -2636,7 +2645,7 @@ function PcPanel({
       {sessionSnapshot?.active_entitlement && <div className="detail-row"><span>Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
     </div>
     {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="panel-section"><div className="card-heading"><div><h3>Очередь пакетов</h3><p>Решение об активации подтверждает backend</p></div></div>{sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="detail-row" key={item.id}><span>#{item.queue_position} · {item.remaining_minutes} мин</span><button className="text-button" onClick={() => void activatePackage(item.id)} disabled={submitting || Boolean(sessionSnapshot.active_entitlement)}>Активировать</button></div>)}</div>}
-    {pc.status === "online" && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
+    {(pc.status === "online" || pc.status === "busy") && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
       <div className="sale-entry-icon"><Receipt size={20} /></div>
       <div><strong>Оформить продажу</strong><span>Время, товары и покупатель — в одном окне</span></div>
       <ChevronRight size={17} />
@@ -2644,7 +2653,7 @@ function PcPanel({
     <div className="panel-actions">
       <button className="secondary-button wide" onClick={() => onDeposit(clientCandidate)}><WalletCards size={15} /> Пополнить баланс</button>
       <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
-      {pc.status === "busy" ? <button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
+      {pc.status === "busy" ? <><button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
       {stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
       {pc.status === "busy" && api && <>
         <label>Перенести на место<select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)} disabled={submitting}>

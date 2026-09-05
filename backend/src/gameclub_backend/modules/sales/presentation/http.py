@@ -18,7 +18,7 @@ class ProductSaleRequest(BaseModel):
     product_id: uuid.UUID
     quantity: int = Field(gt=0, le=10_000)
     client_id: uuid.UUID | None = None
-    payment_method: str = Field(pattern="^(balance|cash|mixed)$")
+    payment_method: str = Field(pattern="^(balance|cash|transfer|mixed)$")
     cash_shift_id: uuid.UUID | None = None
     payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
 

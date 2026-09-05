@@ -105,11 +105,11 @@ class ProductSaleService:
                     raise ValueError("Mixed payment requires at least two payment parts")
                 if len(normalized_parts) == 1 and normalized_parts[0].method != method.value:
                     raise ValueError("Payment method does not match the payment part")
-                if any(part.method not in {"balance", "cash"} for part in normalized_parts):
-                    raise ApplicationError(
-                        ErrorCode.DEPENDENCY_UNAVAILABLE,
-                        "Direct payment provider is not configured for this payment method",
-                    )
+                if any(
+                    part.method not in {"balance", "cash", "transfer"}
+                    for part in normalized_parts
+                ):
+                    raise ValueError("Unsupported payment method")
                 if client_id is None and any(part.method == "balance" for part in normalized_parts):
                     raise ValueError("Balance payment requires a client")
                 if (
@@ -183,6 +183,12 @@ class ProductSaleService:
                         actor_id=actor,
                         idempotency_key=f"product-sale-balance:{key}:{index}",
                     )
+                elif part.method == ProductPaymentMethod.TRANSFER.value:
+                    # A transfer is a manual, already-confirmed non-cash
+                    # settlement. The payment part remains the accounting fact;
+                    # there is no external provider call in this slice.
+                    settled_any = True
+                    continue
                 else:
                     if self._cash is None or cash_shift_id is None:
                         raise ApplicationError(
@@ -333,6 +339,8 @@ class ProductSaleService:
                         actor_id=sale.sold_by,
                         idempotency_key=f"product-sale-balance:{sale.idempotency_key}:{index}",
                     )
+                elif part.method == ProductPaymentMethod.TRANSFER.value:
+                    continue
                 else:
                     if self._cash is None or sale.cash_shift_id is None:
                         raise ApplicationError(

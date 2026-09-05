@@ -34,6 +34,8 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
 
     public string? DeviceId { get; private set; }
 
+    public string? WorkstationId { get; private set; }
+
     public bool IsEnrolled => !string.IsNullOrWhiteSpace(DeviceId) && HasUsableToken();
 
     public async ValueTask<string?> GetAccessTokenAsync(
@@ -92,13 +94,15 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
             if (!response.IsSuccessStatusCode
                 || !string.Equals(payload.State, "approved", StringComparison.OrdinalIgnoreCase)
                 || string.IsNullOrWhiteSpace(payload.AccessToken)
-                || string.IsNullOrWhiteSpace(payload.DeviceId))
+                || string.IsNullOrWhiteSpace(payload.DeviceId)
+                || string.IsNullOrWhiteSpace(payload.WorkstationId))
             {
                 response.EnsureSuccessStatusCode();
                 throw new InvalidOperationException("Backend returned an invalid enrollment response");
             }
 
             DeviceId = payload.DeviceId;
+            WorkstationId = payload.WorkstationId;
             _accessToken = payload.AccessToken;
             _expiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(payload.ExpiresIn, 1));
             return _accessToken;
@@ -129,6 +133,7 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
     private sealed record DeviceEnrollmentResponse(
         [property: JsonPropertyName("state")] string State,
         [property: JsonPropertyName("device_id")] string? DeviceId,
+        [property: JsonPropertyName("workstation_id")] string? WorkstationId,
         [property: JsonPropertyName("access_token")] string? AccessToken,
         [property: JsonPropertyName("expires_in")] int ExpiresIn);
 

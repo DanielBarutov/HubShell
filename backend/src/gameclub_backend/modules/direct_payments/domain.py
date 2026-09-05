@@ -42,9 +42,9 @@ class GuestSessionPayment:
             raise ValueError("Guest payment parts are required")
         if sum(part.amount_cents for part in self.payment_parts) != self.total_price_cents:
             raise ValueError("Guest payment parts total must match the payment total")
-        if any(part.method != "cash" for part in self.payment_parts):
-            raise ValueError("Guest direct payment provider is not configured")
-        if self.cash_shift_id is None:
+        if any(part.method not in {"cash", "transfer"} for part in self.payment_parts):
+            raise ValueError("Guest direct payment supports cash or transfer")
+        if any(part.method == "cash" for part in self.payment_parts) and self.cash_shift_id is None:
             raise ValueError("Guest cash payment requires a cash shift")
         if not self.idempotency_key.strip() or self.created_at.tzinfo is None:
             raise ValueError("Guest payment key and timestamp are required")

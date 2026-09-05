@@ -30,7 +30,9 @@ class GuestSessionPaymentModel(DirectPaymentBase):
     guest_name: Mapped[str] = mapped_column(String(128))
     total_price_cents: Mapped[int] = mapped_column(Integer())
     payment_parts: Mapped[list[dict[str, object]]] = mapped_column(JSONB)
-    cash_shift_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    cash_shift_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(16))
     idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))

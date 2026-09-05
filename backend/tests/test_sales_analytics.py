@@ -174,6 +174,33 @@ async def test_guest_product_sale_is_settled_in_cash_shift() -> None:
     assert (await cash_shifts.get(shift.id)).expected_close_cents == 100
 
 
+async def test_product_sale_can_use_manual_transfer_without_cash_shift() -> None:
+    catalog_repository = InMemoryCatalogRepository()
+    catalog = CatalogService(catalog_repository)
+    product = await catalog.create_product("Transfer water", "drinks", 150, stock_quantity=2)
+    service = ProductSaleService(
+        InMemoryProductSaleRepository(catalog_repository),
+        catalog,
+        ClientService(InMemoryClientRepository()),
+    )
+
+    sale = await service.sell(
+        product.id,
+        quantity=1,
+        client_id=None,
+        payment_method="transfer",
+        cash_shift_id=None,
+        sold_by="operator",
+        idempotency_key="sale-transfer-001",
+        payment_parts=[{"method": "transfer", "amount_cents": 150}],
+    )
+
+    assert sale.status.value == "completed"
+    assert sale.payment_method.value == "transfer"
+    assert sale.payment_parts[0].method == "transfer"
+    assert (await catalog.get_product(product.id)).stock_quantity == 1
+
+
 async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)

@@ -189,6 +189,38 @@ async def test_guest_transient_failure_has_durable_backoff_and_settlement_audit(
 
 
 @pytest.mark.asyncio
+async def test_guest_payment_can_use_manual_transfer_without_cash_shift() -> None:
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Guest transfer hour",
+        group_id="main",
+        duration_minutes=60,
+        price_cents=500,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="guest-transfer-hour",
+    )
+    cash = ToggleCashSettlement()
+    repository = InMemoryGuestSessionPaymentRepository()
+    service = GuestSessionPaymentService(repository, tariffs=catalog, cash=cash)
+
+    payment = await service.confirm(
+        workstation_id=uuid.uuid4(),
+        tariff_id=tariff.id,
+        tariff_quantity=1,
+        guest_name="Гость",
+        actor_id="operator",
+        idempotency_key="guest-transfer-001",
+        cash_shift_id=None,
+        payment_parts=[{"method": "transfer", "amount_cents": 500}],
+    )
+
+    assert payment.status is DirectPaymentStatus.CONFIRMED
+    assert payment.cash_shift_id is None
+    assert cash.calls == []
+
+
+@pytest.mark.asyncio
 async def test_product_transient_failure_has_durable_backoff_and_keeps_reserved_stock() -> None:
     now = datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
     catalog_repository = InMemoryCatalogRepository()
