@@ -47,17 +47,15 @@ foreach ($endpoint in @(
     if ($uri.Scheme -notin @("http", "https")) {
         throw "$($endpoint.Name) должен использовать http или https."
     }
-    if ($uri.Scheme -eq "http" -and (
-            $EnvironmentName -ne "dev"
-            -or -not $uri.IsLoopback)) {
+    $isDevLoopbackHttp = $EnvironmentName -eq "dev" -and $uri.Scheme -eq "http" -and $uri.IsLoopback
+    if ($uri.Scheme -eq "http" -and -not $isDevLoopbackHttp) {
         throw "$($endpoint.Name) должен использовать HTTPS, кроме loopback HTTP в dev."
     }
-    if ($isProduction -and (
-            $uri.Scheme -ne "https"
-            -or $uri.IsLoopback
-            -or $uri.Host -in @("api.gameclub.local", "localhost")
-            -or $uri.Host -match "(^|[.])example([.]|$)"
-            -or $uri.Host -match "[.]local$")) {
+    $isProductionInvalidHost = $uri.IsLoopback `
+        -or $uri.Host -in @("api.gameclub.local", "localhost") `
+        -or $uri.Host -match "(^|[.])example([.]|$)" `
+        -or $uri.Host -match "[.]local$"
+    if ($isProduction -and ($uri.Scheme -ne "https" -or $isProductionInvalidHost)) {
         throw "$($endpoint.Name) для production должен быть реальным внешним HTTPS endpoint без placeholder/loopback host."
     }
 }
