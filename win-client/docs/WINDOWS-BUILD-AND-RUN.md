@@ -142,6 +142,23 @@ Set-Location "C:\Git\HubShell\win-client"
 Для удалённого backend замените адреса на реальные HTTPS и используйте
 `-EnvironmentName production`.
 
+Важно для WinUI: сборку и публикацию можно выполнять по SSH, но окно клиента
+нельзя валидно проверять из SSH-сеанса Windows Session 0. Запускать EXE нужно
+в интерактивном desktop-сеансе обычного пользователя — напрямую на ПК или по
+RDP. Проверка текущей сессии:
+
+```powershell
+[System.Diagnostics.Process]::GetCurrentProcess().SessionId
+quser
+```
+
+Для обычного рабочего стола ожидается Session 1 или другой номер активной
+пользовательской сессии, а не `0`. Если запустить WinUI из SSH, он может
+завершиться внутри `Microsoft.UI.Xaml.dll` до первой строки собственного
+`startup.log`; это не доказательство ошибки приложения. Скрипт диагностики
+теперь записывает `DiagnosticSessionId`, `InteractiveDesktop` и печатает это
+предупреждение в отчёте.
+
 Запускать нужно весь каталог, а не только EXE:
 
 ```powershell
@@ -229,6 +246,7 @@ Get-MpThreatDetection |
 | `Application Error` с faulting module | Проверить native dependency, Windows App SDK, архитектуру и crash dump. |
 | Нет событий, EXE исчезает сразу | Проверить Defender/SmartScreen, `Unblock-File`, права на каталог и совместимость Windows. |
 | Процесс жив, но окна нет | Запустить из Visual Studio, проверить XAML и native tray; отсутствие backend не должно закрывать окно. |
+| Запуск выполнен по SSH и SessionId равен `0` | Повторить запуск из активного desktop-сеанса/RDP; SSH Session 0 не подходит для проверки WinUI-окна. |
 
 Особенно важно: native tray и фоновые циклы теперь запускаются после
 `Window.Activate()`, а ошибка tray записывается в `startup.log` и не должна
