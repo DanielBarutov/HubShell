@@ -25,6 +25,35 @@ public sealed class ClientSessionCoordinatorTests
             throw new DeviceAuthenticationRequiredException(
                 new InvalidOperationException("test authentication failure"));
 
+        public Task<ClientPortalAuthenticationSnapshot> RegisterAsync(
+            string nickname,
+            string phone,
+            string pin,
+            string deviceId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ClientPortalAuthenticationSnapshot> LoginAsync(
+            string identifier,
+            string pin,
+            string deviceId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ClientPortalSnapshot> RefreshAsync(
+            string deviceId,
+            int limit = 50,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ClientPortalSnapshot> ActivateEntitlementAsync(
+            string deviceId,
+            string entitlementId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public void Logout() => throw new NotSupportedException();
+
         public Task<WorkstationHeartbeatSnapshot> SendHeartbeatAsync(
             string deviceId,
             string clientVersion,
