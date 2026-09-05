@@ -117,6 +117,25 @@ class PostgresReservationRepository:
             )
             return [model.to_domain() for model in result]
 
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        start_at: datetime.datetime,
+        limit: int,
+    ) -> list[Reservation]:
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(ReservationModel)
+                .where(
+                    ReservationModel.client_id == client_id,
+                    ReservationModel.status == ReservationStatus.CONFIRMED.value,
+                    ReservationModel.start_at >= start_at,
+                )
+                .order_by(ReservationModel.start_at, ReservationModel.id)
+                .limit(limit)
+            )
+            return [model.to_domain() for model in result]
+
     async def list_pending_no_show(self, cutoff_at: datetime.datetime) -> list[Reservation]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(

@@ -16,9 +16,9 @@
 
 ## Контракт
 
-- Регистрация: nickname, телефон и PIN; PIN хранится только как server-side
-  scrypt/PBKDF2 verifier.
-- Login: nickname или canonical phone + PIN.
+- Регистрация: nickname, телефон и пароль; пароль хранится только как
+  server-side scrypt/PBKDF2 verifier.
+- Login: nickname или canonical phone + пароль.
 - Backend выдаёт короткоживущий `SubjectType.CLIENT` token, scoped к текущему
   workstation/device.
 - Windows client не вычисляет цену, доступное время, списание или баланс.
@@ -26,7 +26,7 @@
 
 ## Этапы
 
-- [x] Добавить application use case регистрации и проверки PIN.
+- [x] Добавить application use case регистрации и проверки пароля.
 - [x] Добавить client-scoped JWT и device binding в auth claims.
 - [x] Добавить gRPC portal contract и server implementation.
 - [x] Добавить истории ledger, session charges и product sales через публичные

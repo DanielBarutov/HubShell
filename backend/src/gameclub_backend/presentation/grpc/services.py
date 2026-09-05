@@ -888,6 +888,27 @@ def to_portal_snapshot_proto(
             )
             for item in snapshot.entitlements
         ],
+        tariffs=[
+            clients_pb2.PortalTariff(
+                id=str(tariff.id),
+                name=tariff.name,
+                zone_id=tariff.group_id or "",
+                duration_minutes=tariff.duration_minutes,
+                price_cents=tariff.price_cents,
+            )
+            for tariff in snapshot.tariffs
+        ],
+        reservations=[
+            clients_pb2.PortalReservation(
+                id=str(reservation.id),
+                workstation_ids=[str(item) for item in reservation.workstation_ids],
+                start_at=to_timestamp(reservation.start_at),
+                end_at=to_timestamp(reservation.end_at),
+                status=reservation.status.value,
+                tariff_id=str(reservation.tariff_id) if reservation.tariff_id else "",
+            )
+            for reservation in snapshot.reservations
+        ],
     )
     return response
 
@@ -1088,7 +1109,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
     ) -> clients_pb2.ClientPortalSession:
         await require_device(context, self._token_service, request.device_id)
         try:
-            client = await self._service.register(request.nickname, request.phone, request.pin)
+            client = await self._service.register(request.nickname, request.phone, request.password)
             return await self._issue_session(client, request.device_id)
         except ApplicationError as error:
             await abort_application_error(context, error)
@@ -1100,7 +1121,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
     ) -> clients_pb2.ClientPortalSession:
         await require_device(context, self._token_service, request.device_id)
         try:
-            client = await self._service.authenticate(request.identifier, request.pin)
+            client = await self._service.authenticate(request.identifier, request.password)
             return await self._issue_session(client, request.device_id)
         except ApplicationError as error:
             await abort_application_error(context, error)
@@ -1145,6 +1166,30 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
                 parse_uuid(principal.subject_id, "client_id"),
                 parse_uuid(request.entitlement_id, "entitlement_id"),
                 request.device_id,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_portal_snapshot_proto(snapshot)
+
+    async def PurchaseEntitlement(
+        self,
+        request: clients_pb2.PurchaseEntitlementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSnapshot:
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.purchase_entitlement(
+                parse_uuid(principal.subject_id, "client_id"),
+                parse_uuid(request.tariff_id, "tariff_id"),
+                request.idempotency_key,
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))

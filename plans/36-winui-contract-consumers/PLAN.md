@@ -15,7 +15,8 @@ transfer и durable offline protocol. Клиент остаётся thin consume
 
 ## Текущее состояние
 
-Pre-auth gate, post-auth widget/tray, portal package queue/explicit activation,
+Pre-auth gate, right-aligned compact post-auth widget/tray without avatar, portal
+tariff purchase/package queue/explicit activation,
 snapshot gateway, heartbeat callback, transfer UI и durable offline journal есть
 на source-level. Portal login/register и command-driven session start теперь
 передают workstation/client через server `EntryDecision`; native compile/runtime
@@ -38,6 +39,9 @@ host.
 - explicit activation saved package при новом входе;
 - session stop/logout/restart по server result;
 - transfer offer/confirm на новом ПК;
+- compact widget без выбора темы пользователем и без фиктивной брони; карточка
+  бронирования строится только из совпадающей будущей подтверждённой брони
+  snapshot;
 - durable journal, reconnect batch и result UI;
 - stale/offline lock states и безопасный no-new-session rule.
 

@@ -470,6 +470,11 @@ class ClientPortalServiceStub:
                 request_serializer=gameclub_dot_v1_dot_clients__pb2.ActivateEntitlementRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
                 _registered_method=True)
+        self.PurchaseEntitlement = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/PurchaseEntitlement',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.PurchaseEntitlementRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
+                _registered_method=True)
 
 
 class ClientPortalServiceServicer:
@@ -499,6 +504,12 @@ class ClientPortalServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PurchaseEntitlement(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ClientPortalServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -520,6 +531,11 @@ def add_ClientPortalServiceServicer_to_server(servicer, server):
             'ActivateEntitlement': grpc.unary_unary_rpc_method_handler(
                     servicer.ActivateEntitlement,
                     request_deserializer=gameclub_dot_v1_dot_clients__pb2.ActivateEntitlementRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.SerializeToString,
+            ),
+            'PurchaseEntitlement': grpc.unary_unary_rpc_method_handler(
+                    servicer.PurchaseEntitlement,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.PurchaseEntitlementRequest.FromString,
                     response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.SerializeToString,
             ),
     }
@@ -630,6 +646,33 @@ class ClientPortalService:
             target,
             '/gameclub.clients.v1.ClientPortalService/ActivateEntitlement',
             gameclub_dot_v1_dot_clients__pb2.ActivateEntitlementRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PurchaseEntitlement(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/PurchaseEntitlement',
+            gameclub_dot_v1_dot_clients__pb2.PurchaseEntitlementRequest.SerializeToString,
             gameclub_dot_v1_dot_clients__pb2.ClientPortalSnapshot.FromString,
             options,
             channel_credentials,

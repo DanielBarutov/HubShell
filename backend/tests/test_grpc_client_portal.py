@@ -18,6 +18,10 @@ from gameclub_backend.modules.entitlements.application.service import Entitlemen
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
     InMemoryEntitlementRepository,
 )
+from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
+from gameclub_backend.modules.reservations.infrastructure.memory import (
+    InMemoryReservationRepository,
+)
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
@@ -48,6 +52,7 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
         None,
     )
     session_repository = InMemorySessionRepository()
+    reservation_repository = InMemoryReservationRepository()
     sales = ProductSaleService(
         InMemoryProductSaleRepository(),
         products=catalog,
@@ -66,6 +71,7 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
         sales=sales,
         tariffs=catalog,
         entitlements=entitlement_service,
+        reservations=reservation_repository,
     )
 
     server = grpc.aio.server()
@@ -91,7 +97,7 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
             clients_pb2.RegisterPortalRequest(
                 nickname="NightFox",
                 phone="79991234567",
-                pin="1234",
+                password="1234",
                 device_id="device-01",
             ),
             metadata=(("authorization", f"Bearer {device_token}"),),
@@ -104,11 +110,29 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
             "operator",
             "grpc-portal-top-up",
         )
-        await entitlement_service.purchase(
-            uuid.UUID(registered.snapshot.client.id),
-            tariff.id,
-            "operator",
-            "grpc-portal-package",
+        purchased = await client.PurchaseEntitlement(
+            clients_pb2.PurchaseEntitlementRequest(
+                tariff_id=str(tariff.id),
+                device_id="device-01",
+                idempotency_key="grpc-portal-package",
+            ),
+            metadata=(("authorization", f"Bearer {registered.access_token}"),),
+        )
+        reservation_start = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=2)
+        await reservation_repository.save(
+            Reservation(
+                id=uuid.uuid4(),
+                workstation_ids=(uuid.UUID("00000000-0000-0000-0000-000000000009"),),
+                client_id=uuid.UUID(registered.snapshot.client.id),
+                guest_name=None,
+                start_at=reservation_start,
+                end_at=reservation_start + datetime.timedelta(hours=1),
+                status=ReservationStatus.CONFIRMED,
+                notes=None,
+                tariff_id=tariff.id,
+                created_by="operator",
+                created_at=datetime.datetime.now(datetime.UTC),
+            )
         )
         await session_repository.save(
             Session(
@@ -151,5 +175,9 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
     assert snapshot.available_time_minutes == 0
     assert snapshot.sessions[0].tariff_name == "Ночной тариф"
     assert snapshot.entitlements[0].status == "queued"
+    assert purchased.entitlements[0].status == "queued"
+    assert len(snapshot.reservations) == 1
+    assert snapshot.reservations[0].workstation_ids == ["00000000-0000-0000-0000-000000000009"]
+    assert snapshot.tariffs[0].name == "Ночной тариф"
     assert activated.entitlements[0].status == "active"
     assert error.value.code() is grpc.StatusCode.PERMISSION_DENIED

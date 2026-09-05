@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using WinRT.Interop;
+using Windows.Graphics;
 using XamlApplication = Microsoft.UI.Xaml.Application;
 
 namespace GameClub.Client;
@@ -190,14 +191,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void PortalPhoneChanged(object sender, TextChangedEventArgs args)
-    {
-        if (sender is TextBox textBox)
-        {
-            _viewModel.PortalPhone = textBox.Text;
-        }
-    }
-
     private void PortalNicknameChanged(object sender, TextChangedEventArgs args)
     {
         if (sender is TextBox textBox)
@@ -206,20 +199,47 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void PortalPinChanged(object sender, RoutedEventArgs args)
+    private void PortalPasswordChanged(object sender, RoutedEventArgs args)
     {
         if (sender is PasswordBox passwordBox)
         {
-            _viewModel.PortalPin = passwordBox.Password;
+            _viewModel.PortalPassword = passwordBox.Password;
         }
     }
 
-    private void PortalRegistrationPinChanged(object sender, RoutedEventArgs args)
+    private void PortalRegistrationPasswordChanged(object sender, RoutedEventArgs args)
     {
         if (sender is PasswordBox passwordBox)
         {
-            _viewModel.PortalRegistrationPin = passwordBox.Password;
+            _viewModel.PortalRegistrationPassword = passwordBox.Password;
         }
+    }
+
+    private bool _normalizingPhone;
+
+    private void ToggleTransferPanel(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        _viewModel.ToggleTransferPanel();
+    }
+
+    private void PortalPhoneChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender is not TextBox textBox || _normalizingPhone)
+        {
+            return;
+        }
+
+        var formatted = FormatRussianPhone(textBox.Text);
+        if (!string.Equals(textBox.Text, formatted, StringComparison.Ordinal))
+        {
+            _normalizingPhone = true;
+            textBox.Text = formatted;
+            textBox.SelectionStart = formatted.Length;
+            _normalizingPhone = false;
+        }
+        _viewModel.PortalPhone = formatted;
     }
 
     private void RecordKeyActivity(object sender, KeyRoutedEventArgs args) =>
@@ -239,13 +259,13 @@ public sealed partial class MainWindow : Window
     private async void LoginPortal(object sender, RoutedEventArgs args)
     {
         await _viewModel.LoginPortalAsync();
-        PortalPinBox.Password = string.Empty;
+        PortalPasswordBox.Password = string.Empty;
     }
 
     private async void RegisterPortal(object sender, RoutedEventArgs args)
     {
         await _viewModel.RegisterPortalAsync();
-        PortalRegistrationPinBox.Password = string.Empty;
+        PortalRegistrationPasswordBox.Password = string.Empty;
     }
 
     private async void ActivateFirstPortalEntitlement(object sender, RoutedEventArgs args)
@@ -258,8 +278,35 @@ public sealed partial class MainWindow : Window
 
     private void CancelPortalRegistration(object sender, RoutedEventArgs args)
     {
-        PortalRegistrationPinBox.Password = string.Empty;
+        PortalRegistrationPasswordBox.Password = string.Empty;
         _viewModel.CancelPortalRegistration();
+    }
+
+    private async void PurchaseTariff(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button button || button.Tag is not string tariffId)
+        {
+            return;
+        }
+
+        var tariff = _viewModel.FindPortalTariff(tariffId);
+        if (tariff is null || ContentRoot.XamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Купить «{tariff.Name}»?",
+            Content = $"{tariff.DurationSummary} · {tariff.PriceSummary}. Сумма будет списана с баланса.",
+            PrimaryButtonText = "Купить",
+            CloseButtonText = "Отмена",
+            XamlRoot = ContentRoot.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await _viewModel.PurchasePortalTariffAsync(tariffId);
+        }
     }
 
     private void OpenManagerLogin(object sender, RoutedEventArgs args) =>
@@ -381,7 +428,15 @@ public sealed partial class MainWindow : Window
         presenter.IsMinimizable = false;
         presenter.IsAlwaysOnTop = true;
         _appWindow.SetPresenter(presenter);
-        _appWindow.Resize(new Windows.Graphics.SizeInt32(460, 720));
+        var size = new SizeInt32(390, 700);
+        _appWindow.Resize(size);
+        var displayArea = DisplayArea.GetFromWindowId(
+            _appWindow.Id,
+            DisplayAreaFallback.Nearest);
+        var workArea = displayArea.WorkArea;
+        _appWindow.Move(new PointInt32(
+            workArea.X + workArea.Width - size.Width - 18,
+            workArea.Y + Math.Max(18, (workArea.Height - size.Height) / 2)));
     }
 
     private void ApplyThemeFromCommand(string theme)
@@ -427,9 +482,50 @@ public sealed partial class MainWindow : Window
 
     private void ApplyLegacyWindowModeMarker(bool isCompact)
     {
-        // The client is fullscreen in production; this remains only for older
-        // diagnostic automation that inspects the previous mode contract.
+        // Keep the old automation marker without changing the new right-side
+        // widget layout.
         _viewModel.IsExpanded = isCompact;
+    }
+
+    private static string FormatRussianPhone(string value)
+    {
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.StartsWith('7') || digits.StartsWith('8'))
+        {
+            digits = digits[1..];
+        }
+        if (digits.Length > 10)
+        {
+            digits = digits[..10];
+        }
+
+        if (digits.Length == 0)
+        {
+            return "+7 (";
+        }
+
+        var result = $"+7 ({digits[0]}";
+        if (digits.Length > 1)
+        {
+            result += digits[1..Math.Min(3, digits.Length)];
+        }
+        if (digits.Length >= 3)
+        {
+            result += ")";
+        }
+        if (digits.Length > 3)
+        {
+            result += $" {digits[3..Math.Min(6, digits.Length)]}";
+        }
+        if (digits.Length > 6)
+        {
+            result += $"-{digits[6..Math.Min(8, digits.Length)]}";
+        }
+        if (digits.Length > 8)
+        {
+            result += $"-{digits[8..Math.Min(10, digits.Length)]}";
+        }
+        return result;
     }
 
 }

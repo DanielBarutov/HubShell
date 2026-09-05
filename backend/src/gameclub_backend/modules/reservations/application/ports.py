@@ -23,6 +23,14 @@ class ReservationRepository(typing.Protocol):
     ) -> list[Reservation]:
         """Return reservations intersecting a period."""
 
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        start_at: datetime.datetime,
+        limit: int,
+    ) -> list[Reservation]:
+        """Return future confirmed reservations assigned to one client."""
+
     async def list_pending_no_show(
         self,
         cutoff_at: datetime.datetime,
