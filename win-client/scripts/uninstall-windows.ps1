@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess, ConfirmImpact = "High")]
+﻿[CmdletBinding(SupportsShouldProcess, ConfirmImpact = "High")]
 param(
     [string]$InstallPath = (Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "GameClub\Client"),
     [switch]$RemoveRuntimeData,
