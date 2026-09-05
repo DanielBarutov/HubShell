@@ -142,7 +142,9 @@ versioned файлы в `proto/gameclub/v1/`; Python-типы генерирую
 Чтобы Windows-клиенты из LAN могли подключиться к контейнеру, задайте
 `GAMECLUB_HTTP_HOST=0.0.0.0` и `GAMECLUB_GRPC_HOST=0.0.0.0`, опубликуйте порты
 8100 и 51051 только в профиле private network Windows Firewall и используйте
-адрес сервера из RFC1918-сети в клиенте.
+адрес сервера из RFC1918-сети в клиенте. Для Docker Compose дополнительно
+задайте `GAMECLUB_BIND_HOST=0.0.0.0` в `.env`, иначе host-порты останутся
+доступны только на `127.0.0.1`.
 
 Threat model, JWT policy, secret handling и границы доверия описаны в
 [`plans/04-auth-security/THREAT-MODEL.md`](../plans/04-auth-security/THREAT-MODEL.md).
