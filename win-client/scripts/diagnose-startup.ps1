@@ -37,6 +37,8 @@ $startupLogLines = @()
 $startupLogReadError = $null
 $processArchitecture = if ([Environment]::Is64BitProcess) { "x64" } else { "x86" }
 $osArchitecture = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+$diagnosticSessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+$interactiveDesktop = $diagnosticSessionId -ne 0
 
 try {
     $workingDirectory = Split-Path -Parent $resolvedExecutablePath
@@ -90,6 +92,11 @@ $lines.Add("WorkingDirectory: $(Split-Path -Parent $resolvedExecutablePath)")
 $lines.Add("OS: $([Environment]::OSVersion.VersionString)")
 $lines.Add("ProcessArchitecture: $processArchitecture")
 $lines.Add("OSArchitecture: $osArchitecture")
+$lines.Add("DiagnosticSessionId: $diagnosticSessionId")
+$lines.Add("InteractiveDesktop: $interactiveDesktop")
+if (-not $interactiveDesktop) {
+    $lines.Add("Warning: WinUI GUI must be launched from the interactive Windows desktop. Session 0 (for example SSH) is not a valid GUI runtime test.")
+}
 $lines.Add("TimeoutSeconds: $TimeoutSeconds")
 $lines.Add("StartupLogPath: $startupLogPath")
 
@@ -133,6 +140,9 @@ foreach ($startupLogLine in $startupLogLines) {
 Set-Content -LiteralPath $reportPath -Value $lines -Encoding UTF8
 
 Write-Host "Startup diagnostic report: $reportPath"
+if (-not $interactiveDesktop) {
+    Write-Host "ВНИМАНИЕ: текущая Windows-сессия $diagnosticSessionId не является интерактивным desktop-сеансом. Для WinUI запускайте EXE из Session 1/RDP; результат SSH-запуска нельзя считать проверкой окна."
+}
 if ($null -ne $startError) {
     Write-Host "EXE не удалось запустить. Подробность сохранена в отчёте."
     exit 2
