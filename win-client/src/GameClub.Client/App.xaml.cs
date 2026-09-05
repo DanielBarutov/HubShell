@@ -68,7 +68,7 @@ public partial class App : XamlApplication
 
     private static void CurrentDomainUnhandledException(
         object? sender,
-        UnhandledExceptionEventArgs args)
+        System.UnhandledExceptionEventArgs args)
     {
         _ = sender;
         if (args.ExceptionObject is Exception error)
