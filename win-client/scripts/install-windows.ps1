@@ -20,9 +20,15 @@ if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
     throw "В каталоге публикации не найден GameClub.Client.exe: $resolvedPublishPath"
 }
 
-New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-Copy-Item -Path (Join-Path $resolvedPublishPath "*") -Destination $InstallPath -Recurse -Force
-$installedExecutable = Join-Path $InstallPath "GameClub.Client.exe"
+if ($RegisterRecoveryTask -and -not $NoStartup) {
+    throw "Выберите один механизм запуска: обычный HKCU Run или -RegisterRecoveryTask с -NoStartup."
+}
+
+$resolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath)
+New-Item -ItemType Directory -Path $resolvedInstallPath -Force | Out-Null
+Copy-Item -Path (Join-Path $resolvedPublishPath "*") -Destination $resolvedInstallPath -Recurse -Force
+$installedExecutable = Join-Path $resolvedInstallPath "GameClub.Client.exe"
+Set-Content -LiteralPath (Join-Path $resolvedInstallPath ".gameclub-installation") -Value "GameClub.Client" -Encoding UTF8
 
 if (-not $NoStartup) {
     $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"

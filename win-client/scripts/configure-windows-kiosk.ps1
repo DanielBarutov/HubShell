@@ -135,6 +135,15 @@ if ($osCaption -notmatch "Enterprise|Education|IoT") {
     throw "Shell Launcher требует поддерживаемую редакцию Windows Enterprise/Education/IoT. Определена: $osCaption"
 }
 
+if ($EnableFeature) {
+    if ($PSCmdlet.ShouldProcess("Windows optional features", "включить Client-DeviceLockdown и Client-EmbeddedShellLauncher")) {
+        Enable-WindowsOptionalFeature -Online -FeatureName @(
+            "Client-DeviceLockdown",
+            "Client-EmbeddedShellLauncher"
+        ) -All -NoRestart | Out-Null
+    }
+}
+
 $assignedAccess = Get-AssignedAccessObject
 $existingPolicy = [string]$assignedAccess.ShellLauncher
 New-Item -ItemType Directory -Path (Split-Path -Parent $resolvedOutputPath) -Force | Out-Null
@@ -148,15 +157,6 @@ else {
 
 $xml = Get-ShellLauncherXml $resolvedExecutablePath $KioskUser
 Set-Content -LiteralPath $resolvedOutputPath -Value $xml -Encoding UTF8
-
-if ($EnableFeature) {
-    if ($PSCmdlet.ShouldProcess("Windows optional features", "включить Client-DeviceLockdown и Client-EmbeddedShellLauncher")) {
-        Enable-WindowsOptionalFeature -Online -FeatureName @(
-            "Client-DeviceLockdown",
-            "Client-EmbeddedShellLauncher"
-        ) -All -NoRestart | Out-Null
-    }
-}
 
 if ($PSCmdlet.ShouldProcess("MDM_AssignedAccess", "применить GameClub Shell Launcher для $KioskUser")) {
     $assignedAccess.ShellLauncher = Get-EncodedShellLauncher $xml

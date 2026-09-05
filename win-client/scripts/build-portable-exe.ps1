@@ -6,8 +6,8 @@ param(
     [string]$Configuration = "Release",
     [ValidateSet("dev", "staging", "production")]
     [string]$EnvironmentName = "production",
-    [string]$AuthAddress = "https://api.gameclub.local:8100",
-    [string]$GrpcAddress = "https://api.gameclub.local:51051"
+    [string]$AuthAddress,
+    [string]$GrpcAddress
 )
 
 Set-StrictMode -Version Latest
@@ -31,11 +31,7 @@ $runtime = "win-$($Architecture.ToLowerInvariant())"
 $distributionPath = Join-Path $clientRoot "win-client\artifacts\portable\$runtime\$Configuration"
 $temporaryPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gameclub-client-publish-" + [Guid]::NewGuid().ToString("N"))
 
-if (Test-Path -LiteralPath $distributionPath) {
-    Get-ChildItem -LiteralPath $distributionPath -Force |
-        Remove-Item -Recurse -Force
-}
-else {
+if (-not (Test-Path -LiteralPath $distributionPath)) {
     New-Item -ItemType Directory -Path $distributionPath -Force | Out-Null
 }
 
@@ -52,8 +48,14 @@ try {
     }
 
     $targetExecutable = Join-Path $distributionPath "GameClub.Client.exe"
-    Copy-Item -LiteralPath $sourceExecutable -Destination $targetExecutable -Force
-    $hash = (Get-FileHash -LiteralPath $targetExecutable -Algorithm SHA256).Hash
+    $stagedExecutable = Join-Path $distributionPath (
+        ".GameClub.Client.exe." + [Guid]::NewGuid().ToString("N") + ".new")
+    Copy-Item -LiteralPath $sourceExecutable -Destination $stagedExecutable -Force
+    $hash = (Get-FileHash -LiteralPath $stagedExecutable -Algorithm SHA256).Hash
+    Move-Item -LiteralPath $stagedExecutable -Destination $targetExecutable -Force
+    Get-ChildItem -LiteralPath $distributionPath -Force |
+        Where-Object { $_.FullName -ne $targetExecutable } |
+        Remove-Item -Recurse -Force
 
     Write-Host "Готово. Один переносимый файл:"
     Write-Host $targetExecutable

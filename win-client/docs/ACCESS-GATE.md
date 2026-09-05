@@ -9,8 +9,9 @@
 `User`; после бездействия, потери device-auth или явного выхода состояние снова
 становится `Locked`, а после server-side `session.stop` — `SessionLocked` до
 повторной аутентификации пользователя.
-При деактивации окна клиент также немедленно очищает поля credentials и
-возвращается в `Locked`.
+Потеря фокуса окна сама по себе не блокирует клиент: это обычное поведение
+Windows Desktop после входа. Возврат в `Locked` выполняется по idle timeout,
+потере device-auth, явному выходу или server-side policy.
 
 Потеря device-auth определяется по `401/403` HTTP либо
 `Unauthenticated/PermissionDenied` gRPC на health-проверке; временный offline без

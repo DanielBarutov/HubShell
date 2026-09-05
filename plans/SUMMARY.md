@@ -296,7 +296,7 @@ flows.
   idle relock, relock при auth 401/403;
 - `Ctrl+Alt+P`, session locked/zero-balance handling и controlled restart после
   подтверждённого stop;
-- installer/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
+- deployment/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
   `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
   зашитыми non-secret HTTPS endpoint metadata для передачи на клиентский ПК.
 - server-backed register/login/profile/history screen показывает баланс,
@@ -412,7 +412,7 @@ security boundary. Детали — в
 2. На Windows выполнить:
 
    ```powershell
-   cd win-client
+   Set-Location "C:\Git\HubShell\win-client"
    .\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
    ```
 
@@ -421,7 +421,14 @@ security boundary. Детали — в
    Для передачи на клиентский ПК собрать portable-файл:
 
    ```powershell
-   .\scripts\build-portable-exe.ps1 -Architecture x64 -Configuration Release
+   $authAddress = Read-Host "Production AuthAddress (https://...)"
+   $grpcAddress = Read-Host "Production GrpcAddress (https://...)"
+   .\scripts\build-portable-exe.ps1 `
+     -Architecture x64 `
+     -Configuration Release `
+     -EnvironmentName production `
+     -AuthAddress $authAddress `
+     -GrpcAddress $grpcAddress
    ```
 3. Проверить основной browser flow в поддерживаемых браузерах и определить
    порог нагрузки/частоту polling; при необходимости перейти от polling к
@@ -489,7 +496,7 @@ npm run build
 Windows — только PowerShell на Windows:
 
 ```powershell
-cd win-client
+Set-Location "C:\Git\HubShell\win-client"
 .\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 dotnet test GameClub.Client.sln --configuration Debug -p:Platform=x64
 ```
