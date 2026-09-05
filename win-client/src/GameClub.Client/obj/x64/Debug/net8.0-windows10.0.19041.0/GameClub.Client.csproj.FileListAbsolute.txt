@@ -1,1 +1,0 @@
-/home/daniel/HubShell/win-client/src/GameClub.Client/obj/x64/Debug/net8.0-windows10.0.19041.0/GameClub.Client.csproj.AssemblyReference.cache

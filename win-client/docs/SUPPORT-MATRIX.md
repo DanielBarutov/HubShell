@@ -1,7 +1,9 @@
 # Windows client — support matrix
 
 Документ фиксирует целевую платформу и границы доказательств. Фактический
-запуск нужно подтвердить на Windows перед выпуском.
+запуск нужно подтвердить на Windows перед выпуском. Команды сборки, публикации и
+startup diagnostics находятся в
+[`WINDOWS-BUILD-AND-RUN.md`](WINDOWS-BUILD-AND-RUN.md).
 
 | Область | Целевое значение | Статус в Linux checkout |
 | --- | --- | --- |
@@ -28,6 +30,18 @@
    группы через heartbeat.
 6. Клиент открывает Locked shell; пользователь регистрируется или входит и
    получает свой профиль/историю.
+
+Канонический checkout на машине сборки:
+
+```text
+C:\Git\HubShell
+```
+
+Канонический путь приложения на тестовом игровом ПК:
+
+```text
+C:\GameClub\Client\GameClub.Client.exe
+```
 
 На клиентском ПК не должны выполняться `dotnet`, PowerShell setup, ввод
 `device_id`, bootstrap-токена или локальных PIN-хэшей.
@@ -57,7 +71,8 @@
   произвольные приложения, recovery и restore;
 - production HTTPS/gRPC TLS и сертификатная цепочка.
 
-Автоматизированная последовательность и ручные отметки находятся в
+Автоматизированная сборка и запуск находятся в
+[WINDOWS-BUILD-AND-RUN.md](WINDOWS-BUILD-AND-RUN.md), а ручные отметки — в
 [REAL-PC-VERIFICATION.md](REAL-PC-VERIFICATION.md).
 
 Для native solution используется `-p:Platform=x64`; `--arch` для solution не

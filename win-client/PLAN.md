@@ -88,8 +88,9 @@ Windows Desktop и показывает компактный borderless-видж
     менеджерский пароль не хранить в клиенте: для dev
     допускается PBKDF2-хеш из защищённой конфигурации, production использует
     Windows Credential Manager/серверную проверку supervisor. Добавлены
-    throttling неудачных попыток, relock при device-auth 401/403/Unauthenticated,
-    relock при деактивации окна и unit-тесты coordinator.
+    throttling неудачных попыток и relock при device-auth
+    401/403/Unauthenticated; потеря фокуса окна сама по себе не вызывает relock.
+    Добавлены unit-тесты coordinator.
 17. [ ] Зафиксировать kiosk deployment: app-level lock не заменяет Windows
     logon. Для запрета Alt+Tab, запуска оболочки и ухода в другой desktop нужен
     Assigned Access/Shell Launcher, отдельная учётная запись ПК и ручная Windows
@@ -103,7 +104,7 @@ Windows Desktop и показывает компактный borderless-видж
     контролируемый restart после подтверждённой сервером остановки сессии.
     Команда `session.start` также передаёт `tariff_id`/`tariff_quantity`, а
     клиент показывает активную сессию и позволяет завершить её самостоятельно.
-20. [x] Подготовить Windows deployment script/installer bootstrap, который
+20. [x] Подготовить Windows deployment/autostart bootstrap, который
     регистрирует автозапуск клиента и опциональные recovery policy; настоящий
     Assigned Access/Shell Launcher и native installer smoke требуют Windows.
 21. [x] Подключить смену manager credential из operator dashboard для группы ПК:
@@ -120,6 +121,12 @@ Windows Desktop и показывает компактный borderless-видж
     offline batch. Package queue и explicit activation доступны в client portal
     snapshot/gRPC/UI; entry login integration, native Windows и production
     hardening остаются отдельными checks в планах 32/36/37.
+24. [x] Добавить в приложение собственный startup diagnostics boundary:
+    безопасный журнал этапов запуска в `%LocalAppData%\GameClub\startup.log`,
+    обработчики ранних managed/UI-исключений и наблюдение за background tasks.
+    Native Windows проверка журнала остаётся частью реального smoke; внешний
+    сборщик `scripts/diagnose-startup.ps1`, Application Event Log и Visual Studio
+    используются для ранних/native loader сбоев.
 
 Декомпозиция оставшегося runtime: entitlement/meter и snapshot принадлежат
 планам [`30`](../plans/30-entitlements-meter/PLAN.md) и

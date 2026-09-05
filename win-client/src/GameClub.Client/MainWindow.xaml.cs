@@ -21,9 +21,11 @@ public sealed partial class MainWindow : Window
     private readonly DeviceEnrollmentTokenProvider _enrollmentTokenProvider;
     private NativeTrayIcon? _trayIcon;
     private bool _closing;
+    private bool _startupStarted;
 
     public MainWindow()
     {
+        StartupDiagnostics.Info("MainWindow constructor: begin");
         InitializeComponent();
         var windowHandle = WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
@@ -59,17 +61,15 @@ public sealed partial class MainWindow : Window
             _powerController);
         ContentRoot.DataContext = _viewModel;
         _viewModel.PropertyChanged += ViewModelPropertyChanged;
-        InitializeTrayIcon();
-        ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode);
-        _ = StartClientAsync();
+        StartupDiagnostics.Info("MainWindow constructor: completed");
     }
 
     private async Task StartClientAsync()
     {
         await _viewModel.RefreshConnectionAsync();
-        _viewModel.TrackBackgroundTask(_viewModel.RunHeartbeatLoopAsync());
-        _viewModel.TrackBackgroundTask(_viewModel.RunAccessLockLoopAsync());
-        _viewModel.TrackBackgroundTask(ActivateEnrolledDeviceAsync());
+        TrackBackgroundTask(_viewModel.RunHeartbeatLoopAsync(), "heartbeat loop");
+        TrackBackgroundTask(_viewModel.RunAccessLockLoopAsync(), "access-lock loop");
+        TrackBackgroundTask(ActivateEnrolledDeviceAsync(), "device activation loop");
     }
 
     private async Task ActivateEnrolledDeviceAsync()
@@ -94,14 +94,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _viewModel.TrackBackgroundTask(
+        TrackBackgroundTask(
             _viewModel.RunWorkstationHeartbeatLoopAsync(
                 ApplyThemeFromHeartbeat,
                 ApplyManagerPasswordVerifierFromHeartbeat,
                 ApplyLockdownPolicyFromHeartbeat,
                 _viewModel.ApplySessionSnapshotFromHeartbeat,
-                _viewModel.ApplyHeartbeatConnectionState));
-        _viewModel.TrackBackgroundTask(
+                _viewModel.ApplyHeartbeatConnectionState),
+            "workstation heartbeat loop");
+        TrackBackgroundTask(
             _viewModel.RunCommandLoopAsync(
                 new WindowsCommandExecutor(
                     deviceId,
@@ -110,7 +111,8 @@ public sealed partial class MainWindow : Window
                     _powerController,
                     RegisterSessionStartedFromCommand,
                     RegisterSessionStoppedFromCommand,
-                    LockClientFromCommand)));
+                    LockClientFromCommand)),
+            "workstation command loop");
     }
 
     private async void RefreshConnection(object sender, RoutedEventArgs args)
@@ -152,9 +154,32 @@ public sealed partial class MainWindow : Window
 
     private void MainWindowActivated(object sender, WindowActivatedEventArgs args)
     {
+        _ = sender;
         // Losing focus is normal desktop behavior after login. Access is locked
         // only by the server/session policy or an explicit logout action.
         _ = args;
+        if (_startupStarted)
+        {
+            return;
+        }
+
+        _startupStarted = true;
+        StartupDiagnostics.Info("MainWindow activated: post-activation startup begin");
+        try
+        {
+            InitializeTrayIcon();
+            StartupDiagnostics.Info("MainWindow activated: tray initialized");
+        }
+        catch (Exception error)
+        {
+            // Tray is optional for the first visible window. Keep the client
+            // alive and leave the exact native failure in startup.log.
+            StartupDiagnostics.Error("MainWindow activated: tray initialization failed", error);
+        }
+
+        ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode);
+        ObserveBackgroundTask(StartClientAsync(), "client startup");
+        StartupDiagnostics.Info("MainWindow activated: post-activation startup scheduled");
     }
 
     private void PortalIdentifierChanged(object sender, TextChangedEventArgs args)
@@ -296,6 +321,33 @@ public sealed partial class MainWindow : Window
             WindowNative.GetWindowHandle(this),
             RestoreFromTray,
             ExitFromTray);
+    }
+
+    private void TrackBackgroundTask(Task task, string name)
+    {
+        _viewModel.TrackBackgroundTask(task);
+        ObserveBackgroundTask(task, name);
+    }
+
+    private static void ObserveBackgroundTask(Task task, string name)
+    {
+        _ = ObserveBackgroundTaskAsync(task, name);
+    }
+
+    private static async Task ObserveBackgroundTaskAsync(Task task, string name)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            StartupDiagnostics.Info($"Background task canceled: {name}");
+        }
+        catch (Exception error)
+        {
+            StartupDiagnostics.Error($"Background task failed: {name}", error);
+        }
     }
 
     private void RestoreFromTray()

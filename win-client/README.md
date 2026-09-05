@@ -1,133 +1,77 @@
 # GameClub Windows client
 
-`GameClub.Client` — клиент игрового ПК. Целевой пользовательский сценарий:
+`GameClub.Client` — WinUI 3-клиент игрового ПК. До авторизации он работает как
+fullscreen Locked access-gate; после входа показывает компактный borderless
+виджет и не заменяет Windows shell. Backend остаётся источником истины для
+сессий, тарифов, баланса, списаний и команд.
 
-1. администратор один раз собирает EXE на админском Windows-ПК;
-2. EXE копируется на игровой ПК и запускается без консоли, SDK и ручной
-   настройки;
-3. клиент сам определяет MAC и ждёт назначения места в web-админке;
-4. после назначения получает настройки группы и открывает fullscreen Locked
-   shell;
-5. пользователь регистрируется или входит на этом экране и видит только свой
-   аккаунт, баланс, операции депозита, историю сессий/тарифов/товаров и
-   доступное время;
-6. менеджер открывает отдельный режим обслуживания через `Ctrl+Alt+P`.
+## Основной порядок работы
 
-Пошаговая проверка физического Windows-ПК находится в
-[docs/REAL-PC-VERIFICATION.md](docs/REAL-PC-VERIFICATION.md), а границы
-поддержки — в [docs/SUPPORT-MATRIX.md](docs/SUPPORT-MATRIX.md).
+1. Клонировать проект в `C:\Git\HubShell`.
+2. На Windows-машине сборки выполнить native restore/build/test.
+3. Проверить Debug folder-publish и запуск.
+4. Собрать Release single-file EXE.
+5. Передать EXE на игровой ПК и выполнить ручной smoke.
 
-## Архитектура
+Полная пошаговая инструкция, включая диагностику EXE, находится в
+[`docs/WINDOWS-BUILD-AND-RUN.md`](docs/WINDOWS-BUILD-AND-RUN.md).
 
-- `Domain` — модели состояния, heartbeat и пользовательского портала без WinUI
-  и gRPC;
-- `Application` — coordinator и порты backend/token provider;
-- `Infrastructure` — gRPC/HTTP enrollment, device identity, endpoint policy,
-  Windows adapters;
-- `Presentation` — WinUI fullscreen shell и `MainViewModel`.
+## Документы
 
-Backend остаётся источником истины для сессий, тарифов, цены, баланса, списаний
-и истории. Клиент не считает деньги и не принимает произвольные shell-команды.
-Команды устройства ограничены allowlist, имеют срок действия и подтверждение.
+- [`docs/WINDOWS-BUILD-AND-RUN.md`](docs/WINDOWS-BUILD-AND-RUN.md) — каноническая
+  сборка, folder-publish, single-file, запуск и startup diagnostics;
+- [`docs/REAL-PC-VERIFICATION.md`](docs/REAL-PC-VERIFICATION.md) — функциональный
+  smoke на физическом Windows-ПК после успешной сборки;
+- [`docs/ACCESS-GATE.md`](docs/ACCESS-GATE.md) — режимы, access-gate и границы
+  kiosk-безопасности;
+- [`docs/SUPPORT-MATRIX.md`](docs/SUPPORT-MATRIX.md) — целевая платформа и
+  разделение source-level/native evidence.
 
-## Сборка одного EXE на админском ПК
+## Пути
 
-Для production передайте скрипту реальные адреса защищённых endpoint'ов. Адреса
-не являются секретами и вшиваются в метаданные сборки:
-
-```powershell
-cd win-client
-.\scripts\build-portable-exe.ps1 `
-  -Architecture x64 `
-  -Configuration Release `
-  -EnvironmentName production `
-  -AuthAddress "https://api.example.club:8100" `
-  -GrpcAddress "https://api.example.club:51051"
+```text
+C:\Git\HubShell\win-client\GameClub.Client.sln
+C:\Git\HubShell\win-client\src\GameClub.Client\GameClub.Client.csproj
+C:\Git\HubShell\win-client\scripts
+C:\Git\HubShell\win-client\artifacts
 ```
 
-Готовый файл:
-`artifacts\portable\win-x64\Release\GameClub.Client.exe`.
-Скрипт печатает SHA-256. На игровом ПК не нужны Visual Studio, .NET SDK,
-Windows App SDK, PowerShell-команды, `device_id`, bootstrap-токен,
-переменные окружения или локальные PIN-хэши.
+Скрипты запускаются из `C:\Git\HubShell\win-client`.
 
-Важно: один EXE можно передавать между ПК только при одинаковой архитектуре и
-совместимой Windows. Если backend меняет адрес, EXE нужно пересобрать на
-админском ПК; секреты в EXE не вшиваются.
+## Скрипты
 
-## Установка на игровой ПК
+- `scripts\verify-windows.ps1` — restore, Debug build и tests solution;
+- `scripts\publish-windows.ps1` — folder-publish или low-level single-file
+  publish с явными параметрами;
+- `scripts\build-portable-exe.ps1` — канонический Release single-file EXE с
+  SHA-256;
+- `scripts\diagnose-startup.ps1` — запуск с ожиданием, exit code и сбором
+  Application Event Log;
+- `%LocalAppData%\GameClub\startup.log` — собственные этапы запуска,
+  managed/UI-исключения и ошибки фоновых циклов без секретов;
+- `scripts\install-windows.ps1` — необязательное копирование folder-publish и
+  регистрация автозапуска текущего пользователя;
+- `scripts\uninstall-windows.ps1` — явное удаление этой установки и автозапуска;
+- `scripts\configure-windows-kiosk.ps1` — отдельный preview/apply/restore только для
+  Windows Shell Launcher; не использовать до успешного обычного smoke;
+- `scripts\new-access-hash.ps1` — только developer helper для PBKDF2 verifier,
+  не часть обычной установки клиента.
 
-Минимальный сценарий — скопировать `GameClub.Client.exe` в постоянную папку и
-запустить двойным кликом. Клиент создаёт только технический `installation_id`
-в `%LocalAppData%\GameClub\Client`, отправляет MAC на endpoint enrollment и
-показывает одно из состояний:
+`build-installer.ps1` удалён: это не был установщик, а дублирующий упаковочный
+скрипт без отдельного installer-формата.
 
-- `Ожидает назначения` — администратор ещё не создал/не назначил место;
-- `Подключение` — место найдено и проверяется heartbeat;
-- `Заблокировано` — устройство отключено администратором;
-- `Locked` — устройство подключено, ожидается регистрация или вход пользователя.
+## Важные ограничения
 
-В админке оператор открывает настройки игровых мест, создаёт workstation,
-выбирает группу/зону и указывает MAC из сведений физического ПК. До назначения
-клиент не получает operator-доступ. После первого одобрения backend привязывает
-установку к MAC; другой installation identity не может молча заменить её.
+- `dotnet build` не создаёт переносимый один EXE;
+- для отладки сначала использовать folder-publish с PDB;
+- для solution использовать `-p:Platform=x64`, не `--arch`;
+- production требует HTTPS для auth и gRPC;
+- на игровом ПК не нужны SDK, Visual Studio, env-переменные, `device_id`,
+  bootstrap token или PIN hash;
+- fullscreen WinUI не заменяет Assigned Access/Shell Launcher;
+- отсутствие backend должно отображаться как offline/reconnecting, а не быть
+  причиной закрытия окна.
 
-Для автозапуска и копирования folder-publish существует optional
-`scripts/install-windows.ps1`, но для первого пользовательского smoke он не
-нужен. Полное ограничение выхода в Windows настраивается отдельно через
-Assigned Access или Shell Launcher — fullscreen WinUI сам по себе не является
-границей безопасности ОС.
-
-## Пользовательский и менеджерский flow
-
-На Locked-экране пользователь может:
-
-- зарегистрироваться по nickname, телефону и PIN;
-- войти по nickname или canonical phone и PIN;
-- увидеть текущий баланс и бонусы;
-- увидеть пополнения и списания, включая поминутные списания;
-- увидеть купленные товары, тарифы и историю игровых сессий;
-- увидеть рассчитанное сервером доступное время.
-
-JWT пользователя хранится только в памяти процесса, привязан к текущему device,
-а snapshot обновляется с backend. При logout, expiry, relock или `401/403`
-пользовательское состояние очищается. `Ctrl+Alt+P` открывает manager
-maintenance; рабочий экран пользователя не должен получать manager credentials.
-
-## Локальная разработка
-
-Исходный Debug-запуск на Windows нужен только разработчику. Для него endpoint'ы
-можно переопределить параметрами publish или runtime diagnostics, но эти
-переменные не нужны при обычной передаче EXE на игровой ПК:
-
-```powershell
-dotnet restore .\GameClub.Client.sln
-dotnet build .\GameClub.Client.sln --configuration Debug -p:Platform=x64
-dotnet test .\GameClub.Client.sln --configuration Debug -p:Platform=x64
-```
-
-Проверочный скрипт выполняет native Windows restore/build/test и после этого
-печатает ручной checklist:
-
-```powershell
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
-```
-
-Он намеренно завершается с ошибкой вне Windows: Linux не заменяет WinUI 3
-XAML-компилятор и реальный kiosk smoke.
-
-## Безопасность и kiosk
-
-- MAC используется только как ключ назначения, не как единственная production
-  аутентификация;
-- в EXE нет паролей, JWT, bootstrap-токенов и PIN;
-- production должен использовать HTTPS/gRPC TLS, rate limit, rotation/revocation
-  device credentials и защищённое локальное хранилище;
-- Assigned Access/Shell Launcher должны отдельно запрещать Explorer, desktop,
-  Alt+Tab и произвольные приложения;
-- действия `session.start/stop`, темы и lock проходят только через typed
-  allowlist и backend permissions.
-
-Нативные ограничения и ручные проверки описаны в
-[docs/REAL-PC-VERIFICATION.md](docs/REAL-PC-VERIFICATION.md) и
-[docs/ACCESS-GATE.md](docs/ACCESS-GATE.md).
+После запуска клиент определяет MAC, ждёт назначения workstation в админке,
+получает device identity и тему группы через backend. Подробный пользовательский
+flow проверяется по `REAL-PC-VERIFICATION.md`.

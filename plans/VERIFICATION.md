@@ -24,8 +24,8 @@
 | Operator map quick operations | карта как главный экран, PC context menu, tariff mini-cards, guest/client selection, inline product sale and top-up | успешно | Playwright headed smoke на локальном Compose; device command runtime требует Windows |
 | Product contract audit | сравнение backend/frontend/win-client product contracts с кодом, CODEX и планами; implementation progress зафиксирован в плане 29 и планах 31–37 | source/unit + Compose/HTTP/gRPC/headed slice реализован; DSN suite добавила package/transfer/offline/settlement evidence; 11 subitems сведены в `EVIDENCE-20260902.md` | native Windows/kiosk, full browser/accessibility matrix и production security evidence остаются незакрыты |
 
-Подробная последовательность проверки физического Windows-ПК находится в
-[../win-client/docs/REAL-PC-VERIFICATION.md](../win-client/docs/REAL-PC-VERIFICATION.md).
+Сборка и startup diagnostics: [../win-client/docs/WINDOWS-BUILD-AND-RUN.md](../win-client/docs/WINDOWS-BUILD-AND-RUN.md).
+Функциональный smoke: [../win-client/docs/REAL-PC-VERIFICATION.md](../win-client/docs/REAL-PC-VERIFICATION.md).
 
 Детальный evidence текущего среза планов 31–37 находится в
 [37-platform-integration-evidence/EVIDENCE-20260902.md](37-platform-integration-evidence/EVIDENCE-20260902.md).
@@ -53,7 +53,7 @@ npm run build
 Windows native:
 
 ```powershell
-cd win-client
+Set-Location "C:\Git\HubShell\win-client"
 .\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 ```
 
