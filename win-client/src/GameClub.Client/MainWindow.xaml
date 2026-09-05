@@ -3,7 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:GameClub.Client"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
     <Grid
@@ -14,213 +13,127 @@
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="P" Modifiers="Control,Menu" Invoked="OpenManagerLoginHotkey" />
         </Grid.KeyboardAccelerators>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-        <Grid
-            Padding="22,18,18,14"
-            ColumnSpacing="12"
-            Visibility="{Binding SecuredContentVisibility}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Spacing="3">
-                <TextBlock Text="GAMESHELL" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" />
-                <TextBlock Text="Ваше игровое место" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
-            </StackPanel>
-            <Button
-                Grid.Column="1"
-                Click="HideToTray"
-                Visibility="{Binding SecuredContentVisibility}"
-                Padding="10,7"
-                Background="{ThemeResource CardBackgroundBrush}"
-                AutomationProperties.Name="{Binding WindowModeActionLabel}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="—" FontSize="16" />
-                    <TextBlock Text="Скрыть в трей" FontSize="11" VerticalAlignment="Center" />
+
+        <!-- Guest and technical state. Authenticated clients use the compact widget below. -->
+        <Grid Visibility="{Binding SecuredContentVisibility}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Padding="18,16,14,12" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="3">
+                    <TextBlock Text="GAMESHELL" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" />
+                    <TextBlock Text="Игровое место" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
                 </StackPanel>
-            </Button>
-        </Grid>
-        <ScrollViewer
-            Grid.Row="1"
-            Padding="18,0,18,18"
-            Visibility="{Binding SecuredContentVisibility}">
-            <StackPanel Spacing="13">
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Width="9" Height="9" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="Состояние соединения" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                                <TextBlock Text="{Binding ConnectionMessage}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="13" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{Binding BackendVersion}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" VerticalAlignment="Center" />
-                        </Grid>
-                        <TextBlock Text="{Binding DeviceStatus}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="11">
-                        <TextBlock Text="Тема зоны" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                        <ComboBox
-                            SelectedValue="{Binding ThemeName, Mode=TwoWay}"
-                            SelectedValuePath="Content"
-                            Foreground="{ThemeResource PrimaryTextBrush}">
-                            <ComboBoxItem Content="VIP-зона" />
-                            <ComboBoxItem Content="Обычный зал" />
-                        </ComboBox>
-                        <TextBlock Text="Тема назначается клубом для группы ПК." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="7">
-                        <TextBlock Text="Ближайшая бронь" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                        <TextBlock Text="{Binding NextBooking}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="15" FontWeight="SemiBold" />
-                        <TextBlock Text="Место будет доступно после окончания текущей сессии." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15" Visibility="{Binding ActiveSessionVisibility}">
-                    <StackPanel Spacing="9">
-                        <TextBlock Text="Активная сессия" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                        <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <Button Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
-                            <TextBlock Text="Завершить сессию и перезапустить ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
-                        </Button>
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="9">
-                        <TextBlock Text="Перенос сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                        <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
-                        <Button Click="DismissSessionNotification" Visibility="{Binding TransferMessageVisibility}" HorizontalAlignment="Left" Padding="6,4" Background="Transparent">
-                            <TextBlock Text="Закрыть уведомление" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
-                        </Button>
-                        <TextBox Header="Место на новом ПК (ID)" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
-                        <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,9">
-                            <TextBlock Text="Подготовить перенос с этого ПК" FontSize="11" />
-                        </Button>
-                        <TextBox Header="ID предложения на новом ПК" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" PlaceholderText="Вставьте ID предложения" />
-                        <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" PlaceholderText="Вставьте одноразовый код" />
-                        <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,9" Background="{ThemeResource AccentBrush}">
-                            <TextBlock Text="Подтвердить перенос на этот ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
-                        </Button>
-                    </StackPanel>
-                </Border>
-                <Button Click="RefreshConnection" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
-                    <TextBlock Text="Проверить соединение" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+                <Button Grid.Column="1" Click="HideToTray" Padding="9,6" Background="{ThemeResource CardBackgroundBrush}">
+                    <TextBlock Text="Скрыть" FontSize="11" />
                 </Button>
-            </StackPanel>
-        </ScrollViewer>
-        <Grid
-            Grid.RowSpan="2"
-            Padding="18"
-            Background="#E90B111B"
-            Visibility="{Binding AccessGateVisibility}">
-            <Border
-                MaxWidth="390"
-                Padding="24"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Background="{ThemeResource CardBackgroundBrush}"
-                CornerRadius="18">
-                <StackPanel Spacing="14">
+            </Grid>
+            <ScrollViewer Grid.Row="1" Padding="14,0,14,14">
+                <StackPanel Spacing="10">
+                    <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="14">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="9" Height="9" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="Состояние соединения" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                    <TextBlock Text="{Binding ConnectionMessage}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="13" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding BackendVersion}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            </Grid>
+                            <TextBlock Text="{Binding DeviceStatus}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="14" Visibility="{Binding ActiveSessionVisibility}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Текущая сессия" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="24" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="12" TextWrapping="Wrap" />
+                            <Button Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" Padding="0,9" Background="{ThemeResource AccentBrush}">
+                                <TextBlock Text="Завершить сессию и перезапустить ПК" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    <Button Click="ToggleTransferPanel" HorizontalAlignment="Stretch" Padding="12,9" Background="{ThemeResource CardBackgroundBrush}">
+                        <TextBlock Text="{Binding TransferToggleLabel}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" />
+                    </Button>
+                    <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="14" Visibility="{Binding TransferPanelVisibility}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Перенос сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
+                            <Button Click="DismissSessionNotification" Visibility="{Binding TransferMessageVisibility}" HorizontalAlignment="Left" Padding="4,3" Background="Transparent">
+                                <TextBlock Text="Закрыть уведомление" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            </Button>
+                            <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
+                            <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,8">
+                                <TextBlock Text="Подготовить перенос" FontSize="11" />
+                            </Button>
+                            <TextBox Header="ID предложения" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" PlaceholderText="Вставьте ID предложения" />
+                            <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" PlaceholderText="Одноразовый код" />
+                            <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,8" Background="{ThemeResource AccentBrush}">
+                                <TextBlock Text="Подтвердить перенос" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    <Button Click="RefreshConnection" HorizontalAlignment="Stretch" Padding="0,10" Background="{ThemeResource AccentBrush}">
+                        <TextBlock Text="Проверить соединение" Foreground="#17200F" FontSize="11" FontWeight="SemiBold" />
+                    </Button>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Pre-auth gate. -->
+        <Grid Padding="16" Background="#E90B111B" Visibility="{Binding AccessGateVisibility}">
+            <Border MaxWidth="390" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{ThemeResource CardBackgroundBrush}" CornerRadius="18">
+                <StackPanel Spacing="13">
                     <StackPanel Spacing="5">
                         <TextBlock Text="GAMESHELL ACCESS" Foreground="{ThemeResource AccentBrush}" FontSize="11" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding AccessTitle}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="23" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding AccessSubtitle}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
                     </StackPanel>
-                    <StackPanel Spacing="10" Visibility="{Binding UserLoginVisibility}">
-                        <TextBox
-                            Header="Ник или телефон"
-                            TextChanged="PortalIdentifierChanged"
-                            PlaceholderText="Введите ник или телефон"
-                            MaxLength="64" />
-                        <PasswordBox
-                            x:Name="PortalPinBox"
-                            Header="PIN"
-                            PasswordChanged="PortalPinChanged"
-                            PlaceholderText="Введите PIN"
-                            MaxLength="32" />
-                        <Button
-                            Click="LoginPortal"
-                            IsEnabled="{Binding CanLoginPortal}"
-                            HorizontalAlignment="Stretch"
-                            Padding="0,11"
-                            Background="{ThemeResource AccentBrush}">
+                    <StackPanel Spacing="9" Visibility="{Binding UserLoginVisibility}">
+                        <TextBox Header="Ник или телефон" TextChanged="PortalIdentifierChanged" PlaceholderText="Введите ник или телефон" MaxLength="64" />
+                        <PasswordBox x:Name="PortalPasswordBox" Header="Пароль" PasswordChanged="PortalPasswordChanged" PlaceholderText="Введите пароль" MaxLength="128" />
+                        <Button Click="LoginPortal" IsEnabled="{Binding CanLoginPortal}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
                             <TextBlock Text="Войти в аккаунт" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
                         </Button>
-                        <Button
-                            Click="OpenPortalRegistration"
-                            HorizontalAlignment="Center"
-                            Padding="6,4"
-                            Background="Transparent">
+                        <Button Click="OpenPortalRegistration" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
                             <TextBlock Text="Зарегистрироваться" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
-                        <Button
-                            Click="OpenManagerLogin"
-                            Visibility="{Binding ManagerEntryVisibility}"
-                            HorizontalAlignment="Center"
-                            Padding="6,4"
-                            Background="Transparent">
+                        <Button Click="OpenManagerLogin" Visibility="{Binding ManagerEntryVisibility}" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
                             <TextBlock Text="Режим обслуживания" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
                     </StackPanel>
-                    <StackPanel Spacing="10" Visibility="{Binding PortalRegistrationVisibility}">
-                        <TextBox
-                            Header="Ник"
-                            TextChanged="PortalNicknameChanged"
-                            PlaceholderText="От 3 символов"
-                            MaxLength="64" />
-                        <TextBox
-                            Header="Телефон"
-                            TextChanged="PortalPhoneChanged"
-                            PlaceholderText="+7 или 8XXXXXXXXXX"
-                            MaxLength="32" />
-                        <PasswordBox
-                            x:Name="PortalRegistrationPinBox"
-                            Header="PIN"
-                            PasswordChanged="PortalRegistrationPinChanged"
-                            PlaceholderText="От 4 цифр"
-                            MaxLength="32" />
-                        <Button
-                            Click="RegisterPortal"
-                            IsEnabled="{Binding CanRegisterPortal}"
-                            HorizontalAlignment="Stretch"
-                            Padding="0,11"
-                            Background="{ThemeResource AccentBrush}">
+                    <StackPanel Spacing="9" Visibility="{Binding PortalRegistrationVisibility}">
+                        <TextBox Header="Ник" TextChanged="PortalNicknameChanged" PlaceholderText="От 3 символов" MaxLength="64" />
+                        <TextBox Header="Телефон" TextChanged="PortalPhoneChanged" PlaceholderText="+7 (9__) ___-__-__" MaxLength="18" />
+                        <PasswordBox x:Name="PortalRegistrationPasswordBox" Header="Пароль" PasswordChanged="PortalRegistrationPasswordChanged" PlaceholderText="От 4 символов" MaxLength="128" />
+                        <Button Click="RegisterPortal" IsEnabled="{Binding CanRegisterPortal}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
                             <TextBlock Text="Создать аккаунт" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
                         </Button>
                         <Button Click="CancelPortalRegistration" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
                             <TextBlock Text="Назад ко входу" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
                     </StackPanel>
-                    <StackPanel Spacing="10" Visibility="{Binding ManagerLoginVisibility}">
-                        <PasswordBox
-                            x:Name="ManagerPasswordBox"
-                            Header="Пароль менеджера"
-                            PasswordChanged="ManagerPasswordChanged"
-                            PlaceholderText="Только для обслуживания"
-                            MaxLength="128" />
-                        <Button
-                            Click="EnterMaintenance"
-                            IsEnabled="{Binding CanEnterMaintenance}"
-                            HorizontalAlignment="Stretch"
-                            Padding="0,11"
-                            Background="{ThemeResource AccentBrush}">
+                    <StackPanel Spacing="9" Visibility="{Binding ManagerLoginVisibility}">
+                        <PasswordBox x:Name="ManagerPasswordBox" Header="Пароль менеджера" PasswordChanged="ManagerPasswordChanged" PlaceholderText="Только для обслуживания" MaxLength="128" />
+                        <Button Click="EnterMaintenance" IsEnabled="{Binding CanEnterMaintenance}" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
                             <TextBlock Text="Открыть обслуживание" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
                         </Button>
                         <Button Click="CancelManagerLogin" HorizontalAlignment="Center" Padding="6,4" Background="Transparent">
                             <TextBlock Text="Назад ко входу пользователя" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
                         </Button>
                     </StackPanel>
-                    <StackPanel Spacing="10" Visibility="{Binding MaintenanceVisibility}">
+                    <StackPanel Spacing="9" Visibility="{Binding MaintenanceVisibility}">
                         <Border Background="#2A3B28" CornerRadius="10" Padding="12">
                             <TextBlock Text="Доступ менеджера подтверждён. Рабочие действия клиента приостановлены." Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
                         </Border>
@@ -229,54 +142,141 @@
                         </Button>
                     </StackPanel>
                     <TextBlock Text="{Binding AccessMessage}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
-                    <TextBlock Text="PIN проверяется сервером и не сохраняется в клиенте." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
+                    <TextBlock Text="Пароль проверяется сервером и не сохраняется в клиенте." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </Grid>
-        <ScrollViewer
-            Grid.RowSpan="2"
-            Padding="18,118,18,18"
-            Visibility="{Binding PortalContentVisibility}">
-            <StackPanel Spacing="13">
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="Ваш аккаунт" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="11" />
-                        <TextBlock Text="{Binding PortalAccountSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="20" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" />
-                        <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="14" FontWeight="SemiBold" />
+
+        <!-- Authenticated client widget. -->
+        <ScrollViewer Padding="12" Visibility="{Binding PortalContentVisibility}"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="GAMESHELL" Foreground="{ThemeResource AccentBrush}" FontSize="10" FontWeight="SemiBold" />
+                        <TextBlock Text="Игровое место" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="18" FontWeight="SemiBold" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Click="HideToTray" Padding="8,5" Background="{ThemeResource CardBackgroundBrush}">
+                        <TextBlock Text="Скрыть в трей" FontSize="10" />
+                    </Button>
+                </Grid>
+
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Вы вошли как" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            <TextBlock Text="{Binding PortalAccountSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding PortalContactSummary}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                            <TextBlock Text="{Binding DeviceStatus}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Click="LockClient" Padding="8,5" Background="Transparent" VerticalAlignment="Top">
+                            <TextBlock Text="Выйти" Foreground="{ThemeResource AccentBrush}" FontSize="10" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Доступное время" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="20" FontWeight="SemiBold" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="Баланс" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                        <Border Background="#11141B" CornerRadius="10" Padding="10" Visibility="{Binding ActiveSessionVisibility}">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Оставшееся время текущей сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="24" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding CurrentSessionTariffSummary}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="10" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
+
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13" Visibility="{Binding UpcomingBookingVisibility}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Ваша ближайшая бронь" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                        <TextBlock Text="{Binding UpcomingBookingTitle}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding UpcomingBookingDetails}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13" Visibility="{Binding TariffsVisibility}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="Пакеты времени" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                        <Grid>
+                            <TextBlock Text="Купить время" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock Text="Списание после подтверждения" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding PortalTariffs}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#11141B" CornerRadius="10" Padding="9" Margin="0,2">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding Name}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" FontWeight="SemiBold" />
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <TextBlock Text="{Binding DurationSummary}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                                    <TextBlock Text="·" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                                    <TextBlock Text="{Binding PriceSummary}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Tag="{Binding Id}" Click="PurchaseTariff" Padding="10,6" Background="{ThemeResource AccentBrush}">
+                                                <TextBlock Text="Купить" Foreground="#17200F" FontSize="10" FontWeight="SemiBold" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13">
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="Пакеты времени" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="13" FontWeight="SemiBold" />
                         <ItemsControl ItemsSource="{Binding PortalEntitlementQueue}" />
                         <Button Click="ActivateFirstPortalEntitlement" IsEnabled="{Binding CanActivatePortalEntitlement}" Padding="8,6">
-                            <TextBlock Text="Активировать ближайший пакет" />
+                            <TextBlock Text="Активировать сохранённый пакет" FontSize="10" />
                         </Button>
                     </StackPanel>
                 </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="История пополнений и списаний" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
-                        <ItemsControl ItemsSource="{Binding PortalBalanceHistory}" />
-                        <ItemsControl ItemsSource="{Binding PortalChargeHistory}" />
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Купленные товары" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
-                        <ItemsControl ItemsSource="{Binding PortalPurchaseHistory}" />
-                    </StackPanel>
-                </Border>
-                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="12" Padding="15">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="История тарифов и игровых сессий" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" />
-                        <ItemsControl ItemsSource="{Binding PortalSessionHistory}" />
-                    </StackPanel>
-                </Border>
-                <Button Click="LockClient" HorizontalAlignment="Stretch" Padding="0,11" Background="{ThemeResource AccentBrush}">
-                    <TextBlock Text="Выйти и заблокировать место" Foreground="#17200F" FontSize="12" FontWeight="SemiBold" />
+
+                <Button Click="ToggleTransferPanel" HorizontalAlignment="Stretch" Padding="11,8" Background="{ThemeResource CardBackgroundBrush}">
+                    <TextBlock Text="{Binding TransferToggleLabel}" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="10" />
                 </Button>
+                <Border Background="{ThemeResource CardBackgroundBrush}" CornerRadius="14" Padding="13" Visibility="{Binding TransferPanelVisibility}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Перенос сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                        <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="10" TextWrapping="Wrap" />
+                        <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
+                        <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,8"><TextBlock Text="Подготовить перенос" FontSize="10" /></Button>
+                        <TextBox Header="ID предложения" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" />
+                        <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" />
+                        <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,8" Background="{ThemeResource AccentBrush}"><TextBlock Text="Подтвердить перенос" Foreground="#17200F" FontSize="10" FontWeight="SemiBold" /></Button>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding AccessMessage}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
     </Grid>

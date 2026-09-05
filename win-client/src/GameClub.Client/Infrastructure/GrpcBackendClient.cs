@@ -45,7 +45,7 @@ public sealed class GrpcBackendClient : IBackendClient
     public async Task<ClientPortalAuthenticationSnapshot> RegisterAsync(
         string nickname,
         string phone,
-        string pin,
+        string password,
         string deviceId,
         CancellationToken cancellationToken = default)
     {
@@ -54,7 +54,7 @@ public sealed class GrpcBackendClient : IBackendClient
             {
                 Nickname = nickname,
                 Phone = phone,
-                Pin = pin,
+                Password = password,
                 DeviceId = deviceId,
             },
             headers: await CreateDeviceMetadataAsync(cancellationToken),
@@ -66,7 +66,7 @@ public sealed class GrpcBackendClient : IBackendClient
 
     public async Task<ClientPortalAuthenticationSnapshot> LoginAsync(
         string identifier,
-        string pin,
+        string password,
         string deviceId,
         CancellationToken cancellationToken = default)
     {
@@ -74,7 +74,7 @@ public sealed class GrpcBackendClient : IBackendClient
             new Clients.LoginPortalRequest
             {
                 Identifier = identifier,
-                Pin = pin,
+                Password = password,
                 DeviceId = deviceId,
             },
             headers: await CreateDeviceMetadataAsync(cancellationToken),
@@ -108,6 +108,25 @@ public sealed class GrpcBackendClient : IBackendClient
             {
                 DeviceId = deviceId,
                 EntitlementId = entitlementId,
+            },
+            headers: await CreateClientPortalMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return ToPortalSnapshot(response);
+    }
+
+    public async Task<ClientPortalSnapshot> PurchaseEntitlementAsync(
+        string deviceId,
+        string tariffId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.PurchaseEntitlementAsync(
+            new Clients.PurchaseEntitlementRequest
+            {
+                DeviceId = deviceId,
+                TariffId = tariffId,
+                IdempotencyKey = idempotencyKey,
             },
             headers: await CreateClientPortalMetadataAsync(cancellationToken),
             deadline: DateTime.UtcNow.AddSeconds(10),
@@ -569,7 +588,20 @@ public sealed class GrpcBackendClient : IBackendClient
                 entitlement.QueuePosition,
                 string.IsNullOrWhiteSpace(entitlement.TariffName) ? null : entitlement.TariffName,
                 ToIsoTimestamp(entitlement.PurchasedAt),
-                entitlement.ActivatedAt is null ? null : ToIsoTimestamp(entitlement.ActivatedAt))).ToArray());
+                entitlement.ActivatedAt is null ? null : ToIsoTimestamp(entitlement.ActivatedAt))).ToArray(),
+            source.Tariffs.Select(tariff => new ClientPortalTariff(
+                tariff.Id,
+                tariff.Name,
+                string.IsNullOrWhiteSpace(tariff.ZoneId) ? null : tariff.ZoneId,
+                tariff.DurationMinutes,
+                tariff.PriceCents)).ToArray(),
+            source.Reservations.Select(reservation => new ClientPortalReservation(
+                reservation.Id,
+                reservation.WorkstationIds.ToArray(),
+                ToIsoTimestamp(reservation.StartAt),
+                ToIsoTimestamp(reservation.EndAt),
+                reservation.Status,
+                string.IsNullOrWhiteSpace(reservation.TariffId) ? null : reservation.TariffId)).ToArray());
 
     private static WorkstationCommandSnapshot ToSnapshot(Workstations.WorkstationCommand command) =>
         new(

@@ -30,6 +30,23 @@ class InMemoryReservationRepository:
             key=lambda item: item.start_at,
         )
 
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        start_at: datetime.datetime,
+        limit: int,
+    ) -> list[Reservation]:
+        return sorted(
+            (
+                item
+                for item in self._items.values()
+                if item.client_id == client_id
+                and item.status is ReservationStatus.CONFIRMED
+                and item.start_at >= start_at
+            ),
+            key=lambda item: (item.start_at, str(item.id)),
+        )[:limit]
+
     async def list_pending_no_show(self, cutoff_at: datetime.datetime) -> list[Reservation]:
         return sorted(
             (

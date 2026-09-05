@@ -209,26 +209,26 @@ class ListGuestsResponse(_message.Message):
     def __init__(self, guests: _Optional[_Iterable[_Union[Guest, _Mapping]]] = ...) -> None: ...
 
 class RegisterPortalRequest(_message.Message):
-    __slots__ = ("nickname", "phone", "pin", "device_id")
+    __slots__ = ("nickname", "phone", "password", "device_id")
     NICKNAME_FIELD_NUMBER: _ClassVar[int]
     PHONE_FIELD_NUMBER: _ClassVar[int]
-    PIN_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_FIELD_NUMBER: _ClassVar[int]
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     nickname: str
     phone: str
-    pin: str
+    password: str
     device_id: str
-    def __init__(self, nickname: _Optional[str] = ..., phone: _Optional[str] = ..., pin: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, nickname: _Optional[str] = ..., phone: _Optional[str] = ..., password: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
 class LoginPortalRequest(_message.Message):
-    __slots__ = ("identifier", "pin", "device_id")
+    __slots__ = ("identifier", "password", "device_id")
     IDENTIFIER_FIELD_NUMBER: _ClassVar[int]
-    PIN_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_FIELD_NUMBER: _ClassVar[int]
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     identifier: str
-    pin: str
+    password: str
     device_id: str
-    def __init__(self, identifier: _Optional[str] = ..., pin: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, identifier: _Optional[str] = ..., password: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
 class GetPortalRequest(_message.Message):
     __slots__ = ("device_id", "limit")
@@ -246,6 +246,16 @@ class ActivateEntitlementRequest(_message.Message):
     device_id: str
     def __init__(self, entitlement_id: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
+class PurchaseEntitlementRequest(_message.Message):
+    __slots__ = ("tariff_id", "device_id", "idempotency_key")
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    tariff_id: str
+    device_id: str
+    idempotency_key: str
+    def __init__(self, tariff_id: _Optional[str] = ..., device_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+
 class ClientPortalSession(_message.Message):
     __slots__ = ("access_token", "expires_in", "snapshot")
     ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
@@ -257,7 +267,7 @@ class ClientPortalSession(_message.Message):
     def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ...) -> None: ...
 
 class ClientPortalSnapshot(_message.Message):
-    __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes", "entitlements")
+    __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes", "entitlements", "tariffs", "reservations")
     CLIENT_FIELD_NUMBER: _ClassVar[int]
     BALANCE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
     SESSIONS_FIELD_NUMBER: _ClassVar[int]
@@ -265,6 +275,8 @@ class ClientPortalSnapshot(_message.Message):
     PURCHASES_FIELD_NUMBER: _ClassVar[int]
     AVAILABLE_TIME_MINUTES_FIELD_NUMBER: _ClassVar[int]
     ENTITLEMENTS_FIELD_NUMBER: _ClassVar[int]
+    TARIFFS_FIELD_NUMBER: _ClassVar[int]
+    RESERVATIONS_FIELD_NUMBER: _ClassVar[int]
     client: Client
     balance_operations: _containers.RepeatedCompositeFieldContainer[PortalBalanceOperation]
     sessions: _containers.RepeatedCompositeFieldContainer[PortalSession]
@@ -272,7 +284,39 @@ class ClientPortalSnapshot(_message.Message):
     purchases: _containers.RepeatedCompositeFieldContainer[PortalPurchase]
     available_time_minutes: int
     entitlements: _containers.RepeatedCompositeFieldContainer[PortalEntitlement]
-    def __init__(self, client: _Optional[_Union[Client, _Mapping]] = ..., balance_operations: _Optional[_Iterable[_Union[PortalBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[PortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[PortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[PortalPurchase, _Mapping]]] = ..., available_time_minutes: _Optional[int] = ..., entitlements: _Optional[_Iterable[_Union[PortalEntitlement, _Mapping]]] = ...) -> None: ...
+    tariffs: _containers.RepeatedCompositeFieldContainer[PortalTariff]
+    reservations: _containers.RepeatedCompositeFieldContainer[PortalReservation]
+    def __init__(self, client: _Optional[_Union[Client, _Mapping]] = ..., balance_operations: _Optional[_Iterable[_Union[PortalBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[PortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[PortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[PortalPurchase, _Mapping]]] = ..., available_time_minutes: _Optional[int] = ..., entitlements: _Optional[_Iterable[_Union[PortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[PortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[PortalReservation, _Mapping]]] = ...) -> None: ...
+
+class PortalTariff(_message.Message):
+    __slots__ = ("id", "name", "zone_id", "duration_minutes", "price_cents")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ZONE_ID_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    zone_id: str
+    duration_minutes: int
+    price_cents: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ...) -> None: ...
+
+class PortalReservation(_message.Message):
+    __slots__ = ("id", "workstation_ids", "start_at", "end_at", "status", "tariff_id")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    WORKSTATION_IDS_FIELD_NUMBER: _ClassVar[int]
+    START_AT_FIELD_NUMBER: _ClassVar[int]
+    END_AT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    workstation_ids: _containers.RepeatedScalarFieldContainer[str]
+    start_at: _timestamp_pb2.Timestamp
+    end_at: _timestamp_pb2.Timestamp
+    status: str
+    tariff_id: str
+    def __init__(self, id: _Optional[str] = ..., workstation_ids: _Optional[_Iterable[str]] = ..., start_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status: _Optional[str] = ..., tariff_id: _Optional[str] = ...) -> None: ...
 
 class PortalEntitlement(_message.Message):
     __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "price_cents", "queue_position", "status", "tariff_name", "purchased_at", "activated_at")

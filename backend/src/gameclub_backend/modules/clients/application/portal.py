@@ -11,6 +11,7 @@ from gameclub_backend.modules.catalog.domain import BillingMode, Tariff, TariffL
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
 from gameclub_backend.modules.entitlements.domain import Entitlement
+from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 from gameclub_backend.modules.sales.domain import ProductSale
 from gameclub_backend.modules.sessions.domain import Session
 from gameclub_backend.modules.workstations.domain import Workstation
@@ -56,10 +57,29 @@ class EntitlementReader(typing.Protocol):
     async def activate(self, entitlement_id: uuid.UUID, client_id: uuid.UUID) -> Entitlement:
         """Activate one package after an explicit client action."""
 
+    async def purchase(
+        self,
+        client_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        actor_id: str,
+        idempotency_key: str,
+    ) -> Entitlement:
+        """Purchase one tariff package for the client."""
+
 
 class WorkstationReader(typing.Protocol):
     async def get_by_device_id(self, device_id: str) -> Workstation | None:
         """Return the workstation assigned to a device identity."""
+
+
+class ReservationReader(typing.Protocol):
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        start_at: datetime.datetime,
+        limit: int,
+    ) -> list[Reservation]:
+        """Return future confirmed reservations for one client."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -72,6 +92,8 @@ class ClientPortalSnapshot:
     available_time_minutes: int
     tariff_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
     entitlements: tuple[Entitlement, ...] = ()
+    tariffs: tuple[Tariff, ...] = ()
+    reservations: tuple[Reservation, ...] = ()
 
 
 class ClientPortalService:
@@ -84,6 +106,7 @@ class ClientPortalService:
         tariffs: TariffReader,
         entitlements: EntitlementReader | None = None,
         workstations: WorkstationReader | None = None,
+        reservations: ReservationReader | None = None,
     ) -> None:
         self._clients = clients
         self._sessions = sessions
@@ -92,12 +115,13 @@ class ClientPortalService:
         self._tariffs = tariffs
         self._entitlements = entitlements
         self._workstations = workstations
+        self._reservations = reservations
 
-    async def register(self, nickname: str, phone: str, pin: str) -> Client:
-        return await self._clients.register_portal(nickname, phone, pin)
+    async def register(self, nickname: str, phone: str, password: str) -> Client:
+        return await self._clients.register_portal(nickname, phone, password)
 
-    async def authenticate(self, identifier: str, pin: str) -> Client:
-        return await self._clients.authenticate_portal(identifier, pin)
+    async def authenticate(self, identifier: str, password: str) -> Client:
+        return await self._clients.authenticate_portal(identifier, password)
 
     async def snapshot(self, client_id: uuid.UUID, limit: int = 50) -> ClientPortalSnapshot:
         client = await self._clients.get(client_id)
@@ -113,6 +137,20 @@ class ClientPortalService:
             if self._entitlements is not None
             else []
         )
+        available_tariffs = tuple(
+            tariff
+            for tariff in tariffs
+            if tariff.active and tariff.lifecycle is TariffLifecycle.PUBLISHED
+        )
+        upcoming_reservations = (
+            await self._reservations.list_for_client(
+                client_id,
+                datetime.datetime.now(datetime.UTC),
+                max(1, min(limit, 100)),
+            )
+            if self._reservations is not None
+            else []
+        )
         return ClientPortalSnapshot(
             client=client,
             balance_operations=tuple(operations),
@@ -122,7 +160,30 @@ class ClientPortalService:
             available_time_minutes=self._available_time_minutes(client.balance_cents, tariffs),
             tariff_names={tariff.id: tariff.name for tariff in tariffs},
             entitlements=tuple(package_queue[: max(1, min(limit, 100))]),
+            tariffs=available_tariffs,
+            reservations=tuple(
+                item for item in upcoming_reservations if item.status is ReservationStatus.CONFIRMED
+            ),
         )
+
+    async def purchase_entitlement(
+        self,
+        client_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        idempotency_key: str,
+    ) -> ClientPortalSnapshot:
+        if self._entitlements is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Entitlement service is not configured",
+            )
+        await self._entitlements.purchase(
+            client_id=client_id,
+            tariff_id=tariff_id,
+            actor_id=f"client:{client_id}",
+            idempotency_key=idempotency_key,
+        )
+        return await self.snapshot(client_id)
 
     async def activate_entitlement(
         self,

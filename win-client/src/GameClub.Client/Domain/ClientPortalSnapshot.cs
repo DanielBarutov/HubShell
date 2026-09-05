@@ -16,7 +16,9 @@ public sealed record ClientPortalSnapshot(
     IReadOnlyList<ClientPortalSession> Sessions,
     IReadOnlyList<ClientPortalCharge> Charges,
     IReadOnlyList<ClientPortalPurchase> Purchases,
-    IReadOnlyList<ClientPortalEntitlement> Entitlements);
+    IReadOnlyList<ClientPortalEntitlement> Entitlements,
+    IReadOnlyList<ClientPortalTariff> Tariffs,
+    IReadOnlyList<ClientPortalReservation> Reservations);
 
 public sealed record ClientPortalBalanceOperation(
     string Id,
@@ -65,3 +67,22 @@ public sealed record ClientPortalEntitlement(
     string? TariffName,
     string PurchasedAt,
     string? ActivatedAt);
+
+public sealed record ClientPortalTariff(
+    string Id,
+    string Name,
+    string? ZoneId,
+    int DurationMinutes,
+    long PriceCents)
+{
+    public string DurationSummary => $"{DurationMinutes} мин";
+    public string PriceSummary => $"{(PriceCents / 100m):N0} ₽";
+}
+
+public sealed record ClientPortalReservation(
+    string Id,
+    IReadOnlyList<string> WorkstationIds,
+    string StartAt,
+    string EndAt,
+    string Status,
+    string? TariffId);

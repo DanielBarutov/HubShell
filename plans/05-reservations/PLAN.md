@@ -66,7 +66,8 @@ Reservation владеет жизненным циклом брони и кон�
 7. [x] Реализовать atomic multi-resource create и idempotency на PostgreSQL; PostgreSQL locking/concurrency test добавлен, отдельные contract tests остаются.
 8. [x] Реализовать operator API и permissions.
 9. [x] Подготовить frontend timeline/map integration prototype.
-10. [x] Подготовить WinUI отображение ближайшей брони и ограничение тарифа в shell.
+10. [x] Подготовить WinUI отображение ближайшей реальной брони текущего места;
+    фиктивный `VIP-01` удалён, при отсутствии совпадения карточка скрывается.
 11. [x] Добавить unit/API/DB smoke tests и memory/PostgreSQL concurrency tests; отдельные contract tests остаются.
 12. [x] Добавить async Dramatiq sweep и Redis scheduler boundary для no-show.
 13. [x] Закрепить анонимную гостевую бронь: `client_id` и `guest_id` могут быть

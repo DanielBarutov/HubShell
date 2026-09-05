@@ -29,14 +29,14 @@ public sealed class ClientSessionCoordinatorTests
         public Task<ClientPortalAuthenticationSnapshot> RegisterAsync(
             string nickname,
             string phone,
-            string pin,
+            string password,
             string deviceId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<ClientPortalAuthenticationSnapshot> LoginAsync(
             string identifier,
-            string pin,
+            string password,
             string deviceId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -50,6 +50,13 @@ public sealed class ClientSessionCoordinatorTests
         public Task<ClientPortalSnapshot> ActivateEntitlementAsync(
             string deviceId,
             string entitlementId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ClientPortalSnapshot> PurchaseEntitlementAsync(
+            string deviceId,
+            string tariffId,
+            string idempotencyKey,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

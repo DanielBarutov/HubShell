@@ -178,14 +178,18 @@ def test_clients_contract_contains_balance_operation_history() -> None:
     }.issubset(service.methods_by_name)
     assert "discount_category" in clients_pb2.Guest.DESCRIPTOR.fields_by_name
     portal_service = clients_pb2.DESCRIPTOR.services_by_name["ClientPortalService"]
-    assert {"Register", "Login", "Get", "ActivateEntitlement"}.issubset(
+    assert {"Register", "Login", "Get", "ActivateEntitlement", "PurchaseEntitlement"}.issubset(
         portal_service.methods_by_name
     )
     assert "device_id" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
+    assert "password" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
+    assert "password" in clients_pb2.LoginPortalRequest.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalSession.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalCharge.DESCRIPTOR.fields_by_name
     assert "entitlements" in clients_pb2.ClientPortalSnapshot.DESCRIPTOR.fields_by_name
     assert "queue_position" in clients_pb2.PortalEntitlement.DESCRIPTOR.fields_by_name
+    assert "tariffs" in clients_pb2.ClientPortalSnapshot.DESCRIPTOR.fields_by_name
+    assert "reservations" in clients_pb2.ClientPortalSnapshot.DESCRIPTOR.fields_by_name
 
 
 def test_guest_links_are_present_in_reservation_and_frontend_contracts() -> None:
@@ -289,6 +293,16 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "WindowModeActionLabel" in view_model_source
     assert "EnsureEntryAllowedAsync" in view_model_source
     assert "_clientPortal.Logout()" in view_model_source
+    assert "FindUpcomingBooking" in view_model_source
+    assert "ClientPortalBookingSelector" in view_model_source
+    assert "PurchasePortalTariffAsync" in view_model_source
+    assert "NextBooking" not in view_model_source
+    assert "PurchaseEntitlementAsync" in grpc_source
+    assert "PortalPassword" in view_model_source
+    assert "PortalPhoneChanged" in window_source
+    assert "DisplayArea.GetFromWindowId" in window_source
+    assert "Avatar" not in xaml_source
+    assert "Тема зоны" not in xaml_source
     assert '"vip" => "VIP-зона"' in view_model_source
     assert "GAMECLUB_ENVIRONMENT" in window_source
     assert "EndpointPolicy.GetEnvironmentEndpoint" in window_source

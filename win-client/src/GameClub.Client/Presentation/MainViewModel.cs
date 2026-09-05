@@ -35,13 +35,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _portalIdentifier = string.Empty;
     private string _portalPhone = string.Empty;
     private string _portalNickname = string.Empty;
-    private string _portalPin = string.Empty;
-    private string _portalRegistrationPin = string.Empty;
+    private string _portalPassword = string.Empty;
+    private string _portalRegistrationPassword = string.Empty;
     private string _portalMessage = string.Empty;
     private string _transferTargetWorkstationId = string.Empty;
     private string _incomingTransferOfferId = string.Empty;
     private string _incomingTransferToken = string.Empty;
     private string _sessionNotification = string.Empty;
+    private bool _isTransferExpanded;
     private CancellationTokenSource? _sessionNotificationLifetime;
 
     public MainViewModel(
@@ -83,7 +84,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public Visibility AccessGateVisibility => IsAccessLocked || IsMaintenanceMode
         ? Visibility.Visible
         : Visibility.Collapsed;
-    public Visibility SecuredContentVisibility => IsAccessLocked || IsMaintenanceMode
+    public Visibility SecuredContentVisibility => IsAccessLocked || IsMaintenanceMode || _portalSnapshot is not null
         ? Visibility.Collapsed
         : Visibility.Visible;
     public Visibility UserLoginVisibility => IsAccessLocked
@@ -138,10 +139,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 : "Вход пользователя отключён политикой зоны. Для обслуживания используйте Ctrl+Alt+P.";
     public bool CanUnlockUser => _userAccessCode.Trim().Length >= 4;
     public bool CanEnterMaintenance => _managerPassword.Length >= 8;
-    public bool CanLoginPortal => _portalIdentifier.Trim().Length >= 3 && _portalPin.Length >= 4;
+    public bool CanLoginPortal => _portalIdentifier.Trim().Length >= 3 && _portalPassword.Length >= 4;
     public bool CanRegisterPortal => _portalNickname.Trim().Length >= 3
         && _portalPhone.Trim().Length >= 4
-        && _portalRegistrationPin.Length >= 4;
+        && _portalRegistrationPassword.Length >= 4;
     public bool IsUserAccessConfigured => _accessCredentials.IsUserAccessConfigured;
     public bool IsManagerAccessConfigured => _accessCredentials.IsManagerAccessConfigured;
     public WorkstationLockdownPolicySnapshot LockdownPolicy => _lockdownPolicy;
@@ -215,30 +216,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(CanRegisterPortal));
         }
     }
-    public string PortalPin
+    public string PortalPassword
     {
-        get => _portalPin;
+        get => _portalPassword;
         set
         {
-            if (_portalPin == value)
+            if (_portalPassword == value)
             {
                 return;
             }
-            _portalPin = value;
+            _portalPassword = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanLoginPortal));
         }
     }
-    public string PortalRegistrationPin
+    public string PortalRegistrationPassword
     {
-        get => _portalRegistrationPin;
+        get => _portalRegistrationPassword;
         set
         {
-            if (_portalRegistrationPin == value)
+            if (_portalRegistrationPassword == value)
             {
                 return;
             }
-            _portalRegistrationPin = value;
+            _portalRegistrationPassword = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanRegisterPortal));
         }
@@ -246,7 +247,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool IsPortalRegistrationRequested => _isPortalRegistrationRequested;
     public string PortalAccountSummary => _portalSnapshot is null
         ? string.Empty
-        : $"{_portalSnapshot.Nickname} · {_portalSnapshot.Phone}";
+        : _portalSnapshot.Nickname;
+    public string PortalContactSummary => _portalSnapshot is null
+        ? string.Empty
+        : _portalSnapshot.Phone;
+    public string CurrentWorkstationLabel => DeviceId ?? WorkstationId ?? "это место";
     public string PortalBalanceSummary => _portalSnapshot is null
         ? string.Empty
         : $"Баланс: {FormatMoney(_portalSnapshot.BalanceCents)} · Бонусы: {_portalSnapshot.BalanceBonus}";
@@ -274,6 +279,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         .Select(item =>
             $"{item.TariffName ?? "Пакет"} · {item.Status} · {item.RemainingMinutes} из {item.DurationMinutes} мин")
         .ToArray() ?? Array.Empty<string>();
+    public IReadOnlyList<ClientPortalTariff> PortalTariffs => _portalSnapshot?.Tariffs
+        ?? Array.Empty<ClientPortalTariff>();
+    public bool HasPortalTariffs => PortalTariffs.Count > 0;
+    public Visibility TariffsVisibility => HasPortalTariffs
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+    public bool HasPortalBalance => _portalSnapshot?.BalanceCents > 0;
+    public ClientPortalTariff? FindPortalTariff(string tariffId) =>
+        _portalSnapshot?.Tariffs.FirstOrDefault(item => item.Id == tariffId);
+    public Visibility UpcomingBookingVisibility => FindUpcomingBooking() is null
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+    public string UpcomingBookingTitle => FormatUpcomingBookingTitle(FindUpcomingBooking());
+    public string UpcomingBookingDetails => FormatUpcomingBooking(
+        FindUpcomingBooking(),
+        CurrentWorkstationLabel);
+    public Visibility TransferPanelVisibility => _isTransferExpanded
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+    public string TransferToggleLabel => _isTransferExpanded
+        ? "Свернуть перенос"
+        : "Перенести сессию на другой ПК";
     public bool CanActivatePortalEntitlement => _portalSnapshot?.Entitlements
         .Any(item => item.Status == "queued") == true
         && !string.IsNullOrWhiteSpace(DeviceId);
@@ -287,6 +314,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string ActiveSessionDescription => _activeSession is null
         ? string.Empty
         : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
+    public string ActiveTimeSummary => _activeSession is null
+        ? "Сессия не запущена"
+        : _activeSession.ActivePackage is not null
+            ? $"Осталось {FormatDuration(_activeSession.ActivePackage.RemainingMinutes)}"
+            : _activeSession.Meter is not null
+                ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
+                : "Время обновляется сервером";
+    public string CurrentSessionTariffSummary => _activeSession?.ActivePackage is null
+        ? "Поминутный режим"
+        : _activeSession.ActivePackage.RemainingMinutes > 0
+            ? $"Тариф · {_activeSession.ActivePackage.RemainingMinutes} мин"
+            : "Тариф завершён";
     public string TransferTargetWorkstationId
     {
         get => _transferTargetWorkstationId;
@@ -386,8 +425,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(AccessSubtitle));
     }
 
-    public string NextBooking { get; } = "Сегодня, 18:00 · VIP-01";
-
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -457,6 +494,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         if (deviceChanged || workstationChanged)
         {
             OnPropertyChanged(nameof(DeviceStatus));
+            OnPropertyChanged(nameof(CurrentWorkstationLabel));
+            OnPropertyChanged(nameof(UpcomingBookingVisibility));
+            OnPropertyChanged(nameof(UpcomingBookingTitle));
+            OnPropertyChanged(nameof(UpcomingBookingDetails));
             OnPropertyChanged(nameof(CanCreateTransferOffer));
             OnPropertyChanged(nameof(CanConfirmTransfer));
         }
@@ -529,7 +570,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             var authentication = await _clientPortal.LoginAsync(
                 PortalIdentifier,
-                PortalPin,
+                PortalPassword,
                 DeviceId,
                 _lifetime.Token);
             if (!await EnsureEntryAllowedAsync(authentication.Snapshot.ClientId))
@@ -539,7 +580,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _portalMessage = string.Empty;
-            PortalPin = string.Empty;
+            PortalPassword = string.Empty;
             PublishAccessState();
             return true;
         }
@@ -549,7 +590,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            _portalMessage = "Не удалось войти. Проверьте ник/телефон и PIN";
+            _portalMessage = "Не удалось войти. Проверьте ник/телефон и пароль";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
@@ -577,7 +618,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             var authentication = await _clientPortal.RegisterAsync(
                 PortalNickname,
                 PortalPhone,
-                PortalRegistrationPin,
+                PortalRegistrationPassword,
                 DeviceId,
                 _lifetime.Token);
             if (!await EnsureEntryAllowedAsync(authentication.Snapshot.ClientId))
@@ -588,7 +629,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             _accessGate.OpenUserSession();
             _isPortalRegistrationRequested = false;
             _portalMessage = string.Empty;
-            PortalRegistrationPin = string.Empty;
+            PortalRegistrationPassword = string.Empty;
             PublishAccessState();
             return true;
         }
@@ -701,6 +742,42 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             _portalMessage = "Не удалось активировать пакет. Обновите снимок и повторите.";
             OnPropertyChanged(nameof(AccessMessage));
         }
+    }
+
+    public async Task PurchasePortalTariffAsync(
+        string tariffId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId) || FindPortalTariff(tariffId) is null)
+        {
+            return;
+        }
+
+        try
+        {
+            SetPortalSnapshot(await _clientPortal.PurchaseEntitlementAsync(
+                DeviceId,
+                tariffId,
+                $"win-portal-tariff-{Guid.NewGuid():N}",
+                cancellationToken));
+            _portalMessage = "Тариф куплен и добавлен в очередь времени";
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            _portalMessage = "Не удалось купить тариф. Проверьте баланс и повторите.";
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+    }
+
+    public void ToggleTransferPanel()
+    {
+        _isTransferExpanded = !_isTransferExpanded;
+        OnPropertyChanged(nameof(TransferPanelVisibility));
+        OnPropertyChanged(nameof(TransferToggleLabel));
     }
 
     public void CancelManagerLogin()
@@ -1006,7 +1083,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private void PublishPortalState()
     {
         OnPropertyChanged(nameof(PortalContentVisibility));
+        OnPropertyChanged(nameof(SecuredContentVisibility));
         OnPropertyChanged(nameof(PortalAccountSummary));
+        OnPropertyChanged(nameof(PortalContactSummary));
         OnPropertyChanged(nameof(PortalBalanceSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeSummary));
         OnPropertyChanged(nameof(PortalBalanceHistory));
@@ -1014,6 +1093,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalChargeHistory));
         OnPropertyChanged(nameof(PortalSessionHistory));
         OnPropertyChanged(nameof(PortalEntitlementQueue));
+        OnPropertyChanged(nameof(PortalTariffs));
+        OnPropertyChanged(nameof(HasPortalTariffs));
+        OnPropertyChanged(nameof(TariffsVisibility));
+        OnPropertyChanged(nameof(HasPortalBalance));
+        OnPropertyChanged(nameof(UpcomingBookingVisibility));
+        OnPropertyChanged(nameof(UpcomingBookingTitle));
+        OnPropertyChanged(nameof(UpcomingBookingDetails));
         OnPropertyChanged(nameof(CanActivatePortalEntitlement));
     }
 
@@ -1032,6 +1118,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(ActiveSessionVisibility));
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
+        OnPropertyChanged(nameof(ActiveTimeSummary));
+        OnPropertyChanged(nameof(CurrentSessionTariffSummary));
         OnPropertyChanged(nameof(CanCreateTransferOffer));
         OnPropertyChanged(nameof(CanConfirmTransfer));
     }
@@ -1061,6 +1149,62 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 $"Автоматически активирован пакет {snapshot.ActivePackage.TariffId}. В очереди осталось {remaining}.");
         }
         PublishSessionState();
+    }
+
+    private ClientPortalReservation? FindUpcomingBooking()
+    {
+        if (_portalSnapshot is null || string.IsNullOrWhiteSpace(WorkstationId))
+        {
+            return null;
+        }
+
+        return ClientPortalBookingSelector.FindUpcoming(
+            _portalSnapshot.Reservations,
+            WorkstationId,
+            DateTimeOffset.UtcNow);
+    }
+
+    private static string FormatUpcomingBooking(
+        ClientPortalReservation? reservation,
+        string placeLabel)
+    {
+        if (reservation is null
+            || !DateTimeOffset.TryParse(
+                reservation.StartAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var start)
+            || !DateTimeOffset.TryParse(
+                reservation.EndAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var end))
+        {
+            return string.Empty;
+        }
+
+        var period = $"{start.ToLocalTime():dd.MM, HH:mm}–{end.ToLocalTime():HH:mm}";
+        return $"{period} · {placeLabel}";
+    }
+
+    private static string FormatUpcomingBookingTitle(ClientPortalReservation? reservation)
+    {
+        if (reservation is null
+            || !DateTimeOffset.TryParse(
+                reservation.StartAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var start)
+            || !DateTimeOffset.TryParse(
+                reservation.EndAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var end))
+        {
+            return string.Empty;
+        }
+
+        return $"{start.ToLocalTime():dd.MM, HH:mm}–{end.ToLocalTime():HH:mm}";
     }
 
     private void ShowSessionNotification(string message)

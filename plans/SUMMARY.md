@@ -302,7 +302,9 @@ flows.
   закрытая private LAN допускает HTTP без белого IP.
 - server-backed register/login/profile/history screen показывает баланс,
   операции, списания времени, товары, тарифы/сессии и доступное время; portal
-  snapshot теперь передаёт ordered package queue и explicit activation RPC/UI.
+  snapshot теперь передаёт ordered package queue, explicit activation RPC/UI,
+  каталог тарифов для подтверждённой покупки и будущие подтверждённые брони
+  клиента для текущего места.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.

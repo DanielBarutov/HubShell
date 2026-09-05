@@ -23,6 +23,7 @@ service ClientPortalService {
   rpc Login(LoginPortalRequest) returns (ClientPortalSession);
   rpc Get(GetPortalRequest) returns (ClientPortalSnapshot);
   rpc ActivateEntitlement(ActivateEntitlementRequest) returns (ClientPortalSnapshot);
+  rpc PurchaseEntitlement(PurchaseEntitlementRequest) returns (ClientPortalSnapshot);
 }
 
 message Client {
@@ -146,13 +147,13 @@ message ListGuestsResponse {
 message RegisterPortalRequest {
   string nickname = 1;
   string phone = 2;
-  string pin = 3;
+  string password = 3;
   string device_id = 4;
 }
 
 message LoginPortalRequest {
   string identifier = 1;
-  string pin = 2;
+  string password = 2;
   string device_id = 3;
 }
 
@@ -164,6 +165,12 @@ message GetPortalRequest {
 message ActivateEntitlementRequest {
   string entitlement_id = 1;
   string device_id = 2;
+}
+
+message PurchaseEntitlementRequest {
+  string tariff_id = 1;
+  string device_id = 2;
+  string idempotency_key = 3;
 }
 
 message ClientPortalSession {
@@ -180,6 +187,25 @@ message ClientPortalSnapshot {
   repeated PortalPurchase purchases = 5;
   int64 available_time_minutes = 6;
   repeated PortalEntitlement entitlements = 7;
+  repeated PortalTariff tariffs = 8;
+  repeated PortalReservation reservations = 9;
+}
+
+message PortalTariff {
+  string id = 1;
+  string name = 2;
+  string zone_id = 3;
+  int32 duration_minutes = 4;
+  int64 price_cents = 5;
+}
+
+message PortalReservation {
+  string id = 1;
+  repeated string workstation_ids = 2;
+  google.protobuf.Timestamp start_at = 3;
+  google.protobuf.Timestamp end_at = 4;
+  string status = 5;
+  string tariff_id = 6;
 }
 
 message PortalEntitlement {

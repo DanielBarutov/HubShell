@@ -63,11 +63,11 @@ class ClientService:
         self,
         nickname: str,
         phone: str,
-        pin: str,
+        password: str,
     ) -> Client:
         normalized_nickname = nickname.strip()
         normalized_phone = phone.strip()
-        self._validate_portal_pin(pin)
+        self._validate_portal_password(password)
         try:
             Nickname(normalized_nickname)
             canonical_phone = PhoneNumber(normalized_phone).value
@@ -88,12 +88,12 @@ class ClientService:
             balance_bonus=0,
             created_at=now,
             updated_at=now,
-            password_hash=self._hash_password(pin),
+            password_hash=self._hash_password(password),
         )
         return await self._repository.save(client)
 
-    async def authenticate_portal(self, identifier: str, pin: str) -> Client:
-        self._validate_portal_pin(pin)
+    async def authenticate_portal(self, identifier: str, password: str) -> Client:
+        self._validate_portal_password(password)
         normalized_identifier = identifier.strip()
         if not normalized_identifier:
             raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
@@ -105,7 +105,7 @@ class ClientService:
         if (
             client is None
             or client.blocked_at is not None
-            or not self._verify_password(pin, client.password_hash)
+            or not self._verify_password(password, client.password_hash)
         ):
             raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
         return client
@@ -182,11 +182,11 @@ class ClientService:
         return secrets.compare_digest(actual, expected)
 
     @staticmethod
-    def _validate_portal_pin(pin: str) -> None:
-        if not pin.isdigit() or not 4 <= len(pin) <= 32:
+    def _validate_portal_password(password: str) -> None:
+        if not password.strip() or not 4 <= len(password) <= 128:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
-                "PIN must contain from 4 to 32 digits",
+                "Password must contain from 4 to 128 characters",
             )
 
     async def search(self, query: str, field: str) -> list[Client]:

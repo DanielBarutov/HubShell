@@ -288,6 +288,7 @@ def create_server(
         tariffs=catalog_service,
         entitlements=entitlement_service,
         workstations=workstation_repository,
+        reservations=reservation_repository,
     )
     command_service = WorkstationCommandService(
         command_repository,
