@@ -1,6 +1,7 @@
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
 using GameClub.Client.Domain;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace GameClub.Client.Tests;
@@ -76,7 +77,7 @@ public sealed class ClientSessionCoordinatorTests
 
         public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
             string deviceId,
-            CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.CompletedTask;
             yield break;
