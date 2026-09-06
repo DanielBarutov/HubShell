@@ -75,6 +75,10 @@ BFF и RPC `ListGroups`/`UpsertGroup`. Группа имеет allowlist theme k
 передаёт валидированную декларативную lockdown policy группы; backend хранит её
 как JSON с безопасным default и сериализует в protobuf, но не применяет Windows
 политику непосредственно.
+Цена поминутной игры также хранится в `workstation_groups` как
+`per_minute_price_cents`, возвращается через HTTP/gRPC и синхронизирует
+технический billing snapshot; отдельный per-minute тариф не является позицией
+каталога для покупки.
 
 Management API также поддерживает `POST`/`PUT`/`DELETE` для зон и ПК. Удаление ПК
 идемпотентно переводит запись в архив, исключает её из рабочих списков и оставляет

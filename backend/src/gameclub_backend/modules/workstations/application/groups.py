@@ -5,7 +5,10 @@ import hashlib
 import secrets
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.workstations.application.ports import WorkstationGroupRepository
+from gameclub_backend.modules.workstations.application.ports import (
+    WorkstationGroupRepository,
+    ZoneRateSynchronizer,
+)
 from gameclub_backend.modules.workstations.domain import LockdownPolicy, WorkstationGroup
 
 
@@ -22,9 +25,11 @@ class WorkstationGroupService:
         self,
         repository: WorkstationGroupRepository,
         clock: UtcClock | None = None,
+        zone_rate_synchronizer: ZoneRateSynchronizer | None = None,
     ) -> None:
         self._repository = repository
         self._clock = clock or UtcClock()
+        self._zone_rate_synchronizer = zone_rate_synchronizer
 
     async def list(self) -> list[WorkstationGroup]:
         return await self._repository.list()
@@ -35,6 +40,7 @@ class WorkstationGroupService:
         name: str,
         theme: str,
         lockdown_policy: LockdownPolicy | None = None,
+        per_minute_price_cents: int | None = None,
     ) -> WorkstationGroup:
         normalized_id = group_id.strip().lower()
         normalized_name = name.strip()
@@ -45,11 +51,20 @@ class WorkstationGroupService:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT, "Unsupported workstation group theme"
             )
+        if per_minute_price_cents is not None and per_minute_price_cents < 0:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "Per-minute price cannot be negative"
+            )
         existing = await self._repository.get(normalized_id)
         group = WorkstationGroup(
             id=normalized_id,
             name=normalized_name,
             theme=normalized_theme,
+            per_minute_price_cents=(
+                per_minute_price_cents
+                if per_minute_price_cents is not None
+                else (existing.per_minute_price_cents if existing else 0)
+            ),
             updated_at=self._clock.now(),
             manager_password_verifier=(existing.manager_password_verifier if existing else None),
             lockdown_policy=(
@@ -58,7 +73,15 @@ class WorkstationGroupService:
                 else (existing.lockdown_policy if existing else LockdownPolicy())
             ),
         )
-        return await self._repository.save(group)
+        saved = await self._repository.save(group)
+        if self._zone_rate_synchronizer is not None:
+            await self._zone_rate_synchronizer.sync_per_minute_tariff(
+                saved.id,
+                saved.name,
+                saved.per_minute_price_cents,
+                saved.updated_at or self._clock.now(),
+            )
+        return saved
 
     async def set_lockdown_policy(
         self, group_id: str, lockdown_policy: LockdownPolicy

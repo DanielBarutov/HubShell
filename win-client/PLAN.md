@@ -128,6 +128,10 @@ Windows Desktop и показывает компактный borderless-видж
     Native Windows проверка журнала остаётся частью реального smoke; внешний
     сборщик `scripts/diagnose-startup.ps1`, Application Event Log и Visual Studio
     используются для ранних/native loader сбоев.
+25. [x] Устранить source-level причины пустого первого кадра и невидимой ошибки
+    покупки: начальный presenter применяется после загрузки XAML visual tree,
+    режим повторно применяется после возврата из трея, а ошибки недостаточного
+    баланса показываются отдельным уведомлением авторизованного виджета.
 
 Декомпозиция оставшегося runtime: entitlement/meter и snapshot принадлежат
 планам [`30`](../plans/30-entitlements-meter/PLAN.md) и

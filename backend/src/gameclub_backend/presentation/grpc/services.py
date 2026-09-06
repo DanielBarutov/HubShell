@@ -656,6 +656,11 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
                 request.name,
                 request.theme,
                 policy,
+                per_minute_price_cents=(
+                    request.per_minute_price_cents
+                    if request.HasField("per_minute_price_cents")
+                    else None
+                ),
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -698,6 +703,7 @@ def to_group_proto(group: WorkstationGroup) -> workstations_pb2.WorkstationGroup
         id=group.id,
         name=group.name,
         theme=group.theme,
+        per_minute_price_cents=group.per_minute_price_cents,
         lockdown_policy=to_lockdown_policy_proto(group.lockdown_policy),
     )
     updated_at = to_timestamp(group.updated_at)

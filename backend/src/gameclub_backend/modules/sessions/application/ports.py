@@ -101,6 +101,13 @@ class TariffLookup(typing.Protocol):
     async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:
         """Return the tariff used to build a server-owned session snapshot."""
 
+    async def find_per_minute_tariff(
+        self,
+        group_id: str | None,
+        moment: datetime.datetime,
+    ) -> Tariff | None:
+        """Return the applicable zone fallback tariff for a client session."""
+
 
 class ReservationLookup(typing.Protocol):
     async def get(self, reservation_id: uuid.UUID) -> Reservation:

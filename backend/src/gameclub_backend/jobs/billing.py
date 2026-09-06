@@ -44,6 +44,9 @@ from gameclub_backend.modules.workstations.infrastructure.commands_memory import
 from gameclub_backend.modules.workstations.infrastructure.commands_postgres import (
     PostgresWorkstationCommandRepository,
 )
+from gameclub_backend.modules.workstations.infrastructure.groups_postgres import (
+    PostgresWorkstationGroupRepository,
+)
 from gameclub_backend.modules.workstations.infrastructure.postgres import (
     PostgresWorkstationRepository,
 )
@@ -87,8 +90,12 @@ async def reconcile_billing_charges(
         reconciliation = PostgresChargeReconciliationRepository(engine_provider)
         sessions = PostgresSessionRepository(engine_provider)
         workstations = PostgresWorkstationRepository(engine_provider)
+        workstation_groups = PostgresWorkstationGroupRepository(engine_provider)
         clients = ClientService(PostgresClientRepository(engine_provider))
-        catalog = CatalogService(PostgresCatalogRepository(engine_provider))
+        catalog = CatalogService(
+            PostgresCatalogRepository(engine_provider),
+            zones=workstation_groups,
+        )
         entitlements = EntitlementService(
             PostgresEntitlementRepository(engine_provider),
             tariffs=catalog,
@@ -149,9 +156,13 @@ async def meter_active_sessions() -> None:
 
         session_repository = PostgresSessionRepository(engine_provider)
         workstation_repository = PostgresWorkstationRepository(engine_provider)
+        workstation_groups = PostgresWorkstationGroupRepository(engine_provider)
         client_repository = PostgresClientRepository(engine_provider)
         clients = ClientService(client_repository)
-        catalog = CatalogService(PostgresCatalogRepository(engine_provider))
+        catalog = CatalogService(
+            PostgresCatalogRepository(engine_provider),
+            zones=workstation_groups,
+        )
         entitlements = EntitlementService(
             PostgresEntitlementRepository(engine_provider),
             tariffs=catalog,

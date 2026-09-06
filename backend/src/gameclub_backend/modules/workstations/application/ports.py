@@ -20,6 +20,17 @@ class WorkstationGroupRepository(typing.Protocol):
         """Delete a workstation group configuration."""
 
 
+class ZoneRateSynchronizer(typing.Protocol):
+    async def sync_per_minute_tariff(
+        self,
+        group_id: str,
+        group_name: str,
+        price_per_minute_cents: int,
+        moment: datetime.datetime,
+    ) -> None:
+        """Synchronize the internal metered tariff snapshot for a zone."""
+
+
 class WorkstationRepository(typing.Protocol):
     async def get(self, workstation_id: uuid.UUID) -> Workstation | None:
         """Return a workstation by ID."""

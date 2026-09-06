@@ -108,6 +108,10 @@ class BillingService:
             raise ApplicationError(ErrorCode.CONFLICT, "Only an active session can be metered")
         if session.client_id is None:
             return None
+        workstation = await self._workstations.get(session.workstation_id)
+        if workstation is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        moment = now or self._clock.now()
         tariff_id = session.tariff_id
         active_entitlement = None
         if tariff_id is None and self._entitlements is not None:
@@ -117,15 +121,18 @@ class BillingService:
         elif self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
         if tariff_id is None:
+            fallback_tariff = await self._catalog.find_per_minute_tariff(
+                workstation.group_id,
+                moment,
+            )
+            if fallback_tariff is not None:
+                tariff_id = fallback_tariff.id
+        if tariff_id is None:
             return None
         tariff = await self._catalog.get_tariff(tariff_id)
         if tariff is None:
             return None
-        workstation = await self._workstations.get(session.workstation_id)
-        if workstation is None:
-            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         client = await self._clients.get(session.client_id)
-        moment = now or self._clock.now()
         end_at = session.ended_at or moment
         elapsed_minutes = self._elapsed_minutes(session.started_at, end_at)
         current = await self._meter_repository.get(session.id)

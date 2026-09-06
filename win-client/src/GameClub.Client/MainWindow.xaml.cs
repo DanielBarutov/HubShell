@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private NativeTrayIcon? _trayIcon;
     private bool _closing;
     private bool _startupStarted;
+    private bool _contentLoaded;
 
     public MainWindow()
     {
@@ -61,8 +62,25 @@ public sealed partial class MainWindow : Window
             new[] { "commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1" },
             _powerController);
         ContentRoot.DataContext = _viewModel;
+        ContentRoot.Loaded += ContentRootLoaded;
         _viewModel.PropertyChanged += ViewModelPropertyChanged;
         StartupDiagnostics.Info("MainWindow constructor: completed");
+    }
+
+    private void ContentRootLoaded(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        _contentLoaded = true;
+        StartupDiagnostics.Info("MainWindow content loaded");
+
+        // Changing the AppWindow presenter from Activated can race the first
+        // XAML render and leave a blank frame. Wait until the visual tree is
+        // loaded, then apply the access gate or compact widget mode.
+        if (_startupStarted)
+        {
+            DispatcherQueue.TryEnqueue(ApplyInitialWindowMode);
+        }
     }
 
     private async Task StartClientAsync()
@@ -178,9 +196,19 @@ public sealed partial class MainWindow : Window
             StartupDiagnostics.Error("MainWindow activated: tray initialization failed", error);
         }
 
-        ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode);
+        DispatcherQueue.TryEnqueue(ApplyInitialWindowMode);
         ObserveBackgroundTask(StartClientAsync(), "client startup");
         StartupDiagnostics.Info("MainWindow activated: post-activation startup scheduled");
+    }
+
+    private void ApplyInitialWindowMode()
+    {
+        if (!_contentLoaded || _closing)
+        {
+            return;
+        }
+
+        ApplyWindowMode(_viewModel.IsAccessLocked || _viewModel.IsMaintenanceMode);
     }
 
     private void PortalIdentifierChanged(object sender, TextChangedEventArgs args)
@@ -400,6 +428,7 @@ public sealed partial class MainWindow : Window
     private void RestoreFromTray()
     {
         _appWindow.Show();
+        DispatcherQueue.TryEnqueue(ApplyInitialWindowMode);
         Activate();
     }
 

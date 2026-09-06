@@ -116,6 +116,13 @@ class CatalogQuoter(typing.Protocol):
     async def get_tariff(self, tariff_id: uuid.UUID):
         """Return the selected tariff for lifecycle-specific billing."""
 
+    async def find_per_minute_tariff(
+        self,
+        group_id: str | None,
+        moment: datetime.datetime,
+    ):
+        """Return the applicable zone fallback tariff for legacy sessions."""
+
     async def quote(
         self,
         duration_minutes: int,

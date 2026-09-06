@@ -1,7 +1,7 @@
 import datetime
 import json
 
-from sqlalchemy import DateTime, String, Text, select
+from sqlalchemy import BigInteger, DateTime, String, Text, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -92,6 +92,7 @@ class WorkstationGroupModel(WorkstationGroupBase):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     theme: Mapped[str] = mapped_column(String(32))
+    per_minute_price_cents: Mapped[int] = mapped_column(BigInteger, default=0)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     manager_password_verifier: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     lockdown_policy_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -101,6 +102,7 @@ class WorkstationGroupModel(WorkstationGroupBase):
             id=self.id,
             name=self.name,
             theme=self.theme,
+            per_minute_price_cents=self.per_minute_price_cents,
             updated_at=self.updated_at,
             manager_password_verifier=self.manager_password_verifier,
             lockdown_policy=policy_from_json(self.lockdown_policy_json),
@@ -112,6 +114,7 @@ class WorkstationGroupModel(WorkstationGroupBase):
             id=group.id,
             name=group.name,
             theme=group.theme,
+            per_minute_price_cents=group.per_minute_price_cents,
             updated_at=group.updated_at or datetime.datetime.now(datetime.UTC),
             manager_password_verifier=group.manager_password_verifier,
             lockdown_policy_json=policy_to_json(group.lockdown_policy),
@@ -142,6 +145,7 @@ class PostgresWorkstationGroupRepository:
             else:
                 model.name = group.name
                 model.theme = group.theme
+                model.per_minute_price_cents = group.per_minute_price_cents
                 model.updated_at = group.updated_at or datetime.datetime.now(datetime.UTC)
                 model.manager_password_verifier = group.manager_password_verifier
                 model.lockdown_policy_json = policy_to_json(group.lockdown_policy)

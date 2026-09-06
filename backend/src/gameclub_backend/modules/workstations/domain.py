@@ -72,6 +72,7 @@ class WorkstationGroup:
     id: str
     name: str
     theme: str = "standard"
+    per_minute_price_cents: int = 0
     updated_at: datetime.datetime | None = None
     manager_password_verifier: str | None = None
     lockdown_policy: LockdownPolicy = dataclasses.field(default_factory=LockdownPolicy)
@@ -81,6 +82,8 @@ class WorkstationGroup:
             raise ValueError("Workstation group id and name cannot be empty")
         if self.theme not in {"standard", "vip", "neon", "minimal"}:
             raise ValueError("Unsupported workstation group theme")
+        if self.per_minute_price_cents < 0:
+            raise ValueError("Per-minute price cannot be negative")
 
 
 @dataclasses.dataclass(frozen=True)

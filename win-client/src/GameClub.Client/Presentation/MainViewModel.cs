@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using Grpc.Core;
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
 using GameClub.Client.Domain;
@@ -393,6 +394,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public Visibility TransferMessageVisibility => string.IsNullOrWhiteSpace(_sessionNotification)
         ? Visibility.Collapsed
         : Visibility.Visible;
+    public string PortalNotification => _sessionNotification;
+    public Visibility PortalNotificationVisibility => string.IsNullOrWhiteSpace(_sessionNotification)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
     public IWorkstationSessionGateway BackendClient => _session.BackendClient;
     public string ThemeName
     {
@@ -780,16 +785,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 $"win-portal-tariff-{Guid.NewGuid():N}",
                 cancellationToken));
             await RefreshActiveSessionSnapshotQuietlyAsync();
-            _portalMessage = "Тариф куплен и добавлен в очередь времени";
-            OnPropertyChanged(nameof(AccessMessage));
+            ShowSessionNotification("Тариф куплен и добавлен в очередь времени.");
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
+        catch (RpcException error) when (IsInsufficientBalance(error))
+        {
+            ShowSessionNotification("Недостаточно средств на балансе. Пополните депозит и повторите покупку.");
+        }
         catch (Exception)
         {
-            _portalMessage = "Не удалось купить тариф. Проверьте баланс и повторите.";
-            OnPropertyChanged(nameof(AccessMessage));
+            ShowSessionNotification("Не удалось купить тариф. Проверьте баланс и повторите.");
         }
     }
 
@@ -1329,7 +1336,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         OnPropertyChanged(nameof(TransferMessage));
         OnPropertyChanged(nameof(TransferMessageVisibility));
+        OnPropertyChanged(nameof(PortalNotification));
+        OnPropertyChanged(nameof(PortalNotificationVisibility));
     }
+
+    private static bool IsInsufficientBalance(RpcException error) =>
+        error.Status.Detail.Contains("Insufficient balance", StringComparison.OrdinalIgnoreCase);
 
     private void ApplySessionStopPolicy()
     {

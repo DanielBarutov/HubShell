@@ -7,7 +7,7 @@
     mc:Ignorable="d">
     <Grid
         x:Name="ContentRoot"
-        Background="{ThemeResource PageBackgroundBrush}"
+        Background="#11141B"
         KeyDown="RecordKeyActivity"
         PointerPressed="RecordPointerActivity">
         <Grid.KeyboardAccelerators>
@@ -180,6 +180,23 @@
                         </StackPanel>
                         <Button Grid.Column="1" Click="LockClient" Padding="8,5" Background="Transparent" VerticalAlignment="Top">
                             <TextBlock Text="Выйти" Foreground="{ThemeResource AccentBrush}" FontSize="10" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <Border Background="#25351E" CornerRadius="10" Padding="10"
+                        Visibility="{Binding PortalNotificationVisibility}">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding PortalNotification}"
+                                   Foreground="{ThemeResource PrimaryTextBrush}"
+                                   FontSize="10" TextWrapping="Wrap" />
+                        <Button Grid.Column="1" Click="DismissSessionNotification" Padding="4,2"
+                                Background="Transparent" VerticalAlignment="Top">
+                            <TextBlock Text="×" Foreground="{ThemeResource AccentBrush}" FontSize="14" />
                         </Button>
                     </Grid>
                 </Border>

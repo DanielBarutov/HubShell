@@ -37,7 +37,7 @@ class FixedClock:
         return self.current
 
 
-async def build_metered_services(clock: FixedClock):
+async def build_metered_services(clock: FixedClock, tariff_free_minutes: int = 5):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
         "meter-device", "Meter PC", group_id="vip"
@@ -63,7 +63,7 @@ async def build_metered_services(clock: FixedClock):
         valid_to=None,
         billing_mode=BillingMode.PER_MINUTE,
         price_per_minute_cents=10,
-        free_minutes=5,
+        free_minutes=tariff_free_minutes,
     )
     session_repository = InMemorySessionRepository()
     meter_repository = InMemoryMeterRepository()
@@ -72,6 +72,7 @@ async def build_metered_services(clock: FixedClock):
         workstations=workstation_repository,
         clients=client_repository,
         clock=clock,
+        tariffs=catalog,
     )
     billing = BillingService(
         InMemoryChargeRepository(),
@@ -225,6 +226,36 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
     assert meter is not None
     assert meter.billed_minutes == 0
     assert (await clients.get(client.id)).balance_cents == 1_000
+
+
+@pytest.mark.asyncio
+async def test_device_login_selects_zone_per_minute_tariff_without_package() -> None:
+    clock = FixedClock()
+    workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="meter-device-zone-tariff",
+    )
+
+    assert session.tariff_id == tariff.id
+    snapshot = await sessions.snapshot(session.id)
+    assert snapshot.active_tariff is not None
+    assert snapshot.active_tariff.id == tariff.id
+
+    clock.current += datetime.timedelta(minutes=6)
+    meter = await billing.meter_session(session.id)
+
+    assert meter is not None
+    assert meter.billed_minutes == 1
+    assert meter.billed_cents == 10
+    assert (await clients.get(client.id)).balance_cents == 990
+    assert (await meters.get(session.id)).tariff_id == tariff.id
 
 
 @pytest.mark.asyncio

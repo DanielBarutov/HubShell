@@ -122,6 +122,7 @@ class SessionService:
             normalized_guest_name = normalized_guest_name or "Гость"
         if client_id is not None and await self._clients.get(client_id) is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Client not found")
+        active_entitlement = None
         if client_id is not None and self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(client_id)
             if entitlement_id is not None:
@@ -145,6 +146,18 @@ class SessionService:
                         ErrorCode.CONFLICT,
                         "Selected tariff conflicts with the active package",
                     )
+        if (
+            client_id is not None
+            and tariff_id is None
+            and active_entitlement is None
+            and self._tariffs is not None
+        ):
+            fallback_tariff = await self._tariffs.find_per_minute_tariff(
+                workstation.group_id,
+                self._clock.now(),
+            )
+            if fallback_tariff is not None:
+                tariff_id = fallback_tariff.id
         if client_id is not None and guest_payment_id is not None:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
@@ -330,8 +343,9 @@ class SessionService:
                 "Session snapshot time must include timezone",
             )
         active_tariff = None
-        if session.tariff_id is not None and self._tariffs is not None:
-            tariff = await self._tariffs.get_tariff(session.tariff_id)
+        snapshot_tariff_id = session.tariff_id or (meter.tariff_id if meter is not None else None)
+        if snapshot_tariff_id is not None and self._tariffs is not None:
+            tariff = await self._tariffs.get_tariff(snapshot_tariff_id)
             if tariff is not None:
                 elapsed_minutes = self._elapsed_minutes(
                     session.started_at,

@@ -3,7 +3,7 @@ import math
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.catalog.application.ports import CatalogRepository
+from gameclub_backend.modules.catalog.application.ports import CatalogRepository, ZoneRateLookup
 from gameclub_backend.modules.catalog.domain import (
     BillingMode,
     CatalogSnapshot,
@@ -17,8 +17,17 @@ from gameclub_backend.modules.catalog.domain import (
 
 
 class CatalogService:
-    def __init__(self, repository: CatalogRepository) -> None:
+    def __init__(
+        self,
+        repository: CatalogRepository,
+        zones: ZoneRateLookup | None = None,
+    ) -> None:
         self._repository = repository
+        self._zones = zones
+
+    @staticmethod
+    def _zone_per_minute_tariff_key(group_id: str) -> str:
+        return f"zone:{group_id.strip().lower()}:per_minute"
 
     async def create_product(
         self,
@@ -227,6 +236,59 @@ class CatalogService:
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
+    async def sync_per_minute_tariff(
+        self,
+        group_id: str,
+        group_name: str,
+        price_per_minute_cents: int,
+        moment: datetime.datetime,
+    ) -> None:
+        """Keep the zone-owned metered tariff snapshot aligned with its rate."""
+        normalized_group_id = group_id.strip().lower()
+        if not normalized_group_id or not group_name.strip() or price_per_minute_cents < 0:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid zone per-minute rate")
+        if moment.tzinfo is None:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff dates must include timezone")
+
+        key = self._zone_per_minute_tariff_key(normalized_group_id)
+        internal = [
+            tariff
+            for tariff in await self._repository.list_tariffs()
+            if tariff.tariff_key == key
+        ]
+        current = next(
+            (
+                tariff
+                for tariff in internal
+                if tariff.active
+                and tariff.lifecycle is TariffLifecycle.PUBLISHED
+                and tariff.price_per_minute_cents == price_per_minute_cents
+                and tariff.applies_at(moment, normalized_group_id)
+            ),
+            None,
+        )
+        if price_per_minute_cents > 0 and current is not None:
+            return
+
+        for tariff in internal:
+            archived = tariff.archive()
+            if archived != tariff:
+                await self._repository.save_tariff(archived)
+        if price_per_minute_cents == 0:
+            return
+        await self.create_tariff(
+            name=f"{group_name.strip()} · Поминутно",
+            group_id=normalized_group_id,
+            duration_minutes=1,
+            price_cents=0,
+            valid_from=moment,
+            valid_to=None,
+            tariff_key=key,
+            lifecycle=TariffLifecycle.PUBLISHED,
+            billing_mode=BillingMode.PER_MINUTE,
+            price_per_minute_cents=price_per_minute_cents,
+        )
+
     async def create_discount_rule(
         self,
         category: str,
@@ -268,6 +330,37 @@ class CatalogService:
             rule for rule in await self._repository.list_discount_rules() if rule.active
         ]
         return CatalogSnapshot(tuple(tariffs), tuple(discount_rules))
+
+    async def find_per_minute_tariff(
+        self,
+        group_id: str | None,
+        moment: datetime.datetime,
+    ) -> Tariff | None:
+        """Return the applicable per-minute tariff for a workstation zone."""
+        if moment.tzinfo is None:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff lookup input")
+        if self._zones is not None and group_id is not None:
+            zone = await self._zones.get(group_id)
+            if zone is not None and zone.per_minute_price_cents <= 0:
+                return None
+        matching = [
+            tariff
+            for tariff in await self._repository.find_tariffs(group_id, moment)
+            if tariff.billing_mode is BillingMode.PER_MINUTE
+        ]
+        if group_id is not None:
+            internal = [
+                tariff
+                for tariff in matching
+                if tariff.tariff_key == self._zone_per_minute_tariff_key(group_id)
+            ]
+            if internal:
+                matching = internal
+        return min(
+            matching,
+            key=lambda item: (item.price_per_minute_cents, item.duration_minutes, str(item.id)),
+            default=None,
+        )
 
     async def quote(
         self,
