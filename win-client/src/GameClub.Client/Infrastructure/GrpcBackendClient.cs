@@ -229,6 +229,7 @@ public sealed class GrpcBackendClient : IBackendClient
         string workstationId,
         string? clientId,
         string? guestId,
+        string deviceId,
         CancellationToken cancellationToken = default)
     {
         var metadata = await CreateMetadataAsync(cancellationToken);
@@ -238,6 +239,7 @@ public sealed class GrpcBackendClient : IBackendClient
                 WorkstationId = workstationId,
                 ClientId = clientId ?? string.Empty,
                 GuestId = guestId ?? string.Empty,
+                DeviceId = deviceId,
             },
             headers: metadata,
             deadline: DateTime.UtcNow.AddSeconds(5),
@@ -319,6 +321,16 @@ public sealed class GrpcBackendClient : IBackendClient
                         : response.Meter.ActiveEntitlementId,
                     response.Meter.Status,
                     ToIsoTimestamp(response.Meter.UpdatedAt)),
+            ActiveTariff = response.ActiveTariff is null || response.ActiveTariff.CalculateSize() == 0
+                ? null
+                : new SessionTariffSnapshot(
+                    response.ActiveTariff.Id,
+                    response.ActiveTariff.Name,
+                    response.ActiveTariff.BillingMode,
+                    response.ActiveTariff.DurationMinutes,
+                    response.ActiveTariff.Quantity,
+                    response.ActiveTariff.ElapsedMinutes,
+                    response.ActiveTariff.RemainingMinutes),
             ServerTime = ToIsoTimestamp(response.ServerTime),
             DeviceId = string.IsNullOrWhiteSpace(response.DeviceId) ? null : response.DeviceId,
         };

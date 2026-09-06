@@ -76,16 +76,18 @@ class CheckAvailabilityResponse(_message.Message):
     def __init__(self, available: _Optional[bool] = ..., conflicting_reservation_ids: _Optional[_Iterable[str]] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class CheckEntryRequest(_message.Message):
-    __slots__ = ("workstation_id", "client_id", "guest_id", "at")
+    __slots__ = ("workstation_id", "client_id", "guest_id", "at", "device_id")
     WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     GUEST_ID_FIELD_NUMBER: _ClassVar[int]
     AT_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     workstation_id: str
     client_id: str
     guest_id: str
     at: _timestamp_pb2.Timestamp
-    def __init__(self, workstation_id: _Optional[str] = ..., client_id: _Optional[str] = ..., guest_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    device_id: str
+    def __init__(self, workstation_id: _Optional[str] = ..., client_id: _Optional[str] = ..., guest_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., device_id: _Optional[str] = ...) -> None: ...
 
 class CheckEntryResponse(_message.Message):
     __slots__ = ("allowed", "reason", "reservation_id", "assigned_client_id", "starts_at", "ends_at")

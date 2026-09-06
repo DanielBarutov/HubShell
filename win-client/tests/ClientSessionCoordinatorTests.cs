@@ -73,6 +73,7 @@ public sealed class ClientSessionCoordinatorTests
             string workstationId,
             string? clientId,
             string? guestId,
+            string deviceId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new EntryDecisionSnapshot(
                 true,

@@ -15,9 +15,15 @@ from gameclub_backend.modules.sessions.application.ports import (
     MeterLookup,
     ReservationLookup,
     SessionRepository,
+    TariffLookup,
     WorkstationLookup,
 )
-from gameclub_backend.modules.sessions.domain import Session, SessionSnapshot, SessionStatus
+from gameclub_backend.modules.sessions.domain import (
+    Session,
+    SessionSnapshot,
+    SessionStatus,
+    SessionTariffSnapshot,
+)
 from gameclub_backend.modules.workstations.domain import WorkstationStatus
 
 
@@ -40,6 +46,7 @@ class SessionService:
         guest_payments: GuestPaymentLookup | None = None,
         entitlements: EntitlementLookup | None = None,
         meters: MeterLookup | None = None,
+        tariffs: TariffLookup | None = None,
     ) -> None:
         self._repository = repository
         self._workstations = workstations
@@ -49,6 +56,7 @@ class SessionService:
         self._reservations = reservations
         self._entitlements = entitlements
         self._meters = meters
+        self._tariffs = tariffs
         self._clock = clock or UtcClock()
 
     async def start(
@@ -321,6 +329,29 @@ class SessionService:
                 ErrorCode.INVALID_ARGUMENT,
                 "Session snapshot time must include timezone",
             )
+        active_tariff = None
+        if session.tariff_id is not None and self._tariffs is not None:
+            tariff = await self._tariffs.get_tariff(session.tariff_id)
+            if tariff is not None:
+                elapsed_minutes = self._elapsed_minutes(
+                    session.started_at,
+                    session.ended_at or server_time,
+                )
+                total_minutes = tariff.duration_minutes * session.tariff_quantity
+                remaining_minutes = (
+                    max(0, total_minutes - elapsed_minutes)
+                    if tariff.billing_mode.value == "block"
+                    else 0
+                )
+                active_tariff = SessionTariffSnapshot(
+                    id=tariff.id,
+                    name=tariff.name,
+                    billing_mode=tariff.billing_mode.value,
+                    duration_minutes=tariff.duration_minutes,
+                    quantity=session.tariff_quantity,
+                    elapsed_minutes=elapsed_minutes,
+                    remaining_minutes=remaining_minutes,
+                )
         return SessionSnapshot(
             schema_version=1,
             server_time=server_time,
@@ -334,8 +365,20 @@ class SessionService:
             active_entitlement=active_entitlement,
             entitlements=entitlements,
             meter=meter,
+            active_tariff=active_tariff,
             allowed_actions=("stop",) if session.status is SessionStatus.ACTIVE else (),
         )
+
+    @staticmethod
+    def _elapsed_minutes(
+        started_at: datetime.datetime,
+        ended_at: datetime.datetime,
+    ) -> int:
+        elapsed = ended_at - started_at
+        total_microseconds = (
+            elapsed.days * 86_400 * 1_000_000 + elapsed.seconds * 1_000_000 + elapsed.microseconds
+        )
+        return max(0, (total_microseconds + 60_000_000 - 1) // 60_000_000)
 
     @staticmethod
     def _validate_idempotent_session(

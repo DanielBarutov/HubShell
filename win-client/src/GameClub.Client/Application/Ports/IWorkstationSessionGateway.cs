@@ -8,6 +8,7 @@ public interface IWorkstationSessionGateway
         string workstationId,
         string? clientId,
         string? guestId,
+        string deviceId,
         CancellationToken cancellationToken = default);
 
     Task<SessionSnapshot> StartSessionAsync(

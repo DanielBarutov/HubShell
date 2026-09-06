@@ -3,6 +3,8 @@ import datetime
 
 import pytest
 
+from gameclub_backend.modules.catalog.application.service import CatalogService
+from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
@@ -101,3 +103,56 @@ async def test_stale_workstation_does_not_become_available_when_snapshot_is_pres
     assert response.active_session_id == session.id
     assert device.status != 2  # WORKSTATION_STATUS_ONLINE
     assert device.session_snapshot.session.id == str(session.id)
+
+
+@pytest.mark.asyncio
+async def test_snapshot_exposes_guest_style_tariff_time_from_server() -> None:
+    workstations_repository = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations_repository).register(
+        "guest-tariff-device",
+        "Guest Tariff PC",
+        group_id="main",
+    )
+    clients_repository = InMemoryClientRepository()
+    client = await ClientService(clients_repository).create("TariffSnapshotClient")
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Обычный зал · час",
+        group_id="main",
+        duration_minutes=60,
+        price_cents=250,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="main-hour",
+    )
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations_repository,
+        clients=clients_repository,
+        tariffs=catalog,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        tariff_id=tariff.id,
+        tariff_quantity=2,
+        idempotency_key="guest-tariff-snapshot",
+    )
+
+    snapshot = await sessions.snapshot(
+        session.id,
+        now=session.started_at + datetime.timedelta(minutes=35),
+    )
+    http_snapshot = SessionSnapshotResponse.from_domain(snapshot)
+    grpc_snapshot = to_session_snapshot_proto(snapshot)
+
+    assert snapshot.active_tariff is not None
+    assert snapshot.active_tariff.name == "Обычный зал · час"
+    assert snapshot.active_tariff.quantity == 2
+    assert snapshot.active_tariff.elapsed_minutes == 35
+    assert snapshot.active_tariff.remaining_minutes == 85
+    assert http_snapshot.active_tariff is not None
+    assert http_snapshot.active_tariff.remaining_minutes == 85
+    assert grpc_snapshot.active_tariff.name == "Обычный зал · час"
+    assert grpc_snapshot.active_tariff.remaining_minutes == 85

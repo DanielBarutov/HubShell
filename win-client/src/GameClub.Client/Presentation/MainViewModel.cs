@@ -318,14 +318,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         ? "Сессия не запущена"
         : _activeSession.ActivePackage is not null
             ? $"Осталось {FormatDuration(_activeSession.ActivePackage.RemainingMinutes)}"
+            : _activeSession.ActiveTariff is not null
+                && _activeSession.ActiveTariff.BillingMode == "block"
+                ? $"Осталось {FormatDuration(_activeSession.ActiveTariff.RemainingMinutes)}"
+            : _activeSession.ActiveTariff is not null
+                ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
             : _activeSession.Meter is not null
                 ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
                 : "Время обновляется сервером";
-    public string CurrentSessionTariffSummary => _activeSession?.ActivePackage is null
-        ? "Поминутный режим"
-        : _activeSession.ActivePackage.RemainingMinutes > 0
-            ? $"Тариф · {_activeSession.ActivePackage.RemainingMinutes} мин"
-            : "Тариф завершён";
+    public string CurrentSessionTariffSummary => _activeSession?.ActivePackage is not null
+        ? _activeSession.ActivePackage.RemainingMinutes > 0
+            ? $"Пакет · {_activeSession.ActivePackage.RemainingMinutes} мин"
+            : "Пакет завершён"
+        : _activeSession?.ActiveTariff is not null
+            ? $"{_activeSession.ActiveTariff.Name} · {_activeSession.ActiveTariff.Quantity} × "
+                + $"{_activeSession.ActiveTariff.DurationMinutes} мин"
+            : _activeSession?.Meter is not null
+                ? "Поминутный режим"
+                : "Тариф не выбран";
     public string TransferTargetWorkstationId
     {
         get => _transferTargetWorkstationId;
@@ -663,6 +673,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 workstationId,
                 clientId,
                 guestId: null,
+                deviceId: DeviceId!,
                 cancellationToken: _lifetime.Token);
             if (decision.Allowed)
             {

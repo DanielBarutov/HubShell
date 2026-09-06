@@ -259,6 +259,7 @@ def create_server(
         guests=guest_repository,
         entitlements=entitlement_service,
         meters=meter_repository,
+        tariffs=catalog_service,
     )
     billing_service = BillingService(
         billing_repository,

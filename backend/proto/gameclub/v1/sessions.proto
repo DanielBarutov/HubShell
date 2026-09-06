@@ -91,6 +91,16 @@ message SessionMeterSnapshot {
   google.protobuf.Timestamp updated_at = 7;
 }
 
+message SessionTariffSnapshot {
+  string id = 1;
+  string name = 2;
+  string billing_mode = 3;
+  int32 duration_minutes = 4;
+  int32 quantity = 5;
+  int32 elapsed_minutes = 6;
+  int32 remaining_minutes = 7;
+}
+
 message SessionSnapshot {
   int32 schema_version = 1;
   google.protobuf.Timestamp server_time = 2;
@@ -105,6 +115,7 @@ message SessionSnapshot {
   SessionMeterSnapshot meter = 11;
   repeated string allowed_actions = 12;
   string device_id = 13;
+  SessionTariffSnapshot active_tariff = 14;
 }
 
 message ListSessionsRequest {

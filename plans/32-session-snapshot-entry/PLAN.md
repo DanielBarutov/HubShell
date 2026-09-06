@@ -35,8 +35,10 @@ consumers добавлены; heartbeat теперь передаёт active ses
 ## Реализовано в текущем срезе
 
 Добавлены versioned `SessionSnapshot`/entry DTO, HTTP endpoints и protobuf RPC,
-snapshot с balance, active entitlement, queue, meter, login grant, server time и
-allowed actions. Frontend запрашивает snapshot при открытой карточке ПК, а
+snapshot с balance, active entitlement, guest `active_tariff`, queue, meter,
+login grant, server time и allowed actions. Для block-тарифа backend считает
+elapsed/remaining time по `server_time`; frontend запрашивает snapshot при
+открытой карточке ПК, а
 WinUI обновляет snapshot через gateway/heartbeat callback. Workstation response
 теперь различает `online/stale/offline`, а transport fixture сравнивает HTTP,
 gRPC и heartbeat outputs; добавлены проверки entry refusal в frontend и
@@ -83,8 +85,9 @@ backend unit/API slice.
 
 ## Остаток и release blocker
 
-Остаётся native Windows compile/runtime и проверка device login entry на
-целевой машине. Общая mapping-fixture и stale/offline semantics закрыты на
+Остаётся native Windows compile/runtime и повторная проверка device login entry
+на целевой машине после передачи device identity в `CheckEntry`. Общая
+mapping-fixture и stale/offline semantics закрыты на
 backend source/unit уровне; PostgreSQL permission/concurrency и headed
 frontend/Windows smoke относятся к плану 37.
 

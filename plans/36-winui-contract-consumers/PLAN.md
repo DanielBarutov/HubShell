@@ -19,14 +19,17 @@ Pre-auth gate, right-aligned compact post-auth widget/tray without avatar, porta
 tariff purchase/package queue/explicit activation,
 snapshot gateway, heartbeat callback, transfer UI и durable offline journal есть
 на source-level. Portal login/register и command-driven session start теперь
-передают workstation/client через server `EntryDecision`; native compile/runtime
-пока не доказаны.
+передают workstation/client и device identity через server `EntryDecision`;
+клиент принудительно использует согласованную dark/lime-палитру, чтобы системная
+светлая тема Windows не меняла внешний вид. Native compile/runtime пока не
+доказаны.
 
 ## Реализовано в текущем срезе
 
 Добавлены C# snapshot/entry/transfer/offline DTO, gateway methods и coordinator
 heartbeat/replay wiring. MainViewModel показывает active-package/auto-next
-уведомление с закрытием через 3 секунды, transfer offer/confirm, блокирует
+уведомление с закрытием через 3 секунды, server-backed guest tariff/remaining
+time, transfer offer/confirm, блокирует
 login при offline/reconnecting и очищает portal token при отказе EntryDecision.
 Journal шифрует JSONL и sequence state через DPAPI. Source-level tests/fakes
 обновлены; native Windows build не запускался из-за отсутствующего .NET SDK на

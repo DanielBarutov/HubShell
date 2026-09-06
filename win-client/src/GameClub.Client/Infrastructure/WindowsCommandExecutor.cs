@@ -138,6 +138,7 @@ public sealed class WindowsCommandExecutor : IWorkstationCommandExecutor
                 command.WorkstationId,
                 clientId,
                 ReadOptionalString(payload.RootElement, "guest_id"),
+                deviceId,
                 cancellationToken);
             if (!entry.Allowed)
             {
