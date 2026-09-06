@@ -90,6 +90,7 @@ public sealed class WindowsCommandExecutorTests
             string workstationId,
             string? clientId,
             string? guestId,
+            string deviceId,
             CancellationToken cancellationToken = default) => Task.FromResult(_decision);
 
         public Task<SessionSnapshot> StartSessionAsync(

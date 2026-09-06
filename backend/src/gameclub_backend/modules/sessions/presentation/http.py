@@ -126,6 +126,28 @@ class SnapshotMeterResponse(BaseModel):
         )
 
 
+class SnapshotTariffResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    billing_mode: str
+    duration_minutes: int
+    quantity: int
+    elapsed_minutes: int
+    remaining_minutes: int
+
+    @classmethod
+    def from_domain(cls, item) -> "SnapshotTariffResponse":
+        return cls(
+            id=item.id,
+            name=item.name,
+            billing_mode=item.billing_mode,
+            duration_minutes=item.duration_minutes,
+            quantity=item.quantity,
+            elapsed_minutes=item.elapsed_minutes,
+            remaining_minutes=item.remaining_minutes,
+        )
+
+
 class SessionSnapshotResponse(BaseModel):
     schema_version: int
     server_time: str
@@ -139,6 +161,7 @@ class SessionSnapshotResponse(BaseModel):
     active_entitlement: SnapshotEntitlementResponse | None
     entitlements: list[SnapshotEntitlementResponse]
     meter: SnapshotMeterResponse | None
+    active_tariff: SnapshotTariffResponse | None
     allowed_actions: list[str]
 
     @classmethod
@@ -162,6 +185,11 @@ class SessionSnapshotResponse(BaseModel):
                 SnapshotEntitlementResponse.from_domain(item) for item in snapshot.entitlements
             ],
             meter=SnapshotMeterResponse.from_domain(snapshot.meter) if snapshot.meter else None,
+            active_tariff=(
+                SnapshotTariffResponse.from_domain(snapshot.active_tariff)
+                if snapshot.active_tariff
+                else None
+            ),
             allowed_actions=list(snapshot.allowed_actions),
         )
 

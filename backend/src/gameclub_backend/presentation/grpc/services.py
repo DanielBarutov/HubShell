@@ -1585,7 +1585,7 @@ class ReservationGrpcService(reservations_pb2_grpc.ReservationServiceServicer):
         request: reservations_pb2.CheckEntryRequest,
         context: grpc.aio.ServicerContext,
     ) -> reservations_pb2.CheckEntryResponse:
-        await require_session_actor(context, self._token_service, request.workstation_id)
+        await require_session_actor(context, self._token_service, request.device_id)
         try:
             decision = await self._service.check_entry(
                 workstation_id=parse_uuid(request.workstation_id, "workstation_id"),
@@ -1828,6 +1828,19 @@ def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.Session
                 ),
                 status=meter.status.value,
                 updated_at=to_timestamp(meter.updated_at),
+            )
+        )
+    if snapshot.active_tariff is not None:
+        tariff = snapshot.active_tariff
+        response.active_tariff.CopyFrom(
+            sessions_pb2.SessionTariffSnapshot(
+                id=str(tariff.id),
+                name=tariff.name,
+                billing_mode=tariff.billing_mode,
+                duration_minutes=tariff.duration_minutes,
+                quantity=tariff.quantity,
+                elapsed_minutes=tariff.elapsed_minutes,
+                remaining_minutes=tariff.remaining_minutes,
             )
         )
     return response

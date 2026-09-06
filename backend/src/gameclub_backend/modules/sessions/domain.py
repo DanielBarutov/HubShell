@@ -74,6 +74,27 @@ class Session:
 
 
 @dataclasses.dataclass(frozen=True)
+class SessionTariffSnapshot:
+    """Server-calculated tariff state for the currently running session."""
+
+    id: uuid.UUID
+    name: str
+    billing_mode: str
+    duration_minutes: int
+    quantity: int
+    elapsed_minutes: int
+    remaining_minutes: int
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("Session tariff name is required")
+        if self.duration_minutes <= 0 or self.quantity <= 0:
+            raise ValueError("Session tariff duration and quantity must be positive")
+        if self.elapsed_minutes < 0 or self.remaining_minutes < 0:
+            raise ValueError("Session tariff time cannot be negative")
+
+
+@dataclasses.dataclass(frozen=True)
 class SessionSnapshot:
     """Server-owned, versioned state sent to operator and device consumers."""
 
@@ -89,6 +110,7 @@ class SessionSnapshot:
     active_entitlement: "Entitlement | None"
     entitlements: tuple["Entitlement", ...]
     meter: "SessionMeter | None"
+    active_tariff: SessionTariffSnapshot | None
     allowed_actions: tuple[str, ...]
 
     def __post_init__(self) -> None:

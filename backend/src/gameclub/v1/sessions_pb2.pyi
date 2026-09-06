@@ -141,8 +141,26 @@ class SessionMeterSnapshot(_message.Message):
     updated_at: _timestamp_pb2.Timestamp
     def __init__(self, session_id: _Optional[str] = ..., billed_minutes: _Optional[int] = ..., billed_cents: _Optional[int] = ..., package_minutes: _Optional[int] = ..., active_entitlement_id: _Optional[str] = ..., status: _Optional[str] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
+class SessionTariffSnapshot(_message.Message):
+    __slots__ = ("id", "name", "billing_mode", "duration_minutes", "quantity", "elapsed_minutes", "remaining_minutes")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    ELAPSED_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    billing_mode: str
+    duration_minutes: int
+    quantity: int
+    elapsed_minutes: int
+    remaining_minutes: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., billing_mode: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., quantity: _Optional[int] = ..., elapsed_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ...) -> None: ...
+
 class SessionSnapshot(_message.Message):
-    __slots__ = ("schema_version", "server_time", "session", "workstation_id", "zone_id", "client_id", "balance_cents", "balance_bonus", "active_package", "package_queue", "meter", "allowed_actions", "device_id")
+    __slots__ = ("schema_version", "server_time", "session", "workstation_id", "zone_id", "client_id", "balance_cents", "balance_bonus", "active_package", "package_queue", "meter", "allowed_actions", "device_id", "active_tariff")
     SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     SERVER_TIME_FIELD_NUMBER: _ClassVar[int]
     SESSION_FIELD_NUMBER: _ClassVar[int]
@@ -156,6 +174,7 @@ class SessionSnapshot(_message.Message):
     METER_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_ACTIONS_FIELD_NUMBER: _ClassVar[int]
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_TARIFF_FIELD_NUMBER: _ClassVar[int]
     schema_version: int
     server_time: _timestamp_pb2.Timestamp
     session: Session
@@ -169,7 +188,8 @@ class SessionSnapshot(_message.Message):
     meter: SessionMeterSnapshot
     allowed_actions: _containers.RepeatedScalarFieldContainer[str]
     device_id: str
-    def __init__(self, schema_version: _Optional[int] = ..., server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session: _Optional[_Union[Session, _Mapping]] = ..., workstation_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., client_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., active_package: _Optional[_Union[PackageSnapshot, _Mapping]] = ..., package_queue: _Optional[_Iterable[_Union[PackageSnapshot, _Mapping]]] = ..., meter: _Optional[_Union[SessionMeterSnapshot, _Mapping]] = ..., allowed_actions: _Optional[_Iterable[str]] = ..., device_id: _Optional[str] = ...) -> None: ...
+    active_tariff: SessionTariffSnapshot
+    def __init__(self, schema_version: _Optional[int] = ..., server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session: _Optional[_Union[Session, _Mapping]] = ..., workstation_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., client_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., active_package: _Optional[_Union[PackageSnapshot, _Mapping]] = ..., package_queue: _Optional[_Iterable[_Union[PackageSnapshot, _Mapping]]] = ..., meter: _Optional[_Union[SessionMeterSnapshot, _Mapping]] = ..., allowed_actions: _Optional[_Iterable[str]] = ..., device_id: _Optional[str] = ..., active_tariff: _Optional[_Union[SessionTariffSnapshot, _Mapping]] = ...) -> None: ...
 
 class ListSessionsRequest(_message.Message):
     __slots__ = ("workstation_id", "active_only")

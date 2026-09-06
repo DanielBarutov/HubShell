@@ -338,6 +338,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         guest_payments=guest_payments,
         entitlements=entitlements,
         meters=meter_repository,
+        tariffs=catalog,
     )
     offline = OfflineReplayService(
         offline_repository,

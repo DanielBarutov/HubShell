@@ -22,6 +22,7 @@ public sealed record SessionSnapshot(
     SessionPackageSnapshot? ActivePackage = null,
     IReadOnlyList<SessionPackageSnapshot>? PackageQueue = null,
     SessionMeterSnapshot? Meter = null,
+    SessionTariffSnapshot? ActiveTariff = null,
     string? ServerTime = null,
     string? DeviceId = null);
 
@@ -45,6 +46,15 @@ public sealed record SessionMeterSnapshot(
     string? ActiveEntitlementId,
     string Status,
     string UpdatedAt);
+
+public sealed record SessionTariffSnapshot(
+    string Id,
+    string Name,
+    string BillingMode,
+    int DurationMinutes,
+    int Quantity,
+    int ElapsedMinutes,
+    int RemainingMinutes);
 
 public sealed record SessionTransferOfferSnapshot(
     string Id,

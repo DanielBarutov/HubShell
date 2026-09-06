@@ -61,6 +61,7 @@ message CheckEntryRequest {
   string client_id = 2;
   string guest_id = 3;
   google.protobuf.Timestamp at = 4;
+  string device_id = 5;
 }
 
 message CheckEntryResponse {

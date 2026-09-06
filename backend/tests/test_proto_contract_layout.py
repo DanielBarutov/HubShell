@@ -83,6 +83,7 @@ def test_reservation_contract_contains_availability_and_lifecycle_methods() -> N
         "MarkNoShow",
     }.issubset(methods)
     assert "reason" in reservations_pb2.CheckEntryResponse.DESCRIPTOR.fields_by_name
+    assert "device_id" in reservations_pb2.CheckEntryRequest.DESCRIPTOR.fields_by_name
     assert "status" in reservations_pb2.Reservation.DESCRIPTOR.fields_by_name
 
 
@@ -99,6 +100,8 @@ def test_session_contract_contains_idempotent_lifecycle_methods() -> None:
     assert "tariff_id" in sessions_pb2.StartSessionRequest.DESCRIPTOR.fields_by_name
     assert "schema_version" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
     assert "package_minutes" in sessions_pb2.SessionMeterSnapshot.DESCRIPTOR.fields_by_name
+    assert "active_tariff" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
+    assert "remaining_minutes" in sessions_pb2.SessionTariffSnapshot.DESCRIPTOR.fields_by_name
 
 
 def test_billing_contract_contains_idempotent_session_charge_methods() -> None:
@@ -292,6 +295,20 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "_viewModel.IsExpanded = isCompact" in window_source
     assert "WindowModeActionLabel" in view_model_source
     assert "EnsureEntryAllowedAsync" in view_model_source
+    assert "deviceId: DeviceId" in view_model_source
+    assert "DeviceId = deviceId" in grpc_source
+    assert (
+        "request.device_id"
+        in (
+            PROJECT_ROOT
+            / "backend"
+            / "src"
+            / "gameclub_backend"
+            / "presentation"
+            / "grpc"
+            / "services.py"
+        ).read_text()
+    )
     assert "_clientPortal.Logout()" in view_model_source
     assert "FindUpcomingBooking" in view_model_source
     assert "ClientPortalBookingSelector" in view_model_source
@@ -303,6 +320,10 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "DisplayArea.GetFromWindowId" in window_source
     assert "Avatar" not in xaml_source
     assert "Тема зоны" not in xaml_source
+    assert (
+        'RequestedTheme="Dark"'
+        in (PROJECT_ROOT / "win-client" / "src" / "GameClub.Client" / "App.xaml").read_text()
+    )
     assert '"vip" => "VIP-зона"' in view_model_source
     assert "GAMECLUB_ENVIRONMENT" in window_source
     assert "EndpointPolicy.GetEnvironmentEndpoint" in window_source

@@ -4,6 +4,7 @@ import datetime
 import typing
 import uuid
 
+from gameclub_backend.modules.catalog.domain import Tariff
 from gameclub_backend.modules.clients.domain import Client, Guest
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
 from gameclub_backend.modules.entitlements.domain import Entitlement
@@ -94,6 +95,11 @@ class EntitlementLookup(typing.Protocol):
 class MeterLookup(typing.Protocol):
     async def get(self, session_id: uuid.UUID):
         """Return the current session meter, if one has started."""
+
+
+class TariffLookup(typing.Protocol):
+    async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:
+        """Return the tariff used to build a server-owned session snapshot."""
 
 
 class ReservationLookup(typing.Protocol):
