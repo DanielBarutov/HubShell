@@ -294,10 +294,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cache=workstation_cache,
         cache_ttl_seconds=20,
     )
-    workstation_groups = WorkstationGroupService(workstation_group_repository)
     clients = ClientService(client_repository)
     guests = GuestService(guest_repository)
-    catalog = CatalogService(catalog_repository)
+    catalog = CatalogService(catalog_repository, zones=workstation_group_repository)
+    workstation_groups = WorkstationGroupService(
+        workstation_group_repository,
+        zone_rate_synchronizer=catalog,
+    )
     entitlements = EntitlementService(
         entitlement_repository,
         tariffs=catalog,

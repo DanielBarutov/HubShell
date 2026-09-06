@@ -229,6 +229,11 @@ def test_workstation_contract_contains_group_theme_configuration() -> None:
     assert {"ListGroups", "UpsertGroup"}.issubset(service.methods_by_name)
     assert "theme" in workstations_pb2.Workstation.DESCRIPTOR.fields_by_name
     assert "theme" in workstations_pb2.WorkstationGroup.DESCRIPTOR.fields_by_name
+    assert "per_minute_price_cents" in workstations_pb2.WorkstationGroup.DESCRIPTOR.fields_by_name
+    assert (
+        "per_minute_price_cents"
+        in workstations_pb2.UpsertWorkstationGroupRequest.DESCRIPTOR.fields_by_name
+    )
 
 
 def test_frontend_bff_mentions_current_auth_and_catalog_routes() -> None:

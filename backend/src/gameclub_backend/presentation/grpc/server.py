@@ -233,10 +233,13 @@ def create_server(
         offline_after_seconds=settings.workstation_offline_after_seconds,
         groups=workstation_group_repository,
     )
-    workstation_group_service = WorkstationGroupService(workstation_group_repository)
     client_service = ClientService(client_repository)
     guest_service = GuestService(guest_repository)
-    catalog_service = CatalogService(catalog_repository)
+    catalog_service = CatalogService(catalog_repository, zones=workstation_group_repository)
+    workstation_group_service = WorkstationGroupService(
+        workstation_group_repository,
+        zone_rate_synchronizer=catalog_service,
+    )
     entitlement_service = EntitlementService(
         entitlement_repository,
         tariffs=catalog_service,

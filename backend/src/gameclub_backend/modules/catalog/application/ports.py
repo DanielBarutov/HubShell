@@ -63,6 +63,15 @@ class CatalogRepository(typing.Protocol):
         """Return discount rules applicable at a moment."""
 
 
+class ZoneRate(typing.Protocol):
+    per_minute_price_cents: int
+
+
+class ZoneRateLookup(typing.Protocol):
+    async def get(self, group_id: str) -> ZoneRate | None:
+        """Return the configured rate for a workstation zone."""
+
+
 class ProductInventory(typing.Protocol):
     async def reserve_stock(
         self,

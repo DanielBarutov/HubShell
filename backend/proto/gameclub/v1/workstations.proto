@@ -54,6 +54,7 @@ message WorkstationGroup {
   string theme = 3;
   google.protobuf.Timestamp updated_at = 4;
   WorkstationLockdownPolicy lockdown_policy = 5;
+  int64 per_minute_price_cents = 6;
 }
 
 message WorkstationLockdownPolicy {
@@ -82,6 +83,7 @@ message UpsertWorkstationGroupRequest {
   string name = 2;
   string theme = 3;
   WorkstationLockdownPolicy lockdown_policy = 4;
+  optional int64 per_minute_price_cents = 5;
 }
 
 message RegisterWorkstationRequest {

@@ -49,6 +49,7 @@ export type BackendWorkstationGroup = {
   id: string;
   name: string;
   theme: "standard" | "vip" | "neon" | "minimal";
+  per_minute_price_cents: number;
   updated_at: string | null;
   lockdown_policy?: BackendLockdownPolicy;
 };
@@ -706,7 +707,7 @@ export class GameClubApi {
 
   async saveWorkstationGroup(
     groupId: string,
-    payload: { name: string; theme: BackendWorkstationGroup["theme"] },
+    payload: { name: string; theme: BackendWorkstationGroup["theme"]; per_minute_price_cents: number },
   ): Promise<BackendWorkstationGroup> {
     return this.request<BackendWorkstationGroup>(`/workstation-groups/${encodeURIComponent(groupId)}`, {
       method: "PUT",
@@ -714,7 +715,7 @@ export class GameClubApi {
     });
   }
 
-  async createWorkstationGroup(payload: { name: string; theme: BackendWorkstationGroup["theme"] }): Promise<BackendWorkstationGroup> {
+  async createWorkstationGroup(payload: { name: string; theme: BackendWorkstationGroup["theme"]; per_minute_price_cents: number }): Promise<BackendWorkstationGroup> {
     return this.request<BackendWorkstationGroup>("/workstation-groups", {
       method: "POST",
       body: JSON.stringify(payload),

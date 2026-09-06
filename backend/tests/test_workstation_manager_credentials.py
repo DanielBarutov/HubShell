@@ -4,6 +4,8 @@ import hashlib
 import pytest
 
 from gameclub_backend.application.errors import ApplicationError
+from gameclub_backend.modules.catalog.application.service import CatalogService
+from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.workstations.application.groups import WorkstationGroupService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.modules.workstations.infrastructure.groups_memory import (
@@ -51,6 +53,27 @@ async def test_manager_password_is_stored_as_verifier_and_reaches_device_config(
         to_proto(workstation, include_manager_password_verifier=True).manager_password_verifier
         == updated.manager_password_verifier
     )
+
+
+@pytest.mark.asyncio
+async def test_zone_rate_is_stored_and_synced_as_internal_metered_tariff() -> None:
+    groups = InMemoryWorkstationGroupRepository()
+    catalog = CatalogService(InMemoryCatalogRepository(), zones=groups)
+    group_service = WorkstationGroupService(groups, zone_rate_synchronizer=catalog)
+
+    saved = await group_service.save("vip", "VIP-зона", "vip", per_minute_price_cents=750)
+
+    assert saved.per_minute_price_cents == 750
+    assert saved.updated_at is not None
+    tariff = await catalog.find_per_minute_tariff("vip", saved.updated_at)
+    assert tariff is not None
+    assert tariff.price_per_minute_cents == 750
+    assert tariff.tariff_key == "zone:vip:per_minute"
+
+    disabled = await group_service.save("vip", "VIP-зона", "vip", per_minute_price_cents=0)
+    assert disabled.per_minute_price_cents == 0
+    assert disabled.updated_at is not None
+    assert await catalog.find_per_minute_tariff("vip", disabled.updated_at) is None
 
 
 @pytest.mark.asyncio

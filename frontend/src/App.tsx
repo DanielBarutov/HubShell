@@ -1055,7 +1055,7 @@ function LegacyCatalogView({ api, groups, refreshKey, onNewTariff, onNewProduct,
     let active = true;
     Promise.all([api.listTariffs(), api.listDiscountRules(), api.listProducts(), api.listProductCategories()]).then(([items, rules, productItems, categoryItems]) => {
       if (active) {
-        setTariffs(items);
+        setTariffs(items.filter((item) => item.billing_mode === "block"));
         setDiscountRules(rules);
         setProducts(productItems);
         setCategories(categoryItems);
@@ -1116,7 +1116,7 @@ function CatalogView({ api, groups, refreshKey, onNewTariff, onNewProduct, onEdi
     let active = true;
     void Promise.all([api.listTariffs(), api.listDiscountRules(), api.listProducts(), api.listProductCategories()]).then(([tariffItems, ruleItems, productItems, categoryItems]) => {
       if (active) {
-        setTariffs(tariffItems);
+        setTariffs(tariffItems.filter((item) => item.billing_mode === "block"));
         setDiscountRules(ruleItems);
         setProducts(productItems);
         setCategories(categoryItems);
@@ -1488,6 +1488,7 @@ function SettingsView({ api, pcs, refreshKey, onNewGroup, onEditGroup, onNewPaym
       id: pc.groupId,
       name: pc.group,
       theme: pc.groupId.toLowerCase().includes("vip") ? "vip" : "standard",
+      per_minute_price_cents: 0,
       updated_at: null,
     });
     return items;
@@ -1498,13 +1499,14 @@ function SettingsView({ api, pcs, refreshKey, onNewGroup, onEditGroup, onNewPaym
     return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба</p><h1>Настройки</h1><p className="subheading">Группы ПК, темы Windows-клиента и способы оплаты.</p></div></div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Темы групп</h3><p>В live-режиме здесь сохраняются настройки backend.</p></div></div><div className="settings-row"><div><strong>VIP-зона</strong><span>Тема по умолчанию для демонстрации</span></div><span className="active-chip">VIP-зона</span></div><div className="settings-row"><div><strong>Обычный зал</strong><span>Тема по умолчанию для демонстрации</span></div><span className="active-chip">Обычный зал</span></div></div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Демо-режим показывает базовые способы оплаты.</p></div></div><div className="settings-row"><div><strong>Баланс клиента</strong><span>balance</span></div><span className="active-chip">Включён</span></div><div className="settings-row"><div><strong>Наличные</strong><span>cash</span></div><span className="active-chip">Включён</span></div></div></>;
   }
 
-  return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба · Backend</p><h1>Настройки</h1><p className="subheading">Тема и пароль обслуживания назначаются группе ПК, а способы оплаты управляются отдельно.</p></div><div className="heading-actions"><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Способ оплаты</button><button className="primary-button" onClick={onNewGroup}><Plus size={17} /> Добавить группу</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="white-card product-list-card"><div className="card-heading"><div><h3>Группы игровых мест</h3><p>Изменения сохраняются в backend и применяются без новой версии клиента.</p></div></div>{visibleGroups.length ? visibleGroups.map((group) => <div className="settings-row" key={group.id}><div><strong>{group.name}</strong><span>{group.id} · обновлено {group.updated_at ? new Date(group.updated_at).toLocaleString("ru-RU") : "наследуемая настройка"}</span></div><span className="active-chip">{themeLabels[group.theme]}</span><button className="text-button" onClick={() => onEditGroup?.(group)}>Изменить</button></div>) : <div className="timeline-empty">Группы ещё не настроены</div>}</div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Баланс и наличные проводятся автоматически; перевод фиксируется оператором как подтверждённая ручная операция.</p></div><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Добавить</button></div>{paymentMethods.length ? paymentMethods.map((method) => <div className="settings-row payment-method-row" key={method.id}><div><strong>{method.name}</strong><span>{method.key} · порядок {method.sort_order}</span></div><span className={method.active ? "active-chip" : "inactive-chip"}>{method.active ? "Включён" : "Выключен"}</span><button className="text-button" onClick={() => onEditPaymentMethod?.(method)}>Изменить</button></div>) : <div className="timeline-empty">Способы оплаты ещё не настроены</div>}</div><p className="subheading settings-note">Для ключа transfer не требуется кассовая смена: оператор подтверждает, что перевод получен, а операция попадает в историю и аналитику.</p></>;
+  return <><div className="page-heading"><div><p className="eyebrow">Конфигурация клуба · Backend</p><h1>Настройки</h1><p className="subheading">В зоне задаются тема, ставка поминутной игры и пароль обслуживания; способы оплаты управляются отдельно.</p></div><div className="heading-actions"><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Способ оплаты</button><button className="primary-button" onClick={onNewGroup}><Plus size={17} /> Добавить группу</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="white-card product-list-card"><div className="card-heading"><div><h3>Группы игровых мест</h3><p>Изменения сохраняются в backend и применяются без новой версии клиента.</p></div></div>{visibleGroups.length ? visibleGroups.map((group) => <div className="settings-row" key={group.id}><div><strong>{group.name}</strong><span>{group.id} · поминутка {group.per_minute_price_cents > 0 ? `${(group.per_minute_price_cents / 100).toLocaleString("ru-RU")} ₽/мин` : "выключена"} · обновлено {group.updated_at ? new Date(group.updated_at).toLocaleString("ru-RU") : "наследуемая настройка"}</span></div><span className="active-chip">{themeLabels[group.theme]}</span><button className="text-button" onClick={() => onEditGroup?.(group)}>Изменить</button></div>) : <div className="timeline-empty">Группы ещё не настроены</div>}</div><div className="white-card product-list-card"><div className="card-heading"><div><h3>Способы оплаты</h3><p>Баланс и наличные проводятся автоматически; перевод фиксируется оператором как подтверждённая ручная операция.</p></div><button className="secondary-button" onClick={onNewPaymentMethod}><Plus size={16} /> Добавить</button></div>{paymentMethods.length ? paymentMethods.map((method) => <div className="settings-row payment-method-row" key={method.id}><div><strong>{method.name}</strong><span>{method.key} · порядок {method.sort_order}</span></div><span className={method.active ? "active-chip" : "inactive-chip"}>{method.active ? "Включён" : "Выключен"}</span><button className="text-button" onClick={() => onEditPaymentMethod?.(method)}>Изменить</button></div>) : <div className="timeline-empty">Способы оплаты ещё не настроены</div>}</div><p className="subheading settings-note">Для ключа transfer не требуется кассовая смена: оператор подтверждает, что перевод получен, а операция попадает в историю и аналитику.</p></>;
 }
 
 function GroupSettingsPanel({ api, group, onClose, onSaved }: { api: GameClubApi; group?: BackendWorkstationGroup; onClose: () => void; onSaved: () => void }) {
   const [groupId, setGroupId] = useState(group?.id ?? "");
   const [name, setName] = useState(group?.name ?? "");
   const [theme, setTheme] = useState<BackendWorkstationGroup["theme"]>(group?.theme ?? "standard");
+  const [perMinutePrice, setPerMinutePrice] = useState(group ? String(group.per_minute_price_cents / 100) : "0");
   const [managerPassword, setManagerPassword] = useState("");
   const [deploymentMode, setDeploymentMode] = useState<BackendLockdownPolicy["deployment_mode"]>(group?.lockdown_policy?.deployment_mode ?? "app_gate");
   const [shellEnabled, setShellEnabled] = useState(group?.lockdown_policy?.shell_enabled ?? true);
@@ -1523,6 +1525,7 @@ function GroupSettingsPanel({ api, group, onClose, onSaved }: { api: GameClubApi
     setGroupId(group?.id ?? "");
     setName(group?.name ?? "");
     setTheme(group?.theme ?? "standard");
+    setPerMinutePrice(group ? String(group.per_minute_price_cents / 100) : "0");
     setManagerPassword("");
     setDeploymentMode(group?.lockdown_policy?.deployment_mode ?? "app_gate");
     setShellEnabled(group?.lockdown_policy?.shell_enabled ?? true);
@@ -1543,10 +1546,19 @@ function GroupSettingsPanel({ api, group, onClose, onSaved }: { api: GameClubApi
       setError("Укажите идентификатор и название группы");
       return;
     }
+    const perMinutePriceRubles = Number(perMinutePrice.replace(",", "."));
+    if (!Number.isFinite(perMinutePriceRubles) || perMinutePriceRubles < 0) {
+      setError("Укажите корректную цену поминутки или 0, чтобы отключить её");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await api.saveWorkstationGroup(groupId, { name: name.trim(), theme });
+      await api.saveWorkstationGroup(groupId, {
+        name: name.trim(),
+        theme,
+        per_minute_price_cents: Math.round(perMinutePriceRubles * 100),
+      });
       const policy: BackendLockdownPolicy = {
         deployment_mode: deploymentMode,
         shell_enabled: shellEnabled,
@@ -1573,7 +1585,32 @@ function GroupSettingsPanel({ api, group, onClose, onSaved }: { api: GameClubApi
     }
   };
 
-  return <div className="panel-inner"><PanelHeader title="Настройки зон" subtitle={group ? "Изменение группы" : "Новая группа ПК"} onClose={onClose} /><form className="booking-form" onSubmit={submit}><label>Идентификатор группы<input value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="vip" autoFocus disabled={Boolean(group)} /></label><label>Название группы<input value={name} onChange={(event) => setName(event.target.value)} placeholder="VIP-зона" /></label><label>Тема Windows-клиента<select value={theme} onChange={(event) => setTheme(event.target.value as BackendWorkstationGroup["theme"])}>{Object.entries(themeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>Режим блокировки Windows<select value={deploymentMode} onChange={(event) => setDeploymentMode(event.target.value as BackendLockdownPolicy["deployment_mode"])}><option value="app_gate">Только access-gate приложения</option><option value="assigned_access">Assigned Access</option><option value="shell_launcher">Shell Launcher</option></select></label><div className="settings-toggle-list"><label><input type="checkbox" checked={shellEnabled} onChange={(event) => setShellEnabled(event.target.checked)} /> Запускать GameClub shell</label><label><input type="checkbox" checked={userSelfLoginEnabled} onChange={(event) => setUserSelfLoginEnabled(event.target.checked)} /> Разрешить вход пользователя</label><label><input type="checkbox" checked={lockAfterSession} onChange={(event) => setLockAfterSession(event.target.checked)} /> Блокировать после сессии</label><label><input type="checkbox" checked={restartAfterSession} onChange={(event) => setRestartAfterSession(event.target.checked)} /> Перезапускать ПК после сессии</label><label><input type="checkbox" checked={blockExternalStorage} onChange={(event) => setBlockExternalStorage(event.target.checked)} /> Запретить внешние накопители</label><label><input type="checkbox" checked={disableStartMenu} onChange={(event) => setDisableStartMenu(event.target.checked)} /> Ограничить Start Menu</label><label><input type="checkbox" checked={disableDesktopSwitching} onChange={(event) => setDisableDesktopSwitching(event.target.checked)} /> Запретить смену рабочих столов</label></div><label>Скрытые диски<input value={hiddenDrives} onChange={(event) => setHiddenDrives(event.target.value)} placeholder="C:, D:" /></label><label>Блокируемые окна/классы<textarea value={blockedWindowRules} onChange={(event) => setBlockedWindowRules(event.target.value)} placeholder="CabinetWClass\n*cmd*" rows={3} /></label><label>Пароль менеджера Win-клиента<input type="password" value={managerPassword} onChange={(event) => setManagerPassword(event.target.value)} placeholder={group ? "Оставьте пустым без изменений" : "Минимум 8 символов"} autoComplete="new-password" minLength={8} maxLength={128} /></label><p className="subheading">Профиль применяется клиентом только по allowlist. Assigned Access/Shell Launcher требуют отдельного Windows provisioning. Пароль сохраняется как PBKDF2-verifier и передаётся через аутентифицированный heartbeat. Ctrl+Alt+P открывает обслуживание.</p>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Сохранить группу"}</button><p className="subheading">При следующем heartbeat клиент получит тему, policy и обновлённый пароль. Для немедленного изменения темы можно также отправить theme.apply.</p></form></div>;
+  return <div className="panel-inner">
+    <PanelHeader title="Настройки зон" subtitle={group ? "Изменение группы" : "Новая группа ПК"} onClose={onClose} />
+    <form className="booking-form" onSubmit={submit}>
+      <label>Идентификатор группы<input value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="vip" autoFocus disabled={Boolean(group)} /></label>
+      <label>Название группы<input value={name} onChange={(event) => setName(event.target.value)} placeholder="VIP-зона" /></label>
+      <label>Цена поминутки, ₽<input type="number" min="0" step="0.01" value={perMinutePrice} onChange={(event) => setPerMinutePrice(event.target.value)} placeholder="0" /><span className="field-hint">0 — поминутное списание отключено для этой зоны.</span></label>
+      <label>Тема Windows-клиента<select value={theme} onChange={(event) => setTheme(event.target.value as BackendWorkstationGroup["theme"])}>{Object.entries(themeLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+      <label>Режим блокировки Windows<select value={deploymentMode} onChange={(event) => setDeploymentMode(event.target.value as BackendLockdownPolicy["deployment_mode"])}><option value="app_gate">Только access-gate приложения</option><option value="assigned_access">Assigned Access</option><option value="shell_launcher">Shell Launcher</option></select></label>
+      <div className="settings-toggle-list">
+        <label><input type="checkbox" checked={shellEnabled} onChange={(event) => setShellEnabled(event.target.checked)} /> Запускать GameClub shell</label>
+        <label><input type="checkbox" checked={userSelfLoginEnabled} onChange={(event) => setUserSelfLoginEnabled(event.target.checked)} /> Разрешить вход пользователя</label>
+        <label><input type="checkbox" checked={lockAfterSession} onChange={(event) => setLockAfterSession(event.target.checked)} /> Блокировать после сессии</label>
+        <label><input type="checkbox" checked={restartAfterSession} onChange={(event) => setRestartAfterSession(event.target.checked)} /> Перезапускать ПК после сессии</label>
+        <label><input type="checkbox" checked={blockExternalStorage} onChange={(event) => setBlockExternalStorage(event.target.checked)} /> Запретить внешние накопители</label>
+        <label><input type="checkbox" checked={disableStartMenu} onChange={(event) => setDisableStartMenu(event.target.checked)} /> Ограничить Start Menu</label>
+        <label><input type="checkbox" checked={disableDesktopSwitching} onChange={(event) => setDisableDesktopSwitching(event.target.checked)} /> Запретить смену рабочих столов</label>
+      </div>
+      <label>Скрытые диски<input value={hiddenDrives} onChange={(event) => setHiddenDrives(event.target.value)} placeholder="C:, D:" /></label>
+      <label>Блокируемые окна/классы<textarea value={blockedWindowRules} onChange={(event) => setBlockedWindowRules(event.target.value)} placeholder="CabinetWClass\n*cmd*" rows={3} /></label>
+      <label>Пароль менеджера Win-клиента<input type="password" value={managerPassword} onChange={(event) => setManagerPassword(event.target.value)} placeholder={group ? "Оставьте пустым без изменений" : "Минимум 8 символов"} autoComplete="new-password" minLength={8} maxLength={128} /></label>
+      <p className="subheading">Профиль применяется клиентом только по allowlist. Assigned Access/Shell Launcher требуют отдельного Windows provisioning. Пароль сохраняется как PBKDF2-verifier и передаётся через аутентифицированный heartbeat. Ctrl+Alt+P открывает обслуживание.</p>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Сохранить группу"}</button>
+      <p className="subheading">При следующем heartbeat клиент получит тему, policy и обновлённый пароль. Для немедленного изменения темы можно также отправить theme.apply.</p>
+    </form>
+  </div>;
 }
 
 function PaymentMethodPanel({ api, method, onClose, onSaved }: { api: GameClubApi; method?: BackendPaymentMethod; onClose: () => void; onSaved: () => void }) {
@@ -1640,9 +1677,6 @@ function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubApi; grou
   const [groupId, setGroupId] = useState("main");
   const [duration, setDuration] = useState("60");
   const [price, setPrice] = useState("300");
-  const [billingMode, setBillingMode] = useState<"block" | "per_minute">("block");
-  const [pricePerMinute, setPricePerMinute] = useState("5");
-  const [freeMinutes, setFreeMinutes] = useState("5");
   const [validFrom, setValidFrom] = useState(() => {
     const date = new Date();
     date.setSeconds(0, 0);
@@ -1655,9 +1689,7 @@ function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubApi; grou
     event.preventDefault();
     const durationMinutes = Number(duration);
     const priceRubles = Number(price);
-    const minutePriceRubles = Number(pricePerMinute);
-    const free = Number(freeMinutes);
-    if (!name.trim() || !Number.isInteger(durationMinutes) || durationMinutes <= 0 || !Number.isFinite(priceRubles) || priceRubles < 0 || billingMode === "per_minute" && (!Number.isFinite(minutePriceRubles) || minutePriceRubles <= 0) || !Number.isInteger(free) || free < 0) {
+    if (!name.trim() || !Number.isInteger(durationMinutes) || durationMinutes <= 0 || !Number.isFinite(priceRubles) || priceRubles < 0) {
       setError("Заполните название, длительность и корректную цену");
       return;
     }
@@ -1674,9 +1706,7 @@ function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubApi; grou
         group_id: groupId || null,
         duration_minutes: durationMinutes,
         price_cents: Math.round(priceRubles * 100),
-        billing_mode: billingMode,
-        price_per_minute_cents: Math.round(minutePriceRubles * 100),
-        free_minutes: free,
+        billing_mode: "block",
         valid_from: parsedDate.toISOString(),
         lifecycle: "draft",
       });
@@ -1689,7 +1719,7 @@ function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubApi; grou
   };
 
   const tariffGroups = groups.length ? groups : [{ id: "main", name: "Обычный зал" }, { id: "vip", name: "VIP-зона" }];
-  return <div className="panel-inner"><div className="panel-header"><div><p>Настройки клуба</p><h2>Новый тариф</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Обычный зал · час" autoFocus /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{tariffGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><div className="compact-tabs tariff-mode-tabs"><button type="button" className={billingMode === "block" ? "selected" : ""} onClick={() => setBillingMode("block")}>Пакет времени</button><button type="button" className={billingMode === "per_minute" ? "selected" : ""} onClick={() => setBillingMode("per_minute")}>Поминутно</button></div><label>Длительность шага, минут<input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label>{billingMode === "block" ? <label>Цена пакета, ₽<input type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} /></label> : <div className="form-grid-two"><label>Цена за минуту, ₽<input type="number" min="0.01" step="0.01" value={pricePerMinute} onChange={(event) => setPricePerMinute(event.target.value)} /></label><label>Бесплатно в начале, минут<input type="number" min="0" step="1" value={freeMinutes} onChange={(event) => setFreeMinutes(event.target.value)} /></label></div>}<label>Начало действия<DateTimePicker value={validFrom} onChange={setValidFrom} mode="datetime" label="Начало действия тарифа" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Создать draft-тариф"}</button><p className="subheading">{billingMode === "per_minute" ? "После бесплатного времени backend списывает только поминутную дельту с баланса клиента." : "Количество одинаковых пакетов можно выбрать на карте ПК перед запуском."}</p></form></div>;
+  return <div className="panel-inner"><div className="panel-header"><div><p>Настройки клуба</p><h2>Новый пакет времени</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Пакет 1 час" autoFocus /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{tariffGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><label>Длительность, минут<input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label><label>Цена пакета, ₽<input type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} /></label><label>Начало действия<DateTimePicker value={validFrom} onChange={setValidFrom} mode="datetime" label="Начало действия тарифа" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Создать draft-тариф"}</button><p className="subheading">Поминутная ставка и бесплатные минуты настраиваются в карточке зоны, а здесь создаются только пакеты времени.</p></form></div>;
 }
 
 function LegacyProductPanel({ api, onClose, onSaved }: { api: GameClubApi; onClose: () => void; onSaved: () => void }) {
@@ -1806,7 +1836,6 @@ const demoSaleTariffs: BackendTariff[] = [
   { id: "demo-tariff-3h", name: "Пакет 3 часа", group_id: null, duration_minutes: 180, price_cents: 32000, valid_from: "2026-01-01T00:00:00Z", valid_to: null, active: true, tariff_key: "demo-3h", version: 1, lifecycle: "published", billing_mode: "block", price_per_minute_cents: 0, free_minutes: 0 },
   { id: "demo-tariff-1h", name: "Пакет 1 час", group_id: null, duration_minutes: 60, price_cents: 10000, valid_from: "2026-01-01T00:00:00Z", valid_to: null, active: true, tariff_key: "demo-1h", version: 1, lifecycle: "published", billing_mode: "block", price_per_minute_cents: 0, free_minutes: 0 },
   { id: "demo-tariff-2h", name: "Пакет 2 часа", group_id: null, duration_minutes: 120, price_cents: 22000, valid_from: "2026-01-01T00:00:00Z", valid_to: null, active: true, tariff_key: "demo-2h", version: 1, lifecycle: "published", billing_mode: "block", price_per_minute_cents: 0, free_minutes: 0 },
-  { id: "demo-tariff-minute", name: "Поминутный", group_id: null, duration_minutes: 0, price_cents: 0, valid_from: "2026-01-01T00:00:00Z", valid_to: null, active: true, tariff_key: "demo-minute", version: 1, lifecycle: "published", billing_mode: "per_minute", price_per_minute_cents: 700, free_minutes: 10 },
 ];
 
 const demoSaleProducts: BackendProduct[] = [
@@ -1823,7 +1852,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
   const [products, setProducts] = useState<BackendProduct[]>([]);
   const [categories, setCategories] = useState<BackendProductCategory[]>([]);
   const [activeTab, setActiveTab] = useState<"time" | "products">("time");
-  const [tariffCategory, setTariffCategory] = useState<"all" | "blocks" | "minute">("all");
+  const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
   const [lines, setLines] = useState<SaleLine[]>([]);
   const [buyerMode, setBuyerMode] = useState<"guest" | "client">("guest");
@@ -1857,7 +1886,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
     let active = true;
     void Promise.all([api.listTariffs(), api.listProducts(), api.listProductCategories()]).then(([tariffItems, productItems, categoryItems]) => {
       if (!active) return;
-      setTariffs(tariffItems.filter((item) => item.lifecycle === "published" && item.active));
+      setTariffs(tariffItems.filter((item) => item.lifecycle === "published" && item.active && item.billing_mode === "block"));
       setProducts(productItems.filter((item) => item.active && item.stock_quantity > 0));
       setCategories(categoryItems);
     }).catch((requestError) => {
@@ -1914,7 +1943,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
   const totalMinutes = timeLines.reduce((sum, line) => sum + (line.durationMinutes ?? 0) * line.quantity, 0);
   const mixedTariffs = new Set(timeLines.map((line) => line.sourceId)).size > 1;
   const lineCount = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const visibleTariffs = tariffCategory === "all" ? tariffs : tariffs.filter((tariff) => tariff.billing_mode === (tariffCategory === "minute" ? "per_minute" : "block"));
+  const visibleTariffs = tariffCategory === "all" ? tariffs : tariffs.filter((tariff) => tariff.billing_mode === "block");
   const productCategoryOptions = ["all", ...Array.from(new Set(products.map((product) => product.category)))];
   const visibleProducts = productCategory === "all" ? products : products.filter((product) => product.category === productCategory);
 
@@ -1925,7 +1954,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
       const key = `tariff:${tariff.id}`;
       const existing = current.find((line) => line.key === key);
       if (existing) return current.map((line) => line.key === key ? { ...line, quantity: Math.min(10, line.quantity + 1) } : line);
-      return [...current, { key, kind: "tariff", sourceId: tariff.id, name: tariff.name, detail: tariff.billing_mode === "per_minute" ? `${tariff.free_minutes} мин бесплатно · затем поминутно` : formatDuration(tariff.duration_minutes), priceCents: tariff.billing_mode === "per_minute" ? 0 : tariff.price_cents, quantity: 1, durationMinutes: tariff.duration_minutes }];
+      return [...current, { key, kind: "tariff", sourceId: tariff.id, name: tariff.name, detail: formatDuration(tariff.duration_minutes), priceCents: tariff.price_cents, quantity: 1, durationMinutes: tariff.duration_minutes }];
     });
   };
   const addProduct = (product: BackendProduct) => {
@@ -2113,7 +2142,7 @@ function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShift
           <section className="sale-catalog-card">
             <div className="sale-section-heading"><div><span className="sale-step">02</span><div><h2>Добавьте в продажу</h2><p>Выберите несколько позиций — они появятся справа в заказе</p></div></div><div className="sale-catalog-count"><span>{lineCount}</span> поз. в заказе</div></div>
             <div className="sale-main-tabs" role="tablist" aria-label="Каталог продажи"><button type="button" className={activeTab === "time" ? "selected" : ""} role="tab" aria-selected={activeTab === "time"} onClick={() => setActiveTab("time")}><Clock3 size={16} /> Игровое время <em>{tariffs.length}</em></button><button type="button" className={activeTab === "products" ? "selected" : ""} role="tab" aria-selected={activeTab === "products"} onClick={() => setActiveTab("products")}><ShoppingCart size={16} /> Товары и напитки <em>{products.length}</em></button></div>
-            {activeTab === "time" ? <><div className="sale-category-tabs"><button type="button" className={tariffCategory === "all" ? "selected" : ""} onClick={() => setTariffCategory("all")}>Все тарифы</button><button type="button" className={tariffCategory === "blocks" ? "selected" : ""} onClick={() => setTariffCategory("blocks")}><Tags size={14} /> Пакеты</button><button type="button" className={tariffCategory === "minute" ? "selected" : ""} onClick={() => setTariffCategory("minute")}><Clock3 size={14} /> Поминутно</button></div><div className="sale-item-grid">{visibleTariffs.map((tariff) => <button type="button" className="sale-item-card time-card" key={tariff.id} onClick={() => addTariff(tariff)}><div className="sale-item-top"><span className={`sale-item-icon ${tariff.billing_mode === "per_minute" ? "minute" : "package"}`}>{tariff.billing_mode === "per_minute" ? <Clock3 size={18} /> : <Gamepad2 size={18} />}</span><span className="sale-add-icon"><Plus size={16} /></span></div><strong>{tariff.name}</strong><small>{tariff.billing_mode === "per_minute" ? `${(tariff.price_per_minute_cents / 100).toLocaleString("ru-RU")} ₽/мин · ${tariff.free_minutes} мин бесплатно` : `${formatDuration(tariff.duration_minutes)} игрового времени`}</small><div className="sale-item-price">{tariff.billing_mode === "per_minute" ? <><b>По минутам</b><span>от {(tariff.price_per_minute_cents / 100).toLocaleString("ru-RU")} ₽</span></> : <><b>{money(tariff.price_cents)}</b><span>за пакет</span></>}</div></button>)}{!visibleTariffs.length && <div className="sale-empty-catalog">Опубликованных тарифов нет</div>}</div></> : <><div className="sale-category-tabs">{productCategoryOptions.map((category) => <button type="button" className={productCategory === category ? "selected" : ""} key={category} onClick={() => setProductCategory(category)}>{category === "all" ? "Все товары" : categoryName(category)}</button>)}</div><div className="sale-item-grid">{visibleProducts.map((product) => <button type="button" className="sale-item-card product-card" key={product.id} onClick={() => addProduct(product)}><div className="sale-item-top"><span className="sale-item-icon product"><ShoppingCart size={18} /></span><span className="sale-stock">{product.stock_quantity} шт.</span></div><strong>{product.name}</strong><small>{categoryName(product.category)}</small><div className="sale-item-price"><b>{money(product.price_cents)}</b><span>за штуку</span></div></button>)}{!visibleProducts.length && <div className="sale-empty-catalog">Товаров с остатком нет</div>}</div></>}
+            {activeTab === "time" ? <><div className="sale-category-tabs"><button type="button" className={tariffCategory === "all" ? "selected" : ""} onClick={() => setTariffCategory("all")}>Все пакеты</button><button type="button" className={tariffCategory === "blocks" ? "selected" : ""} onClick={() => setTariffCategory("blocks")}><Tags size={14} /> Пакеты времени</button></div><div className="sale-item-grid">{visibleTariffs.map((tariff) => <button type="button" className="sale-item-card time-card" key={tariff.id} onClick={() => addTariff(tariff)}><div className="sale-item-top"><span className="sale-item-icon package"><Gamepad2 size={18} /></span><span className="sale-add-icon"><Plus size={16} /></span></div><strong>{tariff.name}</strong><small>{formatDuration(tariff.duration_minutes)} игрового времени</small><div className="sale-item-price"><b>{money(tariff.price_cents)}</b><span>за пакет</span></div></button>)}{!visibleTariffs.length && <div className="sale-empty-catalog">Опубликованных пакетов нет</div>}</div></> : <><div className="sale-category-tabs">{productCategoryOptions.map((category) => <button type="button" className={productCategory === category ? "selected" : ""} key={category} onClick={() => setProductCategory(category)}>{category === "all" ? "Все товары" : categoryName(category)}</button>)}</div><div className="sale-item-grid">{visibleProducts.map((product) => <button type="button" className="sale-item-card product-card" key={product.id} onClick={() => addProduct(product)}><div className="sale-item-top"><span className="sale-item-icon product"><ShoppingCart size={18} /></span><span className="sale-stock">{product.stock_quantity} шт.</span></div><strong>{product.name}</strong><small>{categoryName(product.category)}</small><div className="sale-item-price"><b>{money(product.price_cents)}</b><span>за штуку</span></div></button>)}{!visibleProducts.length && <div className="sale-empty-catalog">Товаров с остатком нет</div>}</div></>}
           </section>
         </div>
         <form className="sale-order-panel" onSubmit={(event) => void submit(event)}>

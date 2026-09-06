@@ -18,6 +18,7 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("workstations
 class WorkstationGroupRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     theme: str = Field(default="standard", min_length=1, max_length=32)
+    per_minute_price_cents: int | None = Field(default=None, ge=0)
     lockdown_policy: "LockdownPolicyRequest | None" = None
 
 
@@ -92,6 +93,7 @@ class WorkstationGroupResponse(BaseModel):
     id: str
     name: str
     theme: str
+    per_minute_price_cents: int
     updated_at: str | None
     lockdown_policy: LockdownPolicyResponse
 
@@ -101,6 +103,7 @@ class WorkstationGroupResponse(BaseModel):
             id=group.id,
             name=group.name,
             theme=group.theme,
+            per_minute_price_cents=group.per_minute_price_cents,
             updated_at=group.updated_at.isoformat() if group.updated_at else None,
             lockdown_policy=LockdownPolicyResponse.from_domain(group.lockdown_policy),
         )
@@ -128,7 +131,13 @@ def create_router(service: WorkstationGroupService) -> APIRouter:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(error),
             ) from error
-        group = await service.save(group_id, body.name, body.theme, policy)
+        group = await service.save(
+            group_id,
+            body.name,
+            body.theme,
+            policy,
+            per_minute_price_cents=body.per_minute_price_cents,
+        )
         return WorkstationGroupResponse.from_domain(group)
 
     @router.post("", response_model=WorkstationGroupResponse, status_code=status.HTTP_201_CREATED)
@@ -146,7 +155,13 @@ def create_router(service: WorkstationGroupService) -> APIRouter:
                 detail=str(error),
             ) from error
         return WorkstationGroupResponse.from_domain(
-            await service.save(group_id, body.name, body.theme, policy)
+            await service.save(
+                group_id,
+                body.name,
+                body.theme,
+                policy,
+                per_minute_price_cents=body.per_minute_price_cents,
+            )
         )
 
     @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)

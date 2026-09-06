@@ -78,18 +78,20 @@ class Workstation(_message.Message):
     def __init__(self, id: _Optional[str] = ..., device_id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ..., position: _Optional[int] = ..., status: _Optional[_Union[WorkstationStatus, str]] = ..., last_seen_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., client_version: _Optional[str] = ..., disabled_reason: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., theme: _Optional[str] = ..., manager_password_verifier: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ..., active_session_id: _Optional[str] = ..., active_session_status: _Optional[str] = ..., session_server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session_snapshot: _Optional[_Union[_sessions_pb2.SessionSnapshot, _Mapping]] = ...) -> None: ...
 
 class WorkstationGroup(_message.Message):
-    __slots__ = ("id", "name", "theme", "updated_at", "lockdown_policy")
+    __slots__ = ("id", "name", "theme", "updated_at", "lockdown_policy", "per_minute_price_cents")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     THEME_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     LOCKDOWN_POLICY_FIELD_NUMBER: _ClassVar[int]
+    PER_MINUTE_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     theme: str
     updated_at: _timestamp_pb2.Timestamp
     lockdown_policy: WorkstationLockdownPolicy
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., theme: _Optional[str] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ...) -> None: ...
+    per_minute_price_cents: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., theme: _Optional[str] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ..., per_minute_price_cents: _Optional[int] = ...) -> None: ...
 
 class WorkstationLockdownPolicy(_message.Message):
     __slots__ = ("deployment_mode", "shell_enabled", "user_self_login_enabled", "lock_after_session", "restart_after_session", "hidden_drives", "block_external_storage", "disable_start_menu", "disable_desktop_switching", "blocked_window_rules", "allowed_application_ids", "version")
@@ -130,16 +132,18 @@ class ListWorkstationGroupsResponse(_message.Message):
     def __init__(self, groups: _Optional[_Iterable[_Union[WorkstationGroup, _Mapping]]] = ...) -> None: ...
 
 class UpsertWorkstationGroupRequest(_message.Message):
-    __slots__ = ("id", "name", "theme", "lockdown_policy")
+    __slots__ = ("id", "name", "theme", "lockdown_policy", "per_minute_price_cents")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     THEME_FIELD_NUMBER: _ClassVar[int]
     LOCKDOWN_POLICY_FIELD_NUMBER: _ClassVar[int]
+    PER_MINUTE_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     theme: str
     lockdown_policy: WorkstationLockdownPolicy
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., theme: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ...) -> None: ...
+    per_minute_price_cents: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., theme: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ..., per_minute_price_cents: _Optional[int] = ...) -> None: ...
 
 class RegisterWorkstationRequest(_message.Message):
     __slots__ = ("device_id", "name", "group_id", "position", "client_version", "capabilities")

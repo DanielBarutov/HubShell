@@ -109,6 +109,7 @@ concurrency-коррекции прошёл 146 тестов.
 ## Остаток и release blocker
 
 Нужно подтвердить оставшиеся PostgreSQL-переходы auto-next/stop/activation и
-общий transaction/UoW для debit плюс package consume. Отдельно требуется
-довести fallback на поминутную ставку после исчерпания всех пакетов для session
-без явно выбранного per-minute tariff и добавить dedicated grant audit test.
+общий transaction/UoW для debit плюс package consume. Fallback на опубликованный
+per-minute tariff зоны для session без явно выбранного тарифа реализован в
+`SessionService` и `BillingService`; отдельным остатком остаётся dedicated grant
+audit test.
