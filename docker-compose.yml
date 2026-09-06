@@ -125,7 +125,23 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: ["dramatiq", "gameclub_backend.jobs.reservations", "gameclub_backend.jobs.billing", "gameclub_backend.jobs.cash_shifts", "--processes", "1", "--threads", "4"]
+    command: ["dramatiq", "gameclub_backend.jobs.reservations", "gameclub_backend.jobs.billing", "gameclub_backend.jobs.cash_shifts", "--processes", "1", "--threads", "4", "--queues", "reservations", "billing", "cash-shifts"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  meter-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["dramatiq", "gameclub_backend.jobs.billing", "--processes", "1", "--threads", "2", "--queues", "metering"]
     environment:
       <<: *backend-environment
     depends_on:

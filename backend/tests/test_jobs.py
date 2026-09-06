@@ -6,7 +6,8 @@ import pytest
 
 from gameclub_backend.config import Settings
 from gameclub_backend.infrastructure.broker import create_broker
-from gameclub_backend.jobs.billing import reconcile_billing_charges
+from gameclub_backend.jobs.billing import meter_active_sessions, reconcile_billing_charges
+from gameclub_backend.jobs.cash_shifts import run_cash_shift_schedule
 from gameclub_backend.jobs.reservations import _parse_sweep_time, sweep_reservation_no_shows
 from gameclub_backend.jobs.scheduler import run
 
@@ -27,6 +28,19 @@ def test_sweep_time_requires_timezone() -> None:
 def test_background_actors_do_not_publish_discarded_results() -> None:
     assert sweep_reservation_no_shows.fn.__annotations__["return"] is None
     assert reconcile_billing_charges.fn.__annotations__["return"] is None
+
+
+def test_background_actors_share_one_broker() -> None:
+    assert sweep_reservation_no_shows.broker is reconcile_billing_charges.broker
+    assert reconcile_billing_charges.broker is run_cash_shift_schedule.broker
+    assert set(reconcile_billing_charges.broker.actors) >= {
+        "meter_active_sessions",
+        "reconcile_billing_charges",
+        "reconcile_pending_settlements",
+        "run_cash_shift_schedule",
+        "sweep_reservation_no_shows",
+    }
+    assert meter_active_sessions.queue_name == "metering"
 
 
 def test_scheduler_requires_redis() -> None:

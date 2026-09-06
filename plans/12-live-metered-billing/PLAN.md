@@ -33,6 +33,9 @@
 3. [x] Реализовать идемпотентное списание elapsed minutes и recovery worker.
 4. [x] Подключить выбор тарифа/количества, продажу товара и пополнение клиента к карте ПК.
 5. [x] Добавить unit/API/concurrency tests и Compose smoke.
+6. [x] Зарегистрировать все Dramatiq actors на общем broker и вынести live
+   metering в отдельную очередь/worker, чтобы reconciliation backlog не
+   задерживал списание активных сессий.
 
 Оставшийся production backlog: отдельный cashier flow для автоматического
 списания гостевой поминутной сессии. Manager credential уже настраивается для

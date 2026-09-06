@@ -340,6 +340,9 @@ security boundary. Детали — в
    read-only analytics по завершённым sessions, charges и sales.
 9. Live metered billing: per-minute delta, grace minutes, insufficient-balance
    stop и sequential block quantity.
+   - Исправлен общий Dramatiq broker для job actors; live metering вынесен в
+     отдельную очередь и worker, чтобы billing retry backlog не блокировал
+     списание активных сессий.
 10. Последний прикладной срез по запросам пользователя:
     - исправлены fixed-size map cards, отдельный scroll-frame и короткий polling карты;
     - добавлен Redis snapshot cache с TTL 20 s;

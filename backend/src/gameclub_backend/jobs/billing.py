@@ -7,8 +7,8 @@ import dramatiq
 from gameclub_backend.application.errors import ApplicationError
 from gameclub_backend.config import get_settings
 from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
-from gameclub_backend.infrastructure.broker import configure_broker
 from gameclub_backend.infrastructure.resources import create_resources
+from gameclub_backend.jobs.broker import broker as shared_broker
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.infrastructure.postgres import (
     PostgresChargeReconciliationRepository,
@@ -49,7 +49,7 @@ from gameclub_backend.modules.workstations.infrastructure.postgres import (
 )
 
 logger = logging.getLogger(__name__)
-broker = configure_broker(get_settings())
+dramatiq.set_broker(shared_broker)
 
 
 def _parse_sweep_time(value: str | None) -> datetime.datetime:
@@ -134,7 +134,7 @@ async def reconcile_billing_charges(
         await resources.close()
 
 
-@dramatiq.actor(queue_name="billing", max_retries=3)
+@dramatiq.actor(queue_name="metering", max_retries=3)
 async def meter_active_sessions() -> None:
     """Charge minute deltas and stop devices whose spendable balance is exhausted."""
     settings = get_settings()
