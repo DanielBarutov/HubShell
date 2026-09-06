@@ -59,6 +59,11 @@ async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture() 
     assert http_snapshot["workstation_id"] == grpc_snapshot.workstation_id == str(workstation.id)
     assert http_snapshot["device_id"] == grpc_snapshot.device_id == workstation.device_id
     assert http_snapshot["allowed_actions"] == list(grpc_snapshot.allowed_actions) == ["stop"]
+    assert (
+        http_snapshot["login_grant_remaining_minutes"]
+        == grpc_snapshot.login_grant_remaining_minutes
+        == 0
+    )
     assert device_heartbeat.active_session_id == str(session.id)
     assert device_heartbeat.active_session_status == session.status.value
     assert device_heartbeat.session_snapshot.schema_version == grpc_snapshot.schema_version

@@ -336,10 +336,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void LockClient(object sender, RoutedEventArgs args)
+    private async void LockClient(object sender, RoutedEventArgs args)
     {
         ManagerPasswordBox.Password = string.Empty;
-        _viewModel.LockClient();
+        await _viewModel.LogoutAsync();
     }
 
     private void HideToTray(object sender, RoutedEventArgs args)

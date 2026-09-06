@@ -43,6 +43,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _incomingTransferToken = string.Empty;
     private string _sessionNotification = string.Empty;
     private bool _isTransferExpanded;
+    private string? _portalSessionIdempotencyKey;
     private CancellationTokenSource? _sessionNotificationLifetime;
 
     public MainViewModel(
@@ -323,6 +324,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ? $"Осталось {FormatDuration(_activeSession.ActiveTariff.RemainingMinutes)}"
             : _activeSession.ActiveTariff is not null
                 ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
+            : _activeSession.LoginGrantRemainingMinutes > 0
+                ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
             : _activeSession.Meter is not null
                 ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
                 : "Время обновляется сервером";
@@ -335,6 +338,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 + $"{_activeSession.ActiveTariff.DurationMinutes} мин"
             : _activeSession?.Meter is not null
                 ? "Поминутный режим"
+            : _activeSession?.LoginGrantRemainingMinutes > 0
+                ? "Бесплатное время входа"
                 : "Тариф не выбран";
     public string TransferTargetWorkstationId
     {
@@ -515,7 +520,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task RunHeartbeatLoopAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         while (await timer.WaitForNextTickAsync(_lifetime.Token))
         {
             await RefreshConnectionAsync(_lifetime.Token);
@@ -587,6 +592,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             {
                 return false;
             }
+            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _portalMessage = string.Empty;
@@ -635,6 +641,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             {
                 return false;
             }
+            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _isPortalRegistrationRequested = false;
@@ -742,6 +749,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 DeviceId,
                 entitlement.Id,
                 _lifetime.Token));
+            await RefreshActiveSessionSnapshotQuietlyAsync();
             _portalMessage = string.Empty;
             OnPropertyChanged(nameof(AccessMessage));
         }
@@ -771,6 +779,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 tariffId,
                 $"win-portal-tariff-{Guid.NewGuid():N}",
                 cancellationToken));
+            await RefreshActiveSessionSnapshotQuietlyAsync();
             _portalMessage = "Тариф куплен и добавлен в очередь времени";
             OnPropertyChanged(nameof(AccessMessage));
         }
@@ -825,12 +834,42 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         _clientPortal.Logout();
         _portalSnapshot = null;
+        _portalSessionIdempotencyKey = null;
         _accessGate.Lock(message);
         _isManagerLoginRequested = false;
         UserAccessCode = string.Empty;
         ManagerPassword = string.Empty;
         PublishAccessState();
         PublishPortalState();
+    }
+
+    public async Task<bool> LogoutAsync(CancellationToken cancellationToken = default)
+    {
+        var activeSession = _activeSession;
+        if (activeSession is not null && !string.IsNullOrWhiteSpace(DeviceId))
+        {
+            try
+            {
+                var stopped = await _session.BackendClient.StopSessionAsync(
+                    activeSession.Id,
+                    DeviceId,
+                    cancellationToken);
+                RegisterSessionStopped(stopped);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+            catch (Exception)
+            {
+                _portalMessage = "Не удалось завершить сессию. Проверьте связь и повторите выход.";
+                OnPropertyChanged(nameof(AccessMessage));
+                return false;
+            }
+        }
+
+        LockClient("Экран заблокирован");
+        return true;
     }
 
     public void TouchAccessActivity() => _accessGate.Touch();
@@ -846,6 +885,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         if (_activeSession?.Id == session.Id)
         {
             _activeSession = null;
+            _portalSessionIdempotencyKey = null;
             PublishSessionState();
             ApplySessionStopPolicy();
         }
@@ -864,6 +904,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             DeviceId,
             cancellationToken);
         _activeSession = null;
+        _portalSessionIdempotencyKey = null;
         PublishSessionState();
         ApplySessionStopPolicy();
         return true;
@@ -1030,6 +1071,45 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             ApplyActiveSessionSnapshot(replay.Snapshot);
         }
+    }
+
+    private async Task RefreshActiveSessionSnapshotQuietlyAsync()
+    {
+        try
+        {
+            await RefreshActiveSessionSnapshotAsync();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            // The purchase/activation result is already server-confirmed. The
+            // next heartbeat will refresh the session snapshot independently.
+        }
+    }
+
+    private async Task StartPortalSessionAsync(string clientId)
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId) || string.IsNullOrWhiteSpace(WorkstationId))
+        {
+            throw new InvalidOperationException("ПК ещё не привязан к рабочему месту");
+        }
+
+        var idempotencyKey = _portalSessionIdempotencyKey ??= $"win-portal-session-{Guid.NewGuid():N}";
+        var started = await _session.BackendClient.StartSessionAsync(
+            WorkstationId!,
+            DeviceId!,
+            clientId,
+            guestName: null,
+            reservationId: null,
+            idempotencyKey: idempotencyKey,
+            cancellationToken: _lifetime.Token);
+        var snapshot = await _session.BackendClient.GetSessionSnapshotAsync(
+            started.Id,
+            DeviceId,
+            _lifetime.Token);
+        ApplyActiveSessionSnapshot(snapshot);
     }
 
     public void DismissSessionNotification()

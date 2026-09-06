@@ -116,6 +116,7 @@ message SessionSnapshot {
   repeated string allowed_actions = 12;
   string device_id = 13;
   SessionTariffSnapshot active_tariff = 14;
+  int32 login_grant_remaining_minutes = 15;
 }
 
 message ListSessionsRequest {

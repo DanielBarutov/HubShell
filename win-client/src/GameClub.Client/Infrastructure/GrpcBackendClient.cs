@@ -333,6 +333,7 @@ public sealed class GrpcBackendClient : IBackendClient
                     response.ActiveTariff.RemainingMinutes),
             ServerTime = ToIsoTimestamp(response.ServerTime),
             DeviceId = string.IsNullOrWhiteSpace(response.DeviceId) ? null : response.DeviceId,
+            LoginGrantRemainingMinutes = response.LoginGrantRemainingMinutes,
         };
     }
 

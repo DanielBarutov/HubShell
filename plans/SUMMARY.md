@@ -1,6 +1,6 @@
 # GameClub / HubShell — сводка проекта
 
-Дата среза: `2026-09-05`<br>
+Дата среза: `2026-09-06`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
 Этот файл фиксирует фактическое состояние кода, планов и проверок на дату среза.
@@ -241,7 +241,7 @@ Generated Python находится в `backend/src/gameclub/v1/`, а C# project
 - карта с фиксированной карточкой места `112x84px`, восемью колонками,
   внутренним scroll-frame и отдельной легендой/панелью; grid не зависит от
   ширины окна так, как прежняя fluid-сетка;
-- polling карты и операционных данных каждые 20 секунд; backend snapshot cache
+- polling карты и операционных данных с целевой задержкой до 5 секунд; backend snapshot cache
   в Redis — ключ `gameclub:workstations:snapshot:v1`, bounded TTL 20 секунд;
 - карта/панель ПК, старт/стоп/interrupt session, выбор клиента или анонимного
   гостя, тариф и товарный checkout;
@@ -341,7 +341,7 @@ security boundary. Детали — в
 9. Live metered billing: per-minute delta, grace minutes, insufficient-balance
    stop и sequential block quantity.
 10. Последний прикладной срез по запросам пользователя:
-    - исправлены fixed-size map cards, отдельный scroll-frame и polling 20 s;
+    - исправлены fixed-size map cards, отдельный scroll-frame и короткий polling карты;
     - добавлен Redis snapshot cache с TTL 20 s;
     - checkout защищён от повторного session/product submit;
     - stale permissions при BFF `403` обновляются через refresh;
@@ -364,6 +364,9 @@ security boundary. Детали — в
       rebind-операции.
     - добавлен in-process gRPC smoke для portal registration/snapshot с проверкой
       client/device scope.
+    - portal login/register теперь создаёт server-backed active session на текущем
+      ПК; WinUI и карта администратора получают snapshot через короткие циклы
+      gRPC/HTTP polling, WebSocket для MVP не вводился.
 
 Детальные задачи и решения: [`plans/README.md`](README.md) и таблица
 проверок ниже. В README есть небольшое расхождение: Product Sales уже имеет

@@ -432,8 +432,20 @@ export type BackendSessionSnapshot = {
   active_entitlement: BackendSnapshotEntitlement | null;
   entitlements: BackendSnapshotEntitlement[];
   meter: BackendSessionMeter | null;
+  active_tariff: BackendSessionTariff | null;
+  login_grant_remaining_minutes: number;
   allowed_actions: string[];
   device_id?: string;
+};
+
+export type BackendSessionTariff = {
+  id: string;
+  name: string;
+  billing_mode: string;
+  duration_minutes: number;
+  quantity: number;
+  elapsed_minutes: number;
+  remaining_minutes: number;
 };
 
 export type BackendSnapshotEntitlement = {

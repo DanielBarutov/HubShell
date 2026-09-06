@@ -94,4 +94,4 @@ polling остаётся временной реализацией.
 
 - точная компоновка queue в карте без создания новых сущностей;
 - copy для `needs_review` и права supervisor action;
-- polling interval до решения о realtime.
+- polling interval до отдельного решения о realtime; MVP target — не более 10 секунд.

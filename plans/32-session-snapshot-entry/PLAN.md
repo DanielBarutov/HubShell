@@ -57,7 +57,8 @@ backend unit/API slice.
 
 - реализация transfer/offline journal;
 - расчёт тарифов в клиенте;
-- realtime transport вместо polling без отдельного решения;
+- realtime transport вместо polling без отдельного решения; текущая короткая
+  polling-синхронизация остаётся допустимой реализацией MVP;
 - VNC/remote control.
 
 ## Порядок задач

@@ -17,7 +17,7 @@ transfer и durable offline protocol. Клиент остаётся thin consume
 
 Pre-auth gate, right-aligned compact post-auth widget/tray without avatar, portal
 tariff purchase/package queue/explicit activation,
-snapshot gateway, heartbeat callback, transfer UI и durable offline journal есть
+server-backed portal-login session start, snapshot gateway, heartbeat callback, transfer UI и durable offline journal есть
 на source-level. Portal login/register и command-driven session start теперь
 передают workstation/client и device identity через server `EntryDecision`;
 клиент принудительно использует согласованную dark/lime-палитру, чтобы системная
@@ -38,6 +38,8 @@ host.
 ## Входит в план
 
 - login response/heartbeat с `SessionSnapshot` и `EntryDecision`;
+- server-backed session start после portal login/register с idempotency key;
+- короткий portal refresh cycle для внешнего пополнения и покупки;
 - активный пакет, queue и auto-next notifications;
 - explicit activation saved package при новом входе;
 - session stop/logout/restart по server result;

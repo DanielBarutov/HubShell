@@ -101,6 +101,7 @@ def test_session_contract_contains_idempotent_lifecycle_methods() -> None:
     assert "schema_version" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
     assert "package_minutes" in sessions_pb2.SessionMeterSnapshot.DESCRIPTOR.fields_by_name
     assert "active_tariff" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
+    assert "login_grant_remaining_minutes" in sessions_pb2.SessionSnapshot.DESCRIPTOR.fields_by_name
     assert "remaining_minutes" in sessions_pb2.SessionTariffSnapshot.DESCRIPTOR.fields_by_name
 
 
@@ -295,6 +296,9 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "_viewModel.IsExpanded = isCompact" in window_source
     assert "WindowModeActionLabel" in view_model_source
     assert "EnsureEntryAllowedAsync" in view_model_source
+    assert "StartPortalSessionAsync" in view_model_source
+    assert "LogoutAsync" in view_model_source
+    assert "LoginGrantRemainingMinutes" in view_model_source
     assert "deviceId: DeviceId" in view_model_source
     assert "DeviceId = deviceId" in grpc_source
     assert (

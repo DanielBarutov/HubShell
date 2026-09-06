@@ -157,7 +157,7 @@ public sealed class ClientSessionCoordinator
         Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
         while (!cancellationToken.IsCancellationRequested)
         {
             try

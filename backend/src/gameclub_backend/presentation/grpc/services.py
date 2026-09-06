@@ -1807,6 +1807,7 @@ def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.Session
         client_id=str(snapshot.client_id) if snapshot.client_id else "",
         balance_cents=snapshot.balance_cents or 0,
         balance_bonus=snapshot.balance_bonus or 0,
+        login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
         package_queue=[to_package_snapshot_proto(item) for item in snapshot.entitlements],
         allowed_actions=list(snapshot.allowed_actions),
     )

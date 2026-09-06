@@ -162,6 +162,7 @@ class SessionSnapshotResponse(BaseModel):
     entitlements: list[SnapshotEntitlementResponse]
     meter: SnapshotMeterResponse | None
     active_tariff: SnapshotTariffResponse | None
+    login_grant_remaining_minutes: int
     allowed_actions: list[str]
 
     @classmethod
@@ -190,6 +191,7 @@ class SessionSnapshotResponse(BaseModel):
                 if snapshot.active_tariff
                 else None
             ),
+            login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
             allowed_actions=list(snapshot.allowed_actions),
         )
 
