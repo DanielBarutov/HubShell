@@ -23,7 +23,7 @@ public sealed partial class MainWindow : Window
     private NativeTrayIcon? _trayIcon;
     private bool _closing;
     private bool _startupStarted;
-    private bool _contentLoaded;
+    private bool _visualTreeLoaded;
 
     public MainWindow()
     {
@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window
     {
         _ = sender;
         _ = args;
-        _contentLoaded = true;
+        _visualTreeLoaded = true;
         StartupDiagnostics.Info("MainWindow content loaded");
 
         // Changing the AppWindow presenter from Activated can race the first
@@ -203,7 +203,7 @@ public sealed partial class MainWindow : Window
 
     private void ApplyInitialWindowMode()
     {
-        if (!_contentLoaded || _closing)
+        if (!_visualTreeLoaded || _closing)
         {
             return;
         }
