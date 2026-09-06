@@ -192,7 +192,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="Доступное время" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
+                                <TextBlock Text="Время по балансу" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
                                 <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="20" FontWeight="SemiBold" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Spacing="2">

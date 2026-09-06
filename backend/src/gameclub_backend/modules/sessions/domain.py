@@ -111,6 +111,7 @@ class SessionSnapshot:
     entitlements: tuple["Entitlement", ...]
     meter: "SessionMeter | None"
     active_tariff: SessionTariffSnapshot | None
+    login_grant_remaining_minutes: int
     allowed_actions: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -118,6 +119,8 @@ class SessionSnapshot:
             raise ValueError("Session snapshot schema version is invalid")
         if self.server_time.tzinfo is None:
             raise ValueError("Session snapshot server time must include timezone")
+        if self.login_grant_remaining_minutes < 0:
+            raise ValueError("Session login grant remaining minutes cannot be negative")
 
 
 @dataclasses.dataclass(frozen=True)

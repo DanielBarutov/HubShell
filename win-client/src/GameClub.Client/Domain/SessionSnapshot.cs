@@ -24,7 +24,8 @@ public sealed record SessionSnapshot(
     SessionMeterSnapshot? Meter = null,
     SessionTariffSnapshot? ActiveTariff = null,
     string? ServerTime = null,
-    string? DeviceId = null);
+    string? DeviceId = null,
+    int LoginGrantRemainingMinutes = 0);
 
 public sealed record SessionPackageSnapshot(
     string Id,

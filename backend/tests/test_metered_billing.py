@@ -216,7 +216,10 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
     )
 
     assert session.login_grant_minutes == 5
-    clock.current += datetime.timedelta(minutes=10)
+    assert (await sessions.snapshot(session.id)).login_grant_remaining_minutes == 5
+    clock.current += datetime.timedelta(minutes=2)
+    assert (await sessions.snapshot(session.id)).login_grant_remaining_minutes == 3
+    clock.current += datetime.timedelta(minutes=8)
     meter = await billing.meter_session(session.id)
 
     assert meter is not None

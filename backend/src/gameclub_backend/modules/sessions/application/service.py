@@ -352,6 +352,10 @@ class SessionService:
                     elapsed_minutes=elapsed_minutes,
                     remaining_minutes=remaining_minutes,
                 )
+        elapsed_minutes = self._elapsed_minutes(
+            session.started_at,
+            session.ended_at or server_time,
+        )
         return SessionSnapshot(
             schema_version=1,
             server_time=server_time,
@@ -366,6 +370,10 @@ class SessionService:
             entitlements=entitlements,
             meter=meter,
             active_tariff=active_tariff,
+            login_grant_remaining_minutes=max(
+                0,
+                session.login_grant_minutes - elapsed_minutes,
+            ),
             allowed_actions=("stop",) if session.status is SessionStatus.ACTIVE else (),
         )
 

@@ -186,7 +186,12 @@ function App() {
       return undefined;
     }
     let active = true;
+    let refreshInFlight = false;
     const refresh = async () => {
+      if (refreshInFlight) {
+        return;
+      }
+      refreshInFlight = true;
       try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -230,10 +235,12 @@ function App() {
         if (active) {
           setLiveError(error instanceof ApiError ? error.message : "Не удалось обновить данные");
         }
+      } finally {
+        refreshInFlight = false;
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 20_000);
+    const timer = window.setInterval(() => void refresh(), 5_000);
     return () => {
       active = false;
       window.clearInterval(timer);
