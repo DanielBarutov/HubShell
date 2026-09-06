@@ -113,6 +113,7 @@ class BillingService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         moment = now or self._clock.now()
         tariff_id = session.tariff_id
+        quote_moment = session.started_at
         active_entitlement = None
         if tariff_id is None and self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
@@ -120,6 +121,19 @@ class BillingService:
                 tariff_id = active_entitlement.tariff_id
         elif self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
+        selected_tariff = (
+            await self._catalog.get_tariff(tariff_id) if tariff_id is not None else None
+        )
+        if (
+            selected_tariff is not None
+            and selected_tariff.billing_mode is BillingMode.PER_MINUTE
+            and not selected_tariff.applies_at(session.started_at, workstation.group_id)
+        ):
+            # A session can outlive a replaced zone snapshot. Use the current
+            # zone snapshot for legacy sessions instead of retrying forever with
+            # an archived tariff that can no longer be quoted.
+            tariff_id = None
+
         if tariff_id is None:
             fallback_tariff = await self._catalog.find_per_minute_tariff(
                 workstation.group_id,
@@ -127,6 +141,7 @@ class BillingService:
             )
             if fallback_tariff is not None:
                 tariff_id = fallback_tariff.id
+                quote_moment = moment
         if tariff_id is None:
             return None
         tariff = await self._catalog.get_tariff(tariff_id)
@@ -225,7 +240,7 @@ class BillingService:
         quote = await self._catalog.quote_for_tariff(
             tariff_id=tariff.id,
             group_id=workstation.group_id,
-            moment=session.started_at,
+            moment=quote_moment,
             discount_category=client.discount_category,
             duration_minutes=max(
                 1,
