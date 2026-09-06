@@ -4,13 +4,13 @@ import logging
 import dramatiq
 
 from gameclub_backend.config import get_settings
-from gameclub_backend.infrastructure.broker import configure_broker
 from gameclub_backend.infrastructure.resources import create_resources
+from gameclub_backend.jobs.broker import broker as shared_broker
 from gameclub_backend.modules.cash_shifts.application.service import CashShiftService
 from gameclub_backend.modules.cash_shifts.infrastructure.postgres import PostgresCashShiftRepository
 
 logger = logging.getLogger(__name__)
-broker = configure_broker(get_settings())
+dramatiq.set_broker(shared_broker)
 
 
 def _parse_now(value: str | None) -> datetime.datetime:

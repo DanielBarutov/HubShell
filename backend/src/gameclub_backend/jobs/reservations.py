@@ -4,8 +4,8 @@ import logging
 import dramatiq
 
 from gameclub_backend.config import get_settings
-from gameclub_backend.infrastructure.broker import configure_broker
 from gameclub_backend.infrastructure.resources import create_resources
+from gameclub_backend.jobs.broker import broker as shared_broker
 from gameclub_backend.modules.clients.infrastructure.postgres import PostgresClientRepository
 from gameclub_backend.modules.reservations.application.service import ReservationService
 from gameclub_backend.modules.reservations.infrastructure.postgres import (
@@ -16,8 +16,7 @@ from gameclub_backend.modules.workstations.infrastructure.postgres import (
 )
 
 logger = logging.getLogger(__name__)
-
-broker = configure_broker(get_settings())
+dramatiq.set_broker(shared_broker)
 
 
 def _parse_sweep_time(value: str | None) -> datetime.datetime:
