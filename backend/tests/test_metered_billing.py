@@ -259,6 +259,43 @@ async def test_device_login_selects_zone_per_minute_tariff_without_package() -> 
 
 
 @pytest.mark.asyncio
+async def test_metering_replaces_archived_legacy_minute_tariff_with_current_zone_snapshot() -> None:
+    clock = FixedClock()
+    workstation, client, old_tariff, sessions, billing, meters, clients = (
+        await build_metered_services(clock, tariff_free_minutes=0)
+    )
+    catalog = billing._catalog
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        tariff_id=old_tariff.id,
+        idempotency_key="meter-legacy-archived-tariff",
+    )
+    await catalog._repository.save_tariff(old_tariff.archive())
+    clock.current += datetime.timedelta(minutes=6)
+    replacement = await catalog.create_tariff(
+        "VIP current minute",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=25,
+        free_minutes=0,
+    )
+    meter = await billing.meter_session(session.id)
+
+    assert meter is not None
+    assert meter.tariff_id == replacement.id
+    assert meter.billed_minutes == 6
+    assert meter.billed_cents == 150
+    assert (await clients.get(client.id)).balance_cents == 850
+    assert (await meters.get(session.id)).tariff_id == replacement.id
+
+
+@pytest.mark.asyncio
 async def test_repeated_device_login_returns_the_same_grant() -> None:
     clock = FixedClock()
     (
