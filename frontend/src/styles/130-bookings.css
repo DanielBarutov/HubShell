@@ -1,0 +1,3 @@
+/* The reservation schedule covers the whole club day and scrolls on narrow screens. */
+.timeline { overflow-x: auto; overflow-y: hidden; }
+.timeline-hours, .timeline-row { grid-template-columns: 105px repeat(24, minmax(74px, 1fr)); min-width: 1881px; }

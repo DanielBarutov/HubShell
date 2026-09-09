@@ -106,8 +106,7 @@ class ProductSaleService:
                 if len(normalized_parts) == 1 and normalized_parts[0].method != method.value:
                     raise ValueError("Payment method does not match the payment part")
                 if any(
-                    part.method not in {"balance", "cash", "transfer"}
-                    for part in normalized_parts
+                    part.method not in {"balance", "cash", "transfer"} for part in normalized_parts
                 ):
                     raise ValueError("Unsupported payment method")
                 if client_id is None and any(part.method == "balance" for part in normalized_parts):

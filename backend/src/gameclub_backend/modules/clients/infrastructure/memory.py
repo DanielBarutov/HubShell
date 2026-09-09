@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import datetime
 import uuid
 
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
@@ -48,6 +49,20 @@ class InMemoryClientRepository:
     async def save(self, client: Client) -> Client:
         self._items[client.id] = client
         return client
+
+    async def consume_password_reset_login(
+        self,
+        client_id: uuid.UUID,
+        now: datetime.datetime,
+    ) -> Client:
+        current = self._items.get(client_id)
+        if current is None:
+            raise ValueError("Client not found")
+        if not current.password_reset_required or current.password_reset_login_used:
+            raise ValueError("Passwordless reset login already used")
+        updated = dataclasses.replace(current, password_reset_login_used=True, updated_at=now)
+        self._items[client_id] = updated
+        return updated
 
     async def delete(self, client_id: uuid.UUID) -> None:
         self._items.pop(client_id, None)

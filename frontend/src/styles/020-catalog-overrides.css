@@ -1,0 +1,72 @@
+/* Compact catalog and balance management surfaces. */
+.catalog-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.catalog-summary > div { display: flex; min-height: 76px; flex-direction: column; justify-content: center; gap: 3px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-card); }
+.catalog-summary span, .catalog-summary small { color: var(--ink-muted); font-size: 9px; }
+.catalog-summary strong { color: var(--ink-strong); font-size: 21px; letter-spacing: -.04em; }
+.catalog-toolbar { display: flex; align-items: center; gap: 12px; min-height: 42px; margin-bottom: 24px; }
+.compact-tabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid #e4eaf2; border-radius: 9px; background: #edf2f7; }
+.compact-tabs button { min-height: 28px; padding: 0 11px; color: #7d899a; border-radius: 6px; background: transparent; font-size: 10px; }
+.compact-tabs button.selected { color: var(--ink-strong); background: #fff; box-shadow: 0 2px 7px rgba(25, 39, 63, .08); }
+.catalog-category-filter { min-height: 34px; padding: 0 10px; color: var(--ink); border: 1px solid #e0e7ef; border-radius: 8px; background: #fff; font: inherit; font-size: 10px; }
+.catalog-breadcrumb { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; color: var(--ink-muted); font-size: 10px; }
+.catalog-section { margin-top: 22px; }
+.catalog-section .section-row { align-items: flex-end; }
+.tariff-mini-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tariff-mini-card { min-height: 145px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-card); }
+.tariff-mini-card.muted { opacity: .62; }
+.tariff-mini-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tariff-type { display: inline-flex; align-items: center; gap: 5px; color: #7f8ba1; font-size: 9px; }
+.tariff-mini-card h3 { margin: 15px 0 5px; color: var(--ink-strong); font-size: 13px; }
+.tariff-mini-card p { min-height: 28px; margin: 0; color: var(--ink-muted); font-size: 9px; line-height: 1.4; }
+.tariff-mini-card > strong { display: block; margin-top: 10px; color: var(--ink-strong); font-size: 18px; }
+.tariff-mini-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.empty-state-card, .catalog-empty-state { display: grid; min-height: 100px; place-items: center; padding: 20px; color: var(--ink-muted); border: 1px dashed var(--line); border-radius: 13px; background: var(--surface-soft); font-size: 11px; }
+.product-table { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-card); }
+.product-table-head, .product-table-row { display: grid; grid-template-columns: minmax(210px, 1.5fr) 100px 110px 110px 90px 38px; align-items: center; gap: 14px; padding: 0 16px; }
+.product-table-head { min-height: 38px; color: var(--ink-muted); border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 9px; }
+.product-table-row { min-height: 62px; color: var(--ink); border-bottom: 1px solid var(--line); font-size: 10px; }
+.product-table-row:last-child { border-bottom: 0; }
+.product-table-row > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.product-table-row strong { color: var(--ink-strong); font-size: 11px; }
+.product-table-row small { overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.product-kind-chip { width: fit-content; padding: 4px 7px; color: #7180b5; border-radius: 5px; background: #eef0ff; font-size: 9px; }
+.stock-low { color: #c87567; }
+.stock-ok { color: #6eaa51; }
+.discount-section { padding-bottom: 20px; }
+.discount-compact-list { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-card); }
+.discount-compact-row { display: grid; grid-template-columns: 1fr 80px 100px 100px; align-items: center; gap: 14px; min-height: 50px; padding: 0 16px; color: var(--ink-muted); border-bottom: 1px solid var(--line); font-size: 10px; }
+.discount-compact-row:last-child { border-bottom: 0; }
+.discount-compact-row strong { color: var(--ink-strong); font-size: 14px; }
+.modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(9, 15, 24, .58); backdrop-filter: blur(5px); }
+.modal-card { width: min(620px, 100%); max-height: min(760px, 92vh); overflow: auto; padding: 22px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); box-shadow: 0 25px 80px rgba(15, 28, 48, .28); }
+.modal-card-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.modal-card-head h2 { margin: 5px 0 0; color: var(--ink-strong); font-size: 22px; }
+.modal-card .category-manager { margin-top: 18px; }
+.client-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.client-action-grid button { min-height: 36px; justify-content: center; padding-inline: 9px; font-size: 10px; }
+.client-balance-section { padding: 13px 0 3px; }
+.balance-highlight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.balance-highlight > div { display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid #e5eaf2; border-radius: 10px; background: #f8fafc; }
+.balance-highlight span { color: #8793a5; font-size: 9px; }
+.balance-highlight strong { color: #33405a; font-size: 17px; }
+.form-success { margin: 10px 0; padding: 10px; color: #4f8d34; border-radius: 8px; background: #eef9e6; font-size: 10px; }
+.client-edit-form, .product-edit-form { padding-top: 10px; }
+.form-grid-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.checkbox-field { display: flex !important; min-height: 36px; flex-direction: row !important; align-items: center; gap: 8px !important; padding-top: 19px; color: #667387 !important; }
+.checkbox-field input { width: 15px !important; height: 15px !important; }
+.client-delete-button, .product-delete-button { width: 100%; justify-content: space-between; margin-top: 15px; color: #b86f68; border-color: #f0d4d0; background: #fff7f5; }
+.tariff-picker { padding: 12px; border: 1px solid #e2e8f0; border-radius: 11px; background: #f8fafc; }
+.tariff-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.tariff-picker-head > div { display: flex; flex-direction: column; gap: 3px; }
+.tariff-picker-head strong { color: #4d586a; font-size: 11px; }
+.tariff-picker-head span { color: #8995a6; font-size: 9px; }
+.tariff-picker-current { padding: 4px 7px; color: #6eaa51 !important; border-radius: 5px; background: #edf8e8; white-space: nowrap; }
+.panel-tariff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.tariff-sale-card { display: flex; min-height: 70px; flex-direction: column; align-items: flex-start; gap: 4px; padding: 9px; color: #5d6a7e; border: 1px solid #dfe7ef; border-radius: 9px; background: #fff; text-align: left; }
+.tariff-sale-card:hover { border-color: #a9d477; box-shadow: 0 4px 12px rgba(114, 165, 67, .1); }
+.tariff-sale-card.selected { color: #3e672e; border-color: #a8e16b; background: #f1fae9; box-shadow: 0 0 0 2px rgba(168, 225, 107, .18); }
+.tariff-sale-card span { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; }
+.tariff-sale-card strong { color: #3f4d61; font-size: 14px; }
+.tariff-sale-card.selected strong { color: #4d8b35; }
+.tariff-sale-card small { overflow: hidden; width: 100%; color: #99a4b3; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+

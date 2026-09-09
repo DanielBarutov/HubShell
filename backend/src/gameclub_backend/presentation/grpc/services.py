@@ -173,6 +173,8 @@ async def require_client_portal(
     token_service: JwtTokenService | None,
     client_id: str,
     device_id: str,
+    *,
+    allow_password_reset: bool = False,
 ) -> Principal:
     principal = await require_principal(context, token_service)
     if (
@@ -180,6 +182,7 @@ async def require_client_portal(
         or principal.subject_id != client_id
         or principal.device_id != device_id
         or not principal.can("client.portal")
+        or (principal.password_reset_required and not allow_password_reset)
     ):
         await context.abort(
             grpc.StatusCode.PERMISSION_DENIED,
@@ -1132,6 +1135,62 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
         except ApplicationError as error:
             await abort_application_error(context, error)
 
+    async def ChangePassword(
+        self,
+        request: clients_pb2.ChangePortalPasswordRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSession:
+        try:
+            principal = await require_principal(context, self._token_service)
+            if not principal.password_reset_required:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "Password reset is not pending",
+                )
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+                allow_password_reset=True,
+            )
+            client = await self._service.set_password(
+                parse_uuid(principal.subject_id, "client_id"),
+                request.new_password,
+            )
+            return await self._issue_session(client, request.device_id)
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def Refresh(
+        self,
+        request: clients_pb2.RefreshPortalRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSession:
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.snapshot(
+                parse_uuid(principal.subject_id, "client_id"),
+                request.limit or 50,
+            )
+            return await self._issue_session(
+                snapshot.client,
+                request.device_id,
+                snapshot=snapshot,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
     async def Get(
         self,
         request: clients_pb2.GetPortalRequest,
@@ -1207,6 +1266,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
         self,
         client: Client,
         device_id: str,
+        snapshot: ClientPortalSnapshot | None = None,
     ) -> clients_pb2.ClientPortalSession:
         if self._token_service is None:
             raise ApplicationError(
@@ -1219,12 +1279,14 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             roles=frozenset({"client"}),
             permissions=frozenset({"client.portal"}),
             device_id=device_id,
+            password_reset_required=client.password_reset_required,
         )
         access_token, expires_in = self._token_service.issue_access_token(principal)
-        snapshot = await self._service.snapshot(client.id)
+        snapshot = snapshot or await self._service.snapshot(client.id)
         return clients_pb2.ClientPortalSession(
             access_token=access_token,
             expires_in=expires_in,
+            password_reset_required=client.password_reset_required,
             snapshot=to_portal_snapshot_proto(snapshot),
         )
 
@@ -1814,6 +1876,7 @@ def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.Session
         balance_cents=snapshot.balance_cents or 0,
         balance_bonus=snapshot.balance_bonus or 0,
         login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
+        balance_remaining_minutes=(snapshot.balance_remaining_minutes or 0),
         package_queue=[to_package_snapshot_proto(item) for item in snapshot.entitlements],
         allowed_actions=list(snapshot.allowed_actions),
     )

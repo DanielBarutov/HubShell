@@ -109,9 +109,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text(
-            "DELETE FROM tariffs "
-            "WHERE tariff_key LIKE 'zone:%:per_minute'"
-        )
-    )
+    # The migration can update an existing tariff history and does not persist
+    # which rows it created. A broad DELETE would destroy operator data during
+    # downgrade, so keep the data and require an explicit operator migration
+    # if a rollback of these snapshots is ever needed.
+    pass

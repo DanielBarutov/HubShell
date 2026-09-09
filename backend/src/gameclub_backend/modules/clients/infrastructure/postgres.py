@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy import DateTime, String, func, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -35,6 +36,8 @@ class ClientModel(ClientBase):
         nullable=True,
     )
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_reset_required: Mapped[bool] = mapped_column(default=False, server_default="false")
+    password_reset_login_used: Mapped[bool] = mapped_column(default=False, server_default="false")
 
     def to_domain(self) -> Client:
         return Client(
@@ -48,6 +51,8 @@ class ClientModel(ClientBase):
             updated_at=self.updated_at,
             blocked_at=self.blocked_at,
             password_hash=self.password_hash,
+            password_reset_required=self.password_reset_required,
+            password_reset_login_used=self.password_reset_login_used,
         )
 
     @classmethod
@@ -63,6 +68,8 @@ class ClientModel(ClientBase):
             updated_at=client.updated_at,
             blocked_at=client.blocked_at,
             password_hash=client.password_hash,
+            password_reset_required=client.password_reset_required,
+            password_reset_login_used=client.password_reset_login_used,
         )
 
 
@@ -197,8 +204,30 @@ class PostgresClientRepository:
                 for key, value in ClientModel.from_domain(client).__dict__.items():
                     if not key.startswith("_"):
                         setattr(model, key, value)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError as error:
+                await session.rollback()
+                raise ValueError("Client nickname or phone is already registered") from error
             return client
+
+    async def consume_password_reset_login(
+        self,
+        client_id: uuid.UUID,
+        now: datetime.datetime,
+    ) -> Client:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                model = await session.scalar(
+                    select(ClientModel).where(ClientModel.id == client_id).with_for_update()
+                )
+                if model is None:
+                    raise ValueError("Client not found")
+                if not model.password_reset_required or model.password_reset_login_used:
+                    raise ValueError("Passwordless reset login already used")
+                model.password_reset_login_used = True
+                model.updated_at = now
+                return model.to_domain()
 
     async def delete(self, client_id: uuid.UUID) -> None:
         async with open_session(self._engine_provider) as session:

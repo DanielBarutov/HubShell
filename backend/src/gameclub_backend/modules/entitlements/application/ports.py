@@ -72,6 +72,17 @@ class ClientEntitlementDebit(typing.Protocol):
     ) -> tuple[object, object]:
         """Debit a registered client's balance for a package purchase."""
 
+    async def top_up(
+        self,
+        client_id: uuid.UUID,
+        amount_cents: int,
+        bonus_amount: int,
+        reason: str,
+        actor_id: str,
+        idempotency_key: str,
+    ) -> tuple[object, object]:
+        """Compensate a debit when package creation fails after settlement."""
+
 
 class TariffLookup(typing.Protocol):
     async def get_tariff(self, tariff_id: uuid.UUID):

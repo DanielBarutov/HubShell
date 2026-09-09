@@ -11,6 +11,24 @@ Reservations, Auth, [`plans/29-contract-alignment/PLAN.md`](../plans/29-contract
 
 Создать минималистичную web-панель для ежедневной работы оператора и настройки клуба: dashboard, карта мест, клиенты, депозит, тарифы и бронирование.
 
+## Архитектурный baseline
+
+Экранный слой разделён по feature-модулям, а `App.tsx` оставлен композиционным
+входом. `frontend/src/app/` содержит store, typed hooks, auth gate, shell и
+host контекстных панелей; `frontend/src/features/` — экраны и операции
+dashboard, workstations, bookings, clients, catalog, cash, settings и auth;
+`frontend/src/shared/` — переиспользуемые UI-компоненты, форматтеры и константы.
+
+Серверные данные и общий UI-контекст находятся в Redux Toolkit slices. Основные
+workspace/auth загрузки и единый Redux API facade выполняют сетевые вызовы через
+Redux thunk; локально в feature-компонентах остаются незавершённые значения форм,
+корзина продажи, debounce и состояние календаря. DTO/API-клиент разделены на
+`frontend/src/api/types.ts`, `client.ts`, `normalizers.ts` и `index.ts`.
+
+Глобальные стили сохранены в исходном порядке правил, но разбиты на
+`frontend/src/styles/*.css`; `src/index.css` содержит только последовательность
+импортов, чтобы каскад не менялся при миграции.
+
 ## Входит в план
 
 - React/TypeScript application shell;
@@ -290,5 +308,5 @@ consumption и entry decision требуют следующего backend-сре
 - gateway/API или grpc-web для браузера;
 - polling или realtime в MVP;
 - карта grid/plan-based или свободная схема;
-- окно timeline 24, 36 или другой длительности;
+- окно timeline: полный календарный день `00:00–24:00` с горизонтальной прокруткой;
 - какие dashboard-метрики войдут в первый релиз.

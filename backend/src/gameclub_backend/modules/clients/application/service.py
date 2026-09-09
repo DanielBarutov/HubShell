@@ -57,7 +57,10 @@ class ClientService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.save(client)
+        try:
+            return await self._repository.save(client)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
     async def register_portal(
         self,
@@ -90,10 +93,12 @@ class ClientService:
             updated_at=now,
             password_hash=self._hash_password(password),
         )
-        return await self._repository.save(client)
+        try:
+            return await self._repository.save(client)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
     async def authenticate_portal(self, identifier: str, password: str) -> Client:
-        self._validate_portal_password(password)
         normalized_identifier = identifier.strip()
         if not normalized_identifier:
             raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
@@ -102,11 +107,23 @@ class ClientService:
             canonical_phone = normalize_phone(normalized_identifier)
             if len(canonical_phone) == 11 and canonical_phone.startswith("7"):
                 client = await self._repository.get_by_phone(canonical_phone)
-        if (
-            client is None
-            or client.blocked_at is not None
-            or not self._verify_password(password, client.password_hash)
-        ):
+        if client is None or client.blocked_at is not None:
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        if client.password_reset_required:
+            if password.strip():
+                raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+            try:
+                return await self._repository.consume_password_reset_login(
+                    client.id,
+                    self._clock.now(),
+                )
+            except ValueError as error:
+                raise ApplicationError(
+                    ErrorCode.UNAUTHENTICATED,
+                    "Invalid client credentials",
+                ) from error
+        self._validate_portal_password(password)
+        if not self._verify_password(password, client.password_hash):
             raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
         return client
 
@@ -137,18 +154,32 @@ class ClientService:
         client = await self.get(client_id)
         await self._repository.save(dataclasses.replace(client, blocked_at=self._clock.now()))
 
-    async def reset_password(self, client_id: uuid.UUID) -> str:
+    async def reset_password(self, client_id: uuid.UUID) -> None:
         client = await self.get(client_id)
-        temporary_password = secrets.token_urlsafe(9)
-        password_hash = self._hash_password(temporary_password)
         await self._repository.save(
             dataclasses.replace(
                 client,
-                password_hash=password_hash,
+                password_hash=None,
+                password_reset_required=True,
+                password_reset_login_used=False,
                 updated_at=self._clock.now(),
             )
         )
-        return temporary_password
+
+    async def set_portal_password(self, client_id: uuid.UUID, password: str) -> Client:
+        self._validate_portal_password(password)
+        client = await self.get(client_id)
+        if client.blocked_at is not None:
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        return await self._repository.save(
+            dataclasses.replace(
+                client,
+                password_hash=self._hash_password(password),
+                password_reset_required=False,
+                password_reset_login_used=False,
+                updated_at=self._clock.now(),
+            )
+        )
 
     @staticmethod
     def _hash_password(password: str) -> str:

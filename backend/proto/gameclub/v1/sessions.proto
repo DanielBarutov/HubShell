@@ -117,6 +117,7 @@ message SessionSnapshot {
   string device_id = 13;
   SessionTariffSnapshot active_tariff = 14;
   int32 login_grant_remaining_minutes = 15;
+  int64 balance_remaining_minutes = 16;
 }
 
 message ListSessionsRequest {

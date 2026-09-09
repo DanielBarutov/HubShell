@@ -790,7 +790,7 @@ async def test_operator_can_manage_client_password_and_product_inventory() -> No
     assert update_response.json()["phone"] == "79997654321"
     assert update_response.json()["discount_category"] == "vip"
     assert reset_response.status_code == 200
-    assert len(reset_response.json()["temporary_password"]) >= 8
+    assert reset_response.json() == {"password_reset_required": True}
     assert delete_response.status_code == 204
     assert product_response.status_code == 201
     assert product_response.json()["stock_quantity"] == 12

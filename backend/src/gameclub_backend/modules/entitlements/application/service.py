@@ -126,7 +126,14 @@ class EntitlementService:
         try:
             created = await self._repository.create(entitlement)
         except ValueError as error:
+            await self._compensate_purchase_debit(client_id, tariff.price_cents, key, error)
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        except Exception as error:
+            await self._compensate_purchase_debit(client_id, tariff.price_cents, key, error)
+            raise ApplicationError(
+                ErrorCode.INTERNAL,
+                "Package purchase failed; the balance debit was compensated",
+            ) from error
         if (
             self._active_sessions is not None
             and self._workstations is not None
@@ -150,6 +157,28 @@ class EntitlementService:
                     except ValueError as error:
                         raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
         return created
+
+    async def _compensate_purchase_debit(
+        self,
+        client_id: uuid.UUID,
+        amount_cents: int,
+        purchase_key: str,
+        original_error: Exception,
+    ) -> None:
+        try:
+            await self._clients.top_up(
+                client_id=client_id,
+                amount_cents=amount_cents,
+                bonus_amount=0,
+                reason=f"Compensation for failed package purchase {purchase_key}",
+                actor_id="system:entitlement-compensation",
+                idempotency_key=f"entitlement-compensation:{purchase_key}",
+            )
+        except Exception as compensation_error:
+            raise ApplicationError(
+                ErrorCode.INTERNAL,
+                "Package purchase failed after debit; manual balance reconciliation is required",
+            ) from compensation_error
 
     async def activate(self, entitlement_id: uuid.UUID, client_id: uuid.UUID) -> Entitlement:
         entitlement = await self.get(entitlement_id)

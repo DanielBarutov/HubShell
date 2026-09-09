@@ -1,0 +1,57 @@
+/* Consistent SmartShell-inspired dark operator theme. */
+html, body, .app-shell, .main-content { color: #d7e0ee; background: #0e141c; }
+.app-shell::before { background: rgba(84, 128, 197, .08); }
+.topbar { color: #dbe4f2; border-color: #273342; background: rgba(14, 20, 28, .9); box-shadow: 0 1px 0 rgba(255, 255, 255, .02); }
+.breadcrumb span, .breadcrumb strong { color: #d7e0ee; }
+.breadcrumb strong { color: #fff; }
+.live-indicator { color: #77d79e; border-color: #263849; background: #141e2a; }
+.content-wrap { padding-top: 34px; }
+.page-heading h1, .section-row h2 { color: #f2f6fc; }
+.page-heading .subheading, .section-caption, .eyebrow { color: #8392a8; }
+.metric-card, .white-card, .table-card, .catalog-card, .catalog-summary > div, .tariff-mini-card, .product-table, .discount-compact-list { color: #d6e0ed; border-color: #263445; background: #141d28; box-shadow: 0 12px 35px rgba(0, 0, 0, .14); }
+.metric-title, .metric-delta, .table-head, .product-table-head { color: #8291a8; }
+.metric-value, .catalog-summary strong, .tariff-mini-card h3, .tariff-mini-card > strong, .product-table-row strong { color: #f4f7fb; }
+.metric-card::after { border-color: rgba(98, 143, 205, .12); }
+.catalog-toolbar .compact-tabs { border-color: #2a384a; background: #1b2634; }
+.compact-tabs button { color: #91a1b8; }
+.compact-tabs button.selected { color: #fff; background: #2b3949; box-shadow: none; }
+.catalog-category-filter { color: #ced8e7; border-color: #2c3a4c; background: #182330; }
+.catalog-breadcrumb { color: #7889a1; }
+.product-table-head { border-color: #263445; background: #182330; }
+.product-table-row, .discount-compact-row { color: #b5c1d1; border-color: #263445; }
+.product-table-row:hover, .discount-compact-row:hover { background: #192635; }
+.product-table-row small, .tariff-mini-card p { color: #7f90a8; }
+.empty-state-card, .catalog-empty-state { color: #8494ab; border-color: #2d3e53; background: #121b26; }
+.balance-highlight > div { border-color: #29394b; background: #182432; }
+.balance-highlight span { color: #8b9bb0; }
+.balance-highlight strong { color: #f0f4fb; }
+.right-panel { color: #d7e0ee; border-left-color: #2a394b; background: #121b26; box-shadow: -15px 0 45px rgba(0, 0, 0, .22); }
+.right-panel .panel-header { border-color: #28384b; }
+.right-panel .panel-header p, .right-panel .detail-row span, .right-panel .subheading { color: #8a9ab0; }
+.right-panel h2, .right-panel .detail-row strong { color: #f1f5fb; }
+.right-panel .booking-form input, .right-panel .booking-form select, .right-panel .booking-form textarea, .right-panel .amount-field input { color: #e2e9f3; border-color: #33465c; background: #182433; }
+.right-panel .booking-form label, .right-panel .amount-field { color: #94a4ba; }
+.right-panel .settings-toggle-list { border-color: #33465c; background: #182433; }.right-panel .settings-toggle-list label { color: #aebbd0; }
+.right-panel .secondary-button { color: #c2d0e1; border-color: #33465a; background: #1a2736; }
+.right-panel .secondary-button:hover { background: #223246; }
+.right-panel .guest-mode-card { border-color: #31445c; background: #172536; }
+.right-panel .guest-mode-card strong { color: #dfe8f5; }
+.right-panel .guest-mode-card span { color: #8ea0b8; }
+.right-panel .tariff-picker { border-color: #304256; background: #172534; }
+.right-panel .tariff-picker-head strong { color: #dce7f3; }
+.right-panel .tariff-picker-head span { color: #8da0b8; }
+.right-panel .tariff-picker-current { color: #bce995 !important; background: rgba(182, 240, 106, .12); }
+.right-panel .tariff-sale-card { color: #b9c8d9; border-color: #34475c; background: #1b2a3a; }
+.right-panel .tariff-sale-card:hover { border-color: #9ecf65; background: #213549; }
+.right-panel .tariff-sale-card.selected { border-color: #a8e16b; background: #213d31; }
+.right-panel .tariff-sale-card strong { color: #eef4fb; }
+.right-panel .tariff-sale-card.selected strong { color: #c6f29e; }
+.right-panel .tariff-sale-card small { color: #8ea0b6; }
+.modal-backdrop .modal-card { color: #d7e0ee; border-color: #34465b; background: #14202c; }
+.modal-backdrop .modal-card h2, .modal-backdrop .modal-card h3, .modal-backdrop .modal-card strong { color: #f0f5fb; }
+.modal-backdrop .product-list-card { border-color: #2b3b4f; background: #182532; }
+.modal-backdrop .category-create-form input, .modal-backdrop .category-create-form select, .modal-backdrop .category-row input, .modal-backdrop .category-row select { color: #e2eaf4; border-color: #34475d; background: #1b2a3a; }
+
+@media (max-width: 1180px) and (min-width: 901px) { .map-canvas { grid-template-columns: repeat(6, minmax(52px, 1fr)); } .tariff-mini-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .map-stage { grid-template-columns: 1fr; }.map-canvas { grid-template-columns: repeat(4, minmax(52px, 1fr)); grid-auto-rows: 82px; padding: 13px; }.catalog-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.tariff-mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.catalog-toolbar { flex-wrap: wrap; }.catalog-breadcrumb { width: 100%; margin-left: 0; }.product-table { overflow-x: auto; }.product-table-head, .product-table-row { min-width: 690px; } }
+

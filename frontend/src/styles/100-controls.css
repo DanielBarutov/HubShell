@@ -1,0 +1,59 @@
+/* Unified dark date and time controls. */
+.analytics-date-field { display: flex; align-items: center; gap: 6px; color: #8fa2ba; font-size: 9px; }
+.date-time-picker { position: relative; z-index: 1; width: 100%; }
+.date-time-picker.open { z-index: 50; }
+.date-time-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 0 10px; color: #dce7f3; border: 1px solid #30465e; border-radius: 9px; background: #152536; text-align: left; font-size: 10px; transition: .18s ease; }
+.date-time-trigger:hover, .date-time-picker.open .date-time-trigger { border-color: #4c8fca; background: #1a3046; box-shadow: 0 0 0 3px rgba(61, 143, 222, .11); }
+.date-time-trigger:disabled { cursor: not-allowed; opacity: .45; }
+.date-time-trigger > svg:first-child { flex: 0 0 auto; color: #70b7ff; }
+.date-time-trigger > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date-time-chevron { flex: 0 0 auto; color: #7c92aa; transition: transform .18s ease; }
+.date-time-picker.open .date-time-chevron { transform: rotate(180deg); }
+.analytics-date-field .date-time-picker { width: 132px; }
+.booking-date-picker { width: 166px; }
+.date-time-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 286px; padding: 12px; color: #dce7f3; border: 1px solid #34506c; border-radius: 13px; background: #111e2b; box-shadow: 0 18px 48px rgba(0, 0, 0, .46); }
+.date-time-popover.time-only { width: 224px; }
+.picker-month-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+.picker-month-head strong { color: #f0f6fc; font-size: 11px; text-transform: capitalize; }
+.picker-month-head button { display: grid; place-items: center; width: 26px; height: 26px; color: #92abc4; border: 1px solid #2e465f; border-radius: 7px; background: #172b3f; }
+.picker-month-head button:hover { color: #fff; border-color: #4d8fc9; background: #1d3b58; }
+.picker-weekdays, .picker-calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.picker-weekdays { margin-bottom: 5px; }
+.picker-weekdays span { color: #7088a1; font-size: 8px; text-align: center; }
+.picker-calendar button { min-height: 29px; color: #c7d6e6; border: 1px solid transparent; border-radius: 7px; background: transparent; font-size: 10px; }
+.picker-calendar button:hover { color: #fff; border-color: #3f7cae; background: #1a3853; }
+.picker-calendar button.outside { color: #526b83; }
+.picker-calendar button.selected { color: #071525; border-color: #72d69b; background: #72d69b; font-weight: 750; }
+.picker-today { width: 100%; margin-top: 9px; padding: 5px 0; color: #75b9f8; background: transparent; font-size: 9px; text-align: center; }
+.picker-today:hover { color: #bfe1ff; }
+.picker-time-panel { margin-top: 11px; padding-top: 11px; border-top: 1px solid #293f56; }
+.picker-time-panel > span { color: #8298b0; font-size: 9px; }
+.picker-time-selects { display: flex; align-items: flex-end; gap: 6px; margin-top: 6px; }
+.picker-time-selects label { display: flex; flex: 1; flex-direction: column; gap: 4px; }
+.picker-time-selects label > span { color: #6f879f; font-size: 8px; }
+.picker-time-selects b { padding-bottom: 7px; color: #9bb0c4; font-size: 12px; }
+.picker-time-selects select { width: 100%; min-height: 31px; padding: 0 7px; color: #e1ecf7; border: 1px solid #304a64; border-radius: 7px; outline: none; background: #182c40; color-scheme: dark; font-size: 10px; }
+.picker-time-selects select:focus { border-color: #4d96d3; box-shadow: 0 0 0 3px rgba(61, 143, 222, .12); }
+.picker-done { width: 100%; min-height: 31px; margin-top: 10px; color: #dff6b9; border: 1px solid #4f8e66; border-radius: 7px; background: #1a4737; font-size: 10px; font-weight: 700; }
+.picker-done:hover { background: #205a43; }
+.schedule-time-picker { width: 88px; }
+.schedule-time-picker .date-time-trigger { min-height: 31px; padding: 0 6px; gap: 5px; font-size: 9px; }
+.schedule-time-picker .date-time-trigger > svg:first-child { width: 12px; }
+.schedule-time-picker .date-time-popover { right: 0; }
+
+@media (max-width: 900px) {
+  .analytics-date-field .date-time-picker { width: auto; flex: 1; }
+  .booking-date-picker { width: 100%; }
+}
+
+@media (max-width: 900px) {
+  .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-report-grid, .analytics-breakdown-grid { grid-template-columns: 1fr; }
+  .analytics-heading, .analytics-heading .heading-actions { align-items: flex-start; flex-direction: column; }
+  .analytics-metrics-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-period { width: 100%; }
+  .analytics-period input { min-width: 0; width: 100%; }
+  .client-analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .product-table-head, .product-table-row { grid-template-columns: minmax(150px, 1fr) 75px 85px 85px 70px auto; gap: 8px; padding-inline: 10px; }
+}
+

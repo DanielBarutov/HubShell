@@ -4,6 +4,7 @@ import datetime
 import pytest
 
 from gameclub_backend.modules.catalog.application.service import CatalogService
+from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
@@ -69,6 +70,63 @@ async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture() 
     assert device_heartbeat.session_snapshot.schema_version == grpc_snapshot.schema_version
     assert device_heartbeat.session_snapshot.session.id == grpc_snapshot.session.id
     assert device_heartbeat.session_server_time == grpc_snapshot.server_time
+
+
+@pytest.mark.asyncio
+async def test_session_snapshot_exposes_balance_time_for_current_zone_rate() -> None:
+    workstations_repository = InMemoryWorkstationRepository()
+    workstations = WorkstationService(workstations_repository)
+    workstation = await workstations.register(
+        "balance-time-device",
+        "Balance Time PC",
+        group_id="main",
+    )
+    clients_repository = InMemoryClientRepository()
+    client_service = ClientService(clients_repository)
+    client = await client_service.create("BalanceTimeClient")
+    await client_service.top_up(
+        client.id,
+        amount_cents=1_000,
+        bonus_amount=0,
+        reason="Balance time test",
+        actor_id="operator",
+        idempotency_key="balance-time-top-up",
+    )
+    catalog = CatalogService(InMemoryCatalogRepository())
+    await catalog.create_tariff(
+        "Поминутный тариф",
+        group_id="main",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="main-per-minute",
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=25,
+    )
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations_repository,
+        clients=clients_repository,
+        tariffs=catalog,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="balance-time-session",
+    )
+
+    snapshot = await sessions.snapshot(
+        session.id,
+        now=datetime.datetime(2026, 9, 2, 12, 30, tzinfo=datetime.UTC),
+    )
+    http_snapshot = SessionSnapshotResponse.from_domain(snapshot)
+    grpc_snapshot = to_session_snapshot_proto(snapshot)
+
+    assert snapshot.balance_remaining_minutes == 40
+    assert http_snapshot.balance_remaining_minutes == 40
+    assert grpc_snapshot.balance_remaining_minutes == 40
 
 
 @pytest.mark.asyncio

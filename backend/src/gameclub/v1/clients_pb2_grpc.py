@@ -460,6 +460,16 @@ class ClientPortalServiceStub:
                 request_serializer=gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
                 _registered_method=True)
+        self.ChangePassword = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/ChangePassword',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.ChangePortalPasswordRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+                _registered_method=True)
+        self.Refresh = channel.unary_unary(
+                '/gameclub.clients.v1.ClientPortalService/Refresh',
+                request_serializer=gameclub_dot_v1_dot_clients__pb2.RefreshPortalRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+                _registered_method=True)
         self.Get = channel.unary_unary(
                 '/gameclub.clients.v1.ClientPortalService/Get',
                 request_serializer=gameclub_dot_v1_dot_clients__pb2.GetPortalRequest.SerializeToString,
@@ -487,6 +497,18 @@ class ClientPortalServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Login(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ChangePassword(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Refresh(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -521,6 +543,16 @@ def add_ClientPortalServiceServicer_to_server(servicer, server):
             'Login': grpc.unary_unary_rpc_method_handler(
                     servicer.Login,
                     request_deserializer=gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.SerializeToString,
+            ),
+            'ChangePassword': grpc.unary_unary_rpc_method_handler(
+                    servicer.ChangePassword,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.ChangePortalPasswordRequest.FromString,
+                    response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.SerializeToString,
+            ),
+            'Refresh': grpc.unary_unary_rpc_method_handler(
+                    servicer.Refresh,
+                    request_deserializer=gameclub_dot_v1_dot_clients__pb2.RefreshPortalRequest.FromString,
                     response_serializer=gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.SerializeToString,
             ),
             'Get': grpc.unary_unary_rpc_method_handler(
@@ -592,6 +624,60 @@ class ClientPortalService:
             target,
             '/gameclub.clients.v1.ClientPortalService/Login',
             gameclub_dot_v1_dot_clients__pb2.LoginPortalRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ChangePassword(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/ChangePassword',
+            gameclub_dot_v1_dot_clients__pb2.ChangePortalPasswordRequest.SerializeToString,
+            gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Refresh(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.clients.v1.ClientPortalService/Refresh',
+            gameclub_dot_v1_dot_clients__pb2.RefreshPortalRequest.SerializeToString,
             gameclub_dot_v1_dot_clients__pb2.ClientPortalSession.FromString,
             options,
             channel_credentials,

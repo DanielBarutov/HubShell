@@ -25,7 +25,7 @@ class UpdateClientRequest(CreateClientRequest):
 
 
 class ResetPasswordResponse(BaseModel):
-    temporary_password: str
+    password_reset_required: bool = True
 
 
 class TopUpRequest(BaseModel):
@@ -179,9 +179,8 @@ def create_router(service: ClientService) -> APIRouter:
         principal: Operator,
     ) -> ResetPasswordResponse:
         del principal
-        return ResetPasswordResponse(
-            temporary_password=await service.reset_password(client_id),
-        )
+        await service.reset_password(client_id)
+        return ResetPasswordResponse()
 
     @router.get("/search", response_model=list[ClientResponse])
     async def search_clients(

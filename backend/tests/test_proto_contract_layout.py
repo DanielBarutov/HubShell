@@ -188,6 +188,8 @@ def test_clients_contract_contains_balance_operation_history() -> None:
     assert "device_id" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
     assert "password" in clients_pb2.RegisterPortalRequest.DESCRIPTOR.fields_by_name
     assert "password" in clients_pb2.LoginPortalRequest.DESCRIPTOR.fields_by_name
+    assert "ChangePassword" in {method.name for method in portal_service.methods}
+    assert "password_reset_required" in clients_pb2.ClientPortalSession.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalSession.DESCRIPTOR.fields_by_name
     assert "tariff_name" in clients_pb2.PortalCharge.DESCRIPTOR.fields_by_name
     assert "entitlements" in clients_pb2.ClientPortalSnapshot.DESCRIPTOR.fields_by_name

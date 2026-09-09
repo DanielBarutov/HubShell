@@ -3,6 +3,7 @@ namespace GameClub.Client.Domain;
 public sealed record ClientPortalAuthenticationSnapshot(
     string AccessToken,
     int ExpiresIn,
+    bool PasswordResetRequired,
     ClientPortalSnapshot Snapshot);
 
 public sealed record ClientPortalSnapshot(

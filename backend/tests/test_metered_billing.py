@@ -261,9 +261,15 @@ async def test_device_login_selects_zone_per_minute_tariff_without_package() -> 
 @pytest.mark.asyncio
 async def test_metering_replaces_archived_legacy_minute_tariff_with_current_zone_snapshot() -> None:
     clock = FixedClock()
-    workstation, client, old_tariff, sessions, billing, meters, clients = (
-        await build_metered_services(clock, tariff_free_minutes=0)
-    )
+    (
+        workstation,
+        client,
+        old_tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+    ) = await build_metered_services(clock, tariff_free_minutes=0)
     catalog = billing._catalog
     session = await sessions.start(
         workstation.id,

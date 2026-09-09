@@ -243,6 +243,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void PortalPasswordSetupChanged(object sender, RoutedEventArgs args)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _viewModel.PortalPasswordSetup = passwordBox.Password;
+        }
+    }
+
+    private void PortalPasswordSetupConfirmationChanged(object sender, RoutedEventArgs args)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _viewModel.PortalPasswordSetupConfirmation = passwordBox.Password;
+        }
+    }
+
     private bool _normalizingPhone;
 
     private void ToggleTransferPanel(object sender, RoutedEventArgs args)
@@ -296,6 +312,13 @@ public sealed partial class MainWindow : Window
         PortalRegistrationPasswordBox.Password = string.Empty;
     }
 
+    private async void SetPortalPassword(object sender, RoutedEventArgs args)
+    {
+        await _viewModel.SetPortalPasswordAsync();
+        PortalPasswordSetupBox.Password = string.Empty;
+        PortalPasswordSetupConfirmationBox.Password = string.Empty;
+    }
+
     private async void ActivateFirstPortalEntitlement(object sender, RoutedEventArgs args)
     {
         await _viewModel.ActivateFirstPortalEntitlementAsync();
@@ -339,14 +362,6 @@ public sealed partial class MainWindow : Window
 
     private void OpenManagerLogin(object sender, RoutedEventArgs args) =>
         _viewModel.ShowManagerLogin();
-
-    private void OpenManagerLoginHotkey(
-        KeyboardAccelerator sender,
-        KeyboardAcceleratorInvokedEventArgs args)
-    {
-        _viewModel.ShowManagerLogin();
-        args.Handled = true;
-    }
 
     private void CancelManagerLogin(object sender, RoutedEventArgs args)
     {

@@ -102,6 +102,10 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
             ),
             metadata=(("authorization", f"Bearer {device_token}"),),
         )
+        renewed = await client.Refresh(
+            clients_pb2.RefreshPortalRequest(device_id="device-01"),
+            metadata=(("authorization", f"Bearer {registered.access_token}"),),
+        )
         await client_service.top_up(
             uuid.UUID(registered.snapshot.client.id),
             1_000,
@@ -166,11 +170,38 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
                 clients_pb2.GetPortalRequest(device_id="other-device"),
                 metadata=(("authorization", f"Bearer {registered.access_token}"),),
             )
+
+        await client_service.reset_password(uuid.UUID(registered.snapshot.client.id))
+        passwordless = await client.Login(
+            clients_pb2.LoginPortalRequest(
+                identifier="NightFox",
+                device_id="device-01",
+            ),
+            metadata=(("authorization", f"Bearer {device_token}"),),
+        )
+        with pytest.raises(grpc.aio.AioRpcError) as reset_error:
+            await client.PurchaseEntitlement(
+                clients_pb2.PurchaseEntitlementRequest(
+                    tariff_id=str(tariff.id),
+                    device_id="device-01",
+                    idempotency_key="grpc-portal-reset-purchase",
+                ),
+                metadata=(("authorization", f"Bearer {passwordless.access_token}"),),
+            )
+        changed = await client.ChangePassword(
+            clients_pb2.ChangePortalPasswordRequest(
+                new_password="new-password",
+                device_id="device-01",
+            ),
+            metadata=(("authorization", f"Bearer {passwordless.access_token}"),),
+        )
     finally:
         await channel.close()
         await server.stop(0)
 
     assert registered.snapshot.client.nickname == "NightFox"
+    assert renewed.access_token != registered.access_token
+    assert renewed.snapshot.client.id == registered.snapshot.client.id
     assert snapshot.client.id == registered.snapshot.client.id
     assert snapshot.available_time_minutes == 0
     assert snapshot.sessions[0].tariff_name == "Ночной тариф"
@@ -181,3 +212,6 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
     assert snapshot.tariffs[0].name == "Ночной тариф"
     assert activated.entitlements[0].status == "active"
     assert error.value.code() is grpc.StatusCode.PERMISSION_DENIED
+    assert passwordless.password_reset_required is True
+    assert reset_error.value.code() is grpc.StatusCode.PERMISSION_DENIED
+    assert changed.password_reset_required is False

@@ -38,6 +38,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _portalNickname = string.Empty;
     private string _portalPassword = string.Empty;
     private string _portalRegistrationPassword = string.Empty;
+    private string _portalPasswordSetup = string.Empty;
+    private string _portalPasswordSetupConfirmation = string.Empty;
+    private bool _portalPasswordResetRequired;
     private string _portalMessage = string.Empty;
     private string _transferTargetWorkstationId = string.Empty;
     private string _incomingTransferOfferId = string.Empty;
@@ -118,6 +121,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public Visibility PortalContentVisibility => _portalSnapshot is null || IsAccessLocked || IsMaintenanceMode
         ? Visibility.Collapsed
         : Visibility.Visible;
+    public Visibility PortalPasswordSetupVisibility => _portalPasswordResetRequired && _portalSnapshot is not null
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+    public Visibility PortalReadyVisibility => _portalPasswordResetRequired
+        ? Visibility.Collapsed
+        : Visibility.Visible;
     public string AccessMessage => string.IsNullOrWhiteSpace(_portalMessage)
         ? _accessGate.Snapshot.Message
         : _portalMessage;
@@ -127,7 +136,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             ? "Ожидание привязки ПК"
         : IsSessionLocked
             ? "Сессия завершена"
-            : _lockdownPolicy.UserSelfLoginEnabled ? "Вход на игровое место" : "Клиент заблокирован";
+            : _lockdownPolicy.UserSelfLoginEnabled ? "Войдите и начните играть" : "Клиент заблокирован";
     public string AccessSubtitle => IsMaintenanceMode
         ? "Системные действия доступны только менеджеру"
         : IsWaitingForAssignment
@@ -136,12 +145,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             ? "Баланс или время сессии закончились. Войдите снова для продолжения."
             : _lockdownPolicy.UserSelfLoginEnabled
                 ? _isPortalRegistrationRequested
-                    ? "Создайте аккаунт клуба — он будет привязан к этому месту"
-                    : "Войдите по нику или телефону, чтобы открыть аккаунт клуба"
-                : "Вход пользователя отключён политикой зоны. Для обслуживания используйте Ctrl+Alt+P.";
+                ? "Создайте аккаунт клуба — он будет привязан к этому месту"
+                    : "Войдите по нику или телефону, чтобы начать сессию на этом ПК"
+                : "Вход пользователя отключён политикой зоны. Обратитесь к администратору клуба.";
     public bool CanUnlockUser => _userAccessCode.Trim().Length >= 4;
     public bool CanEnterMaintenance => _managerPassword.Length >= 8;
-    public bool CanLoginPortal => _portalIdentifier.Trim().Length >= 3 && _portalPassword.Length >= 4;
+    public bool CanLoginPortal => _portalIdentifier.Trim().Length >= 3
+        && (_portalPassword.Length == 0 || _portalPassword.Length >= 4);
+    public bool CanSetPortalPassword => _portalPasswordSetup.Length is >= 4 and <= 128
+        && string.Equals(_portalPasswordSetup, _portalPasswordSetupConfirmation, StringComparison.Ordinal);
     public bool CanRegisterPortal => _portalNickname.Trim().Length >= 3
         && _portalPhone.Trim().Length >= 4
         && _portalRegistrationPassword.Length >= 4;
@@ -246,6 +258,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(CanRegisterPortal));
         }
     }
+    public string PortalPasswordSetup
+    {
+        get => _portalPasswordSetup;
+        set
+        {
+            if (_portalPasswordSetup == value)
+            {
+                return;
+            }
+            _portalPasswordSetup = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSetPortalPassword));
+        }
+    }
+    public string PortalPasswordSetupConfirmation
+    {
+        get => _portalPasswordSetupConfirmation;
+        set
+        {
+            if (_portalPasswordSetupConfirmation == value)
+            {
+                return;
+            }
+            _portalPasswordSetupConfirmation = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSetPortalPassword));
+        }
+    }
+    public bool IsPortalPasswordResetRequired => _portalPasswordResetRequired;
     public bool IsPortalRegistrationRequested => _isPortalRegistrationRequested;
     public string PortalAccountSummary => _portalSnapshot is null
         ? string.Empty
@@ -253,13 +294,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string PortalContactSummary => _portalSnapshot is null
         ? string.Empty
         : _portalSnapshot.Phone;
-    public string CurrentWorkstationLabel => DeviceId ?? WorkstationId ?? "это место";
+    public string CurrentWorkstationLabel => WorkstationId ?? DeviceId ?? "это место";
+    public string PortalBalanceAmountSummary => _portalSnapshot is null
+        ? string.Empty
+        : FormatMoney(_portalSnapshot.BalanceCents);
+    public string PortalBonusSummary => _portalSnapshot is null
+        ? string.Empty
+        : $"Бонусы: {_portalSnapshot.BalanceBonus}";
+    public string PortalAvailableTimeValue => _portalSnapshot is null
+        ? string.Empty
+        : FormatDuration(_portalSnapshot.AvailableTimeMinutes);
     public string PortalBalanceSummary => _portalSnapshot is null
         ? string.Empty
         : $"Баланс: {FormatMoney(_portalSnapshot.BalanceCents)} · Бонусы: {_portalSnapshot.BalanceBonus}";
     public string PortalAvailableTimeSummary => _portalSnapshot is null
         ? string.Empty
-        : $"Доступное время: {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
+        : $"Осталось примерно {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
     public IReadOnlyList<string> PortalBalanceHistory => _portalSnapshot?.BalanceOperations
         .Select(operation =>
             $"{operation.CreatedAt} · {operation.OperationType} · {FormatMoney(operation.AmountCents)} · {operation.Reason}")
@@ -284,7 +334,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public IReadOnlyList<ClientPortalTariff> PortalTariffs => _portalSnapshot?.Tariffs
         ?? Array.Empty<ClientPortalTariff>();
     public bool HasPortalTariffs => PortalTariffs.Count > 0;
-    public Visibility TariffsVisibility => HasPortalTariffs
+    public Visibility TariffsVisibility => HasPortalTariffs && !_portalPasswordResetRequired
         ? Visibility.Visible
         : Visibility.Collapsed;
     public bool HasPortalBalance => _portalSnapshot?.BalanceCents > 0;
@@ -297,7 +347,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string UpcomingBookingDetails => FormatUpcomingBooking(
         FindUpcomingBooking(),
         CurrentWorkstationLabel);
-    public Visibility TransferPanelVisibility => _isTransferExpanded
+    public Visibility TransferPanelVisibility => _isTransferExpanded && !_portalPasswordResetRequired
         ? Visibility.Visible
         : Visibility.Collapsed;
     public string TransferToggleLabel => _isTransferExpanded
@@ -305,14 +355,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : "Перенести сессию на другой ПК";
     public bool CanActivatePortalEntitlement => _portalSnapshot?.Entitlements
         .Any(item => item.Status == "queued") == true
-        && !string.IsNullOrWhiteSpace(DeviceId);
+        && !string.IsNullOrWhiteSpace(DeviceId)
+        && !_portalPasswordResetRequired;
     public string DeviceStatus => string.IsNullOrWhiteSpace(DeviceId)
         ? "Device identity не настроена"
         : $"Device: {DeviceId} · Workstation: {WorkstationId ?? "—"}";
-    public Visibility ActiveSessionVisibility => _activeSession is null
+    public Visibility ActiveSessionVisibility => _activeSession is null || _portalPasswordResetRequired
         ? Visibility.Collapsed
         : Visibility.Visible;
-    public bool CanStopActiveSession => _activeSession is not null && !IsAccessLocked && !IsMaintenanceMode;
+    public bool CanStopActiveSession => _activeSession is not null
+        && !_portalPasswordResetRequired
+        && !IsAccessLocked
+        && !IsMaintenanceMode;
     public string ActiveSessionDescription => _activeSession is null
         ? string.Empty
         : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
@@ -324,12 +378,26 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 && _activeSession.ActiveTariff.BillingMode == "block"
                 ? $"Осталось {FormatDuration(_activeSession.ActiveTariff.RemainingMinutes)}"
             : _activeSession.ActiveTariff is not null
+                && _activeSession.ActiveTariff.BillingMode == "per_minute"
+                && _activeSession.BalanceRemainingMinutes is not null
+                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)} по балансу"
+            : _activeSession.ActiveTariff is not null
                 ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
             : _activeSession.LoginGrantRemainingMinutes > 0
                 ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
             : _activeSession.Meter is not null
+                && _activeSession.BalanceRemainingMinutes is not null
+                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)} по балансу"
+            : _activeSession.Meter is not null
                 ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
                 : "Время обновляется сервером";
+    public string CurrentSessionModeSummary => _activeSession is null
+        ? string.Empty
+        : _activeSession.ActiveTariff?.BillingMode == "per_minute" || _activeSession.Meter is not null
+            ? "Поминутная игра"
+            : _activeSession.ActivePackage is not null
+                ? "Пакет времени"
+                : _activeSession.ActiveTariff?.Name ?? "Игровая сессия";
     public string CurrentSessionTariffSummary => _activeSession?.ActivePackage is not null
         ? _activeSession.ActivePackage.RemainingMinutes > 0
             ? $"Пакет · {_activeSession.ActivePackage.RemainingMinutes} мин"
@@ -385,6 +453,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
     }
     public bool CanCreateTransferOffer => _activeSession is not null
+        && !_portalPasswordResetRequired
         && !string.IsNullOrWhiteSpace(DeviceId)
         && !string.IsNullOrWhiteSpace(_transferTargetWorkstationId);
     public bool CanConfirmTransfer => !string.IsNullOrWhiteSpace(DeviceId)
@@ -538,6 +607,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         while (await timer.WaitForNextTickAsync(_lifetime.Token))
         {
+            if (_activeSession is not null)
+            {
+                continue;
+            }
+
             if (_accessGate.LockIfIdle())
             {
                 PublishAccessState();
@@ -598,6 +672,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 return false;
             }
             await StartPortalSessionAsync(authentication.Snapshot.ClientId);
+            _portalPasswordResetRequired = authentication.PasswordResetRequired;
+            PortalPasswordSetup = string.Empty;
+            PortalPasswordSetupConfirmation = string.Empty;
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _portalMessage = string.Empty;
@@ -609,9 +686,55 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return false;
         }
+        catch (Exception error)
+        {
+            _portalMessage = "Не удалось войти. Проверьте данные и состояние игровой сессии";
+            if (error is RpcException rpcError
+                && rpcError.StatusCode == StatusCode.AlreadyExists
+                && rpcError.Status.Detail.Contains(
+                    "Client already has an active session",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _portalMessage = "У этого пользователя уже есть активная игровая сессия";
+            }
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
+    }
+
+    public async Task<bool> SetPortalPasswordAsync()
+    {
+        if (!CanSetPortalPassword || string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return false;
+        }
+
+        try
+        {
+            var authentication = await _clientPortal.ChangePasswordAsync(
+                PortalPasswordSetup,
+                DeviceId,
+                _lifetime.Token);
+            _portalPasswordResetRequired = authentication.PasswordResetRequired;
+            PortalPasswordSetup = string.Empty;
+            PortalPasswordSetupConfirmation = string.Empty;
+            SetPortalSnapshot(authentication.Snapshot);
+            ShowSessionNotification("Пароль обновлён. Теперь аккаунт защищён новым паролем.");
+            return true;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (RpcException error) when (error.StatusCode == StatusCode.InvalidArgument)
+        {
+            _portalMessage = "Пароль должен содержать от 4 до 128 символов";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
         catch (Exception)
         {
-            _portalMessage = "Не удалось войти. Проверьте ник/телефон и пароль";
+            _portalMessage = "Не удалось сохранить новый пароль. Повторите попытку";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
@@ -647,6 +770,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 return false;
             }
             await StartPortalSessionAsync(authentication.Snapshot.ClientId);
+            _portalPasswordResetRequired = false;
             SetPortalSnapshot(authentication.Snapshot);
             _accessGate.OpenUserSession();
             _isPortalRegistrationRequested = false;
@@ -841,6 +965,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         _clientPortal.Logout();
         _portalSnapshot = null;
+        _portalPasswordResetRequired = false;
+        PortalPasswordSetup = string.Empty;
+        PortalPasswordSetupConfirmation = string.Empty;
         _portalSessionIdempotencyKey = null;
         _accessGate.Lock(message);
         _isManagerLoginRequested = false;
@@ -1164,6 +1291,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(UserLoginVisibility));
         OnPropertyChanged(nameof(PortalRegistrationVisibility));
         OnPropertyChanged(nameof(PortalContentVisibility));
+        OnPropertyChanged(nameof(PortalPasswordSetupVisibility));
+        OnPropertyChanged(nameof(PortalReadyVisibility));
+        OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
         OnPropertyChanged(nameof(ManagerLoginVisibility));
         OnPropertyChanged(nameof(MaintenanceVisibility));
         OnPropertyChanged(nameof(ManagerEntryVisibility));
@@ -1181,11 +1311,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private void PublishPortalState()
     {
         OnPropertyChanged(nameof(PortalContentVisibility));
+        OnPropertyChanged(nameof(PortalPasswordSetupVisibility));
+        OnPropertyChanged(nameof(PortalReadyVisibility));
+        OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
         OnPropertyChanged(nameof(SecuredContentVisibility));
         OnPropertyChanged(nameof(PortalAccountSummary));
         OnPropertyChanged(nameof(PortalContactSummary));
         OnPropertyChanged(nameof(PortalBalanceSummary));
+        OnPropertyChanged(nameof(PortalBalanceAmountSummary));
+        OnPropertyChanged(nameof(PortalBonusSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeSummary));
+        OnPropertyChanged(nameof(PortalAvailableTimeValue));
         OnPropertyChanged(nameof(PortalBalanceHistory));
         OnPropertyChanged(nameof(PortalPurchaseHistory));
         OnPropertyChanged(nameof(PortalChargeHistory));
@@ -1217,6 +1353,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
         OnPropertyChanged(nameof(ActiveTimeSummary));
+        OnPropertyChanged(nameof(CurrentSessionModeSummary));
         OnPropertyChanged(nameof(CurrentSessionTariffSummary));
         OnPropertyChanged(nameof(CanCreateTransferOffer));
         OnPropertyChanged(nameof(CanConfirmTransfer));

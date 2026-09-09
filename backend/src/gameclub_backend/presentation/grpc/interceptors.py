@@ -32,6 +32,7 @@ _AUDITED_OPERATIONS = frozenset(
         "RecordMovement",
         "Close",
         "CreateTransferOffer",
+        "ChangePassword",
         "GetTransferOffer",
         "ConfirmTransfer",
         "ReplayOfflineBatch",

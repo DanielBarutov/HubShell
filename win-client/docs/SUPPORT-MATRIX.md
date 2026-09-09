@@ -16,7 +16,7 @@ startup diagnostics находятся в
 | Device auth | MAC enrollment → device-scoped JWT | source-level |
 | User auth | server-backed register/login → client-scoped JWT | source-level |
 | Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
-| Manager access | `Ctrl+Alt+P`, отдельный manager password | source-level; native smoke не выполнен |
+| Manager access | явный пункт менеджера, отдельный manager password | source-level; native smoke не выполнен |
 | Kiosk boundary | Assigned Access/Shell Launcher | не проверено |
 | Delivery | self-contained single-file `GameClub.Client.exe` | publish требует Windows |
 
@@ -28,8 +28,8 @@ startup diagnostics находятся в
 4. До назначения в админке отображается `Ожидает назначения`.
 5. После назначения workstation по MAC backend выдаёт device JWT и настройки
    группы через heartbeat.
-6. Клиент открывает Locked shell; пользователь регистрируется или входит и
-   получает свой профиль/историю.
+6. Клиент открывает Locked shell; пользователь регистрируется или входит по
+   нику/телефону и паролю, получает свой профиль/историю.
 
 Канонический checkout на машине сборки:
 
@@ -51,7 +51,7 @@ C:\GameClub\Client\GameClub.Client.exe
 - структура слоёв и source-of-truth protobuf;
 - MAC enrollment, installation binding и состояния `pending/approved/disabled`;
 - device/client JWT claims и device binding на source-level;
-- fullscreen presenter, locked flow, portal view и `Ctrl+Alt+P` на source-level;
+- fullscreen presenter, locked flow и portal view на source-level;
 - allowlist команд, deadline, expiry, ACK и reconnect boundaries;
 - portable publish parameters и отсутствие секретов в deployment script.
 

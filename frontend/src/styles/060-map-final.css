@@ -1,0 +1,26 @@
+/* Stale is distinct from a disconnected workstation, but remains non-operational. */
+.pc-status-dot.stale { background: #aab5c5; }
+.map-seat.stale { border-color: #66748a; opacity: .8; }
+
+/* Final map sizing: the canvas is an independent scroll frame and seats keep
+   the same physical size on every operator screen. */
+.map-stage { grid-template-columns: 166px minmax(0, 1fr); min-height: 500px; }
+.map-canvas { grid-template-columns: repeat(8, 112px); grid-auto-rows: 84px; gap: 7px; width: 100%; min-width: 0; min-height: 100%; overflow: auto; padding: 18px; border-left: 1px solid #243247; background-color: rgba(7, 14, 24, .18); }
+.map-slot { width: 112px; height: 84px; }
+.map-legend-panel { margin: 15px 0 15px 15px; padding: 14px 12px; }
+.map-legend-item { padding: 8px 0; font-size: 9px; }
+.map-seat { padding: 8px; border-radius: 8px; }
+.map-seat-top { font-size: 9px; }
+.map-seat-bottom { font-size: 8px; }
+.map-seat-screen svg { width: 17px; height: 17px; }
+
+@media (max-width: 900px) {
+  .map-stage { grid-template-columns: 1fr; }
+  .map-canvas { min-height: 420px; border-top: 1px solid #243247; border-left: 0; }
+}
+
+.inactive-chip { width: max-content; padding: 4px 7px; color: #d8a65d; border-radius: 5px; background: #44351f; font-size: 9px; white-space: nowrap; }
+.settings-checkbox { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
+.settings-checkbox input { width: 15px !important; height: 15px; margin: 0; accent-color: #65c995; }
+.settings-note { max-width: 720px; }
+

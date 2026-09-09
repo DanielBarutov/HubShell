@@ -63,6 +63,6 @@ Write-Host "3. Назначить MAC в админке, дождаться appr
 Write-Host "4. Зарегистрировать пользователя, выполнить login/logout и проверить только его баланс и историю."
 Write-Host "5. Остановить и восстановить backend или сеть; дождаться reconnect и heartbeat без ручного token setup."
 Write-Host "6. Перезапустить клиент; убедиться, что он снова стартует Locked и сохраняет только installation identity."
-Write-Host "7. Проверить отдельный manager password через Ctrl+Alt+P и возврат из maintenance в Locked."
+Write-Host "7. Открыть режим обслуживания через явный пункт менеджера, ввести manager password и проверить возврат в Locked."
 Write-Host "8. Проверить session/product retry и отсутствие повторного debit, sale или active session."
 Write-Host "9. В Assigned Access/Shell Launcher проверить запрет выхода в desktop и shell."
