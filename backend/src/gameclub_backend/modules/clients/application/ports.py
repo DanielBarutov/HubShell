@@ -24,6 +24,13 @@ class ClientRepository(typing.Protocol):
     async def save(self, client: Client) -> Client:
         """Persist a client."""
 
+    async def consume_password_reset_login(
+        self,
+        client_id: uuid.UUID,
+        now: datetime.datetime,
+    ) -> Client:
+        """Atomically consume the one-time passwordless reset login."""
+
     async def delete(self, client_id: uuid.UUID) -> None:
         """Remove or archive a client from the operator directory."""
 

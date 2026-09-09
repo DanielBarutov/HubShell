@@ -192,3 +192,32 @@ async def test_client_portal_is_scoped_and_reports_balance_time_and_purchases() 
     with pytest.raises(ApplicationError) as error:
         await portal.snapshot(first.id)
     assert error.value.code is ErrorCode.UNAUTHENTICATED
+
+
+async def test_password_reset_allows_one_passwordless_login_until_new_password_is_set() -> None:
+    clients = ClientService(InMemoryClientRepository())
+    client = await clients.register_portal("ResetFox", "+7 999 111-22-33", "old-pass")
+
+    await clients.reset_password(client.id)
+    reset_client = await clients.get(client.id)
+    assert reset_client.password_hash is None
+    assert reset_client.password_reset_required is True
+
+    passwordless = await clients.authenticate_portal("ResetFox", "")
+    assert passwordless.password_reset_required is True
+
+    with pytest.raises(ApplicationError) as error:
+        await clients.authenticate_portal("ResetFox", "")
+    assert error.value.code is ErrorCode.UNAUTHENTICATED
+
+    with pytest.raises(ApplicationError) as error:
+        await clients.authenticate_portal("ResetFox", "old-pass")
+    assert error.value.code is ErrorCode.UNAUTHENTICATED
+
+    await clients.set_portal_password(client.id, "new-pass")
+    updated = await clients.authenticate_portal("ResetFox", "new-pass")
+    assert updated.password_reset_required is False
+
+    with pytest.raises(ApplicationError) as error:
+        await clients.authenticate_portal("ResetFox", "")
+    assert error.value.code is ErrorCode.INVALID_ARGUMENT

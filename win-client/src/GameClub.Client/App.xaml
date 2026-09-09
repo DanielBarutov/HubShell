@@ -7,18 +7,28 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#11141B" />
-                    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#191D26" />
-                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F1F3F7" />
-                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#8E95A6" />
-                    <SolidColorBrush x:Key="AccentBrush" Color="#A8ED62" />
+                    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#07090D" />
+                    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#0F1719" />
+                    <SolidColorBrush x:Key="InnerCardBackgroundBrush" Color="#131E20" />
+                    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#0B1214" />
+                    <SolidColorBrush x:Key="BorderBrush" Color="#2C3B3C" />
+                    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#EDF5EF" />
+                    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#7B8F8A" />
+                    <SolidColorBrush x:Key="AccentBrush" Color="#B6F35A" />
+                    <SolidColorBrush x:Key="AccentTextBrush" Color="#11180C" />
+                    <SolidColorBrush x:Key="SignalBrush" Color="#61D8FF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="PageBackgroundBrush" Color="#F4F5F8" />
                     <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="InnerCardBackgroundBrush" Color="#F0F3F3" />
+                    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="BorderBrush" Color="#D4DDDD" />
                     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#171A22" />
                     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#858C99" />
                     <SolidColorBrush x:Key="AccentBrush" Color="#8FD854" />
+                    <SolidColorBrush x:Key="AccentTextBrush" Color="#17200F" />
+                    <SolidColorBrush x:Key="SignalBrush" Color="#1C9EBB" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

@@ -33,6 +33,8 @@ class JwtTokenService:
         }
         if principal.device_id:
             payload["device_id"] = principal.device_id
+        if principal.password_reset_required:
+            payload["password_reset_required"] = True
         token = jwt.encode(payload, self._settings.jwt_secret, algorithm="HS256")
         return token, self._settings.jwt_access_ttl_seconds
 
@@ -65,4 +67,5 @@ class JwtTokenService:
             roles=roles,
             permissions=permissions,
             device_id=(str(payload["device_id"]) if payload.get("device_id") else None),
+            password_reset_required=bool(payload.get("password_reset_required", False)),
         )

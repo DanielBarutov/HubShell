@@ -370,6 +370,17 @@ class SessionService:
             session.started_at,
             session.ended_at or server_time,
         )
+        balance_remaining_minutes = None
+        if client is not None and self._tariffs is not None:
+            per_minute_tariff = await self._tariffs.find_per_minute_tariff(
+                workstation.group_id,
+                server_time,
+            )
+            if per_minute_tariff is not None and per_minute_tariff.price_per_minute_cents > 0:
+                balance_remaining_minutes = max(
+                    0,
+                    client.balance_cents // per_minute_tariff.price_per_minute_cents,
+                )
         return SessionSnapshot(
             schema_version=1,
             server_time=server_time,
@@ -389,6 +400,7 @@ class SessionService:
                 session.login_grant_minutes - elapsed_minutes,
             ),
             allowed_actions=("stop",) if session.status is SessionStatus.ACTIVE else (),
+            balance_remaining_minutes=balance_remaining_minutes,
         )
 
     @staticmethod

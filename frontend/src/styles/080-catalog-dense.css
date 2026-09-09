@@ -1,0 +1,77 @@
+/* Dense catalog controls and calm booking surfaces for the dark operator theme. */
+.catalog-toolbar { gap: 9px; }
+.catalog-breadcrumb { margin-left: auto; }
+.archive-toggle { min-height: 32px; padding: 0 10px; color: #9fb2c8; border: 1px solid #304358; border-radius: 8px; background: #152231; font-size: 10px; font-weight: 650; white-space: nowrap; }
+.archive-toggle:hover, .archive-toggle.active { color: #dcecff; border-color: #386b9d; background: #1b3048; }
+.catalog-section .tariff-mini-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.catalog-section .tariff-mini-card { min-height: 116px; padding: 11px; border-radius: 10px; }
+.catalog-section .tariff-mini-card h3 { margin: 10px 0 4px; font-size: 12px; }
+.catalog-section .tariff-mini-card p { min-height: 24px; font-size: 8px; }
+.catalog-section .tariff-mini-card > strong { margin-top: 7px; font-size: 16px; }
+.catalog-section .tariff-mini-actions { min-height: 17px; }
+.panel-tariff-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.booking-heading-actions .primary-button { color: #dcecff; border-color: #2e6ea8; background: #1e4e7e; box-shadow: none; }
+.booking-heading-actions .primary-button:hover { border-color: #4b91cf; background: #286495; box-shadow: 0 5px 14px rgba(20, 79, 132, .28); }
+.date-picker, .date-chip { color: #b7c8da; border-color: #304358; background: #152231; }
+.date-picker input { color: #dce7f3; background: transparent; color-scheme: dark; }
+.date-chip:hover { border-color: #3a6b99; background: #1b3047; }
+.booking-toolbar .segmented { border-color: #2a3d52; background: #172636; }
+.booking-toolbar .segmented button { color: #91a5bb; }
+.booking-toolbar .segmented button.selected { color: #e0ebf7; background: #2a4056; }
+.booking-toolbar .timeline-note { color: #8da0b6; }
+.right-panel .primary-button { color: #dcecff; border-color: #2e6ea8; background: #1e4e7e; box-shadow: none; }
+.right-panel .primary-button:hover { border-color: #4b91cf; background: #286495; box-shadow: 0 5px 14px rgba(20, 79, 132, .28); }
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .catalog-section .tariff-mini-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .catalog-section .tariff-mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.product-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.compact-action { min-height: 29px; padding: 0 8px; color: #b8d8f3; border-color: #2f5273; background: #172b40; font-size: 9px; }
+.compact-action:hover { color: #e4f3ff; border-color: #4a83b2; background: #1e3b58; }
+.analytics-period { display: flex; gap: 8px; }
+.compact-inline-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.compact-inline-field input { width: 88px; }
+.quick-sale-section { margin-top: 16px; }
+.quick-sale-section .section-row { align-items: center; }
+.quick-sale-section .section-row span { display: block; margin-top: 3px; color: #8295ab; font-size: 12px; }
+.quick-sale-grid { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 8px; margin-top: 12px; }
+.quick-sale-grid .compact-tabs, .quick-sale-grid .wide { grid-column: 1 / -1; }
+.meter-status { display: block; margin-top: 7px; color: #90d1a8; font-size: 9px; }
+.analytics-period label { display: flex; align-items: center; gap: 6px; color: var(--ink-muted); font-size: 9px; }
+.analytics-period input { min-height: 34px; padding: 0 8px; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color-scheme: dark; font: inherit; }
+.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.analytics-metrics { margin-bottom: 4px; }
+.analytics-card { min-height: 255px; padding: 18px; }
+.analytics-card .section-row { align-items: flex-start; }
+.analytics-list { margin-top: 14px; }
+.analytics-list-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 58px; padding: 0 2px; color: var(--ink); border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
+.analytics-list-row > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.analytics-list-row strong { overflow: hidden; color: var(--ink-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-list-row span { color: var(--ink-muted); font-size: 9px; }
+.analytics-list-row b { color: var(--ink-strong); font-size: 12px; white-space: nowrap; }
+.analytics-client-row { cursor: pointer; }
+.analytics-client-row:hover { background: var(--surface-soft); }
+.sale-product-card { display: flex; align-items: center; gap: 12px; margin-top: 22px; padding: 13px; border: 1px solid #2e4963; border-radius: 11px; background: #172b40; }
+.sale-product-icon { display: grid; place-items: center; width: 38px; height: 38px; color: #a8ed62; border-radius: 9px; background: #24445b; }
+.sale-product-card > div:last-child { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.sale-product-card strong { overflow: hidden; color: #e7f1fb; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-product-card span { color: #93abc1; font-size: 9px; }
+.product-sale-form { padding-top: 18px; }
+.sale-client-results { display: flex; flex-direction: column; gap: 5px; margin-top: -7px; }
+.sale-client-results .client-result { margin-top: 0; color: #c5d6e7; border-color: #2e4963; background: #172b40; }
+.sale-client-results .client-result strong { color: #e7f1fb; }
+.sale-client-results .client-result small { color: #8fa6bb; }
+.sale-payment-picker { display: flex; flex-direction: column; gap: 7px; color: #91a5bb; font-size: 10px; }
+.sale-payment-picker .compact-tabs { width: fit-content; border-color: #2e4963; background: #172b40; }
+.sale-payment-picker .compact-tabs button { color: #91a5bb; }
+.sale-payment-picker .compact-tabs button.selected { color: #e4f3ff; background: #2b4964; }
+.sale-total { display: flex; align-items: center; justify-content: space-between; margin: 4px 0; padding: 13px 0; color: #91a5bb; border-top: 1px solid #2e4963; border-bottom: 1px solid #2e4963; font-size: 11px; }
+.sale-total strong { color: #c4f68e; font-size: 20px; letter-spacing: -.03em; }
+.right-panel .product-sale-form input, .right-panel .product-sale-form select { color: #dce7f3; border-color: #304b65; background: #172b40; color-scheme: dark; }
+.right-panel .product-sale-form input:focus, .right-panel .product-sale-form select:focus { border-color: #4a83b2; box-shadow: 0 0 0 3px rgba(55, 133, 199, .14); }
+

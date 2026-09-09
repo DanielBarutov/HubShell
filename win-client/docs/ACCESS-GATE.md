@@ -25,8 +25,8 @@ Windows Desktop после входа. Возврат в `Locked` выполня
 enrollment/rotation и Windows Credential Manager или серверная supervisor-проверка
 с короткоживущим разрешением.
 В dev без заданного deployment-хеша используется встроенный PBKDF2-хеш значения
-`password`; в staging/production явный хеш обязателен. `Ctrl+Alt+P` блокирует
-приложение и открывает форму manager access-gate.
+`password`; в staging/production явный хеш обязателен. Явный пункт менеджера
+блокирует приложение и открывает форму manager access-gate.
 
 ## Что приложение не может гарантировать
 

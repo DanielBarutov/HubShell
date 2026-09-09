@@ -20,7 +20,8 @@ session widget без системных кнопок окна, с собств�
 - [ ] Реализовать переключение fullscreen gate → post-auth desktop/widget и
       tray hide/show; compact widget является штатным пользовательским режимом.
 - [x] Получать shell/lock policy после heartbeat и безопасно применять allowlist.
-- [x] Проверить source-level контракт `Ctrl+Alt+P` без перехвата системных сочетаний.
+- [x] Проверить source-level контракт входа менеджера через явный пункт меню;
+      глобальная горячая клавиша не используется.
 - [ ] Выполнить native smoke с обычным пользователем.
 - [ ] Отдельно проверить Assigned Access/Shell Launcher, Explorer, Alt+Tab,
   restart и recovery; app-level fullscreen не считать kiosk security.

@@ -252,9 +252,7 @@ class CatalogService:
 
         key = self._zone_per_minute_tariff_key(normalized_group_id)
         internal = [
-            tariff
-            for tariff in await self._repository.list_tariffs()
-            if tariff.tariff_key == key
+            tariff for tariff in await self._repository.list_tariffs() if tariff.tariff_key == key
         ]
         current = next(
             (

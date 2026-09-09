@@ -21,6 +21,8 @@ service ClientService {
 service ClientPortalService {
   rpc Register(RegisterPortalRequest) returns (ClientPortalSession);
   rpc Login(LoginPortalRequest) returns (ClientPortalSession);
+  rpc ChangePassword(ChangePortalPasswordRequest) returns (ClientPortalSession);
+  rpc Refresh(RefreshPortalRequest) returns (ClientPortalSession);
   rpc Get(GetPortalRequest) returns (ClientPortalSnapshot);
   rpc ActivateEntitlement(ActivateEntitlementRequest) returns (ClientPortalSnapshot);
   rpc PurchaseEntitlement(PurchaseEntitlementRequest) returns (ClientPortalSnapshot);
@@ -157,7 +159,17 @@ message LoginPortalRequest {
   string device_id = 3;
 }
 
+message ChangePortalPasswordRequest {
+  string new_password = 1;
+  string device_id = 2;
+}
+
 message GetPortalRequest {
+  string device_id = 1;
+  int32 limit = 2;
+}
+
+message RefreshPortalRequest {
   string device_id = 1;
   int32 limit = 2;
 }
@@ -177,6 +189,7 @@ message ClientPortalSession {
   string access_token = 1;
   int32 expires_in = 2;
   ClientPortalSnapshot snapshot = 3;
+  bool password_reset_required = 4;
 }
 
 message ClientPortalSnapshot {

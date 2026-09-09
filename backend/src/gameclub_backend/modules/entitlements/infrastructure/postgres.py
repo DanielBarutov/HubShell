@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -193,36 +194,39 @@ class PostgresEntitlementRepository:
         now: datetime.datetime,
         zone_id: str | None = None,
     ) -> Entitlement:
-        async with open_session(self._engine_provider) as session:
-            async with session.begin():
-                model = await session.scalar(
-                    select(EntitlementModel)
-                    .where(
-                        EntitlementModel.id == entitlement_id,
-                        EntitlementModel.client_id == client_id,
+        try:
+            async with open_session(self._engine_provider) as session:
+                async with session.begin():
+                    model = await session.scalar(
+                        select(EntitlementModel)
+                        .where(
+                            EntitlementModel.id == entitlement_id,
+                            EntitlementModel.client_id == client_id,
+                        )
+                        .with_for_update()
                     )
-                    .with_for_update()
-                )
-                if model is None:
-                    raise ValueError("Entitlement not found")
-                item = model.to_domain()
-                if zone_id is not None and not item.is_compatible(zone_id):
-                    raise ValueError("Package is incompatible with this workstation zone")
-                if not item.is_available_at(now):
-                    raise ValueError("Package is outside its time window")
-                active = await session.scalar(
-                    select(EntitlementModel).where(
-                        EntitlementModel.client_id == client_id,
-                        EntitlementModel.status == EntitlementStatus.ACTIVE.value,
-                        EntitlementModel.id != entitlement_id,
+                    if model is None:
+                        raise ValueError("Entitlement not found")
+                    item = model.to_domain()
+                    if zone_id is not None and not item.is_compatible(zone_id):
+                        raise ValueError("Package is incompatible with this workstation zone")
+                    if not item.is_available_at(now):
+                        raise ValueError("Package is outside its time window")
+                    active = await session.scalar(
+                        select(EntitlementModel).where(
+                            EntitlementModel.client_id == client_id,
+                            EntitlementModel.status == EntitlementStatus.ACTIVE.value,
+                            EntitlementModel.id != entitlement_id,
+                        )
                     )
-                )
-                if active is not None:
-                    raise ValueError("Client already has an active package")
-                updated = item.activate(now)
-                model.status = updated.status.value
-                model.activated_at = updated.activated_at
-                return updated
+                    if active is not None:
+                        raise ValueError("Client already has an active package")
+                    updated = item.activate(now)
+                    model.status = updated.status.value
+                    model.activated_at = updated.activated_at
+                    return updated
+        except IntegrityError as error:
+            raise ValueError("Client already has an active package") from error
 
     async def consume_for_client(
         self,

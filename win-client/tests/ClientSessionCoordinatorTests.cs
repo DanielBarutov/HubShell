@@ -41,6 +41,12 @@ public sealed class ClientSessionCoordinatorTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ClientPortalAuthenticationSnapshot> ChangePasswordAsync(
+            string newPassword,
+            string deviceId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ClientPortalSnapshot> RefreshAsync(
             string deviceId,
             int limit = 50,

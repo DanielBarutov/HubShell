@@ -21,7 +21,8 @@ bootstrap token из обычной установки игрового ПК.
    token, после чего начинает heartbeat.
 6. Клиент стартует в полноэкранном access-gate. Пользователь может
    зарегистрироваться или войти; после входа получает обычный Windows Desktop
-   и компактный session widget; `Ctrl+Alt+P` открывает менеджерский вход.
+   и компактный session widget. Менеджерский вход открывается явным пунктом
+   меню клиента.
 7. После входа пользователь видит профиль, баланс, историю пополнений и
    списаний, покупки товаров/тарифов и доступное время.
 
@@ -67,7 +68,7 @@ decision, transfer и durable offline replay выполняется по
   Workstation, миграцию и CRUD-поле в operator API.
 - [x] Добавить enrollment use case: `pending`, `approved`, `disabled`, binding
   installation identity и выдача только device-scoped JWT.
-- [x] Добавить server-side client registration/login с хэшем PIN и блокировкой
+- [x] Добавить server-side client registration/login с хэшем пароля и блокировкой
   заблокированного профиля.
 - [x] Добавить gRPC portal DTO для профиля, баланса, ledger, session charges,
   product sales, тарифов и доступного времени.
@@ -84,7 +85,7 @@ decision, transfer и durable offline replay выполняется по
   локальный env verifier оставить только явно включаемым dev fallback.
 - [ ] Реализовать state-dependent presentation: fullscreen access-gate до входа,
   обычный Windows Desktop и compact borderless widget/tray после входа.
-- [x] Реализовать `Ctrl+Alt+P`, профиль пользователя, историю операций,
+- [x] Реализовать профиль пользователя, историю операций,
   сессий, списаний, товаров/тарифов и доступного времени.
 - [ ] Добавить хранение/ротацию device и client tokens без plaintext в логах.
 - [ ] Проверить single-file EXE на обычном пользователе Windows и на чистом ПК.
@@ -106,7 +107,7 @@ decision, transfer и durable offline replay выполняется по
   отображение online/offline.
 - Windows: запуск EXE без env и консоли, fullscreen lock, восстановление сети,
   привязка после действия администратора, регистрация/вход пользователя,
-  `Ctrl+Alt+P`, отсутствие выхода в desktop.
+  явное меню менеджера, отсутствие выхода в desktop.
 - Security: MAC spoof/rebind, token expiry/rotation, отсутствие PIN/token в
   EXE, AppData, логах и audit payload.
 

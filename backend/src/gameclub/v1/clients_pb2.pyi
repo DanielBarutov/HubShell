@@ -230,7 +230,23 @@ class LoginPortalRequest(_message.Message):
     device_id: str
     def __init__(self, identifier: _Optional[str] = ..., password: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
+class ChangePortalPasswordRequest(_message.Message):
+    __slots__ = ("new_password", "device_id")
+    NEW_PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    new_password: str
+    device_id: str
+    def __init__(self, new_password: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
+
 class GetPortalRequest(_message.Message):
+    __slots__ = ("device_id", "limit")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    limit: int
+    def __init__(self, device_id: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class RefreshPortalRequest(_message.Message):
     __slots__ = ("device_id", "limit")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
@@ -257,14 +273,16 @@ class PurchaseEntitlementRequest(_message.Message):
     def __init__(self, tariff_id: _Optional[str] = ..., device_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class ClientPortalSession(_message.Message):
-    __slots__ = ("access_token", "expires_in", "snapshot")
+    __slots__ = ("access_token", "expires_in", "snapshot", "password_reset_required")
     ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_RESET_REQUIRED_FIELD_NUMBER: _ClassVar[int]
     access_token: str
     expires_in: int
     snapshot: ClientPortalSnapshot
-    def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ...) -> None: ...
+    password_reset_required: bool
+    def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ..., password_reset_required: _Optional[bool] = ...) -> None: ...
 
 class ClientPortalSnapshot(_message.Message):
     __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes", "entitlements", "tariffs", "reservations")

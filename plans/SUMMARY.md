@@ -28,7 +28,7 @@
 
 ## 2. Назначение и границы продукта
 
-GameClub — операторская система игрового клуба: карта мест и состояние ПК,
+GameClub / HUBSHELL — операторская система игрового клуба: карта мест и состояние ПК,
 клиенты и гости, бронирования, игровые сессии, тарифы, продажи, касса,
 аналитика и Windows-клиент рабочего места.
 
@@ -69,7 +69,10 @@ provider policy, полная browser/accessibility matrix и native Windows evi
 | [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0048` | схема PostgreSQL; текущая голова `20260902_0048` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
-| [`frontend/src/App.tsx`](../frontend/src/App.tsx) | текущий operator shell и основные flows | UI orchestration; бизнес-расчёты остаются в backend |
+| [`frontend/src/app/`](../frontend/src/app/) | композиция App, shell, PanelHost, Redux store/hooks и API facade | UI orchestration и серверный state boundary |
+| [`frontend/src/features/`](../frontend/src/features/) | feature-экраны и контекстные панели operator UI | локальный UI-flow по bounded feature-модулям |
+| [`frontend/src/api/`](../frontend/src/api/) | DTO, HTTP API client и нормализаторы | typed API boundary; вызовы экранов проходят через Redux facade |
+| [`frontend/src/styles/`](../frontend/src/styles/) | каскад operator UI, разложенный по тематическим блокам | сохранённый порядок CSS-правил |
 | [`win-client/`](../win-client/) | C# solution, WinUI, scripts, tests | клиент игрового ПК |
 | [`win-client/src/GameClub.Client/`](../win-client/src/GameClub.Client/) | Domain/Application/Infrastructure/Presentation | Windows implementation |
 | [`plans/README.md`](README.md) | общий индекс и зависимости | навигация по планам |
@@ -182,7 +185,7 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Foundation | async app, config, health, resources, error contract, audit, migrations, generated proto | план помечен `in_progress`; закрыть интеграционные и deployment-вопросы |
 | Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и внешняя TLS-конфигурация |
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
-| Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
+| Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, password reset with one-time passwordless login and forced change, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
 | Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | entitlement package consumption, time windows and next-compatible auto-start |
 | Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | WinUI/operator decision consumer and PostgreSQL concurrency matrix |
 | Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot с server-backed `active_tariff`/remaining time | PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
@@ -228,10 +231,14 @@ Generated Python находится в `backend/src/gameclub/v1/`, а C# project
 
 ## 7. Frontend: операторская оболочка
 
-Основной код сейчас компактно собран вокруг
-[`frontend/src/App.tsx`](../frontend/src/App.tsx), с typed API boundary в
-[`frontend/src/api.ts`](../frontend/src/api.ts), типами в `types.ts`, adapters/data
-для локальных/отладочных сценариев и общими стилями в `index.css`.
+Frontend разделён на композиционный слой `frontend/src/app/`, feature-модули
+экранов и панелей в `frontend/src/features/`, typed API boundary в
+`frontend/src/api/`, адаптеры/mock data и переиспользуемые shared-компоненты.
+`frontend/src/App.tsx` оставлен тонким re-export для совместимости, а
+`frontend/src/app/App.tsx` содержит только auth-gate и композицию shell.
+Redux Toolkit агрегирует auth, workspace и UI-контекст; API facade отправляет
+асинхронные операции через thunk, поэтому screen components не создают API-клиент.
+CSS сохранён в исходном каскадном порядке, но разбит на файлы в `frontend/src/styles/`.
 
 Реализованные области:
 
@@ -294,7 +301,8 @@ flows.
   `standard`;
 - locked startup/access-gate, manager maintenance через отдельный credential,
   idle relock, relock при auth 401/403;
-- `Ctrl+Alt+P`, session locked/zero-balance handling и controlled restart после
+- явный вход в режим обслуживания менеджера без скрытой глобальной горячей
+  клавиши, session locked/zero-balance handling и controlled restart после
   подтверждённого stop;
 - deployment/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
   `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
@@ -304,7 +312,10 @@ flows.
   операции, списания времени, товары, тарифы/сессии и доступное время; portal
   snapshot теперь передаёт ordered package queue, explicit activation RPC/UI,
   каталог тарифов для подтверждённой покупки и будущие подтверждённые брони
-  клиента для текущего места.
+  клиента для текущего места;
+- операторский сброс пароля очищает старый hash без генерации временного
+  секрета; сброшенный аккаунт входит без пароля только до обязательной смены
+  пароля в WinUI с повтором и серверным подтверждением.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
@@ -361,7 +372,7 @@ security boundary. Детали — в
       client-scoped JWT, histories и available time;
     - WinUI pre-auth fullscreen gate и server-backed login/register/profile/history;
     - portable publish получил baked HTTP/HTTPS endpoint parameters и не требует
-      env/bootstrap/token/PIN setup на игровом ПК.
+      env/bootstrap/token setup на игровом ПК.
     - enrollment получает понятный rejected-state при конфликте installation id;
       уже привязанное место нельзя случайно изменить на другой MAC без отдельной
       rebind-операции.
@@ -370,6 +381,8 @@ security boundary. Детали — в
     - portal login/register теперь создаёт server-backed active session на текущем
       ПК; WinUI и карта администратора получают snapshot через короткие циклы
       gRPC/HTTP polling, WebSocket для MVP не вводился.
+    - password reset flow не возвращает временный пароль и переводит WinUI в
+      обязательную форму установки нового пароля.
 
 Детальные задачи и решения: [`plans/README.md`](README.md) и таблица
 проверок ниже. В README есть небольшое расхождение: Product Sales уже имеет

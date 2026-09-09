@@ -113,6 +113,7 @@ class SessionSnapshot:
     active_tariff: SessionTariffSnapshot | None
     login_grant_remaining_minutes: int
     allowed_actions: tuple[str, ...]
+    balance_remaining_minutes: int | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version < 1:
@@ -121,6 +122,8 @@ class SessionSnapshot:
             raise ValueError("Session snapshot server time must include timezone")
         if self.login_grant_remaining_minutes < 0:
             raise ValueError("Session login grant remaining minutes cannot be negative")
+        if self.balance_remaining_minutes is not None and self.balance_remaining_minutes < 0:
+            raise ValueError("Session balance remaining minutes cannot be negative")
 
 
 @dataclasses.dataclass(frozen=True)

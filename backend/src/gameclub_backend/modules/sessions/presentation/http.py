@@ -164,6 +164,7 @@ class SessionSnapshotResponse(BaseModel):
     active_tariff: SnapshotTariffResponse | None
     login_grant_remaining_minutes: int
     allowed_actions: list[str]
+    balance_remaining_minutes: int | None
 
     @classmethod
     def from_domain(cls, snapshot: SessionSnapshot) -> "SessionSnapshotResponse":
@@ -193,6 +194,7 @@ class SessionSnapshotResponse(BaseModel):
             ),
             login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
             allowed_actions=list(snapshot.allowed_actions),
+            balance_remaining_minutes=snapshot.balance_remaining_minutes,
         )
 
 

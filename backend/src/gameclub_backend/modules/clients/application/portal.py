@@ -123,6 +123,9 @@ class ClientPortalService:
     async def authenticate(self, identifier: str, password: str) -> Client:
         return await self._clients.authenticate_portal(identifier, password)
 
+    async def set_password(self, client_id: uuid.UUID, password: str) -> Client:
+        return await self._clients.set_portal_password(client_id, password)
+
     async def snapshot(self, client_id: uuid.UUID, limit: int = 50) -> ClientPortalSnapshot:
         client = await self._clients.get(client_id)
         if client.blocked_at is not None:

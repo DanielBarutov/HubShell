@@ -112,6 +112,8 @@ class Client:
     updated_at: datetime.datetime
     blocked_at: datetime.datetime | None = None
     password_hash: str | None = None
+    password_reset_required: bool = False
+    password_reset_login_used: bool = False
 
     def __post_init__(self) -> None:
         Money(self.balance_cents)

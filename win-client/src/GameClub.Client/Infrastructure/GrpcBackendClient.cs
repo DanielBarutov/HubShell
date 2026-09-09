@@ -84,12 +84,44 @@ public sealed class GrpcBackendClient : IBackendClient
         return ToPortalAuthenticationSnapshot(response);
     }
 
+    public async Task<ClientPortalAuthenticationSnapshot> ChangePasswordAsync(
+        string newPassword,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.ChangePasswordAsync(
+            new Clients.ChangePortalPasswordRequest
+            {
+                NewPassword = newPassword,
+                DeviceId = deviceId,
+            },
+            headers: await CreateClientPortalMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        SetClientPortalToken(response);
+        return ToPortalAuthenticationSnapshot(response);
+    }
+
     public async Task<ClientPortalSnapshot> RefreshAsync(
         string deviceId,
         int limit = 50,
         CancellationToken cancellationToken = default)
     {
-        var metadata = await CreateClientPortalMetadataAsync(cancellationToken);
+        var renewing = _clientPortalExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(2);
+        var metadata = renewing
+            ? await CreateClientPortalRenewalMetadataAsync(cancellationToken)
+            : await CreateClientPortalMetadataAsync(cancellationToken);
+        if (renewing)
+        {
+            var renewed = await _clientPortalClient.RefreshAsync(
+                new Clients.RefreshPortalRequest { DeviceId = deviceId, Limit = limit },
+                headers: metadata,
+                deadline: DateTime.UtcNow.AddSeconds(10),
+                cancellationToken: cancellationToken);
+            SetClientPortalToken(renewed);
+            return ToPortalSnapshot(renewed.Snapshot);
+        }
+
         var response = await _clientPortalClient.GetAsync(
             new Clients.GetPortalRequest { DeviceId = deviceId, Limit = limit },
             headers: metadata,
@@ -305,6 +337,9 @@ public sealed class GrpcBackendClient : IBackendClient
             BalanceBonus = string.IsNullOrWhiteSpace(response.ClientId)
                 ? null
                 : response.BalanceBonus,
+            BalanceRemainingMinutes = string.IsNullOrWhiteSpace(response.ClientId)
+                ? null
+                : response.BalanceRemainingMinutes,
             ActivePackage = response.ActivePackage is null || response.ActivePackage.CalculateSize() == 0
                 ? null
                 : ToPackageSnapshot(response.ActivePackage),
@@ -541,6 +576,24 @@ public sealed class GrpcBackendClient : IBackendClient
         return Task.FromResult(metadata);
     }
 
+    private Task<Metadata> CreateClientPortalRenewalMetadataAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(_clientPortalAccessToken)
+            || _clientPortalExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            throw new DeviceAuthenticationRequiredException(
+                new InvalidOperationException("Client portal authentication has expired"));
+        }
+
+        var metadata = new Metadata
+        {
+            { "authorization", $"Bearer {_clientPortalAccessToken}" },
+        };
+        return Task.FromResult(metadata);
+    }
+
     private void SetClientPortalToken(Clients.ClientPortalSession response)
     {
         _clientPortalAccessToken = response.AccessToken;
@@ -549,7 +602,11 @@ public sealed class GrpcBackendClient : IBackendClient
 
     private static ClientPortalAuthenticationSnapshot ToPortalAuthenticationSnapshot(
         Clients.ClientPortalSession response) =>
-        new(response.AccessToken, response.ExpiresIn, ToPortalSnapshot(response.Snapshot));
+        new(
+            response.AccessToken,
+            response.ExpiresIn,
+            response.PasswordResetRequired,
+            ToPortalSnapshot(response.Snapshot));
 
     private static ClientPortalSnapshot ToPortalSnapshot(Clients.ClientPortalSnapshot source) =>
         new(
