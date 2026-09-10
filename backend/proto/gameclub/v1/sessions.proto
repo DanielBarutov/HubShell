@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.sessions.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Sessions.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Sessions.V1";
 
 service SessionService {
   rpc Start(StartSessionRequest) returns (Session);

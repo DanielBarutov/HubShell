@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package gameclub.workstations.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Workstations.V1";
-
-import "google/protobuf/timestamp.proto";
 import "gameclub/v1/sessions.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Workstations.V1";
 
 service WorkstationService {
   rpc Register(RegisterWorkstationRequest) returns (Workstation);

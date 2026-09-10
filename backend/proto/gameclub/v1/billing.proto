@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.billing.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Billing.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Billing.V1";
 
 service BillingService {
   rpc ChargeSession(ChargeSessionRequest) returns (SessionCharge);

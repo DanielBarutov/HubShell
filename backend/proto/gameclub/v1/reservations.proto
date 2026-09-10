@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.reservations.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Reservations.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Reservations.V1";
 
 service ReservationService {
   rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
