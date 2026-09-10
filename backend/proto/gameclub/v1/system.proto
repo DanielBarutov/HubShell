@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package gameclub.system.v1;
 
-option java_multiple_files = true;
 option csharp_namespace = "GameClub.Client.Contracts";
+option java_multiple_files = true;
 
 service SystemService {
   rpc GetHealth(HealthRequest) returns (HealthResponse);

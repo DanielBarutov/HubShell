@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.catalog.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Catalog.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Catalog.V1";
 
 service CatalogService {
   rpc CreateProduct(CreateProductRequest) returns (Product);

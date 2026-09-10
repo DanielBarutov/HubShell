@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.analytics.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.Analytics.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Analytics.V1";
 
 service AnalyticsService {
   rpc GetOverview(GetAnalyticsOverviewRequest) returns (AnalyticsOverview);

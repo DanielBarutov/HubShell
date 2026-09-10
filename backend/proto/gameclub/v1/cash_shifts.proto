@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package gameclub.cash_shifts.v1;
 
-option csharp_namespace = "GameClub.Client.Contracts.CashShifts.V1";
-
 import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.CashShifts.V1";
 
 service CashShiftService {
   rpc Open(OpenCashShiftRequest) returns (CashShift);
