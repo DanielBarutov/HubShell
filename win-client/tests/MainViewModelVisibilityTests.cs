@@ -55,6 +55,26 @@ public sealed class MainViewModelVisibilityTests
         }
     }
 
+    [Fact]
+    public async Task ManagerMaintenanceStateHasNoUserPortalSideEffect()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        viewModel.ShowManagerLogin();
+
+        Assert.True(viewModel.IsManagerLoginVisible);
+        Assert.False(viewModel.IsMaintenanceVisible);
+        Assert.False(viewModel.IsPortalContentVisible);
+
+        viewModel.ManagerPassword = "manager-secret";
+
+        Assert.True(viewModel.TryEnterMaintenance());
+        Assert.True(viewModel.IsMaintenanceVisible);
+        Assert.False(viewModel.IsPortalContentVisible);
+    }
+
     private static IBackendClient CreateBackend() =>
         DispatchProxy.Create<IBackendClient, UnconfiguredBackendProxy>();
 
