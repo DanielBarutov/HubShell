@@ -79,8 +79,10 @@ provider policy, полная browser/accessibility matrix и native Windows evi
 | [`frontend/src/features/`](../frontend/src/features/) | feature-экраны и контекстные панели operator UI | локальный UI-flow по bounded feature-модулям |
 | [`frontend/src/api/`](../frontend/src/api/) | DTO, HTTP API client и нормализаторы | typed API boundary; вызовы экранов проходят через Redux facade |
 | [`frontend/src/styles/`](../frontend/src/styles/) | каскад operator UI, разложенный по тематическим блокам | сохранённый порядок CSS-правил |
-| [`win-client/`](../win-client/) | C# solution, legacy WinUI source, Avalonia migration plan, scripts, tests | клиент игрового ПК |
+| [`win-client/`](../win-client/) | Linux-first Core/Avalonia solution, legacy WinUI source, scripts, tests | клиент игрового ПК |
 | [`win-client/src/GameClub.Client/`](../win-client/src/GameClub.Client/) | Domain/Application/Infrastructure/Presentation | Windows implementation |
+| [`win-client/src/GameClub.Client.Core/`](../win-client/src/GameClub.Client.Core/) | linked portable Domain/Application/ports and safe infrastructure helpers | `net8.0` migration core |
+| [`win-client/src/GameClub.Client.Avalonia/`](../win-client/src/GameClub.Client.Avalonia/) | diagnostic App/MainWindow and Linux developer host | Avalonia `11.3.2` migration host |
 | [`plans/README.md`](README.md) | общий индекс и зависимости | навигация по планам |
 | [`plans/`](./) | детальные планы backend-модулей, Windows-lockdown и связанные контракты | единое хранилище implementation-планов |
 
@@ -126,8 +128,9 @@ FastAPI, PostgreSQL, Redis, gRPC или Dramatiq; application работает �
 - C# / .NET `8`;
 - текущая реализация: WinUI 3 через Microsoft Windows App SDK `1.6.240829007`
   на `net8.0-windows10.0.19041.0` — legacy source до миграции;
-- утверждённая цель: Avalonia developer host и shared Core/Tests на `net8.0`,
-  изолированные Windows adapters на `net8.0-windows`;
+- Avalonia `11.3.2` developer host и shared Core/Tests на `net8.0` уже
+  собираются с SDK `8.0.425` в Linux; Windows adapters на `net8.0-windows`
+  ещё не выделены;
 - минимальная Windows deployment ОС сохраняется Windows 10 build `17763`;
 - `Grpc.Net.Client 2.66.0`, `Google.Protobuf 3.28.2`, `Grpc.Tools 2.66.0`;
 - x86, x64 и ARM64; тестовый проект сейчас рассчитан на x64;
@@ -294,8 +297,8 @@ flows.
 | `Domain` | connection state, heartbeat, command/session snapshots, lockdown policy |
 | `Application` | access-gate и session coordinators, ports для backend/token/executor |
 | `Infrastructure` | gRPC adapter, bearer metadata, health, enrollment, token storage, Windows command/power adapters, endpoint policy |
-| `Presentation` | текущие legacy WinUI `MainWindow`, `App`, `MainViewModel`; целевой Avalonia host описан в плане 38 |
-| `tests` | access-gate, session coordinator, password verifier, command executor |
+| `Presentation` | legacy WinUI `MainWindow`, `App`, `MainViewModel`; Avalonia diagnostic `App`/`MainWindow` запущен в Linux, product flows не перенесены |
+| `tests` | Linux: access-gate, session coordinator, password verifier, endpoint policy и Avalonia headless smoke; Windows command executor остаётся legacy test |
 
 Уже реализовано в source-level срезе:
 
@@ -423,7 +426,7 @@ security boundary. Детали — в
 | Направление | Почему не закрыто |
 | --- | --- |
 | PostgreSQL integration/concurrency | без DSN 18 тестов пропускаются; при dev DSN все 157 backend-тестов проходят, включая package/transfer/offline/settlement mixed-fault evidence; production cross-owner UoW/provider policy остаётся открытой |
-| Avalonia migration | план 38 утверждён, но код ещё не мигрирован; в этом Linux checkout `dotnet` отсутствует в PATH, поэтому Linux build/run evidence пока не получен |
+| Avalonia migration | Core/Avalonia/tests Linux solution собрана SDK `8.0.425`: Debug build без warnings, `18 passed`, GUI host удерживался запущенным 10 секунд; `win-x64` framework-dependent artifact собран cross-publish. `MainViewModel`, product UI и Windows adapters ещё не перенесены |
 | Windows native | legacy WinUI требует WindowsAppSDK; после Avalonia migration Linux cross-compile не заменяет Windows runtime evidence |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
@@ -434,9 +437,10 @@ security boundary. Детали — в
 
 ### P0 — доказать текущий MVP
 
-0. Выполнить [`план 38`](38-avalonia-linux-first/PLAN.md): Linux developer
-   build/test/run и Windows-target compile artifact. До этого текущий WinUI
-   source остаётся исторической исходной точкой, а не delivery candidate.
+0. Продолжить [`план 38`](38-avalonia-linux-first/PLAN.md): вынести из
+   `MainViewModel` WinUI `Visibility`, затем перенести access-gate и portal
+   flows на Avalonia. Linux Core/Avalonia build/test/run и `win-x64`
+   cross-compile artifact уже получены; это не Windows runtime proof.
 
 1. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
    закрыты доступными source/unit/API/visual checks; native/runtime границы

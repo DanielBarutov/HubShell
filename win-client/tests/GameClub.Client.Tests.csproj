@@ -1,12 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Keep Windows App SDK project references in the same non-MSIX mode as the client. -->
-    <WindowsPackageType>None</WindowsPackageType>
-    <EnableMsixTooling>true</EnableMsixTooling>
-    <Platforms>x64</Platforms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -18,6 +14,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\GameClub.Client\GameClub.Client.csproj" />
+    <ProjectReference Include="..\src\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\src\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="WindowsCommandExecutorTests.cs" />
   </ItemGroup>
 </Project>

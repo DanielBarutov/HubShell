@@ -21,22 +21,24 @@ if ($null -eq $dotnetCommand) {
     throw "Команда dotnet не найдена. Установите .NET 8 SDK и Visual Studio workload .NET desktop development."
 }
 
-$solutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.sln")
+$legacySolutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.Windows.sln")
+$linuxFirstSolutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.sln")
 
-Write-Host "Проверяем Windows client: $solutionPath"
+Write-Host "Проверяем legacy WinUI host: $legacySolutionPath"
+Write-Host "Проверяем Avalonia/Core test graph: $linuxFirstSolutionPath"
 & $dotnetCommand.Source --info
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet --info завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source restore $solutionPath.Path `
+& $dotnetCommand.Source restore $legacySolutionPath.Path `
     -p:UseWPF=false `
     -p:UseWindowsForms=false
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet restore завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source build $solutionPath.Path `
+& $dotnetCommand.Source build $legacySolutionPath.Path `
     --configuration $Configuration `
     -p:Platform=$Architecture `
     -p:UseWPF=false `
@@ -46,17 +48,29 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet build завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source test $solutionPath.Path `
-    --configuration $Configuration `
-    -p:Platform=$Architecture `
-    -p:UseWPF=false `
-    -p:UseWindowsForms=false `
-    --no-restore
+& $dotnetCommand.Source restore $linuxFirstSolutionPath.Path
 if ($LASTEXITCODE -ne 0) {
-    throw "dotnet test завершился с кодом $LASTEXITCODE."
+    throw "Avalonia/Core restore завершился с кодом $LASTEXITCODE."
 }
 
-Write-Host "Native build пройден. Далее выполните ручные проверки под обычным пользователем:"
+& $dotnetCommand.Source build $linuxFirstSolutionPath.Path `
+    --configuration $Configuration `
+    -p:Platform=$Architecture `
+    --no-restore
+if ($LASTEXITCODE -ne 0) {
+    throw "Avalonia/Core build завершился с кодом $LASTEXITCODE."
+}
+
+& $dotnetCommand.Source test $linuxFirstSolutionPath.Path `
+    --configuration $Configuration `
+    -p:Platform=$Architecture `
+    --no-restore
+if ($LASTEXITCODE -ne 0) {
+    throw "Avalonia/Core test завершился с кодом $LASTEXITCODE."
+}
+
+Write-Host "Legacy WinUI native build и Avalonia/Core checks пройдены. Avalonia Windows runtime пока требует отдельного smoke после переноса product UI."
+Write-Host "Далее выполните ручные проверки legacy host под обычным пользователем:"
 Write-Host "1. Запустить клиент обычным пользователем, без прав администратора: он должен стартовать Locked в полноэкранном borderless shell."
 Write-Host "2. До назначения MAC проверить pending/waiting screen без user profile, баланса и рабочих действий."
 Write-Host "3. Назначить MAC в админке, дождаться approved, heartbeat, device policy и theme."

@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameClub.Client.Avalonia.MainWindow"
+        Width="640"
+        Height="360"
+        MinWidth="480"
+        MinHeight="280"
+        Title="HubShell client — Linux developer host"
+        WindowStartupLocation="CenterScreen">
+  <Border Padding="32" Background="#07090D">
+    <StackPanel Spacing="16">
+      <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
+      <TextBlock Text="Avalonia developer host" Foreground="#EDF5EF" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Status}" Foreground="#B9C5C0" TextWrapping="Wrap" FontSize="15" />
+      <Border Background="#131E20" CornerRadius="8" Padding="14">
+        <TextBlock Text="{Binding EvidenceBoundary}" Foreground="#B9C5C0" TextWrapping="Wrap" />
+      </Border>
+    </StackPanel>
+  </Border>
+</Window>
