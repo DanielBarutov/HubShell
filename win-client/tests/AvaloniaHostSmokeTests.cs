@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Headless;
 using GameClub.Client.Avalonia;
+using GameClub.Client.Presentation;
 using Xunit;
 
 namespace GameClub.Client.Tests;
@@ -20,5 +21,7 @@ public sealed class AvaloniaHostSmokeTests
         var window = new MainWindow();
 
         Assert.Equal("HubShell client — Linux developer host", window.Title);
+        Assert.IsType<MainViewModel>(window.DataContext);
+        Assert.True(((MainViewModel)window.DataContext!).IsAccessGateVisible);
     }
 }

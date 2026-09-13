@@ -33,18 +33,21 @@ fullscreen/window placement и kiosk policy.
 1. [x] Выделить `net8.0` gRPC transport/enrollment project: generated protobuf
    consumers, `GrpcBackendClient`, MAC enrollment and endpoint validation.
    Перенести эти types из legacy WinUI compilation без изменения wire calls.
-2. [ ] Добавить безопасную Avalonia developer composition: offline/connection
-   state виден без endpoint; реальный endpoint включается только явной dev
-   настройкой и не использует DPAPI journal как Linux security guarantee.
+2. [x] Добавить безопасную Avalonia developer composition: offline/connection
+   state виден без endpoint; текущий dev host жёстко ограничен loopback
+   `127.0.0.1` и не использует DPAPI journal как Linux security guarantee.
 3. [ ] Перенести access-gate layout и binding/event adapters. Первый frame
    остаётся тёмным; entry/login/register/password-reset rules остаются в
-   `MainViewModel` и backend responses.
+   `MainViewModel` и backend responses. Первый working slice содержит
+   login/register/password-reset controls и minimal post-login summary; full
+   layout equivalence и manager mode остаются в этой незакрытой задаче.
 4. [ ] Перенести post-login portal/session widget: profile, server snapshot,
    balance, tariffs, queued entitlement, active session, transfer and visible
    notifications. Не переносить tray/restart/desktop window mode в Linux.
 5. [ ] Добавить Avalonia headless tests для state transitions and bindings;
    Linux smoke без endpoint, optional integration smoke только против
-   explicitly supplied test backend.
+   explicitly supplied test backend. Opt-in localhost register → portal test
+   added; remaining binding/state coverage keeps this task open.
 6. [ ] После каждого portable slice выполнить Linux restore/build/test/run and
    `win-x64` cross-publish. Перед release выполнить separate Windows native
    compile/runtime smoke, including legacy-to-Avalonia adapter review.
