@@ -16,5 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
   </ItemGroup>
 </Project>

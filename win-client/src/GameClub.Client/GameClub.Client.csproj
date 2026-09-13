@@ -46,6 +46,7 @@
   <ItemGroup>
     <!-- Portable application state is emitted once by the Linux-runnable Core. -->
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -56,6 +57,9 @@
     <Compile Remove="Infrastructure\EndpointPolicy.cs" />
     <Compile Remove="Infrastructure\EnvironmentAccessCredentialVerifier.cs" />
     <Compile Remove="Infrastructure\PasswordHashVerifier.cs" />
+    <Compile Remove="Infrastructure\GrpcBackendClient.cs" />
+    <Compile Remove="Infrastructure\DeviceEnrollmentTokenProvider.cs" />
+    <Compile Remove="Infrastructure\MacAddressProvider.cs" />
   </ItemGroup>
 
   <ItemGroup>

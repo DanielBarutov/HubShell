@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Core", "src\GameClub.Client.Core\GameClub.Client.Core.csproj", "{D7EFBB0E-59B6-4FC5-AD89-8B4A9FA1F832}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Transport.Grpc", "src\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj", "{4BCB6EF3-AE11-4205-AB1E-B1D060B612B9}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Avalonia", "src\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj", "{AFAFD3B2-28F9-44E3-9460-A95F02C4D943}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Tests", "tests\GameClub.Client.Tests.csproj", "{AFD7F0A3-3279-4A7B-ACD6-7A7C4CEEDCA8}"
@@ -18,6 +20,10 @@ Global
 		{D7EFBB0E-59B6-4FC5-AD89-8B4A9FA1F832}.Debug|x64.Build.0 = Debug|Any CPU
 		{D7EFBB0E-59B6-4FC5-AD89-8B4A9FA1F832}.Release|x64.ActiveCfg = Release|Any CPU
 		{D7EFBB0E-59B6-4FC5-AD89-8B4A9FA1F832}.Release|x64.Build.0 = Release|Any CPU
+		{4BCB6EF3-AE11-4205-AB1E-B1D060B612B9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4BCB6EF3-AE11-4205-AB1E-B1D060B612B9}.Debug|x64.Build.0 = Debug|Any CPU
+		{4BCB6EF3-AE11-4205-AB1E-B1D060B612B9}.Release|x64.ActiveCfg = Release|Any CPU
+		{4BCB6EF3-AE11-4205-AB1E-B1D060B612B9}.Release|x64.Build.0 = Release|Any CPU
 		{AFAFD3B2-28F9-44E3-9460-A95F02C4D943}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{AFAFD3B2-28F9-44E3-9460-A95F02C4D943}.Debug|x64.Build.0 = Debug|Any CPU
 		{AFAFD3B2-28F9-44E3-9460-A95F02C4D943}.Release|x64.ActiveCfg = Release|Any CPU
