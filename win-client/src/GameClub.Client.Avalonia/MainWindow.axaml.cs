@@ -28,6 +28,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title = clientHost.WindowTitle;
         this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
+        this.FindControl<Button>("HideToTrayButton")!.IsVisible = clientHost.WindowAdapter is not null;
         DataContext = _clientHost.ViewModel;
         ViewModel.PropertyChanged += ViewModelPropertyChanged;
         Opened += MainWindowOpened;
@@ -36,29 +37,38 @@ public partial class MainWindow : Window
 
     private MainViewModel ViewModel => _clientHost.ViewModel;
 
-    private async void MainWindowOpened(object? sender, EventArgs args) =>
+    private async void MainWindowOpened(object? sender, EventArgs args)
+    {
+        _clientHost.WindowAdapter?.Attach(this);
+        ApplyHostWindowMode();
         await _clientHost.StartAsync();
+    }
 
     private async void MainWindowClosed(object? sender, EventArgs args)
     {
         ViewModel.PropertyChanged -= ViewModelPropertyChanged;
+        _clientHost.WindowAdapter?.Dispose();
         await _clientHost.DisposeAsync();
     }
 
     private void ViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName != nameof(MainViewModel.ThemeName))
+        if (args.PropertyName == nameof(MainViewModel.ThemeName))
         {
-            return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (global::Avalonia.Application.Current is App application)
+                {
+                    application.ApplyWorkstationTheme(ViewModel.ThemeName);
+                }
+            });
         }
 
-        Dispatcher.UIThread.Post(() =>
+        if (args.PropertyName is nameof(MainViewModel.IsAccessLocked)
+            or nameof(MainViewModel.IsMaintenanceMode))
         {
-            if (global::Avalonia.Application.Current is App application)
-            {
-                application.ApplyWorkstationTheme(ViewModel.ThemeName);
-            }
-        });
+            Dispatcher.UIThread.Post(ApplyHostWindowMode);
+        }
     }
 
     private void RecordKeyActivity(object? sender, KeyEventArgs args) =>
@@ -163,6 +173,9 @@ public partial class MainWindow : Window
     private async void Logout(object? sender, RoutedEventArgs args) =>
         await ViewModel.LogoutAsync();
 
+    private void HideToTray(object? sender, RoutedEventArgs args) =>
+        _clientHost.WindowAdapter?.HideToTray();
+
     private async void StopCurrentSession(object? sender, RoutedEventArgs args) =>
         await ViewModel.StopActiveSessionAsync();
 
@@ -260,6 +273,10 @@ public partial class MainWindow : Window
             textBox.Text = string.Empty;
         }
     }
+
+    private void ApplyHostWindowMode() =>
+        _clientHost.WindowAdapter?.ApplyWindowMode(
+            ViewModel.IsAccessLocked || ViewModel.IsMaintenanceMode);
 
     private static string FormatRussianPhone(string value)
     {

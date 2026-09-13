@@ -64,7 +64,7 @@ GameClub.Client.Core       net8.0
 GameClub.Client.Avalonia   net8.0
   Avalonia App/window, resources, bindings and Linux developer host
 
-GameClub.Client.Windows    net8.0-windows
+GameClub.Client.Windows    net8.0, published only for Windows RIDs
   DPAPI, Windows tray/restart/autostart and Windows-specific window adapters
 
 GameClub.Client.Tests      net8.0

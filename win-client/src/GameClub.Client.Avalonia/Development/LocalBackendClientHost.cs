@@ -33,6 +33,8 @@ public sealed class LocalBackendClientHost : IClientHost
 
     public string HostDisclaimer => "Linux developer host: backend доступен только через loopback.";
 
+    public IClientWindowAdapter? WindowAdapter => null;
+
     public async Task StartAsync()
     {
         if (_started)
