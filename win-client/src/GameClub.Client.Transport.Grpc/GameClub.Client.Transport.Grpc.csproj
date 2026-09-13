@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>GameClub.Client</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Protobuf_ProtoRoot>..\..\..\backend\proto</Protobuf_ProtoRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" Version="2.66.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.28.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.66.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\system.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\workstations.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\clients.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\catalog.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\reservations.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\sessions.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\billing.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\cash_shifts.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v1\analytics.proto" GrpcServices="Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\GameClub.Client\Infrastructure\GrpcBackendClient.cs" Link="Infrastructure\GrpcBackendClient.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\DeviceEnrollmentTokenProvider.cs" Link="Infrastructure\DeviceEnrollmentTokenProvider.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\MacAddressProvider.cs" Link="Infrastructure\MacAddressProvider.cs" />
+  </ItemGroup>
+</Project>
