@@ -1,7 +1,7 @@
 # Сборка, запуск и диагностика Windows-клиента
 
 Этот документ является основной инструкцией для сборки и запуска
-`GameClub.Client` на Windows. Он рассчитан на checkout проекта в
+`GameClub.Client.Windows` на Windows. Он рассчитан на checkout проекта в
 `C:\Git\HubShell`.
 
 Функциональный smoke-тест после запуска описан отдельно в
@@ -19,8 +19,8 @@ C:\Git\HubShell
 Основные пути:
 
 ```text
-C:\Git\HubShell\win-client\GameClub.Client.sln
-C:\Git\HubShell\win-client\src\GameClub.Client\GameClub.Client.csproj
+C:\Git\HubShell\win-client\GameClub.Client.Windows.sln
+C:\Git\HubShell\win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj
 C:\Git\HubShell\win-client\scripts
 C:\Git\HubShell\win-client\artifacts
 ```
@@ -33,7 +33,7 @@ C:\Git\HubShell\win-client\artifacts
 - single-file publish — один EXE для передачи на игровой ПК, проверять его
   нужно отдельно после folder-publish.
 
-Нельзя копировать один `GameClub.Client.exe` из каталога `bin` или из
+Нельзя копировать один `GameClub.Client.Windows.exe` из каталога `bin` или из
 folder-publish и ожидать, что он будет переносимым. Для одного файла используйте
 только `build-portable-exe.ps1`.
 
@@ -42,13 +42,11 @@ folder-publish и ожидать, что он будет переносимым.
 На машине сборки/разработчика:
 
 - Windows 10 build 17763 или новее либо Windows 11;
-- Visual Studio 2022 с workload `.NET desktop development`;
 - .NET 8 SDK;
-- Windows SDK;
 - доступ к backend, если проверяется сетевой сценарий.
 
-На игровом ПК для Release single-file не требуются Visual Studio, .NET SDK и
-Windows App SDK. Обычный запуск выполняется без прав администратора. Для
+На игровом ПК для Release single-file не требуются Visual Studio или .NET SDK.
+Обычный запуск выполняется без прав администратора. Для
 первой проверки kiosk-политику Windows не включайте.
 
 Если файлы пришли архивом или скачаны браузером, в каталоге проекта можно
@@ -65,8 +63,8 @@ Set-Location "C:\Git\HubShell"
 git status --short
 git rev-parse --show-toplevel
 git rev-parse --short HEAD
-Test-Path "C:\Git\HubShell\win-client\GameClub.Client.sln"
-Test-Path "C:\Git\HubShell\win-client\src\GameClub.Client\GameClub.Client.csproj"
+Test-Path "C:\Git\HubShell\win-client\GameClub.Client.Windows.sln"
+Test-Path "C:\Git\HubShell\win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj"
 ```
 
 Ожидаемый корень — `C:\Git\HubShell`, а обе проверки `Test-Path` должны вернуть
@@ -115,8 +113,8 @@ Set-Location "C:\Git\HubShell\win-client"
 Если нужен ручной эквивалент:
 
 ```powershell
-dotnet restore "C:\Git\HubShell\win-client\GameClub.Client.sln"
-dotnet build "C:\Git\HubShell\win-client\GameClub.Client.sln" `
+dotnet restore "C:\Git\HubShell\win-client\GameClub.Client.Windows.sln"
+dotnet build "C:\Git\HubShell\win-client\GameClub.Client.Windows.sln" `
   --configuration Debug -p:Platform=x64 --no-restore
 dotnet test "C:\Git\HubShell\win-client\GameClub.Client.sln" `
   --configuration Debug -p:Platform=x64 --no-restore
@@ -146,7 +144,7 @@ Set-Location "C:\Git\HubShell\win-client"
 `-EnvironmentName production` при этом допустим. Для внешнего backend используйте
 `https://...`.
 
-Важно для WinUI: сборку и публикацию можно выполнять по SSH, но окно клиента
+Сборку и публикацию можно выполнять по SSH, но окно клиента
 нельзя валидно проверять из SSH-сеанса Windows Session 0. Запускать EXE нужно
 в интерактивном desktop-сеансе обычного пользователя — напрямую на ПК или по
 RDP. Проверка текущей сессии:
@@ -157,16 +155,15 @@ quser
 ```
 
 Для обычного рабочего стола ожидается Session 1 или другой номер активной
-пользовательской сессии, а не `0`. Если запустить WinUI из SSH, он может
-завершиться внутри `Microsoft.UI.Xaml.dll` до первой строки собственного
-`startup.log`; это не доказательство ошибки приложения. Скрипт диагностики
+пользовательской сессии, а не `0`. Результат запуска Avalonia из SSH нельзя
+считать проверкой окна. Скрипт диагностики
 теперь записывает `DiagnosticSessionId`, `InteractiveDesktop` и печатает это
 предупреждение в отчёте.
 
 Запускать нужно весь каталог, а не только EXE:
 
 ```powershell
-$debugExe = "C:\GameClub\debug-publish\GameClub.Client.exe"
+$debugExe = "C:\GameClub\debug-publish\GameClub.Client.Windows.exe"
 $debugDir = Split-Path -Parent $debugExe
 
 $process = Start-Process `
@@ -191,7 +188,7 @@ Windows из следующего раздела.
 ```powershell
 Set-Location "C:\Git\HubShell\win-client"
 .\scripts\diagnose-startup.ps1 `
-  -ExecutablePath "C:\GameClub\debug-publish\GameClub.Client.exe" `
+  -ExecutablePath "C:\GameClub\debug-publish\GameClub.Client.Windows.exe" `
   -TimeoutSeconds 30
 ```
 
@@ -247,22 +244,22 @@ Get-MpThreatDetection |
 | EXE не найден или ошибка отсутствующей DLL | Использован не тот артефакт; собрать folder-publish и не отделять EXE от каталога. |
 | Ошибка `0xc000007b` или похожая native loader error | Проверить архитектуру ПК и сборки; для обычного игрового ПК использовать `x64`. |
 | `.NET Runtime` с managed exception | Запустить Debug folder-publish из Visual Studio под отладчиком и сохранить stack trace. |
-| `Application Error` с faulting module | Проверить native dependency, Windows App SDK, архитектуру и crash dump. |
+| `Application Error` с faulting module | Проверить native dependency, архитектуру и crash dump. |
 | Нет событий, EXE исчезает сразу | Проверить Defender/SmartScreen, `Unblock-File`, права на каталог и совместимость Windows. |
 | Процесс жив, но окна нет | Запустить из Visual Studio, проверить XAML и native tray; отсутствие backend не должно закрывать окно. |
-| Запуск выполнен по SSH и SessionId равен `0` | Повторить запуск из активного desktop-сеанса/RDP; SSH Session 0 не подходит для проверки WinUI-окна. |
+| Запуск выполнен по SSH и SessionId равен `0` | Повторить запуск из активного desktop-сеанса/RDP; SSH Session 0 не подходит для проверки Avalonia-окна. |
 
-Особенно важно: native tray и фоновые циклы теперь запускаются после
-`Window.Activate()`, а ошибка tray записывается в `startup.log` и не должна
-скрывать уже созданное окно. Если процесс всё равно исчезает до появления
+Особенно важно: native tray подключается после появления нативного handle
+Avalonia-окна, а ошибка tray записывается в `startup.log` и не должна скрывать
+уже созданное окно. Если процесс всё равно исчезает до появления
 записи, используйте Event Log, Defender/SmartScreen и Visual Studio.
 
 ## 8. Запуск под Visual Studio
 
-Откройте:
+Откройте Windows production solution:
 
 ```text
-C:\Git\HubShell\win-client\GameClub.Client.sln
+C:\Git\HubShell\win-client\GameClub.Client.Windows.sln
 ```
 
 В Visual Studio выберите:
@@ -270,7 +267,7 @@ C:\Git\HubShell\win-client\GameClub.Client.sln
 ```text
 Configuration: Debug
 Platform: x64
-Startup Project: GameClub.Client
+Startup Project: GameClub.Client.Windows
 ```
 
 Запустите `F5`. В `Debug > Windows > Exception Settings` включите остановку
@@ -304,13 +301,13 @@ Set-Location "C:\Git\HubShell\win-client"
 Ожидаемый результат:
 
 ```text
-C:\Git\HubShell\win-client\artifacts\portable\win-x64\Release\GameClub.Client.exe
+C:\Git\HubShell\win-client\artifacts\portable\win-x64\Release\GameClub.Client.Windows.exe
 ```
 
 SHA-256 печатается скриптом. На игровом ПК создайте, например, каталог:
 
 ```text
-C:\GameClub\Client\GameClub.Client.exe
+C:\GameClub\Client\GameClub.Client.Windows.exe
 ```
 
 Скопируйте туда именно этот EXE и запускайте обычным пользователем. Для первого

@@ -30,7 +30,7 @@ enrollment/rotation и Windows Credential Manager или серверная supe
 
 ## Что приложение не может гарантировать
 
-Обычное WinUI 3 окно не является границей безопасности Windows. `Topmost`,
+Обычное desktop-окно Avalonia не является границей безопасности Windows. `Topmost`,
 полноэкранный размер и обработка клавиш не блокируют гарантированно
 `Ctrl+Alt+Del`, смену пользователя, диспетчер задач, другой desktop или выход
 из процесса. Команда `display.lock` блокирует только GameClub app-shell и не

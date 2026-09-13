@@ -16,7 +16,7 @@ C:\Git\HubShell
 Игровой ПК:
 
 ```text
-C:\GameClub\Client\GameClub.Client.exe
+C:\GameClub\Client\GameClub.Client.Windows.exe
 ```
 
 Проверять нужно под обычным пользователем, не под администратором. Для первого
@@ -31,9 +31,9 @@ smoke не включайте Assigned Access или Shell Launcher. У вас �
 Запуск и визуальная проверка должны выполняться в интерактивной Windows-сессии
 пользователя (`SessionId` обычно `1` или другой активный номер), напрямую на
 ПК или по RDP. SSH-сеанс обычно работает в Session 0: он подходит для сборки,
-публикации и чтения логов, но не для проверки WinUI-окна.
+публикации и чтения логов, но не для проверки Avalonia-окна.
 
-На игровом ПК не должны требоваться `dotnet`, Visual Studio, Windows App SDK,
+На игровом ПК не должны требоваться `dotnet`, Visual Studio,
 PowerShell setup, env-переменные, `device_id`, bootstrap token или PIN hash.
 
 ## 2. Установка и первый запуск
@@ -158,7 +158,7 @@ docker compose start backend-grpc
 
 ## 8. Kiosk boundary — отдельный этап
 
-Fullscreen WinUI не запрещает `Ctrl+Alt+Del`, Task Manager, другой desktop,
+Fullscreen Avalonia access-gate не запрещает `Ctrl+Alt+Del`, Task Manager, другой desktop,
 Explorer или выход из процесса. В текущем репозитории скрипт настраивает только
 Shell Launcher; Assigned Access через него не настраивается. Проверяйте kiosk
 только на отдельной тестовой машине после обычного smoke.
@@ -169,7 +169,7 @@ Shell Launcher; Assigned Access через него не настраивает�
 Set-Location "C:\Git\HubShell\win-client"
 .\scripts\configure-windows-kiosk.ps1 `
   -KioskUser "GameClubUser" `
-  -ExecutablePath "C:\GameClub\Client\GameClub.Client.exe"
+  -ExecutablePath "C:\GameClub\Client\GameClub.Client.Windows.exe"
 ```
 
 Применение требует отдельной точки восстановления, административных прав и
@@ -180,7 +180,7 @@ SYSTEM-контекста. Обычный elevated PowerShell недостато
 $taskName = "GameClub.ConfigureShellLauncher"
 $action = New-ScheduledTaskAction `
   -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
-  -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Git\HubShell\win-client\scripts\configure-windows-kiosk.ps1" -Apply -KioskUser "GameClubUser" -ExecutablePath "C:\GameClub\Client\GameClub.Client.exe"'
+  -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Git\HubShell\win-client\scripts\configure-windows-kiosk.ps1" -Apply -KioskUser "GameClubUser" -ExecutablePath "C:\GameClub\Client\GameClub.Client.Windows.exe"'
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force
 Start-ScheduledTask -TaskName $taskName

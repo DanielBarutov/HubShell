@@ -33,6 +33,7 @@
     <Compile Include="..\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="Infrastructure\DeploymentSettings.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\JsonlOfflineJournal.cs" Link="Infrastructure\JsonlOfflineJournal.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\NativeTrayIcon.cs" Link="Infrastructure\NativeTrayIcon.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\StartupDiagnostics.cs" Link="Infrastructure\StartupDiagnostics.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\WindowsCommandExecutor.cs" Link="Infrastructure\WindowsCommandExecutor.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\WindowsWorkstationPowerController.cs" Link="Infrastructure\WindowsWorkstationPowerController.cs" />
   </ItemGroup>

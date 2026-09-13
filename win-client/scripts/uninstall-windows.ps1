@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows)) {
-    throw "Удаление WinUI-клиента выполняется только на Windows."
+    throw "Удаление Avalonia Windows-клиента выполняется только на Windows."
 }
 
 if (-not $ConfirmRemoval) {
@@ -40,8 +40,8 @@ if ([string]::Equals(
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $removed = $false
 if ($PSCmdlet.ShouldProcess($resolvedInstallPath, "удалить установку GameClub Client")) {
-    Remove-ItemProperty -Path $runKey -Name "GameClub.Client" -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName "GameClub.Client.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName "GameClub.Client.Windows.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
 
     if (Test-Path -LiteralPath $resolvedInstallPath) {
         Remove-Item -LiteralPath $resolvedInstallPath -Recurse -Force

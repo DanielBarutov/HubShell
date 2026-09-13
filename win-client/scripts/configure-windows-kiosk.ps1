@@ -1,6 +1,6 @@
 ﻿[CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ExecutablePath = (Join-Path $PSScriptRoot "GameClub.Client.exe"),
+    [string]$ExecutablePath = (Join-Path $PSScriptRoot "GameClub.Client.Windows.exe"),
     [string]$KioskUser,
     [string]$OutputPath = (Join-Path $PSScriptRoot "..\artifacts\kiosk\shell-launcher.xml"),
     [string]$BackupPath = (Join-Path $PSScriptRoot "..\artifacts\kiosk\shell-launcher.backup.xml"),

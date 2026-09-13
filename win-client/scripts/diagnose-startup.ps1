@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ExecutablePath = "C:\Git\HubShell\win-client\artifacts\publish\win-x64\Debug\GameClub.Client.exe",
+    [string]$ExecutablePath = "C:\Git\HubShell\win-client\artifacts\publish\win-x64\Debug\GameClub.Client.Windows.exe",
     [string]$OutputPath = (Join-Path $PSScriptRoot "..\artifacts\diagnostics"),
     [ValidateRange(1, 300)]
     [int]$TimeoutSeconds = 30
@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows)) {
-    throw "Диагностика запуска WinUI-клиента выполняется только на Windows."
+    throw "Диагностика запуска Avalonia Windows-клиента выполняется только на Windows."
 }
 
 $resolvedExecutablePath = [System.IO.Path]::GetFullPath($ExecutablePath)
@@ -95,7 +95,7 @@ $lines.Add("OSArchitecture: $osArchitecture")
 $lines.Add("DiagnosticSessionId: $diagnosticSessionId")
 $lines.Add("InteractiveDesktop: $interactiveDesktop")
 if (-not $interactiveDesktop) {
-    $lines.Add("Warning: WinUI GUI must be launched from the interactive Windows desktop. Session 0 (for example SSH) is not a valid GUI runtime test.")
+    $lines.Add("Warning: Avalonia GUI must be launched from the interactive Windows desktop. Session 0 (for example SSH) is not a valid GUI runtime test.")
 }
 $lines.Add("TimeoutSeconds: $TimeoutSeconds")
 $lines.Add("StartupLogPath: $startupLogPath")
@@ -141,7 +141,7 @@ Set-Content -LiteralPath $reportPath -Value $lines -Encoding UTF8
 
 Write-Host "Startup diagnostic report: $reportPath"
 if (-not $interactiveDesktop) {
-    Write-Host "ВНИМАНИЕ: текущая Windows-сессия $diagnosticSessionId не является интерактивным desktop-сеансом. Для WinUI запускайте EXE из Session 1/RDP; результат SSH-запуска нельзя считать проверкой окна."
+    Write-Host "ВНИМАНИЕ: текущая Windows-сессия $diagnosticSessionId не является интерактивным desktop-сеансом. Для Avalonia запускайте EXE из Session 1/RDP; результат SSH-запуска нельзя считать проверкой окна."
 }
 if ($null -ne $startError) {
     Write-Host "EXE не удалось запустить. Подробность сохранена в отчёте."
