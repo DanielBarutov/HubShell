@@ -28,12 +28,13 @@ Windows-продукт и не делает Linux-версию kiosk-клиен�
 autostart и Assigned Access/Shell Launcher. Порядок и первая остановка
 миграции зафиксированы в плане 38.
 
-Первый технический срез плана 38 выполнен частично: `GameClub.Client.Core`,
+Первая техническая остановка плана 38 выполнена: `GameClub.Client.Core`,
 `GameClub.Client.Avalonia` и cross-platform tests собираются в Linux; headless
 smoke прошёл, diagnostic окно запускалось в GUI-сеансе, а `win-x64` artifact
-собран cross-publish. Это не перенос access-gate/portal и не Windows runtime
-proof: `MainViewModel`, full product UI и Windows adapters пока остаются legacy
-WinUI source. Точное evidence — в
+собран cross-publish. `MainViewModel` emitted only из Core и больше не зависит
+от WinUI; legacy XAML использует отдельный bool-to-Visibility adapter. Это ещё
+не перенос access-gate/portal в Avalonia и не Windows runtime proof: full
+product UI и Windows adapters пока остаются legacy WinUI source. Точное evidence — в
 [`plans/VERIFICATION.md`](../plans/VERIFICATION.md).
 
 Подробный целевой flow и личный кабинет: [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md).

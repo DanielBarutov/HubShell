@@ -44,6 +44,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Portable application state is emitted once by the Linux-runnable Core. -->
+    <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Application\**\*.cs" />
+    <Compile Remove="Domain\**\*.cs" />
+    <Compile Remove="Presentation\MainViewModel.cs" />
+    <Compile Remove="Infrastructure\DeviceEnrollmentPendingException.cs" />
+    <Compile Remove="Infrastructure\EndpointPolicy.cs" />
+    <Compile Remove="Infrastructure\EnvironmentAccessCredentialVerifier.cs" />
+    <Compile Remove="Infrastructure\PasswordHashVerifier.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AssemblyMetadata Include="GameClubEnvironment" Value="$(GameClubEnvironment)" />
     <AssemblyMetadata Include="GameClubAuthAddress" Value="$(GameClubAuthAddress)" />
     <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />

@@ -13,11 +13,14 @@
     this keeps the WinUI source available for later Windows comparison.
   -->
   <ItemGroup>
+    <!-- MainViewModel converts transport failures to portable UI state. -->
+    <PackageReference Include="Grpc.Core.Api" Version="2.66.0" />
     <Compile Include="..\GameClub.Client\Application\**\*.cs" Link="Application\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\GameClub.Client\Domain\**\*.cs" Link="Domain\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\GameClub.Client\Infrastructure\DeviceEnrollmentPendingException.cs" Link="Infrastructure\DeviceEnrollmentPendingException.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\EndpointPolicy.cs" Link="Infrastructure\EndpointPolicy.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\EnvironmentAccessCredentialVerifier.cs" Link="Infrastructure\EnvironmentAccessCredentialVerifier.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\PasswordHashVerifier.cs" Link="Infrastructure\PasswordHashVerifier.cs" />
+    <Compile Include="..\GameClub.Client\Presentation\MainViewModel.cs" Link="Presentation\MainViewModel.cs" />
   </ItemGroup>
 </Project>
