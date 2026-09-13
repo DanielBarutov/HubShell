@@ -1,6 +1,18 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GameClub.Client.Avalonia.App">
+  <Application.Resources>
+    <SolidColorBrush x:Key="PageBackgroundBrush" Color="#07090D" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#0F1719" />
+    <SolidColorBrush x:Key="InnerCardBackgroundBrush" Color="#131E20" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#2C3B3C" />
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#EDF5EF" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#B9C5C0" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#7B8F8A" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#B6F35A" />
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#11180C" />
+    <SolidColorBrush x:Key="SignalBrush" Color="#61D8FF" />
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>

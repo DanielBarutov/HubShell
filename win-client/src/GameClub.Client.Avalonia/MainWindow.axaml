@@ -1,103 +1,113 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="GameClub.Client.Avalonia.MainWindow"
-        Width="960"
-        Height="620"
-        MinWidth="640"
-        MinHeight="480"
+        Width="960" Height="680" MinWidth="640" MinHeight="480"
         Title="HubShell client — Linux developer host"
         WindowStartupLocation="CenterScreen"
-        Background="#07090D">
-  <Grid Background="#07090D">
-    <Grid IsVisible="{Binding IsAccessGateVisible}">
-      <Border MaxWidth="900" Margin="40" Padding="32" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#0F1719" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="18">
-        <Grid ColumnDefinitions="1.1*,0.9*" ColumnSpacing="36">
-          <StackPanel VerticalAlignment="Center" Spacing="16">
-            <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
-            <TextBlock Text="{Binding AccessTitle}" Foreground="#EDF5EF" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding AccessSubtitle}" Foreground="#B9C5C0" FontSize="14" TextWrapping="Wrap" />
-            <Border Background="#131E20" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="10" Padding="14">
-              <StackPanel Spacing="4">
-                <TextBlock Text="ИГРОВОЕ МЕСТО" Foreground="#7B8F8A" FontSize="10" />
-                <TextBlock Text="{Binding CurrentWorkstationLabel}" Foreground="#EDF5EF" FontSize="20" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding ConnectionMessage}" Foreground="#B6F35A" FontSize="12" TextWrapping="Wrap" />
-              </StackPanel>
-            </Border>
-            <TextBlock Text="Linux developer host: backend доступен только через loopback." Foreground="#7B8F8A" FontSize="11" TextWrapping="Wrap" />
+        Background="{DynamicResource PageBackgroundBrush}">
+  <Grid Background="{DynamicResource PageBackgroundBrush}" KeyDown="RecordKeyActivity" PointerPressed="RecordPointerActivity">
+    <!-- Device-enrolled fallback when the portal has not yet supplied a snapshot. -->
+    <Grid IsVisible="{Binding IsSecuredContentVisible}" Margin="24">
+      <StackPanel MaxWidth="560" HorizontalAlignment="Center" Spacing="14">
+        <TextBlock Text="HUBSHELL" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" FontSize="14" />
+        <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="18">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Игровое место" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding CurrentWorkstationLabel}" Foreground="{DynamicResource SecondaryTextBrush}" />
+            <TextBlock Text="{Binding ConnectionMessage}" Foreground="{Binding ConnectionColor}" TextWrapping="Wrap" />
+            <Button Click="RefreshConnection" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Проверить соединение" FontWeight="SemiBold" /></Button>
           </StackPanel>
+        </Border>
+        <Border IsVisible="{Binding IsActiveSessionVisible}" Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="14" Padding="18">
+          <StackPanel Spacing="8">
+            <TextBlock Text="ТЕКУЩАЯ СЕССИЯ" Foreground="{DynamicResource SignalBrush}" FontSize="11" />
+            <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+            <Button Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Завершить сессию" FontWeight="SemiBold" /></Button>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Grid>
 
-          <Border Grid.Column="1" Padding="24" Background="#131E20" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="12">
-            <Grid>
-              <StackPanel IsVisible="{Binding IsUserLoginVisible}" Spacing="12">
-                <TextBlock Text="Войти в аккаунт" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Text="Ник или телефон и пароль" Foreground="#B9C5C0" FontSize="12" />
-                <TextBox Name="PortalIdentifierBox" Watermark="Ник или телефон" TextChanged="PortalIdentifierChanged" />
-                <TextBox Name="PortalPasswordBox" Watermark="Пароль" PasswordChar="●" TextChanged="PortalPasswordChanged" />
-                <Button Click="LoginPortal" IsEnabled="{Binding CanLoginPortal}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
-                  <TextBlock Text="Войти" FontWeight="SemiBold" />
-                </Button>
-                <Button Click="OpenPortalRegistration" Background="Transparent" Foreground="#B9C5C0" HorizontalAlignment="Stretch">
-                  <TextBlock Text="Создать аккаунт" />
-                </Button>
-              </StackPanel>
+    <!-- The first visible frame is always the dark access-gate. -->
+    <Grid IsVisible="{Binding IsAccessGateVisible}" Background="#E607090D">
+      <Border MaxWidth="920" Margin="40" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="18">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="22">
+          <StackPanel Orientation="Horizontal" Spacing="9">
+            <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource AccentBrush}"><TextBlock Text="H" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextBrush}" FontSize="15" FontWeight="Bold" /></Border>
+            <TextBlock Text="HUBSHELL" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontSize="13" FontWeight="Bold" />
+          </StackPanel>
+          <Grid Grid.Row="1" ColumnDefinitions="1.1*,0.9*" ColumnSpacing="34">
+            <StackPanel VerticalAlignment="Center">
+              <Border HorizontalAlignment="Left" Padding="9,6" Background="#14B6F35A" BorderBrush="#45B6F35A" BorderThickness="1" CornerRadius="6">
+                <StackPanel Orientation="Horizontal" Spacing="7"><Ellipse Width="7" Height="7" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" /><TextBlock Text="{Binding ConnectionMessage}" Foreground="{DynamicResource AccentBrush}" FontSize="10" /></StackPanel>
+              </Border>
+              <TextBlock Margin="0,22,0,0" Text="{Binding AccessTitle}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Margin="0,10,0,0" Text="{Binding AccessSubtitle}" MaxWidth="360" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="13" TextWrapping="Wrap" />
+              <Border Margin="0,28,0,0" Padding="12" Background="{DynamicResource InnerCardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><Border Width="44" Height="44" CornerRadius="9" Background="#1461D8FF"><TextBlock Text="▣" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource SignalBrush}" FontSize="24" /></Border><StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="ИГРОВОЕ МЕСТО" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><TextBlock Text="{Binding CurrentWorkstationLabel}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="18" FontWeight="SemiBold" /></StackPanel><Ellipse Grid.Column="2" Width="18" Height="18" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" /></Grid>
+              </Border>
+              <TextBlock Margin="0,20,0,0" Text="Защищённый вход по паролю" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
+              <TextBlock Margin="0,8,0,0" Text="Linux developer host: backend доступен только через loopback." Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" />
+            </StackPanel>
 
-              <StackPanel IsVisible="{Binding IsPortalRegistrationVisible}" Spacing="12">
-                <TextBlock Text="Создать аккаунт" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
-                <TextBox Name="PortalNicknameBox" Watermark="Ник (от 3 символов)" TextChanged="PortalNicknameChanged" />
-                <TextBox Name="PortalPhoneBox" Watermark="Телефон" TextChanged="PortalPhoneChanged" />
-                <TextBox Name="PortalRegistrationPasswordBox" Watermark="Пароль (от 4 символов)" PasswordChar="●" TextChanged="PortalRegistrationPasswordChanged" />
-                <Button Click="RegisterPortal" IsEnabled="{Binding CanRegisterPortal}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
-                  <TextBlock Text="Зарегистрироваться" FontWeight="SemiBold" />
-                </Button>
-                <Button Click="CancelPortalRegistration" Background="Transparent" Foreground="#B9C5C0" HorizontalAlignment="Stretch">
-                  <TextBlock Text="Назад ко входу" />
-                </Button>
-              </StackPanel>
+            <Border Grid.Column="1" Padding="22" Background="{DynamicResource InnerCardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12">
+              <Grid RowDefinitions="*,Auto">
+                <StackPanel IsVisible="{Binding IsUserLoginVisible}" Spacing="10">
+                  <TextBlock Text="01 / 01" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /><TextBlock Text="Войти в аккаунт" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" /><TextBlock Text="Ник или телефон и пароль" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" />
+                  <TextBlock Margin="0,8,0,0" Text="Ник или телефон" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="PortalIdentifierBox" Watermark="Например, player_01" TextChanged="PortalIdentifierChanged" MaxLength="64" />
+                  <TextBlock Text="Пароль" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="PortalPasswordBox" Watermark="Пустой только после сброса" PasswordChar="●" TextChanged="PortalPasswordChanged" MaxLength="128" />
+                  <Button Click="LoginPortal" IsEnabled="{Binding CanLoginPortal}" Margin="0,8,0,0" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Войти" FontWeight="SemiBold" /></Button>
+                  <Button Click="OpenPortalRegistration" Background="Transparent" Foreground="{DynamicResource SecondaryTextBrush}"><TextBlock Text="Создать аккаунт" /></Button>
+                  <Button Click="OpenManagerLogin" Background="Transparent" Foreground="{DynamicResource MutedTextBrush}" IsVisible="{Binding IsManagerEntryVisible}"><TextBlock Text="Вход менеджера" /></Button>
+                </StackPanel>
 
-              <StackPanel IsVisible="{Binding IsPortalPasswordSetupVisible}" Spacing="12">
-                <TextBlock Text="Обновите пароль" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Text="После сброса пароль нужно задать до доступа к сессии." Foreground="#B9C5C0" TextWrapping="Wrap" />
-                <TextBox Name="PortalPasswordSetupBox" Watermark="Новый пароль" PasswordChar="●" TextChanged="PortalPasswordSetupChanged" />
-                <TextBox Name="PortalPasswordSetupConfirmationBox" Watermark="Повторите пароль" PasswordChar="●" TextChanged="PortalPasswordSetupConfirmationChanged" />
-                <Button Click="SetPortalPassword" IsEnabled="{Binding CanSetPortalPassword}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
-                  <TextBlock Text="Сохранить пароль" FontWeight="SemiBold" />
-                </Button>
-              </StackPanel>
+                <StackPanel IsVisible="{Binding IsPortalRegistrationVisible}" Spacing="10">
+                  <TextBlock Text="НОВЫЙ АККАУНТ" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /><TextBlock Text="Создать аккаунт" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" />
+                  <TextBlock Text="Ник" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="PortalNicknameBox" Watermark="От 3 символов" TextChanged="PortalNicknameChanged" MaxLength="64" />
+                  <TextBlock Text="Телефон" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="PortalPhoneBox" Watermark="+7 (9__) ___-__-__" TextChanged="PortalPhoneChanged" MaxLength="18" />
+                  <TextBlock Text="Пароль" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="PortalRegistrationPasswordBox" Watermark="От 4 символов" PasswordChar="●" TextChanged="PortalRegistrationPasswordChanged" MaxLength="128" />
+                  <Button Click="RegisterPortal" IsEnabled="{Binding CanRegisterPortal}" Margin="0,8,0,0" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Создать аккаунт" FontWeight="SemiBold" /></Button>
+                  <Button Click="CancelPortalRegistration" Background="Transparent" Foreground="{DynamicResource SecondaryTextBrush}"><TextBlock Text="Назад ко входу" /></Button>
+                </StackPanel>
 
-              <StackPanel VerticalAlignment="Bottom" Spacing="6">
-                <TextBlock Text="{Binding AccessMessage}" Foreground="#B9C5C0" FontSize="11" TextWrapping="Wrap" />
-                <Button Click="RefreshConnection" Background="Transparent" Foreground="#7B8F8A" HorizontalAlignment="Left">
-                  <TextBlock Text="Проверить подключение" />
-                </Button>
-              </StackPanel>
-            </Grid>
-          </Border>
+                <StackPanel IsVisible="{Binding IsManagerLoginVisible}" Spacing="10">
+                  <TextBlock Text="ОБСЛУЖИВАНИЕ" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /><TextBlock Text="Режим менеджера" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" /><TextBlock Text="Системные действия доступны только менеджеру клуба." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" />
+                  <TextBlock Text="Пароль менеджера" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Name="ManagerPasswordBox" Watermark="Введите пароль" PasswordChar="●" TextChanged="ManagerPasswordChanged" MaxLength="128" />
+                  <Button Click="EnterMaintenance" IsEnabled="{Binding CanEnterMaintenance}" Margin="0,8,0,0" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Открыть обслуживание" FontWeight="SemiBold" /></Button>
+                  <Button Click="CancelManagerLogin" Background="Transparent" Foreground="{DynamicResource SecondaryTextBrush}"><TextBlock Text="Назад ко входу пользователя" /></Button>
+                </StackPanel>
+
+                <StackPanel Name="MaintenancePanel" IsVisible="{Binding IsMaintenanceVisible}" Spacing="12">
+                  <TextBlock Text="ОБСЛУЖИВАНИЕ" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /><TextBlock Text="Режим менеджера активен" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <Border Padding="11" Background="#16314C2C" BorderBrush="#3AB6F35A" BorderThickness="1" CornerRadius="8"><TextBlock Text="Доступ менеджера подтверждён. Рабочие действия клиента приостановлены." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="11" TextWrapping="Wrap" /></Border>
+                  <Button Click="LockClient" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Закрыть обслуживание" FontWeight="SemiBold" /></Button>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Spacing="5"><TextBlock Text="{Binding AccessMessage}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" /><Button Click="RefreshConnection" Background="Transparent" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Left"><TextBlock Text="Проверить подключение" FontSize="10" /></Button></StackPanel>
+              </Grid>
+            </Border>
+          </Grid>
+          <Grid Grid.Row="2" Margin="0,12,0,0" ColumnDefinitions="*,Auto"><StackPanel Orientation="Horizontal" Spacing="7"><Ellipse Width="6" Height="6" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" /><TextBlock Text="{Binding ConnectionMessage}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /></StackPanel><TextBlock Grid.Column="1" Text="{Binding CurrentWorkstationLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /></Grid>
         </Grid>
       </Border>
     </Grid>
 
-    <ScrollViewer IsVisible="{Binding IsPortalContentVisible}" Margin="24" VerticalScrollBarVisibility="Auto">
-      <StackPanel MaxWidth="560" HorizontalAlignment="Center" Spacing="14">
-        <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
-        <Border Background="#0F1719" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="12" Padding="18">
-          <StackPanel Spacing="6">
-            <TextBlock Text="{Binding PortalAccountSummary}" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding PortalContactSummary}" Foreground="#B9C5C0" />
-            <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="#B6F35A" FontSize="16" />
-            <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="#B9C5C0" />
-          </StackPanel>
-        </Border>
-        <Border IsVisible="{Binding IsActiveSessionVisible}" Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="12" Padding="18">
-          <StackPanel Spacing="6">
-            <TextBlock Text="АКТИВНАЯ СЕССИЯ" Foreground="#61D8FF" FontSize="11" />
-            <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="#B9C5C0" TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-        <TextBlock Text="{Binding PortalNotification}" IsVisible="{Binding IsPortalNotificationVisible}" Foreground="#B6F35A" TextWrapping="Wrap" />
-        <Button Click="Logout" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
-          <TextBlock Text="Выйти" FontWeight="SemiBold" />
-        </Button>
+    <!-- User portal. Native compact-window/tray behavior is intentionally outside the Linux host. -->
+    <ScrollViewer IsVisible="{Binding IsPortalContentVisible}" Margin="20" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel MaxWidth="560" HorizontalAlignment="Center" Spacing="10">
+        <Grid Margin="4,2" ColumnDefinitions="*,Auto"><TextBlock Text="HUBSHELL" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" FontSize="14" /><Button Grid.Column="1" Click="Logout" Background="Transparent" Foreground="{DynamicResource SecondaryTextBrush}"><TextBlock Text="Выйти" /></Button></Grid>
+        <Border Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="11" Padding="13"><StackPanel Spacing="3"><TextBlock Text="ВЫ ВОШЛИ КАК" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><TextBlock Text="{Binding PortalAccountSummary}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="{Binding PortalContactSummary}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" /></StackPanel></Border>
+        <Border IsVisible="{Binding IsPortalPasswordSetupVisible}" Background="#24331C" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="11" Padding="13"><StackPanel Spacing="9"><TextBlock Text="Обновите пароль" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="17" FontWeight="SemiBold" /><TextBlock Text="Администратор сбросил старый пароль. Задайте новый, чтобы продолжить." Foreground="{DynamicResource SecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" /><TextBox Name="PortalPasswordSetupBox" Watermark="Новый пароль" PasswordChar="●" TextChanged="PortalPasswordSetupChanged" MaxLength="128" /><TextBox Name="PortalPasswordSetupConfirmationBox" Watermark="Повторите пароль" PasswordChar="●" TextChanged="PortalPasswordSetupConfirmationChanged" MaxLength="128" /><Button Click="SetPortalPassword" IsEnabled="{Binding CanSetPortalPassword}" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Сохранить новый пароль" FontWeight="SemiBold" /></Button></StackPanel></Border>
+        <Border IsVisible="{Binding IsPortalReadyVisible}" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8"><Ellipse Width="7" Height="7" Fill="{Binding ConnectionColor}" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding ConnectionMessage}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBlock Grid.Column="2" Text="{Binding CurrentWorkstationLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /></Grid></Border>
+        <Border IsVisible="{Binding IsPortalReadyVisible}" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11"><Grid ColumnDefinitions="*,1.25*" ColumnSpacing="12"><StackPanel Spacing="4"><TextBlock Text="БАЛАНС" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><TextBlock Text="{Binding PortalBalanceAmountSummary}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="{Binding PortalBonusSummary}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /></StackPanel><StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="ОСТАТОК ПО БАЛАНСУ" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><TextBlock Text="{Binding PortalAvailableTimeValue}" Foreground="{DynamicResource AccentBrush}" FontSize="16" FontWeight="SemiBold" /><TextBlock Text="расчёт по текущей ставке сервера" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /></StackPanel></Grid></Border>
+        <Border Name="UpcomingBookingPanel" IsVisible="{Binding IsUpcomingBookingVisible}" Background="#1B2733" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel Spacing="3"><TextBlock Text="БЛИЖАЙШАЯ БРОНЬ НА ЭТОМ МЕСТЕ" Foreground="{DynamicResource SignalBrush}" FontSize="9" /><TextBlock Text="{Binding UpcomingBookingTitle}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" /><TextBlock Text="{Binding UpcomingBookingDetails}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" /></StackPanel></Border>
+        <Border IsVisible="{Binding IsActiveSessionVisible}" Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="10" Padding="12"><StackPanel Spacing="9"><Grid ColumnDefinitions="*,Auto"><TextBlock Text="●  СЕССИЯ АКТИВНА" Foreground="{DynamicResource SignalBrush}" FontSize="10" /><TextBlock Grid.Column="1" Text="{Binding CurrentWorkstationLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" /></Grid><Grid ColumnDefinitions="*,Auto" ColumnSpacing="10"><StackPanel Spacing="3"><TextBlock Text="ТЕКУЩИЙ РЕЖИМ" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><TextBlock Text="{Binding CurrentSessionModeSummary}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><TextBlock Text="{Binding CurrentSessionTariffSummary}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" /></StackPanel><StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="3"><TextBlock Text="ОСТАЛОСЬ" Foreground="{DynamicResource SignalBrush}" FontSize="9" HorizontalAlignment="Right" /><TextBlock Text="{Binding ActiveTimeSummary}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" TextAlignment="Right" TextWrapping="Wrap" /></StackPanel></Grid><Grid ColumnDefinitions="*,Auto"><TextBlock Text="Время обновляется по данным сервера" Foreground="{DynamicResource MutedTextBrush}" FontSize="9" /><Button Grid.Column="1" Click="StopCurrentSession" IsEnabled="{Binding CanStopActiveSession}" Background="Transparent" Foreground="{DynamicResource AccentBrush}"><TextBlock Text="Завершить" FontSize="10" /></Button></Grid></StackPanel></Border>
+        <Border IsVisible="{Binding IsPortalNotificationVisible}" Background="#25351E" BorderBrush="#45B6F35A" BorderThickness="1" CornerRadius="9" Padding="10"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><TextBlock Text="{Binding PortalNotification}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="10" TextWrapping="Wrap" /><Button Grid.Column="1" Click="DismissSessionNotification" Background="Transparent" Foreground="{DynamicResource AccentBrush}"><TextBlock Text="×" FontSize="16" /></Button></Grid></Border>
+        <Border IsVisible="{Binding IsTariffsVisible}" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel Spacing="8"><TextBlock Text="Тарифы времени" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="14" FontWeight="SemiBold" /><ItemsControl Name="PortalTariffList" ItemsSource="{Binding PortalTariffs}"><ItemsControl.ItemTemplate><DataTemplate><Border Background="{DynamicResource InnerCardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="9" Margin="0,2"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><StackPanel Spacing="2"><TextBlock Text="{Binding Name}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="11" FontWeight="SemiBold" /><TextBlock Text="{Binding DurationSummary}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBlock Text="{Binding PriceSummary}" Foreground="{DynamicResource AccentBrush}" FontSize="10" /></StackPanel><Button Grid.Column="1" Tag="{Binding Id}" Click="PurchaseTariff" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Купить" FontSize="10" FontWeight="SemiBold" /></Button></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+        <Border IsVisible="{Binding IsPortalReadyVisible}" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel Spacing="7"><TextBlock Text="Пакеты времени" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" FontWeight="SemiBold" /><ItemsControl Name="PortalEntitlementQueueList" ItemsSource="{Binding PortalEntitlementQueue}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><Button Click="ActivateFirstPortalEntitlement" IsEnabled="{Binding CanActivatePortalEntitlement}"><TextBlock Text="Активировать сохранённый пакет" FontSize="10" /></Button></StackPanel></Border>
+        <Button Click="ToggleTransferPanel" IsVisible="{Binding IsPortalReadyVisible}" Background="{DynamicResource CardBackgroundBrush}" Foreground="{DynamicResource SecondaryTextBrush}"><TextBlock Text="{Binding TransferToggleLabel}" FontSize="10" /></Button>
+        <Border Name="TransferPanel" IsVisible="{Binding IsTransferPanelVisible}" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel Spacing="8"><TextBlock Text="Перенос сессии" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" FontWeight="SemiBold" /><TextBlock Text="{Binding TransferMessage}" IsVisible="{Binding IsTransferMessageVisible}" Foreground="{DynamicResource AccentBrush}" FontSize="10" TextWrapping="Wrap" /><TextBlock Text="ID нового ПК" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Watermark="Например, vip-02" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" /><Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}"><TextBlock Text="Подготовить перенос" FontSize="10" /></Button><TextBlock Text="ID предложения" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" /><TextBlock Text="Код подтверждения" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><TextBox Text="{Binding IncomingTransferToken, Mode=TwoWay}" /><Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentTextBrush}"><TextBlock Text="Подтвердить перенос" FontSize="10" FontWeight="SemiBold" /></Button></StackPanel></Border>
+        <Expander Name="PortalHistory" IsVisible="{Binding IsPortalReadyVisible}" Header="История аккаунта" Foreground="{DynamicResource PrimaryTextBrush}"><StackPanel Margin="8" Spacing="8"><TextBlock Text="Операции баланса" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><ItemsControl ItemsSource="{Binding PortalBalanceHistory}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock Text="Покупки" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><ItemsControl ItemsSource="{Binding PortalPurchaseHistory}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock Text="Списания" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><ItemsControl ItemsSource="{Binding PortalChargeHistory}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock Text="Сессии" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" /><ItemsControl ItemsSource="{Binding PortalSessionHistory}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{DynamicResource MutedTextBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Expander>
       </StackPanel>
     </ScrollViewer>
   </Grid>
