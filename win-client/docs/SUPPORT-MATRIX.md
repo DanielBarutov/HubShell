@@ -1,4 +1,4 @@
-# Windows client — support matrix
+# GameClub client — support matrix
 
 Документ фиксирует целевую платформу и границы доказательств. Фактический
 запуск нужно подтвердить на Windows перед выпуском. Команды сборки, публикации и
@@ -8,8 +8,10 @@ startup diagnostics находятся в
 | Область | Целевое значение | Статус в Linux checkout |
 | --- | --- | --- |
 | Runtime | .NET 8 | source-level |
-| UI framework | WinUI 3 / Windows App SDK 1.6 | source-level |
-| Target framework | `net8.0-windows10.0.19041.0` | project config |
+| Current UI source | WinUI 3 / Windows App SDK 1.6 | legacy source; migration not started |
+| Target UI framework | Avalonia | planned by [`plans/38-avalonia-linux-first`](../../plans/38-avalonia-linux-first/PLAN.md) |
+| Target shared framework | `net8.0` for core, tests and Avalonia host | planned |
+| Windows adapter framework | `net8.0-windows` only for platform ports | planned |
 | Минимальная ОС | Windows 10 build 17763 | project config |
 | Архитектуры | x86, x64, ARM64 | project config; native runtime не проверен |
 | Транспорт | gRPC/Protobuf, HTTP/gRPC в private LAN или HTTPS при внешнем доступе | source-level; transport runtime требует Windows smoke |
@@ -18,7 +20,7 @@ startup diagnostics находятся в
 | Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
 | Manager access | явный пункт менеджера, отдельный manager password | source-level; native smoke не выполнен |
 | Kiosk boundary | Assigned Access/Shell Launcher | не проверено |
-| Delivery | self-contained single-file `GameClub.Client.exe` | publish требует Windows |
+| Delivery | self-contained `GameClub.Client.exe` for Windows | Windows publish/runtime smoke remains required |
 
 ## Целевой deployment flow
 
@@ -51,12 +53,21 @@ C:\GameClub\Client\GameClub.Client.exe
 - структура слоёв и source-of-truth protobuf;
 - MAC enrollment, installation binding и состояния `pending/approved/disabled`;
 - device/client JWT claims и device binding на source-level;
-- fullscreen presenter, locked flow и portal view на source-level;
+- legacy WinUI fullscreen presenter, locked flow и portal view на source-level;
 - allowlist команд, deadline, expiry, ACK и reconnect boundaries;
 - portable publish parameters и отсутствие секретов в deployment script.
 
-Это не подтверждает запуск WinUI, XAML compilation, Windows networking или
-поведение полноэкранного окна.
+Это не подтверждает запуск legacy WinUI, XAML compilation, Windows networking
+или поведение полноэкранного окна. До первого этапа плана 38 Linux ещё не
+собирает и не запускает настоящий client UI; это целевое изменение, а не
+уже полученный результат.
+
+## Linux-first migration boundary
+
+После первой точки остановки плана 38 Linux должен выполнять restore, build,
+unit tests и запуск Avalonia developer host. Он проверяет UI/state transitions,
+gRPC/reconnect и platform-neutral offline protocol. Он не заменяет Windows
+проверки и не включает DPAPI, Windows tray, restart, autostart или kiosk policy.
 
 ## Что требует реального Windows-ПК
 

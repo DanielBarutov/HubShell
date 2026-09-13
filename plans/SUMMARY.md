@@ -1,6 +1,6 @@
 # GameClub / HubShell — сводка проекта
 
-Дата среза: `2026-09-06`<br>
+Дата среза: `2026-09-13`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
 Этот файл фиксирует фактическое состояние кода, планов и проверок на дату среза.
@@ -51,12 +51,18 @@ GameClub / HUBSHELL — операторская система игрового
 срез добавляет durable entitlement queue и consumption с окнами/auto-next,
 device login-grant, payment parts, guest paid-start prerequisite, entry
 decision, one-active-client guard, session snapshot, transfer, offline replay,
-durable settlement retry/audit и portal/WinUI queue activation. Полное
+durable settlement retry/audit и portal/legacy WinUI queue activation. В качестве
+следующего архитектурного решения утверждена миграция Windows UI с WinUI на
+Avalonia: Linux становится development-host для build/run/test, тогда как
+Windows остаётся производственной платформой и финальной platform-smoke
+границей. Первая остановка миграции описана в
+[`plans/38-avalonia-linux-first`](38-avalonia-linux-first/PLAN.md). Полное
 контрактное закрытие ещё не достигнуто: открыты production cross-owner UoW/
 provider policy, полная browser/accessibility matrix и native Windows evidence.
 Остаток нарезан на планы
 [`30–34`](30-entitlements-meter/PLAN.md), [`35`](35-frontend-contract-consumers/PLAN.md),
-[`36`](36-winui-contract-consumers/PLAN.md) и [`37`](37-platform-integration-evidence/PLAN.md).
+[`36`](36-winui-contract-consumers/PLAN.md), [`37`](37-platform-integration-evidence/PLAN.md)
+и [`38`](38-avalonia-linux-first/PLAN.md).
 
 ## 3. Карта репозитория
 
@@ -73,7 +79,7 @@ provider policy, полная browser/accessibility matrix и native Windows evi
 | [`frontend/src/features/`](../frontend/src/features/) | feature-экраны и контекстные панели operator UI | локальный UI-flow по bounded feature-модулям |
 | [`frontend/src/api/`](../frontend/src/api/) | DTO, HTTP API client и нормализаторы | typed API boundary; вызовы экранов проходят через Redux facade |
 | [`frontend/src/styles/`](../frontend/src/styles/) | каскад operator UI, разложенный по тематическим блокам | сохранённый порядок CSS-правил |
-| [`win-client/`](../win-client/) | C# solution, WinUI, scripts, tests | клиент игрового ПК |
+| [`win-client/`](../win-client/) | C# solution, legacy WinUI source, Avalonia migration plan, scripts, tests | клиент игрового ПК |
 | [`win-client/src/GameClub.Client/`](../win-client/src/GameClub.Client/) | Domain/Application/Infrastructure/Presentation | Windows implementation |
 | [`plans/README.md`](README.md) | общий индекс и зависимости | навигация по планам |
 | [`plans/`](./) | детальные планы backend-модулей, Windows-lockdown и связанные контракты | единое хранилище implementation-планов |
@@ -118,8 +124,11 @@ FastAPI, PostgreSQL, Redis, gRPC или Dramatiq; application работает �
 ### Windows client
 
 - C# / .NET `8`;
-- WinUI 3 через Microsoft Windows App SDK `1.6.240829007`;
-- target `net8.0-windows10.0.19041.0`, minimum Windows build `17763`;
+- текущая реализация: WinUI 3 через Microsoft Windows App SDK `1.6.240829007`
+  на `net8.0-windows10.0.19041.0` — legacy source до миграции;
+- утверждённая цель: Avalonia developer host и shared Core/Tests на `net8.0`,
+  изолированные Windows adapters на `net8.0-windows`;
+- минимальная Windows deployment ОС сохраняется Windows 10 build `17763`;
 - `Grpc.Net.Client 2.66.0`, `Google.Protobuf 3.28.2`, `Grpc.Tools 2.66.0`;
 - x86, x64 и ARM64; тестовый проект сейчас рассчитан на x64;
 - xUnit и Microsoft.NET.Test.Sdk для unit-тестов.
@@ -285,7 +294,7 @@ flows.
 | `Domain` | connection state, heartbeat, command/session snapshots, lockdown policy |
 | `Application` | access-gate и session coordinators, ports для backend/token/executor |
 | `Infrastructure` | gRPC adapter, bearer metadata, health, enrollment, token storage, Windows command/power adapters, endpoint policy |
-| `Presentation` | WinUI `MainWindow`, `App`, `MainViewModel`, pre-auth fullscreen Locked gate и задел под post-auth widget |
+| `Presentation` | текущие legacy WinUI `MainWindow`, `App`, `MainViewModel`; целевой Avalonia host описан в плане 38 |
 | `tests` | access-gate, session coordinator, password verifier, command executor |
 
 Уже реализовано в source-level срезе:
@@ -414,7 +423,8 @@ security boundary. Детали — в
 | Направление | Почему не закрыто |
 | --- | --- |
 | PostgreSQL integration/concurrency | без DSN 18 тестов пропускаются; при dev DSN все 157 backend-тестов проходят, включая package/transfer/offline/settlement mixed-fault evidence; production cross-owner UoW/provider policy остаётся открытой |
-| Windows native | Linux не запускает WinUI 3 `XamlCompiler.exe`; source-level contract не заменяет build/runtime; `dotnet` отсутствует в PATH |
+| Avalonia migration | план 38 утверждён, но код ещё не мигрирован; в этом Linux checkout `dotnet` отсутствует в PATH, поэтому Linux build/run evidence пока не получен |
+| Windows native | legacy WinUI требует WindowsAppSDK; после Avalonia migration Linux cross-compile не заменяет Windows runtime evidence |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
 | Production security | нужны real secret storage, enrollment rate-limit/rebind, backups и deployment policy; TLS/mTLS certificates обязательны только при внешнем доступе |
@@ -424,12 +434,16 @@ security boundary. Детали — в
 
 ### P0 — доказать текущий MVP
 
-0. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
+0. Выполнить [`план 38`](38-avalonia-linux-first/PLAN.md): Linux developer
+   build/test/run и Windows-target compile artifact. До этого текущий WinUI
+   source остаётся исторической исходной точкой, а не delivery candidate.
+
+1. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
    закрыты доступными source/unit/API/visual checks; native/runtime границы
    остаются явно отмеченными в [`37`](37-platform-integration-evidence/PLAN.md)
    и его evidence report.
 
-1. На целевой Windows-машине выполнить native verification и kiosk rehearsal;
+2. На целевой Windows-машине выполнить native verification и kiosk rehearsal;
    локальный backend suite с dev PostgreSQL/Redis уже прошёл: `157 passed`.
 2. На Windows выполнить:
 

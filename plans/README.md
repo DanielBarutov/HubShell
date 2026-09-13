@@ -17,7 +17,7 @@ dev-стеком для всех доступных серверных част�
 каталог, бронирования и sliding panels. Сквозной аудит контрактов и реализации
 зафиксирован в плане 29. В текущем срезе реализованы backend payment/guest/entry/
 session-invariant основы, durable entitlement queue, portal queue activation и
-source-level WinUI widget; package consumption с окнами/auto-next, snapshot,
+source-level legacy WinUI widget; package consumption с окнами/auto-next, snapshot,
 transfer, offline replay, settlement review и основные frontend/WinUI consumers
 добавлены, но integration/native evidence ещё не закрыты.
 
@@ -70,8 +70,9 @@ Windows сохраняют свои короткие owner-level входы в `
 | 33 | [`33-session-transfer/PLAN.md`](33-session-transfer/PLAN.md) | атомарный перенос сессии между ПК | `in_progress` |
 | 34 | [`34-durable-offline/PLAN.md`](34-durable-offline/PLAN.md) | durable offline journal и batch replay | `in_progress` |
 | 35 | [`35-frontend-contract-consumers/PLAN.md`](35-frontend-contract-consumers/PLAN.md) | operator consumers новых backend DTO | `in_progress` |
-| 36 | [`36-winui-contract-consumers/PLAN.md`](36-winui-contract-consumers/PLAN.md) | WinUI snapshot, transfer и offline consumers | `in_progress` |
+| 36 | [`36-winui-contract-consumers/PLAN.md`](36-winui-contract-consumers/PLAN.md) | legacy WinUI snapshot, transfer и offline consumers | `in_progress` |
 | 37 | [`37-platform-integration-evidence/PLAN.md`](37-platform-integration-evidence/PLAN.md) | integration, native, kiosk и release evidence | `in_progress` |
+| 38 | [`38-avalonia-linux-first/PLAN.md`](38-avalonia-linux-first/PLAN.md) | Avalonia migration: Linux-first developer host и Windows-target compile artifact | `planned` |
 
 Статусы:
 
@@ -114,6 +115,7 @@ backend/PLAN.md
 │   ├── plans/34-durable-offline
 │   ├── plans/35-frontend-contract-consumers
 │   ├── plans/36-winui-contract-consumers
+│   ├── plans/38-avalonia-linux-first
 │   └── plans/37-platform-integration-evidence
 ├── frontend/PLAN.md
 └── win-client/PLAN.md
