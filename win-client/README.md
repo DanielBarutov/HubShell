@@ -1,9 +1,16 @@
 # GameClub Windows client
 
-`GameClub.Client` — WinUI 3-клиент игрового ПК. До авторизации он работает как
-fullscreen Locked access-gate; после входа показывает компактный borderless
-виджет и не заменяет Windows shell. Backend остаётся источником истины для
-сессий, тарифов, баланса, списаний и команд.
+Текущий `GameClub.Client` source — legacy WinUI 3-клиент игрового ПК. Целевой
+host — Avalonia: Linux будет использоваться для обычной разработки, build/test
+и UI-smoke, а Windows сохранится платформой поставки и финальной native
+проверки. До завершения первой точки миграции текущие Windows-инструкции ниже
+относятся только к legacy source; порядок перехода описан в
+[`plans/38-avalonia-linux-first`](../plans/38-avalonia-linux-first/PLAN.md).
+
+Продуктовой flow не меняется: до авторизации клиент показывает fullscreen Locked
+access-gate; после входа — компактный borderless виджет без замены Windows shell.
+Backend остаётся источником истины для сессий, тарифов, баланса, списаний и
+команд.
 
 ## Основной порядок работы
 

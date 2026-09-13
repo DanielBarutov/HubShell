@@ -6,7 +6,7 @@
 Зависимости: `28-integration-checks`, `30-entitlements-meter`,
 `31-settlement-reconciliation`, `32-session-snapshot-entry`,
 `33-session-transfer`, `34-durable-offline`, `35-frontend-contract-consumers`,
-`36-winui-contract-consumers`
+`36-winui-contract-consumers`, `38-avalonia-linux-first`
 
 ## Цель
 
@@ -21,7 +21,7 @@ preflight.
 - Redis/Dramatiq replay/retry checks;
 - Compose rebuild/readiness/HTTP/gRPC/worker smoke;
 - browser matrix и headed operator flows;
-- Windows native build, publish, widget/tray, reconnect, transfer, offline;
+- Windows native run/publish Avalonia artifact, widget/tray, reconnect, transfer, offline;
 - Assigned Access/Shell Launcher reversible provisioning;
 - enrollment/token/TLS/secret/logging review;
 - обновление [`plans/VERIFICATION.md`](../VERIFICATION.md) только evidence.
@@ -57,8 +57,9 @@ evidence ещё не выполнены.
    entitlement, snapshot и gRPC activation.
 5. [x] Выполнить доступный frontend headed route smoke и проверить stale/offline/
    confirmation states; backend/API evidence покрывает duplicate/error.
-6. [ ] На целевой Windows-машине выполнить `verify-windows.ps1`, native build,
-   portable publish и сценарии из `REAL-PC-VERIFICATION.md`.
+6. [ ] После Linux-first milestone плана 38 на целевой Windows-машине выполнить
+   native build/publish Avalonia artifact и сценарии из
+   `REAL-PC-VERIFICATION.md`. Linux cross-compile не закрывает этот пункт.
 7. [ ] Отдельно провести reversible Assigned Access/Shell Launcher rehearsal
    под ограниченным пользователем с documented restore.
 8. [ ] Проверить secrets, tokens, certificates, logs, AppData, enrollment
