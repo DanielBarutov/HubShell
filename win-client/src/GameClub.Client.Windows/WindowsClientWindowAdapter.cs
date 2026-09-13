@@ -17,16 +17,26 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
 {
     private const double WidgetWidth = 390;
     private const double WidgetHeight = 700;
+    private const double WidgetCornerRadius = 14;
     private Window? _window;
+    private Border? _windowContentSurface;
     private NativeTrayIcon? _trayIcon;
     private bool _disposed;
+
+    public bool UsesTransparentWindow => true;
 
     public void Attach(Window window)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _window = window;
+        _windowContentSurface = window.FindControl<Border>("WindowContentSurface");
         window.SystemDecorations = SystemDecorations.None;
         window.CanResize = false;
+        if (window.ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        {
+            StartupDiagnostics.Info(
+                $"Avalonia Windows transparency fallback: {window.ActualTransparencyLevel}");
+        }
 
         var windowHandle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (windowHandle == IntPtr.Zero)
@@ -62,10 +72,12 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
 
         if (accessGateVisible)
         {
+            SetWindowContentCornerRadius(0);
             _window.WindowState = WindowState.FullScreen;
             return;
         }
 
+        SetWindowContentCornerRadius(WidgetCornerRadius);
         _window.WindowState = WindowState.Normal;
         _window.Width = WidgetWidth;
         _window.Height = WidgetHeight;
@@ -91,6 +103,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
 
         _trayIcon?.Dispose();
         _trayIcon = null;
+        _windowContentSurface = null;
         _window = null;
         _disposed = true;
     }
@@ -131,5 +144,13 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         window.Position = new PixelPoint(
             workArea.X + Math.Max(18, workArea.Width - width - 18),
             workArea.Y + Math.Max(18, (workArea.Height - height) / 2));
+    }
+
+    private void SetWindowContentCornerRadius(double radius)
+    {
+        if (_windowContentSurface is not null)
+        {
+            _windowContentSurface.CornerRadius = new CornerRadius(radius);
+        }
     }
 }

@@ -29,6 +29,12 @@ public partial class MainWindow : Window
         Title = clientHost.WindowTitle;
         this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
         this.FindControl<Button>("HideToTrayButton")!.IsVisible = clientHost.WindowAdapter is not null;
+        if (clientHost.WindowAdapter?.UsesTransparentWindow == true)
+        {
+            TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+            Background = Brushes.Transparent;
+            TransparencyBackgroundFallback = new SolidColorBrush(Color.Parse("#07090D"));
+        }
         DataContext = _clientHost.ViewModel;
         ViewModel.PropertyChanged += ViewModelPropertyChanged;
         Opened += MainWindowOpened;
