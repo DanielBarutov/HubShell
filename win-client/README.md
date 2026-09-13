@@ -1,11 +1,11 @@
 # GameClub Windows client
 
-Текущий `GameClub.Client` source — legacy WinUI 3-клиент игрового ПК. Целевой
-host — Avalonia: Linux будет использоваться для обычной разработки, build/test
-и UI-smoke, а Windows сохранится платформой поставки и финальной native
-проверки. До завершения первой точки миграции текущие Windows-инструкции ниже
-относятся только к legacy source; порядок перехода описан в
-[`plans/38-avalonia-linux-first`](../plans/38-avalonia-linux-first/PLAN.md).
+`GameClub.Client.Avalonia` содержит общий Avalonia UI. Linux использует его как
+developer host для build/test/UI-smoke. `GameClub.Client.Windows` — отдельный
+production composition: он подключает тот же UI к Windows-only DPAPI journal,
+restart, command stream, fullscreen/compact window adapter и native tray.
+Старый `GameClub.Client` остаётся legacy WinUI reference до отдельной Windows
+native проверки и не является новым production entry point.
 
 Продуктовой flow не меняется: до авторизации клиент показывает fullscreen Locked
 access-gate; после входа — компактный borderless виджет без замены Windows shell.
@@ -14,8 +14,8 @@ Backend остаётся источником истины для сессий, 
 
 ## Linux developer host
 
-Linux-first solution находится в `GameClub.Client.sln`; legacy WinUI solution
-для будущего Windows comparison — `GameClub.Client.Windows.sln`. После установки
+Linux-first solution находится в `GameClub.Client.sln`; Windows Avalonia
+production solution — `GameClub.Client.Windows.sln`. После установки
 .NET SDK версии из [`../global.json`](../global.json) первый host запускается так:
 
 ```bash
@@ -55,6 +55,21 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
 
 Полученный artifact не является доказательством Windows runtime.
 
+## Windows Avalonia host
+
+На Windows новая точка входа собирается из отдельного solution, а не из legacy
+WinUI project:
+
+```powershell
+dotnet restore win-client\GameClub.Client.Windows.sln
+dotnet build win-client\GameClub.Client.Windows.sln -c Debug -p:Platform=x64
+dotnet publish win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj `
+  -c Debug -r win-x64 --self-contained false
+```
+
+Linux не считает успешным этот native publish: для него остаются обязательны
+ручные Windows checks окна, tray, DPAPI, restart и kiosk-policy.
+
 ## Основной порядок работы
 
 1. Клонировать проект в `C:\Git\HubShell`.
@@ -81,7 +96,9 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
 
 ```text
 C:\Git\HubShell\win-client\GameClub.Client.sln
+C:\Git\HubShell\win-client\GameClub.Client.Windows.sln
 C:\Git\HubShell\win-client\src\GameClub.Client\GameClub.Client.csproj
+C:\Git\HubShell\win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj
 C:\Git\HubShell\win-client\scripts
 C:\Git\HubShell\win-client\artifacts
 ```

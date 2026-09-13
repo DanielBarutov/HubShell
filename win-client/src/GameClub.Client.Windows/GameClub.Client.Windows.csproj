@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- This is a Windows deployment host, but no WindowsAppSDK API leaks
+         into its UI. net8.0 keeps restore/build verifiable from Linux; publish
+         is restricted to win-x86/win-x64/win-arm64 below. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>GameClub.Client.Windows</RootNamespace>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <!-- Specify one Windows RID at publish time. Restoring every Windows
+         runtime pack is unnecessary for Linux source verification. -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Local Linux verification may run without NuGet audit network access. -->
+    <NuGetAudit>false</NuGetAudit>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+    <GameClubEnvironment Condition="'$(GameClubEnvironment)' == ''">production</GameClubEnvironment>
+    <GameClubAuthAddress Condition="'$(GameClubAuthAddress)' == ''">https://api.gameclub.local:8100</GameClubAuthAddress>
+    <GameClubGrpcAddress Condition="'$(GameClubGrpcAddress)' == ''">https://api.gameclub.local:51051</GameClubGrpcAddress>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="GameClubEnvironment" Value="$(GameClubEnvironment)" />
+    <AssemblyMetadata Include="GameClubAuthAddress" Value="$(GameClubAuthAddress)" />
+    <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />
+    <ProjectReference Include="..\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="Infrastructure\DeploymentSettings.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\JsonlOfflineJournal.cs" Link="Infrastructure\JsonlOfflineJournal.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\NativeTrayIcon.cs" Link="Infrastructure\NativeTrayIcon.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\WindowsCommandExecutor.cs" Link="Infrastructure\WindowsCommandExecutor.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\WindowsWorkstationPowerController.cs" Link="Infrastructure\WindowsWorkstationPowerController.cs" />
+  </ItemGroup>
+</Project>

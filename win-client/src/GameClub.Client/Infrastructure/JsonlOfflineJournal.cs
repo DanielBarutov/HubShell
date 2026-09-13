@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using GameClub.Client.Application.Ports;
@@ -6,6 +7,7 @@ using GameClub.Client.Domain;
 
 namespace GameClub.Client.Infrastructure;
 
+[SupportedOSPlatform("windows")]
 public sealed class JsonlOfflineJournal : IOfflineJournal
 {
     private readonly string _path;
