@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Media;
 using GameClub.Client.Avalonia;
 using GameClub.Client.Presentation;
 using Xunit;
@@ -46,6 +47,19 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(window.FindControl<ItemsControl>("PortalEntitlementQueueList"));
         Assert.NotNull(window.FindControl<Border>("TransferPanel"));
         Assert.NotNull(window.FindControl<Expander>("PortalHistory"));
+    }
+
+    [Fact]
+    public void WorkstationThemeChangesTheSharedAvaloniaAccentResource()
+    {
+        EnsureAvaloniaInitialized();
+
+        var app = new App();
+        app.Initialize();
+        app.ApplyWorkstationTheme("vip");
+
+        var accent = Assert.IsType<SolidColorBrush>(app.Resources["AccentBrush"]);
+        Assert.Equal(Color.Parse("#C49BFF"), accent.Color);
     }
 
     private static void EnsureAvaloniaInitialized()
