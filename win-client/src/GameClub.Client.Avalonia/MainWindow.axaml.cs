@@ -7,18 +7,27 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using GameClub.Client.Avalonia.Development;
+using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Presentation;
 
 namespace GameClub.Client.Avalonia;
 
 public partial class MainWindow : Window
 {
-    private readonly LocalBackendClientHost _clientHost = new();
+    private readonly IClientHost _clientHost;
     private bool _normalizingPhone;
 
     public MainWindow()
+        : this(new LocalBackendClientHost())
     {
+    }
+
+    public MainWindow(IClientHost clientHost)
+    {
+        _clientHost = clientHost;
         InitializeComponent();
+        Title = clientHost.WindowTitle;
+        this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
         DataContext = _clientHost.ViewModel;
         ViewModel.PropertyChanged += ViewModelPropertyChanged;
         Opened += MainWindowOpened;

@@ -1,4 +1,5 @@
 using GameClub.Client.Application;
+using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Infrastructure;
 using GameClub.Client.Presentation;
 
@@ -9,7 +10,7 @@ namespace GameClub.Client.Avalonia.Development;
 /// It is intentionally loopback-only and does not provide a Linux substitute
 /// for DPAPI, tray, restart, or kiosk policy.
 /// </summary>
-public sealed class LocalBackendClientHost : IAsyncDisposable
+public sealed class LocalBackendClientHost : IClientHost
 {
     private static readonly Uri LocalAuthAddress = new("http://127.0.0.1:8100");
     private static readonly Uri LocalGrpcAddress = new("http://127.0.0.1:51051");
@@ -27,6 +28,10 @@ public sealed class LocalBackendClientHost : IAsyncDisposable
     }
 
     public MainViewModel ViewModel { get; }
+
+    public string WindowTitle => "HubShell client — Linux developer host";
+
+    public string HostDisclaimer => "Linux developer host: backend доступен только через loopback.";
 
     public async Task StartAsync()
     {

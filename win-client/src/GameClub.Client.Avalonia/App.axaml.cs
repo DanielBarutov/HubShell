@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using GameClub.Client.Avalonia.Hosting;
 using AvaloniaApplication = Avalonia.Application;
 
 namespace GameClub.Client.Avalonia;
@@ -14,7 +15,7 @@ public partial class App : AvaloniaApplication
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow();
+            desktop.MainWindow = new MainWindow(AvaloniaClientHostFactory.Create());
         }
 
         base.OnFrameworkInitializationCompleted();
