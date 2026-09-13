@@ -25,8 +25,28 @@ dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
 dotnet run --project win-client/src/GameClub.Client.Avalonia --configuration Debug --no-build
 ```
 
-Это diagnostic developer window, без backend connection, DPAPI, tray, restart
-и kiosk-policy. Для Windows-target compile из Linux использовать:
+Это Linux developer host с настоящим access-gate и portable gRPC transport.
+Для локального integration-smoke сначала поднять только backend-контур:
+
+```bash
+docker compose up -d --build postgres redis backend-migrate backend-http backend-grpc worker meter-worker scheduler
+curl --fail --silent --show-error http://127.0.0.1:8100/health/ready
+```
+
+Затем один раз создать в локальной dev-базе игровое место с MAC текущей Linux
+машины. После первого запуска Avalonia enrollment свяжет installation identity
+с этим местом; register/login в окне используют реальные localhost HTTP/gRPC
+контракты и создают server-backed session. Тест перехода register → portal
+запускается только явно и создаёт отдельный случайный dev-аккаунт:
+
+```bash
+GAMECLUB_RUN_LOCAL_INTEGRATION=1 \
+  /home/daniel/.local/share/dotnet-sdk-8/dotnet test win-client/GameClub.Client.sln \
+  --configuration Debug --no-build --filter LocalAvaloniaBackendIntegrationTests
+```
+
+Linux не реализует DPAPI, tray, restart или kiosk-policy. Для Windows-target
+compile из Linux использовать:
 
 ```bash
 dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj \

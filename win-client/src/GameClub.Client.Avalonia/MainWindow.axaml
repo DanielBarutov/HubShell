@@ -1,20 +1,104 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="GameClub.Client.Avalonia.MainWindow"
-        Width="640"
-        Height="360"
-        MinWidth="480"
-        MinHeight="280"
+        Width="960"
+        Height="620"
+        MinWidth="640"
+        MinHeight="480"
         Title="HubShell client — Linux developer host"
-        WindowStartupLocation="CenterScreen">
-  <Border Padding="32" Background="#07090D">
-    <StackPanel Spacing="16">
-      <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
-      <TextBlock Text="Avalonia developer host" Foreground="#EDF5EF" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="{Binding Status}" Foreground="#B9C5C0" TextWrapping="Wrap" FontSize="15" />
-      <Border Background="#131E20" CornerRadius="8" Padding="14">
-        <TextBlock Text="{Binding EvidenceBoundary}" Foreground="#B9C5C0" TextWrapping="Wrap" />
+        WindowStartupLocation="CenterScreen"
+        Background="#07090D">
+  <Grid Background="#07090D">
+    <Grid IsVisible="{Binding IsAccessGateVisible}">
+      <Border MaxWidth="900" Margin="40" Padding="32" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#0F1719" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="18">
+        <Grid ColumnDefinitions="1.1*,0.9*" ColumnSpacing="36">
+          <StackPanel VerticalAlignment="Center" Spacing="16">
+            <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
+            <TextBlock Text="{Binding AccessTitle}" Foreground="#EDF5EF" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding AccessSubtitle}" Foreground="#B9C5C0" FontSize="14" TextWrapping="Wrap" />
+            <Border Background="#131E20" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="10" Padding="14">
+              <StackPanel Spacing="4">
+                <TextBlock Text="ИГРОВОЕ МЕСТО" Foreground="#7B8F8A" FontSize="10" />
+                <TextBlock Text="{Binding CurrentWorkstationLabel}" Foreground="#EDF5EF" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding ConnectionMessage}" Foreground="#B6F35A" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+            <TextBlock Text="Linux developer host: backend доступен только через loopback." Foreground="#7B8F8A" FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <Border Grid.Column="1" Padding="24" Background="#131E20" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="12">
+            <Grid>
+              <StackPanel IsVisible="{Binding IsUserLoginVisible}" Spacing="12">
+                <TextBlock Text="Войти в аккаунт" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="Ник или телефон и пароль" Foreground="#B9C5C0" FontSize="12" />
+                <TextBox Name="PortalIdentifierBox" Watermark="Ник или телефон" TextChanged="PortalIdentifierChanged" />
+                <TextBox Name="PortalPasswordBox" Watermark="Пароль" PasswordChar="●" TextChanged="PortalPasswordChanged" />
+                <Button Click="LoginPortal" IsEnabled="{Binding CanLoginPortal}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
+                  <TextBlock Text="Войти" FontWeight="SemiBold" />
+                </Button>
+                <Button Click="OpenPortalRegistration" Background="Transparent" Foreground="#B9C5C0" HorizontalAlignment="Stretch">
+                  <TextBlock Text="Создать аккаунт" />
+                </Button>
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsPortalRegistrationVisible}" Spacing="12">
+                <TextBlock Text="Создать аккаунт" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
+                <TextBox Name="PortalNicknameBox" Watermark="Ник (от 3 символов)" TextChanged="PortalNicknameChanged" />
+                <TextBox Name="PortalPhoneBox" Watermark="Телефон" TextChanged="PortalPhoneChanged" />
+                <TextBox Name="PortalRegistrationPasswordBox" Watermark="Пароль (от 4 символов)" PasswordChar="●" TextChanged="PortalRegistrationPasswordChanged" />
+                <Button Click="RegisterPortal" IsEnabled="{Binding CanRegisterPortal}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
+                  <TextBlock Text="Зарегистрироваться" FontWeight="SemiBold" />
+                </Button>
+                <Button Click="CancelPortalRegistration" Background="Transparent" Foreground="#B9C5C0" HorizontalAlignment="Stretch">
+                  <TextBlock Text="Назад ко входу" />
+                </Button>
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding IsPortalPasswordSetupVisible}" Spacing="12">
+                <TextBlock Text="Обновите пароль" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Text="После сброса пароль нужно задать до доступа к сессии." Foreground="#B9C5C0" TextWrapping="Wrap" />
+                <TextBox Name="PortalPasswordSetupBox" Watermark="Новый пароль" PasswordChar="●" TextChanged="PortalPasswordSetupChanged" />
+                <TextBox Name="PortalPasswordSetupConfirmationBox" Watermark="Повторите пароль" PasswordChar="●" TextChanged="PortalPasswordSetupConfirmationChanged" />
+                <Button Click="SetPortalPassword" IsEnabled="{Binding CanSetPortalPassword}" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
+                  <TextBlock Text="Сохранить пароль" FontWeight="SemiBold" />
+                </Button>
+              </StackPanel>
+
+              <StackPanel VerticalAlignment="Bottom" Spacing="6">
+                <TextBlock Text="{Binding AccessMessage}" Foreground="#B9C5C0" FontSize="11" TextWrapping="Wrap" />
+                <Button Click="RefreshConnection" Background="Transparent" Foreground="#7B8F8A" HorizontalAlignment="Left">
+                  <TextBlock Text="Проверить подключение" />
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Border>
+        </Grid>
       </Border>
-    </StackPanel>
-  </Border>
+    </Grid>
+
+    <ScrollViewer IsVisible="{Binding IsPortalContentVisible}" Margin="24" VerticalScrollBarVisibility="Auto">
+      <StackPanel MaxWidth="560" HorizontalAlignment="Center" Spacing="14">
+        <TextBlock Text="HUBSHELL" Foreground="#B6F35A" FontWeight="Bold" FontSize="14" />
+        <Border Background="#0F1719" BorderBrush="#2C3B3C" BorderThickness="1" CornerRadius="12" Padding="18">
+          <StackPanel Spacing="6">
+            <TextBlock Text="{Binding PortalAccountSummary}" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding PortalContactSummary}" Foreground="#B9C5C0" />
+            <TextBlock Text="{Binding PortalBalanceSummary}" Foreground="#B6F35A" FontSize="16" />
+            <TextBlock Text="{Binding PortalAvailableTimeSummary}" Foreground="#B9C5C0" />
+          </StackPanel>
+        </Border>
+        <Border IsVisible="{Binding IsActiveSessionVisible}" Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="12" Padding="18">
+          <StackPanel Spacing="6">
+            <TextBlock Text="АКТИВНАЯ СЕССИЯ" Foreground="#61D8FF" FontSize="11" />
+            <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="#EDF5EF" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding ActiveSessionDescription}" Foreground="#B9C5C0" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <TextBlock Text="{Binding PortalNotification}" IsVisible="{Binding IsPortalNotificationVisible}" Foreground="#B6F35A" TextWrapping="Wrap" />
+        <Button Click="Logout" Background="#B6F35A" Foreground="#11180C" HorizontalAlignment="Stretch">
+          <TextBlock Text="Выйти" FontWeight="SemiBold" />
+        </Button>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
 </Window>
