@@ -1,6 +1,6 @@
 # Verification matrix
 
-Дата последней проверки: `2026-09-05`.
+Дата последней проверки: `2026-09-13`.
 
 Документ разделяет фактически проверенное поведение и то, что пока подтверждено
 только исходниками или требует другой платформы.
@@ -15,6 +15,8 @@
 | Frontend | TypeScript typecheck и Vite production build; единый тёмный shell, topbar, dashboard/map/catalog/panel visual system | успешно | Headed snapshot smoke карты с фиксированной карточкой и отдельным scroll-frame; полный browser matrix и realtime transport ещё не проверялись |
 | Frontend live flow | operator login, persistent refresh после reload, spatial map, tariff/product checkout idempotency, catalog sale confirmation, analytics overview, settings и payment-methods CRUD | успешно; headed smoke прошёл основные routes, PC context и offline sale/booking guards disabled | Полный browser matrix, duplicate/error/queue/entry/transfer/guest UI, accessibility и realtime transport ещё не проверялись |
 | Windows client | структура слоёв, protobuf consumers, server EntryDecision в portal login/register и session start, snapshot/transfer gateway, DPAPI journal/sequence, package notification, server-backed guest tariff/remaining time, pre-auth gate, post-auth widget/tray и restart flow | source-level успешно; generated protobuf signature проверена временным protoc | WindowsAppSDK compile/runtime, reconnect/power-loss и native Windows пока не доказаны |
+| Avalonia Linux developer host | новый `net8.0` Core, Avalonia `11.3.2` host, xUnit headless smoke и Linux solution без WindowsAppSDK | Ubuntu `26.04`, .NET SDK `8.0.425`: Debug build без warnings, `18 passed`; окно удерживалось запущенным 10 секунд в Wayland/Xwayland GUI-сеансе | product access-gate/portal, gRPC/enrollment, tray, DPAPI, restart и kiosk в Avalonia ещё не перенесены; запуск окна не доказывает Windows behaviour |
+| Avalonia Windows-target artifact | `GameClub.Client.Avalonia` cross-publish `net8.0/win-x64` из Linux | создан `win-client/artifacts/avalonia-cross-publish/win-x64/Debug/GameClub.Client.Avalonia.exe` (`152064` bytes), framework-dependent | это только cross-compile artifact; Windows runtime, publish delivery и kiosk evidence не проверены |
 | Windows publish | воспроизводимый self-contained publish script и single-file portable EXE через `build-portable-exe.ps1` | source-level успешно | Сам publish и запуск требуют Windows/.NET/Windows SDK; один EXE ещё не запускался на целевой машине |
 | Windows native | WinUI 3 restore/build, access-gate под обычным пользователем, reconnect, темы и restart | не проверено | .NET 8 SDK восстановлен локально, но WindowsAppSDK `XamlCompiler.exe` требует Windows; native build/runtime запускать на Windows |
 | Docker Compose | config validation, backend rebuild/restart, PostgreSQL/Redis readiness, migration `20260902_0048`, backend HTTP health/auth/entry decision, frontend startup, worker/scheduler и dedicated meter worker | успешно в текущем прогоне 2026-09-06; worker обрабатывает billing/cash actors, `/health/ready` и `/health/live` OK, backend HTTP/gRPC healthy | live meter на реальной пользовательской сессии и browser matrix требуют отдельного smoke; native Windows client остаётся отдельной проверкой |
@@ -49,6 +51,20 @@ cd frontend
 npm run typecheck
 npm run build
 ```
+
+Linux Avalonia developer host:
+
+```text
+dotnet restore win-client/GameClub.Client.sln --disable-parallel
+dotnet build win-client/GameClub.Client.sln --configuration Debug --no-restore
+dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
+dotnet run --project win-client/src/GameClub.Client.Avalonia --configuration Debug --no-build
+dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj --configuration Debug --runtime win-x64 --self-contained false
+```
+
+В текущем checkout SDK установлен локально как `8.0.425`; `global.json` задаёт
+совместимую версию. Artifact `win-x64` не запускать и не считать Windows smoke
+без отдельной Windows-машины.
 
 Windows native:
 

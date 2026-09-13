@@ -12,6 +12,29 @@ access-gate; после входа — компактный borderless видж�
 Backend остаётся источником истины для сессий, тарифов, баланса, списаний и
 команд.
 
+## Linux developer host
+
+Linux-first solution находится в `GameClub.Client.sln`; legacy WinUI solution
+для будущего Windows comparison — `GameClub.Client.Windows.sln`. После установки
+.NET SDK версии из [`../global.json`](../global.json) первый host запускается так:
+
+```bash
+dotnet restore win-client/GameClub.Client.sln --disable-parallel
+dotnet build win-client/GameClub.Client.sln --configuration Debug --no-restore
+dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
+dotnet run --project win-client/src/GameClub.Client.Avalonia --configuration Debug --no-build
+```
+
+Это diagnostic developer window, без backend connection, DPAPI, tray, restart
+и kiosk-policy. Для Windows-target compile из Linux использовать:
+
+```bash
+dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj \
+  --configuration Debug --runtime win-x64 --self-contained false
+```
+
+Полученный artifact не является доказательством Windows runtime.
+
 ## Основной порядок работы
 
 1. Клонировать проект в `C:\Git\HubShell`.

@@ -7,10 +7,10 @@ startup diagnostics находятся в
 
 | Область | Целевое значение | Статус в Linux checkout |
 | --- | --- | --- |
-| Runtime | .NET 8 | source-level |
-| Current UI source | WinUI 3 / Windows App SDK 1.6 | legacy source; migration not started |
-| Target UI framework | Avalonia | planned by [`plans/38-avalonia-linux-first`](../../plans/38-avalonia-linux-first/PLAN.md) |
-| Target shared framework | `net8.0` for core, tests and Avalonia host | planned |
+| Runtime | .NET 8 / SDK `8.0.425` | Linux build/test completed |
+| Current UI source | WinUI 3 / Windows App SDK 1.6 | legacy source retained for Windows comparison |
+| Target UI framework | Avalonia `11.3.2` | Linux developer host compiled and started; product screens not migrated |
+| Target shared framework | `net8.0` for core, tests and Avalonia host | Core/Avalonia/Tests compile in Linux |
 | Windows adapter framework | `net8.0-windows` only for platform ports | planned |
 | Минимальная ОС | Windows 10 build 17763 | project config |
 | Архитектуры | x86, x64, ARM64 | project config; native runtime не проверен |
@@ -57,16 +57,16 @@ C:\GameClub\Client\GameClub.Client.exe
 - allowlist команд, deadline, expiry, ACK и reconnect boundaries;
 - portable publish parameters и отсутствие секретов в deployment script.
 
-Это не подтверждает запуск legacy WinUI, XAML compilation, Windows networking
-или поведение полноэкранного окна. До первого этапа плана 38 Linux ещё не
-собирает и не запускает настоящий client UI; это целевое изменение, а не
-уже полученный результат.
+Это не подтверждает запуск legacy WinUI, Windows networking или поведение
+полноэкранного продуктового окна. Первый Avalonia host уже собирается, проходит
+headless smoke и запускался в локальном Linux GUI-сеансе, но пока показывает
+только diagnostic state.
 
 ## Linux-first migration boundary
 
-После первой точки остановки плана 38 Linux должен выполнять restore, build,
-unit tests и запуск Avalonia developer host. Он проверяет UI/state transitions,
-gRPC/reconnect и platform-neutral offline protocol. Он не заменяет Windows
+Linux уже выполняет restore, build, unit tests и запуск diagnostic Avalonia
+developer host. После переноса product flows он будет проверять UI/state
+transitions, gRPC/reconnect и platform-neutral offline protocol. Он не заменяет Windows
 проверки и не включает DPAPI, Windows tray, restart, autostart или kiosk policy.
 
 ## Что требует реального Windows-ПК

@@ -72,7 +72,7 @@ Windows сохраняют свои короткие owner-level входы в `
 | 35 | [`35-frontend-contract-consumers/PLAN.md`](35-frontend-contract-consumers/PLAN.md) | operator consumers новых backend DTO | `in_progress` |
 | 36 | [`36-winui-contract-consumers/PLAN.md`](36-winui-contract-consumers/PLAN.md) | legacy WinUI snapshot, transfer и offline consumers | `in_progress` |
 | 37 | [`37-platform-integration-evidence/PLAN.md`](37-platform-integration-evidence/PLAN.md) | integration, native, kiosk и release evidence | `in_progress` |
-| 38 | [`38-avalonia-linux-first/PLAN.md`](38-avalonia-linux-first/PLAN.md) | Avalonia migration: Linux-first developer host и Windows-target compile artifact | `planned` |
+| 38 | [`38-avalonia-linux-first/PLAN.md`](38-avalonia-linux-first/PLAN.md) | Avalonia migration: Linux-first developer host и Windows-target compile artifact | `in_progress` |
 
 Статусы:
 
