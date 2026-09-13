@@ -47,6 +47,7 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(window.FindControl<ItemsControl>("PortalEntitlementQueueList"));
         Assert.NotNull(window.FindControl<Border>("TransferPanel"));
         Assert.NotNull(window.FindControl<Expander>("PortalHistory"));
+        Assert.NotNull(window.FindControl<Border>("WindowContentSurface"));
         Assert.False(window.FindControl<Button>("HideToTrayButton")!.IsVisible);
     }
 

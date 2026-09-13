@@ -5,6 +5,7 @@
         Title="HubShell client"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource PageBackgroundBrush}">
+  <Border Name="WindowContentSurface" Background="{DynamicResource PageBackgroundBrush}" ClipToBounds="True">
   <Grid Background="{DynamicResource PageBackgroundBrush}" KeyDown="RecordKeyActivity" PointerPressed="RecordPointerActivity">
     <!-- Device-enrolled fallback when the portal has not yet supplied a snapshot. -->
     <Grid IsVisible="{Binding IsSecuredContentVisible}" Margin="24">
@@ -111,4 +112,5 @@
       </StackPanel>
     </ScrollViewer>
   </Grid>
+  </Border>
 </Window>

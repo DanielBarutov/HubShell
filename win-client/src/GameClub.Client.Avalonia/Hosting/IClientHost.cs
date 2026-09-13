@@ -31,6 +31,12 @@ public interface IClientHost : IAsyncDisposable
 /// </summary>
 public interface IClientWindowAdapter : IDisposable
 {
+    /// <summary>
+    /// Requests a transparent native surface before the window opens. This is
+    /// needed only when a platform adapter renders rounded outer corners.
+    /// </summary>
+    bool UsesTransparentWindow { get; }
+
     void Attach(Window window);
 
     void ApplyWindowMode(bool accessGateVisible);

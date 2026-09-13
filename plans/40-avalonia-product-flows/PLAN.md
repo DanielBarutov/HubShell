@@ -67,8 +67,9 @@ fullscreen/window placement и kiosk policy.
    native Windows execution остаётся обязательным evidence.
    Реализовано source-level: `GameClub.Client.Windows.sln` ведёт на новый
    Avalonia host; DPAPI journal, restart/power, command stream, fullscreen
-   access-gate, compact always-on-top widget и native Windows tray перенесены
-   в явные adapters. Linux host намеренно скрывает действие tray. Реальная
+   access-gate, compact always-on-top widget с прозрачными скруглёнными
+   внешними углами и native Windows tray перенесены в явные adapters. Linux
+   host намеренно скрывает действие tray. Реальная
    Windows runtime-проверка остаётся открытым evidence в task 6.
 
 ## Критерии готовности этапа
