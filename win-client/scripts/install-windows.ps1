@@ -11,13 +11,13 @@ $ErrorActionPreference = "Stop"
 
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows)) {
-    throw "Установка WinUI-клиента выполняется только на Windows."
+    throw "Установка Avalonia Windows-клиента выполняется только на Windows."
 }
 
 $resolvedPublishPath = (Resolve-Path -LiteralPath $PublishPath -ErrorAction Stop).Path
-$sourceExecutable = Join-Path $resolvedPublishPath "GameClub.Client.exe"
+$sourceExecutable = Join-Path $resolvedPublishPath "GameClub.Client.Windows.exe"
 if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-    throw "В каталоге публикации не найден GameClub.Client.exe: $resolvedPublishPath"
+    throw "В каталоге публикации не найден GameClub.Client.Windows.exe: $resolvedPublishPath"
 }
 
 if ($RegisterRecoveryTask -and -not $NoStartup) {
@@ -27,17 +27,17 @@ if ($RegisterRecoveryTask -and -not $NoStartup) {
 $resolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath)
 New-Item -ItemType Directory -Path $resolvedInstallPath -Force | Out-Null
 Copy-Item -Path (Join-Path $resolvedPublishPath "*") -Destination $resolvedInstallPath -Recurse -Force
-$installedExecutable = Join-Path $resolvedInstallPath "GameClub.Client.exe"
-Set-Content -LiteralPath (Join-Path $resolvedInstallPath ".gameclub-installation") -Value "GameClub.Client" -Encoding UTF8
+$installedExecutable = Join-Path $resolvedInstallPath "GameClub.Client.Windows.exe"
+Set-Content -LiteralPath (Join-Path $resolvedInstallPath ".gameclub-installation") -Value "GameClub.Client.Windows" -Encoding UTF8
 
 if (-not $NoStartup) {
     $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
     New-Item -Path $runKey -Force | Out-Null
-    Set-ItemProperty -Path $runKey -Name "GameClub.Client" -Value ('"{0}"' -f $installedExecutable)
+    Set-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -Value ('"{0}"' -f $installedExecutable)
 }
 
 if ($RegisterRecoveryTask) {
-    $taskName = "GameClub.Client.Recovery"
+    $taskName = "GameClub.Client.Windows.Recovery"
     $action = New-ScheduledTaskAction -Execute $installedExecutable
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)

@@ -54,9 +54,10 @@ fullscreen/window placement и kiosk policy.
    for confirmation, transfer and password-reset before closing this task.
 6. [ ] После каждого portable slice выполнить Linux restore/build/test/run and
    `win-x64` cross-publish. Перед release выполнить separate Windows native
-   compile/runtime smoke, including tray/window adapter review. Linux now builds
-   the new `GameClub.Client.Windows` solution without warnings; native execution
-   and Windows-RID publish remain unverified.
+   compile/runtime smoke, including tray/window adapter review. Linux builds
+   the new `GameClub.Client.Windows` solution without warnings and produces a
+   self-contained `win-x64` PE folder-publish; native execution remains
+   unverified.
 7. [x] Заменить legacy WinUI executable host отдельным
    `GameClub.Client.Windows` Avalonia production host (portable `net8.0`,
    published only as `win-*`). Он должен переиспользовать

@@ -8,10 +8,10 @@ startup diagnostics находятся в
 | Область | Целевое значение | Статус в Linux checkout |
 | --- | --- | --- |
 | Runtime | .NET 8 / SDK `8.0.425` | Linux build/test completed |
-| Current UI source | WinUI 3 / Windows App SDK 1.6 | legacy source retained for Windows comparison |
-| Target UI framework | Avalonia `11.3.2` | Linux developer host compiled and started; product screens not migrated |
+| Current production UI | Avalonia `11.3.2` | Linux developer host compiled and started; Windows host source-build/cross-publish completed |
+| Legacy UI source | WinUI 3 / Windows App SDK 1.6 | retained only for comparison until native Windows smoke |
 | Target shared framework | `net8.0` for core, tests and Avalonia host | Core/Avalonia/Tests compile in Linux |
-| Windows adapter framework | `net8.0-windows` only for platform ports | planned |
+| Windows adapter framework | `net8.0` host published only for `win-*`; DPAPI/tray/restart isolated in Windows project | source build and `win-x64` publish completed |
 | Минимальная ОС | Windows 10 build 17763 | project config |
 | Архитектуры | x86, x64, ARM64 | project config; native runtime не проверен |
 | Транспорт | gRPC/Protobuf, HTTP/gRPC в private LAN или HTTPS при внешнем доступе | source-level; transport runtime требует Windows smoke |
@@ -20,7 +20,7 @@ startup diagnostics находятся в
 | Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
 | Manager access | явный пункт менеджера, отдельный manager password | source-level; native smoke не выполнен |
 | Kiosk boundary | Assigned Access/Shell Launcher | не проверено |
-| Delivery | self-contained `GameClub.Client.exe` for Windows | Windows publish/runtime smoke remains required |
+| Delivery | self-contained `GameClub.Client.Windows.exe` for Windows | Linux `win-x64` folder-publish completed; Windows runtime smoke remains required |
 
 ## Целевой deployment flow
 
@@ -42,7 +42,7 @@ C:\Git\HubShell
 Канонический путь приложения на тестовом игровом ПК:
 
 ```text
-C:\GameClub\Client\GameClub.Client.exe
+C:\GameClub\Client\GameClub.Client.Windows.exe
 ```
 
 На клиентском ПК не должны выполняться `dotnet`, PowerShell setup, ввод
@@ -53,14 +53,14 @@ C:\GameClub\Client\GameClub.Client.exe
 - структура слоёв и source-of-truth protobuf;
 - MAC enrollment, installation binding и состояния `pending/approved/disabled`;
 - device/client JWT claims и device binding на source-level;
-- legacy WinUI fullscreen presenter, locked flow и portal view на source-level;
+- Avalonia access-gate, manager flow и portal view на source-level;
 - allowlist команд, deadline, expiry, ACK и reconnect boundaries;
 - portable publish parameters и отсутствие секретов в deployment script.
 
-Это не подтверждает запуск legacy WinUI, Windows networking или поведение
-полноэкранного продуктового окна. Первый Avalonia host уже собирается, проходит
-headless smoke и запускался в локальном Linux GUI-сеансе, но пока показывает
-только diagnostic state.
+Это не подтверждает Windows runtime, networking или поведение полноэкранного
+продуктового окна. Avalonia host уже собирается, проходит headless smoke и
+запускался в локальном Linux GUI-сеансе; Windows host также cross-publish-ится
+в `win-x64` PE artifact, но не запускался на Windows.
 
 ## Linux-first migration boundary
 

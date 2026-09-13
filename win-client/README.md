@@ -97,7 +97,6 @@ Linux не считает успешным этот native publish: для не�
 ```text
 C:\Git\HubShell\win-client\GameClub.Client.sln
 C:\Git\HubShell\win-client\GameClub.Client.Windows.sln
-C:\Git\HubShell\win-client\src\GameClub.Client\GameClub.Client.csproj
 C:\Git\HubShell\win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj
 C:\Git\HubShell\win-client\scripts
 C:\Git\HubShell\win-client\artifacts
@@ -136,7 +135,7 @@ C:\Git\HubShell\win-client\artifacts
   для публичного или недоверенного адреса обязательно использовать HTTPS;
 - на игровом ПК не нужны SDK, Visual Studio, env-переменные, `device_id`,
   bootstrap token или PIN hash;
-- fullscreen WinUI не заменяет Assigned Access/Shell Launcher;
+- fullscreen Avalonia access-gate не заменяет Assigned Access/Shell Launcher;
 - отсутствие backend должно отображаться как offline/reconnecting, а не быть
   причиной закрытия окна.
 

@@ -38,12 +38,14 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         try
         {
             _trayIcon = new NativeTrayIcon(windowHandle, RestoreFromTray, ExitFromTray);
+            StartupDiagnostics.Info("Avalonia Windows tray initialized");
         }
         catch (Exception error)
         {
             // A tray failure must not prevent the access gate from protecting
             // the station. Native Windows smoke validates the tray separately.
             Trace.TraceError($"HubShell tray initialization failed: {error}");
+            StartupDiagnostics.Error("Avalonia Windows tray initialization failed", error);
         }
     }
 

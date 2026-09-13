@@ -13,36 +13,32 @@ $windows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
     [System.Runtime.InteropServices.OSPlatform]::Windows
 )
 if (-not $windows) {
-    throw "Этот скрипт предназначен для Windows: WinUI 3 и Windows App SDK нельзя проверить в Linux."
+    throw "Этот скрипт предназначен для Windows: он собирает Avalonia host перед обязательным интерактивным native smoke."
 }
 
 $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($null -eq $dotnetCommand) {
-    throw "Команда dotnet не найдена. Установите .NET 8 SDK и Visual Studio workload .NET desktop development."
+    throw "Команда dotnet не найдена. Установите .NET 8 SDK."
 }
 
-$legacySolutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.Windows.sln")
+$windowsSolutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.Windows.sln")
 $linuxFirstSolutionPath = Resolve-Path (Join-Path $PSScriptRoot "..\GameClub.Client.sln")
 
-Write-Host "Проверяем legacy WinUI host: $legacySolutionPath"
+Write-Host "Проверяем Avalonia Windows host: $windowsSolutionPath"
 Write-Host "Проверяем Avalonia/Core test graph: $linuxFirstSolutionPath"
 & $dotnetCommand.Source --info
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet --info завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source restore $legacySolutionPath.Path `
-    -p:UseWPF=false `
-    -p:UseWindowsForms=false
+& $dotnetCommand.Source restore $windowsSolutionPath.Path
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet restore завершился с кодом $LASTEXITCODE."
 }
 
-& $dotnetCommand.Source build $legacySolutionPath.Path `
+& $dotnetCommand.Source build $windowsSolutionPath.Path `
     --configuration $Configuration `
     -p:Platform=$Architecture `
-    -p:UseWPF=false `
-    -p:UseWindowsForms=false `
     --no-restore
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build завершился с кодом $LASTEXITCODE."
@@ -69,8 +65,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Avalonia/Core test завершился с кодом $LASTEXITCODE."
 }
 
-Write-Host "Legacy WinUI native build и Avalonia/Core checks пройдены. Avalonia Windows runtime пока требует отдельного smoke после переноса product UI."
-Write-Host "Далее выполните ручные проверки legacy host под обычным пользователем:"
+Write-Host "Avalonia Windows build и portable Core checks пройдены. Далее выполните native runtime smoke под обычным пользователем:"
 Write-Host "1. Запустить клиент обычным пользователем, без прав администратора: он должен стартовать Locked в полноэкранном borderless shell."
 Write-Host "2. До назначения MAC проверить pending/waiting screen без user profile, баланса и рабочих действий."
 Write-Host "3. Назначить MAC в админке, дождаться approved, heartbeat, device policy и theme."
@@ -79,4 +74,5 @@ Write-Host "5. Остановить и восстановить backend или �
 Write-Host "6. Перезапустить клиент; убедиться, что он снова стартует Locked и сохраняет только installation identity."
 Write-Host "7. Открыть режим обслуживания через явный пункт менеджера, ввести manager password и проверить возврат в Locked."
 Write-Host "8. Проверить session/product retry и отсутствие повторного debit, sale или active session."
-Write-Host "9. В Assigned Access/Shell Launcher проверить запрет выхода в desktop и shell."
+Write-Host "9. После login проверить compact always-on-top widget, Скрыть → tray → Показать и явный выход из tray."
+Write-Host "10. В Assigned Access/Shell Launcher проверить запрет выхода в desktop и shell."
