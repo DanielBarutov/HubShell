@@ -5,7 +5,6 @@ using Grpc.Core;
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
 using GameClub.Client.Domain;
-using Microsoft.UI.Xaml;
 
 namespace GameClub.Client.Presentation;
 
@@ -86,47 +85,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool IsAccessLocked => _accessGate.IsLocked;
     public bool IsSessionLocked => _accessGate.IsSessionLocked;
     public bool IsMaintenanceMode => _accessGate.IsMaintenance;
-    public Visibility AccessGateVisibility => IsAccessLocked || IsMaintenanceMode
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility SecuredContentVisibility => IsAccessLocked || IsMaintenanceMode || _portalSnapshot is not null
-        ? Visibility.Collapsed
-        : Visibility.Visible;
-    public Visibility UserLoginVisibility => IsAccessLocked
+    public bool IsAccessGateVisible => IsAccessLocked || IsMaintenanceMode;
+    public bool IsSecuredContentVisible => !IsAccessLocked && !IsMaintenanceMode && _portalSnapshot is null;
+    public bool IsUserLoginVisible => IsAccessLocked
         && _lockdownPolicy.UserSelfLoginEnabled
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
-        && !_isPortalRegistrationRequested
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility PortalRegistrationVisibility => IsAccessLocked
+        && !_isPortalRegistrationRequested;
+    public bool IsPortalRegistrationVisible => IsAccessLocked
         && _lockdownPolicy.UserSelfLoginEnabled
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
-        && _isPortalRegistrationRequested
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility ManagerLoginVisibility => IsAccessLocked && _isManagerLoginRequested
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility MaintenanceVisibility => IsMaintenanceMode
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility ManagerEntryVisibility => IsAccessLocked
+        && _isPortalRegistrationRequested;
+    public bool IsManagerLoginVisible => IsAccessLocked && _isManagerLoginRequested;
+    public bool IsMaintenanceVisible => IsMaintenanceMode;
+    public bool IsManagerEntryVisible => IsAccessLocked
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
-        && !_isPortalRegistrationRequested
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility PortalContentVisibility => _portalSnapshot is null || IsAccessLocked || IsMaintenanceMode
-        ? Visibility.Collapsed
-        : Visibility.Visible;
-    public Visibility PortalPasswordSetupVisibility => _portalPasswordResetRequired && _portalSnapshot is not null
-        ? Visibility.Visible
-        : Visibility.Collapsed;
-    public Visibility PortalReadyVisibility => _portalPasswordResetRequired
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+        && !_isPortalRegistrationRequested;
+    public bool IsPortalContentVisible => _portalSnapshot is not null && !IsAccessLocked && !IsMaintenanceMode;
+    public bool IsPortalPasswordSetupVisible => _portalPasswordResetRequired && _portalSnapshot is not null;
+    public bool IsPortalReadyVisible => !_portalPasswordResetRequired;
     public string AccessMessage => string.IsNullOrWhiteSpace(_portalMessage)
         ? _accessGate.Snapshot.Message
         : _portalMessage;
@@ -334,22 +313,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public IReadOnlyList<ClientPortalTariff> PortalTariffs => _portalSnapshot?.Tariffs
         ?? Array.Empty<ClientPortalTariff>();
     public bool HasPortalTariffs => PortalTariffs.Count > 0;
-    public Visibility TariffsVisibility => HasPortalTariffs && !_portalPasswordResetRequired
-        ? Visibility.Visible
-        : Visibility.Collapsed;
+    public bool IsTariffsVisible => HasPortalTariffs && !_portalPasswordResetRequired;
     public bool HasPortalBalance => _portalSnapshot?.BalanceCents > 0;
     public ClientPortalTariff? FindPortalTariff(string tariffId) =>
         _portalSnapshot?.Tariffs.FirstOrDefault(item => item.Id == tariffId);
-    public Visibility UpcomingBookingVisibility => FindUpcomingBooking() is null
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+    public bool IsUpcomingBookingVisible => FindUpcomingBooking() is not null;
     public string UpcomingBookingTitle => FormatUpcomingBookingTitle(FindUpcomingBooking());
     public string UpcomingBookingDetails => FormatUpcomingBooking(
         FindUpcomingBooking(),
         CurrentWorkstationLabel);
-    public Visibility TransferPanelVisibility => _isTransferExpanded && !_portalPasswordResetRequired
-        ? Visibility.Visible
-        : Visibility.Collapsed;
+    public bool IsTransferPanelVisible => _isTransferExpanded && !_portalPasswordResetRequired;
     public string TransferToggleLabel => _isTransferExpanded
         ? "Свернуть перенос"
         : "Перенести сессию на другой ПК";
@@ -360,9 +333,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string DeviceStatus => string.IsNullOrWhiteSpace(DeviceId)
         ? "Device identity не настроена"
         : $"Device: {DeviceId} · Workstation: {WorkstationId ?? "—"}";
-    public Visibility ActiveSessionVisibility => _activeSession is null || _portalPasswordResetRequired
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+    public bool IsActiveSessionVisible => _activeSession is not null && !_portalPasswordResetRequired;
     public bool CanStopActiveSession => _activeSession is not null
         && !_portalPasswordResetRequired
         && !IsAccessLocked
@@ -460,13 +431,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !string.IsNullOrWhiteSpace(_incomingTransferOfferId)
         && !string.IsNullOrWhiteSpace(_incomingTransferToken);
     public string TransferMessage => _sessionNotification;
-    public Visibility TransferMessageVisibility => string.IsNullOrWhiteSpace(_sessionNotification)
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+    public bool IsTransferMessageVisible => !string.IsNullOrWhiteSpace(_sessionNotification);
     public string PortalNotification => _sessionNotification;
-    public Visibility PortalNotificationVisibility => string.IsNullOrWhiteSpace(_sessionNotification)
-        ? Visibility.Collapsed
-        : Visibility.Visible;
+    public bool IsPortalNotificationVisible => !string.IsNullOrWhiteSpace(_sessionNotification);
     public IWorkstationSessionGateway BackendClient => _session.BackendClient;
     public string ThemeName
     {
@@ -509,7 +476,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             LockClient("Доступ к клиенту отключён политикой зоны");
         }
         OnPropertyChanged(nameof(LockdownPolicy));
-        OnPropertyChanged(nameof(UserLoginVisibility));
+        OnPropertyChanged(nameof(IsUserLoginVisible));
         OnPropertyChanged(nameof(AccessTitle));
         OnPropertyChanged(nameof(AccessSubtitle));
     }
@@ -549,9 +516,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(IsOnline));
         OnPropertyChanged(nameof(ConnectionColor));
         OnPropertyChanged(nameof(IsWaitingForAssignment));
-        OnPropertyChanged(nameof(UserLoginVisibility));
-        OnPropertyChanged(nameof(PortalRegistrationVisibility));
-        OnPropertyChanged(nameof(ManagerEntryVisibility));
+        OnPropertyChanged(nameof(IsUserLoginVisible));
+        OnPropertyChanged(nameof(IsPortalRegistrationVisible));
+        OnPropertyChanged(nameof(IsManagerEntryVisible));
         OnPropertyChanged(nameof(AccessTitle));
         OnPropertyChanged(nameof(AccessSubtitle));
     }
@@ -584,7 +551,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             OnPropertyChanged(nameof(DeviceStatus));
             OnPropertyChanged(nameof(CurrentWorkstationLabel));
-            OnPropertyChanged(nameof(UpcomingBookingVisibility));
+            OnPropertyChanged(nameof(IsUpcomingBookingVisible));
             OnPropertyChanged(nameof(UpcomingBookingTitle));
             OnPropertyChanged(nameof(UpcomingBookingDetails));
             OnPropertyChanged(nameof(CanCreateTransferOffer));
@@ -927,7 +894,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public void ToggleTransferPanel()
     {
         _isTransferExpanded = !_isTransferExpanded;
-        OnPropertyChanged(nameof(TransferPanelVisibility));
+        OnPropertyChanged(nameof(IsTransferPanelVisible));
         OnPropertyChanged(nameof(TransferToggleLabel));
     }
 
@@ -1155,9 +1122,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(ConnectionMessage));
         OnPropertyChanged(nameof(IsOnline));
         OnPropertyChanged(nameof(ConnectionColor));
-        OnPropertyChanged(nameof(UserLoginVisibility));
-        OnPropertyChanged(nameof(PortalRegistrationVisibility));
-        OnPropertyChanged(nameof(ManagerEntryVisibility));
+        OnPropertyChanged(nameof(IsUserLoginVisible));
+        OnPropertyChanged(nameof(IsPortalRegistrationVisible));
+        OnPropertyChanged(nameof(IsManagerEntryVisible));
         OnPropertyChanged(nameof(AccessMessage));
     }
 
@@ -1286,17 +1253,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(IsAccessLocked));
         OnPropertyChanged(nameof(IsSessionLocked));
         OnPropertyChanged(nameof(IsMaintenanceMode));
-        OnPropertyChanged(nameof(AccessGateVisibility));
-        OnPropertyChanged(nameof(SecuredContentVisibility));
-        OnPropertyChanged(nameof(UserLoginVisibility));
-        OnPropertyChanged(nameof(PortalRegistrationVisibility));
-        OnPropertyChanged(nameof(PortalContentVisibility));
-        OnPropertyChanged(nameof(PortalPasswordSetupVisibility));
-        OnPropertyChanged(nameof(PortalReadyVisibility));
+        OnPropertyChanged(nameof(IsAccessGateVisible));
+        OnPropertyChanged(nameof(IsSecuredContentVisible));
+        OnPropertyChanged(nameof(IsUserLoginVisible));
+        OnPropertyChanged(nameof(IsPortalRegistrationVisible));
+        OnPropertyChanged(nameof(IsPortalContentVisible));
+        OnPropertyChanged(nameof(IsPortalPasswordSetupVisible));
+        OnPropertyChanged(nameof(IsPortalReadyVisible));
         OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
-        OnPropertyChanged(nameof(ManagerLoginVisibility));
-        OnPropertyChanged(nameof(MaintenanceVisibility));
-        OnPropertyChanged(nameof(ManagerEntryVisibility));
+        OnPropertyChanged(nameof(IsManagerLoginVisible));
+        OnPropertyChanged(nameof(IsMaintenanceVisible));
+        OnPropertyChanged(nameof(IsManagerEntryVisible));
         OnPropertyChanged(nameof(AccessMessage));
         OnPropertyChanged(nameof(AccessTitle));
         OnPropertyChanged(nameof(AccessSubtitle));
@@ -1310,11 +1277,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void PublishPortalState()
     {
-        OnPropertyChanged(nameof(PortalContentVisibility));
-        OnPropertyChanged(nameof(PortalPasswordSetupVisibility));
-        OnPropertyChanged(nameof(PortalReadyVisibility));
+        OnPropertyChanged(nameof(IsPortalContentVisible));
+        OnPropertyChanged(nameof(IsPortalPasswordSetupVisible));
+        OnPropertyChanged(nameof(IsPortalReadyVisible));
         OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
-        OnPropertyChanged(nameof(SecuredContentVisibility));
+        OnPropertyChanged(nameof(IsSecuredContentVisible));
         OnPropertyChanged(nameof(PortalAccountSummary));
         OnPropertyChanged(nameof(PortalContactSummary));
         OnPropertyChanged(nameof(PortalBalanceSummary));
@@ -1329,9 +1296,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalEntitlementQueue));
         OnPropertyChanged(nameof(PortalTariffs));
         OnPropertyChanged(nameof(HasPortalTariffs));
-        OnPropertyChanged(nameof(TariffsVisibility));
+        OnPropertyChanged(nameof(IsTariffsVisible));
         OnPropertyChanged(nameof(HasPortalBalance));
-        OnPropertyChanged(nameof(UpcomingBookingVisibility));
+        OnPropertyChanged(nameof(IsUpcomingBookingVisible));
         OnPropertyChanged(nameof(UpcomingBookingTitle));
         OnPropertyChanged(nameof(UpcomingBookingDetails));
         OnPropertyChanged(nameof(CanActivatePortalEntitlement));
@@ -1349,7 +1316,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void PublishSessionState()
     {
-        OnPropertyChanged(nameof(ActiveSessionVisibility));
+        OnPropertyChanged(nameof(IsActiveSessionVisible));
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
         OnPropertyChanged(nameof(ActiveTimeSummary));
@@ -1472,9 +1439,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private void PublishSessionNotification()
     {
         OnPropertyChanged(nameof(TransferMessage));
-        OnPropertyChanged(nameof(TransferMessageVisibility));
+        OnPropertyChanged(nameof(IsTransferMessageVisible));
         OnPropertyChanged(nameof(PortalNotification));
-        OnPropertyChanged(nameof(PortalNotificationVisibility));
+        OnPropertyChanged(nameof(IsPortalNotificationVisible));
     }
 
     private static bool IsInsufficientBalance(RpcException error) =>

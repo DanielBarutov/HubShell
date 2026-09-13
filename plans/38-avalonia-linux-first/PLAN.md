@@ -87,9 +87,11 @@ adapters пока остаются в legacy source. Новые UI или Core-�
    `net8.0`, Avalonia host на `net8.0`, tests на `net8.0`; выбрать совместимую
    стабильную версию Avalonia и записать её в project file. Выбрана Avalonia
    `11.3.2`: она собирается SDK `8.0.425` без analyzer warnings.
-3. [ ] Вынести из shared presentation state WinUI-specific `Visibility` и
-   другие `Microsoft.UI.*` types; сохранить публичные domain/application
-   contracts и existing tests либо обновить их без изменения поведения.
+3. [x] Вынести из shared presentation state WinUI-specific `Visibility` и
+   другие `Microsoft.UI.*` types; `MainViewModel` emitted only from
+   `GameClub.Client.Core` and exposes 16 positive `bool Is*Visible` states.
+   Legacy WinUI maps these values through a UI-only converter; public
+   domain/application contracts and their behaviour remain unchanged.
 4. [x] Добавить пустой Avalonia App/MainWindow с application composition root,
    безопасным developer settings source и visible diagnostic state. Не подключать
    Windows P/Invoke как условие запуска Linux UI.

@@ -12,7 +12,7 @@
         PointerPressed="RecordPointerActivity">
 
         <!-- Technical fallback shown only before a portal snapshot is available. -->
-        <Grid Visibility="{Binding SecuredContentVisibility}">
+        <Grid Visibility="{Binding IsSecuredContentVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid Padding="22,20,18,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -49,7 +49,7 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
-                        <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14" Visibility="{Binding ActiveSessionVisibility}">
+                        <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14" Visibility="{Binding IsActiveSessionVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Текущая сессия" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
                                 <TextBlock Text="{Binding ActiveTimeSummary}" Foreground="{ThemeResource AccentBrush}" FontSize="24" FontWeight="SemiBold" />
@@ -62,11 +62,11 @@
                         <Button Click="ToggleTransferPanel" HorizontalAlignment="Stretch" Padding="12,9" Background="{ThemeResource CardBackgroundBrush}" Foreground="{ThemeResource PrimaryTextBrush}">
                             <TextBlock Text="{Binding TransferToggleLabel}" FontSize="11" />
                         </Button>
-                        <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14" Visibility="{Binding TransferPanelVisibility}">
+                        <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14" Visibility="{Binding IsTransferPanelVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Перенос сессии" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
-                                <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
-                                <Button Click="DismissSessionNotification" Visibility="{Binding TransferMessageVisibility}" HorizontalAlignment="Left" Padding="4,3" Background="Transparent">
+                                <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding IsTransferMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="{ThemeResource AccentBrush}" FontSize="11" TextWrapping="Wrap" />
+                                <Button Click="DismissSessionNotification" Visibility="{Binding IsTransferMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" HorizontalAlignment="Left" Padding="4,3" Background="Transparent">
                                     <TextBlock Text="Закрыть уведомление" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
                                 </Button>
                                 <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
@@ -89,7 +89,7 @@
         </Grid>
 
         <!-- Fullscreen access gate. -->
-        <Grid Visibility="{Binding AccessGateVisibility}" Background="#E607090D">
+        <Grid Visibility="{Binding IsAccessGateVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#E607090D">
             <Border MaxWidth="920" Margin="40" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="18">
                 <Grid RowSpacing="22">
                     <Grid.RowDefinitions>
@@ -149,7 +149,7 @@
 
                         <Border Grid.Column="1" Padding="22" Background="{ThemeResource InnerCardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="12">
                             <Grid>
-                                <StackPanel Visibility="{Binding UserLoginVisibility}" Spacing="12">
+                                <StackPanel Visibility="{Binding IsUserLoginVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Spacing="12">
                                     <TextBlock Text="01 / 01" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" CharacterSpacing="70" />
                                     <TextBlock Text="Войти в аккаунт" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" />
                                     <TextBlock Text="Ник или телефон и пароль" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
@@ -163,7 +163,7 @@
                                     </Button>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding PortalRegistrationVisibility}" Spacing="12">
+                                <StackPanel Visibility="{Binding IsPortalRegistrationVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Spacing="12">
                                     <TextBlock Text="НОВЫЙ АККАУНТ" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" CharacterSpacing="70" />
                                     <TextBlock Text="Создать аккаунт" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" />
                                     <TextBlock Text="Ник, телефон и пароль" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
@@ -178,7 +178,7 @@
                                     </Button>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding ManagerLoginVisibility}" Spacing="12">
+                                <StackPanel Visibility="{Binding IsManagerLoginVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Spacing="12">
                                     <TextBlock Text="ОБСЛУЖИВАНИЕ" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" CharacterSpacing="70" />
                                     <TextBlock Text="Режим менеджера" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" />
                                     <TextBlock Text="Системные действия доступны только менеджеру клуба." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
@@ -191,7 +191,7 @@
                                     </Button>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding MaintenanceVisibility}" Spacing="12">
+                                <StackPanel Visibility="{Binding IsMaintenanceVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Spacing="12">
                                     <TextBlock Text="ОБСЛУЖИВАНИЕ" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" CharacterSpacing="70" />
                                     <TextBlock Text="Режим менеджера активен" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap" />
                                     <Border Padding="11" Background="#16314C2C" BorderBrush="#3AB6F35A" BorderThickness="1" CornerRadius="8">
@@ -228,7 +228,7 @@
         <!-- Authenticated right-side widget. -->
         <ScrollViewer
             Padding="12"
-            Visibility="{Binding PortalContentVisibility}"
+            Visibility="{Binding IsPortalContentVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="9">
@@ -265,7 +265,7 @@
                     </Grid>
                 </Border>
 
-                <Border Background="#24331C" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="11" Padding="13" Visibility="{Binding PortalPasswordSetupVisibility}">
+                <Border Background="#24331C" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1" CornerRadius="11" Padding="13" Visibility="{Binding IsPortalPasswordSetupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Spacing="9">
                         <TextBlock Text="Обновите пароль" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" />
                         <TextBlock Text="Администратор сбросил старый пароль. Задайте новый, чтобы продолжить." Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" TextWrapping="Wrap" />
@@ -277,7 +277,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="0,1,0,1" Padding="10,8" Visibility="{Binding PortalReadyVisibility}">
+                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="0,1,0,1" Padding="10,8" Visibility="{Binding IsPortalReadyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -292,7 +292,7 @@
                     </Grid>
                 </Border>
 
-                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10" Visibility="{Binding PortalReadyVisibility}">
+                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10" Visibility="{Binding IsPortalReadyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid ColumnSpacing="7">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -311,7 +311,7 @@
                     </Grid>
                 </Border>
 
-                <Border Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="10" Padding="12" Visibility="{Binding ActiveSessionVisibility}">
+                <Border Background="#122130" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="10" Padding="12" Visibility="{Binding IsActiveSessionVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Spacing="10">
                         <Grid>
                             <TextBlock Text="●  СЕССИЯ АКТИВНА" Foreground="{ThemeResource SignalBrush}" FontSize="8" CharacterSpacing="45" />
@@ -341,7 +341,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="#25351E" BorderBrush="#45B6F35A" BorderThickness="1" CornerRadius="9" Padding="10" Visibility="{Binding PortalNotificationVisibility}">
+                <Border Background="#25351E" BorderBrush="#45B6F35A" BorderThickness="1" CornerRadius="9" Padding="10" Visibility="{Binding IsPortalNotificationVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -354,7 +354,7 @@
                     </Grid>
                 </Border>
 
-                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding TariffsVisibility}">
+                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding IsTariffsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Spacing="8">
                         <StackPanel Spacing="3">
                             <TextBlock Text="ДОСТУПНО В АККАУНТЕ" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="8" CharacterSpacing="60" />
@@ -388,7 +388,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding PortalReadyVisibility}">
+                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding IsPortalReadyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Spacing="7">
                         <TextBlock Text="Пакеты времени" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
                         <ItemsControl ItemsSource="{Binding PortalEntitlementQueue}">
@@ -404,13 +404,13 @@
                     </StackPanel>
                 </Border>
 
-                <Button Click="ToggleTransferPanel" HorizontalAlignment="Stretch" Padding="10,8" Background="{ThemeResource CardBackgroundBrush}" Foreground="{ThemeResource SecondaryTextBrush}" Visibility="{Binding PortalReadyVisibility}">
+                <Button Click="ToggleTransferPanel" HorizontalAlignment="Stretch" Padding="10,8" Background="{ThemeResource CardBackgroundBrush}" Foreground="{ThemeResource SecondaryTextBrush}" Visibility="{Binding IsPortalReadyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <TextBlock Text="{Binding TransferToggleLabel}" FontSize="9" />
                 </Button>
-                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding TransferPanelVisibility}">
+                <Border Background="{ThemeResource CardBackgroundBrush}" BorderBrush="{ThemeResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="11" Visibility="{Binding IsTransferPanelVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Перенос сессии" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding TransferMessageVisibility}" Foreground="{ThemeResource AccentBrush}" FontSize="9" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding IsTransferMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="{ThemeResource AccentBrush}" FontSize="9" TextWrapping="Wrap" />
                         <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
                         <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,7"><TextBlock Text="Подготовить перенос" FontSize="9" /></Button>
                         <TextBox Header="ID предложения" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" />
@@ -419,7 +419,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Padding="4,8,4,2" Visibility="{Binding PortalReadyVisibility}">
+                <Grid Padding="4,8,4,2" Visibility="{Binding IsPortalReadyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <TextBlock Text="Завершить сессию и перезапустить ПК" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="8" />
                     <TextBlock Grid.Column="1" Text="HUBSHELL" HorizontalAlignment="Right" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="8" />
                 </Grid>
