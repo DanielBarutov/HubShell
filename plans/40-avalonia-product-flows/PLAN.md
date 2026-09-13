@@ -55,6 +55,12 @@ fullscreen/window placement и kiosk policy.
 6. [ ] После каждого portable slice выполнить Linux restore/build/test/run and
    `win-x64` cross-publish. Перед release выполнить separate Windows native
    compile/runtime smoke, including legacy-to-Avalonia adapter review.
+7. [ ] Заменить legacy WinUI executable host отдельным
+   `GameClub.Client.Windows` Avalonia production host. Он должен переиспользовать
+   `MainWindow`/Core/transport, а Windows-only composition подключает DPAPI
+   journal, restart/power, command stream, native window/tray adapters и baked
+   production endpoints. Не оставлять второй WinUI UI как production path;
+   native Windows execution остаётся обязательным evidence.
 
 ## Критерии готовности этапа
 
