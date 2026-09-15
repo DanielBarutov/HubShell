@@ -1,39 +1,18 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Clock3, Edit3, Plus, ShoppingCart, Settings, X } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
-import type { BackendProduct, BackendProductCategory, BackendWorkstationGroup } from "../../api";
+import type { BackendDiscountRule, BackendProduct, BackendProductCategory, BackendTariff, BackendWorkstationGroup } from "../../api";
 import { DateTimePicker } from "../../shared/components/DateTimePicker";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import { localDateTimeValue } from "../../shared/formatters";
 
-export function CatalogView({ api, groups, refreshKey, onNewTariff, onNewProduct, onEditProduct, onSellProduct, onNewDiscount }: { api?: GameClubApi; groups: BackendWorkstationGroup[]; refreshKey: number; onNewTariff?: () => void; onNewProduct?: () => void; onEditProduct?: (product: BackendProduct) => void; onSellProduct?: (product: BackendProduct) => void; onNewDiscount?: () => void }) {
-  const [tariffs, setTariffs] = useState<Awaited<ReturnType<GameClubApi["listTariffs"]>>>([]);
-  const [discountRules, setDiscountRules] = useState<Awaited<ReturnType<GameClubApi["listDiscountRules"]>>>([]);
-  const [products, setProducts] = useState<BackendProduct[]>([]);
-  const [categories, setCategories] = useState<BackendProductCategory[]>([]);
+export function CatalogView({ api, groups, tariffs, discountRules, products, categories, onRefresh, onNewTariff, onNewProduct, onEditProduct, onSellProduct, onNewDiscount }: { api?: GameClubApi; groups: BackendWorkstationGroup[]; tariffs: BackendTariff[]; discountRules: BackendDiscountRule[]; products: BackendProduct[]; categories: BackendProductCategory[]; onRefresh: () => void; onNewTariff?: () => void; onNewProduct?: () => void; onEditProduct?: (product: BackendProduct) => void; onSellProduct?: (product: BackendProduct) => void; onNewDiscount?: () => void }) {
   const [mode, setMode] = useState<"all" | "tariffs" | "products">("all");
   const [categoryId, setCategoryId] = useState("all");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [showArchivedTariffs, setShowArchivedTariffs] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lifecycleId, setLifecycleId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!api) return undefined;
-    let active = true;
-    void Promise.all([api.listTariffs(), api.listDiscountRules(), api.listProducts(), api.listProductCategories()]).then(([tariffItems, ruleItems, productItems, categoryItems]) => {
-      if (active) {
-        setTariffs(tariffItems.filter((item) => item.billing_mode === "block"));
-        setDiscountRules(ruleItems);
-        setProducts(productItems);
-        setCategories(categoryItems);
-        setError(null);
-      }
-    }).catch((requestError) => {
-      if (active) setError(requestError instanceof ApiError ? requestError.message : "Не удалось загрузить каталог");
-    });
-    return () => { active = false; };
-  }, [api, refreshKey]);
 
   const money = (cents: number) => `${(cents / 100).toLocaleString("ru-RU")} ₽`;
   const groupLabel = (groupId: string | null) => groups.find((group) => group.id === groupId)?.name ?? (groupId === "vip" ? "VIP-зона" : groupId === "main" ? "Обычный зал" : groupId || "Все зоны");
@@ -44,8 +23,8 @@ export function CatalogView({ api, groups, refreshKey, onNewTariff, onNewProduct
     if (!api) return;
     setLifecycleId(tariff.id);
     try {
-      const updated = tariff.lifecycle === "draft" ? await api.publishTariff(tariff.id) : await api.archiveTariff(tariff.id);
-      setTariffs((items) => items.map((item) => item.id === updated.id ? updated : item));
+      await (tariff.lifecycle === "draft" ? api.publishTariff(tariff.id) : api.archiveTariff(tariff.id));
+      onRefresh();
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : "Не удалось изменить тариф");
     } finally {
@@ -54,10 +33,10 @@ export function CatalogView({ api, groups, refreshKey, onNewTariff, onNewProduct
   };
 
   if (!api) return <div className="catalog-empty-state"><p className="eyebrow">Настройки клуба</p><h1>Каталог</h1><p className="subheading">Live-режим подключает тарифы, товары, категории и складские остатки.</p></div>;
-  return <><div className="page-heading"><div><p className="eyebrow">Операции · Каталог</p><h1>Каталог клуба</h1><p className="subheading">Тарифы времени, товары и остатки — в одном рабочем списке.</p></div><div className="heading-actions"><button className="secondary-button" onClick={() => setCategoryModalOpen(true)}><Settings size={15} /> Категории</button><button className="secondary-button" onClick={onNewProduct}><Plus size={15} /> Товар</button><button className="primary-button" onClick={onNewTariff}><Plus size={17} /> Тариф</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="catalog-summary"><div><span>Тарифы</span><strong>{tariffs.filter((item) => item.lifecycle === "published").length}</strong><small>опубликовано</small></div><div><span>Товары</span><strong>{products.length}</strong><small>позиций</small></div><div><span>Категории</span><strong>{categories.length}</strong><small>групп каталога</small></div><div><span>Скидки</span><strong>{discountRules.length}</strong><small>активных правил</small></div></div><div className="catalog-toolbar"><div className="compact-tabs" role="tablist" aria-label="Тип позиции"><button className={mode === "all" ? "selected" : ""} role="tab" aria-selected={mode === "all"} onClick={() => setMode("all")}>Все позиции</button><button className={mode === "tariffs" ? "selected" : ""} role="tab" aria-selected={mode === "tariffs"} onClick={() => setMode("tariffs")}>Тарифы</button><button className={mode === "products" ? "selected" : ""} role="tab" aria-selected={mode === "products"} onClick={() => setMode("products")}>Товары</button></div><select className="catalog-category-filter" aria-label="Фильтр категории товара" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="all">Все категории</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select><span className="catalog-breadcrumb">Каталог <ChevronRight size={13} /> {mode === "all" ? "Все позиции" : mode === "tariffs" ? "Тарифы времени" : "Товары и напитки"}</span><button className={`archive-toggle ${showArchivedTariffs ? "active" : ""}`} type="button" aria-pressed={showArchivedTariffs} onClick={() => setShowArchivedTariffs((value) => !value)}>{showArchivedTariffs ? "Скрыть архивные" : "Показать архивные"}</button></div>{mode !== "products" && <section className="catalog-section"><div className="section-row"><div><h2>Тарифы времени</h2><p className="section-caption">{showArchivedTariffs ? "Активные, черновики и архивные версии." : "Активные и черновики · архивные скрыты."}</p></div><button className="text-button" onClick={onNewTariff}><Plus size={14} /> Новый тариф</button></div><div className="tariff-mini-grid">{visibleTariffs.map((tariff) => <article className={`tariff-mini-card ${tariff.lifecycle === "published" ? "" : "muted"}`} key={tariff.id}><div className="tariff-mini-top"><span className="tariff-type"><Clock3 size={13} /> Тариф</span><span className={`active-chip ${tariff.lifecycle === "published" ? "" : "inactive"}`}>{tariff.lifecycle === "published" ? "Активен" : tariff.lifecycle === "draft" ? "Черновик" : "Архив"}</span></div><h3>{tariff.name}</h3><p>{groupLabel(tariff.group_id)} · {tariff.duration_minutes} мин · v{tariff.version}</p><strong>{money(tariff.price_cents)}</strong><div className="tariff-mini-actions">{tariff.lifecycle !== "archived" && <button className="text-button" disabled={lifecycleId === tariff.id} onClick={() => void updateLifecycle(tariff)}>{tariff.lifecycle === "draft" ? "Опубликовать" : "Архивировать"}</button>}</div></article>)}{!visibleTariffs.length && <div className="empty-state-card">{tariffs.length ? "Архивные тарифы скрыты. Нажмите «Показать архивные», чтобы просмотреть историю." : "Тарифов пока нет. Создайте первое правило времени."}</div>}</div></section>}{mode !== "tariffs" && <section className="catalog-section"><div className="section-row"><div><h2>Товары и напитки</h2><p className="section-caption">Тип, цена продажи, закупочная цена и текущий остаток.</p></div><button className="text-button" onClick={onNewProduct}><Plus size={14} /> Добавить товар</button></div><div className="product-table"><div className="product-table-head"><span>Позиция</span><span>Тип</span><span>Продажа</span><span>Закупка</span><span>Остаток</span><span>Действия</span></div>{visibleProducts.map((product) => <div className="product-table-row" key={product.id}><div><strong>{product.name}</strong><small>{categoryName(product.category)}</small></div><span className="product-kind-chip">{categories.find((category) => category.id === product.category)?.kind === "drink" ? "Напиток" : "Товар"}</span><strong>{money(product.price_cents)}</strong><span>{money(product.cost_price_cents)}</span><span className={product.stock_quantity <= 5 ? "stock-low" : "stock-ok"}>{product.stock_quantity} шт.</span><div className="product-row-actions"><button className="secondary-button compact-action" aria-label={`Продать товар ${product.name}`} onClick={() => onSellProduct?.(product)} disabled={!onSellProduct || !product.active || product.stock_quantity < 1}><ShoppingCart size={13} /> Продать</button><button className="icon-button small" aria-label={`Редактировать товар ${product.name}`} onClick={() => onEditProduct?.(product)}><Edit3 size={14} /></button></div></div>)}{!visibleProducts.length && <div className="empty-state-card">По выбранной категории товаров нет.</div>}</div></section>}<section className="catalog-section discount-section"><div className="section-row"><div><h2>Скидки клиентов</h2><p className="section-caption">Категория клиента применяется backend-расчётом при продаже времени.</p></div><button className="text-button" onClick={onNewDiscount}><Plus size={14} /> Новое правило</button></div>{discountRules.length ? <div className="discount-compact-list">{discountRules.map((rule) => <div className="discount-compact-row" key={rule.id}><span className="product-kind-chip">{rule.category}</span><strong>{(rule.percent_bps / 100).toLocaleString("ru-RU")}%</strong><span>Приоритет {rule.priority}</span><span className="active-chip">{rule.active ? "Активна" : "Отключена"}</span></div>)}</div> : <div className="empty-state-card">Правил скидок пока нет.</div>}</section>{categoryModalOpen && <div className="modal-backdrop" role="presentation" onClick={() => setCategoryModalOpen(false)}><div className="modal-card" role="dialog" aria-modal="true" aria-label="Категории товаров и напитков" onClick={(event) => event.stopPropagation()}><div className="modal-card-head"><div><p className="eyebrow">Каталог</p><h2>Категории</h2></div><button className="icon-button" aria-label="Закрыть категории" onClick={() => setCategoryModalOpen(false)}><X size={18} /></button></div><ProductCategoryManager api={api} categories={categories} onCategoriesChange={setCategories} /></div></div>}</>;
+  return <><div className="page-heading"><div><p className="eyebrow">Операции · Каталог</p><h1>Каталог клуба</h1><p className="subheading">Тарифы времени, товары и остатки — в одном рабочем списке.</p></div><div className="heading-actions"><button className="secondary-button" onClick={() => setCategoryModalOpen(true)}><Settings size={15} /> Категории</button><button className="secondary-button" onClick={onNewProduct}><Plus size={15} /> Товар</button><button className="primary-button" onClick={onNewTariff}><Plus size={17} /> Тариф</button></div></div>{error && <div className="search-hint error" role="alert">{error}</div>}<div className="catalog-summary"><div><span>Тарифы</span><strong>{tariffs.filter((item) => item.lifecycle === "published").length}</strong><small>опубликовано</small></div><div><span>Товары</span><strong>{products.length}</strong><small>позиций</small></div><div><span>Категории</span><strong>{categories.length}</strong><small>групп каталога</small></div><div><span>Скидки</span><strong>{discountRules.length}</strong><small>активных правил</small></div></div><div className="catalog-toolbar"><div className="compact-tabs" role="tablist" aria-label="Тип позиции"><button className={mode === "all" ? "selected" : ""} role="tab" aria-selected={mode === "all"} onClick={() => setMode("all")}>Все позиции</button><button className={mode === "tariffs" ? "selected" : ""} role="tab" aria-selected={mode === "tariffs"} onClick={() => setMode("tariffs")}>Тарифы</button><button className={mode === "products" ? "selected" : ""} role="tab" aria-selected={mode === "products"} onClick={() => setMode("products")}>Товары</button></div><select className="catalog-category-filter" aria-label="Фильтр категории товара" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="all">Все категории</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select><span className="catalog-breadcrumb">Каталог <ChevronRight size={13} /> {mode === "all" ? "Все позиции" : mode === "tariffs" ? "Тарифы времени" : "Товары и напитки"}</span><button className={`archive-toggle ${showArchivedTariffs ? "active" : ""}`} type="button" aria-pressed={showArchivedTariffs} onClick={() => setShowArchivedTariffs((value) => !value)}>{showArchivedTariffs ? "Скрыть архивные" : "Показать архивные"}</button></div>{mode !== "products" && <section className="catalog-section"><div className="section-row"><div><h2>Тарифы времени</h2><p className="section-caption">{showArchivedTariffs ? "Активные, черновики и архивные версии." : "Активные и черновики · архивные скрыты."}</p></div><button className="text-button" onClick={onNewTariff}><Plus size={14} /> Новый тариф</button></div><div className="tariff-mini-grid">{visibleTariffs.map((tariff) => <article className={`tariff-mini-card ${tariff.lifecycle === "published" ? "" : "muted"}`} key={tariff.id}><div className="tariff-mini-top"><span className="tariff-type"><Clock3 size={13} /> Тариф</span><span className={`active-chip ${tariff.lifecycle === "published" ? "" : "inactive"}`}>{tariff.lifecycle === "published" ? "Активен" : tariff.lifecycle === "draft" ? "Черновик" : "Архив"}</span></div><h3>{tariff.name}</h3><p>{groupLabel(tariff.group_id)} · {tariff.duration_minutes} мин · v{tariff.version}</p><strong>{money(tariff.price_cents)}</strong><div className="tariff-mini-actions">{tariff.lifecycle !== "archived" && <button className="text-button" disabled={lifecycleId === tariff.id} onClick={() => void updateLifecycle(tariff)}>{tariff.lifecycle === "draft" ? "Опубликовать" : "Архивировать"}</button>}</div></article>)}{!visibleTariffs.length && <div className="empty-state-card">{tariffs.length ? "Архивные тарифы скрыты. Нажмите «Показать архивные», чтобы просмотреть историю." : "Тарифов пока нет. Создайте первое правило времени."}</div>}</div></section>}{mode !== "tariffs" && <section className="catalog-section"><div className="section-row"><div><h2>Товары и напитки</h2><p className="section-caption">Тип, цена продажи, закупочная цена и текущий остаток.</p></div><button className="text-button" onClick={onNewProduct}><Plus size={14} /> Добавить товар</button></div><div className="product-table"><div className="product-table-head"><span>Позиция</span><span>Тип</span><span>Продажа</span><span>Закупка</span><span>Остаток</span><span>Действия</span></div>{visibleProducts.map((product) => <div className="product-table-row" key={product.id}><div><strong>{product.name}</strong><small>{categoryName(product.category)}</small></div><span className="product-kind-chip">{categories.find((category) => category.id === product.category)?.kind === "drink" ? "Напиток" : "Товар"}</span><strong>{money(product.price_cents)}</strong><span>{money(product.cost_price_cents)}</span><span className={product.stock_quantity <= 5 ? "stock-low" : "stock-ok"}>{product.stock_quantity} шт.</span><div className="product-row-actions"><button className="secondary-button compact-action" aria-label={`Продать товар ${product.name}`} onClick={() => onSellProduct?.(product)} disabled={!onSellProduct || !product.active || product.stock_quantity < 1}><ShoppingCart size={13} /> Продать</button><button className="icon-button small" aria-label={`Редактировать товар ${product.name}`} onClick={() => onEditProduct?.(product)}><Edit3 size={14} /></button></div></div>)}{!visibleProducts.length && <div className="empty-state-card">По выбранной категории товаров нет.</div>}</div></section>}<section className="catalog-section discount-section"><div className="section-row"><div><h2>Скидки клиентов</h2><p className="section-caption">Категория клиента применяется backend-расчётом при продаже времени.</p></div><button className="text-button" onClick={onNewDiscount}><Plus size={14} /> Новое правило</button></div>{discountRules.length ? <div className="discount-compact-list">{discountRules.map((rule) => <div className="discount-compact-row" key={rule.id}><span className="product-kind-chip">{rule.category}</span><strong>{(rule.percent_bps / 100).toLocaleString("ru-RU")}%</strong><span>Приоритет {rule.priority}</span><span className="active-chip">{rule.active ? "Активна" : "Отключена"}</span></div>)}</div> : <div className="empty-state-card">Правил скидок пока нет.</div>}</section>{categoryModalOpen && <div className="modal-backdrop" role="presentation" onClick={() => setCategoryModalOpen(false)}><div className="modal-card" role="dialog" aria-modal="true" aria-label="Категории товаров и напитков" onClick={(event) => event.stopPropagation()}><div className="modal-card-head"><div><p className="eyebrow">Каталог</p><h2>Категории</h2></div><button className="icon-button" aria-label="Закрыть категории" onClick={() => setCategoryModalOpen(false)}><X size={18} /></button></div><ProductCategoryManager api={api} categories={categories} onCategoriesChange={onRefresh} /></div></div>}</>;
 }
 
-export function ProductCategoryManager({ api, categories, onCategoriesChange }: { api: GameClubApi; categories: BackendProductCategory[]; onCategoriesChange: (categories: BackendProductCategory[]) => void }) {
+export function ProductCategoryManager({ api, categories, onCategoriesChange }: { api: GameClubApi; categories: BackendProductCategory[]; onCategoriesChange: () => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<BackendProductCategory["kind"]>("product");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,8 +54,8 @@ export function ProductCategoryManager({ api, categories, onCategoriesChange }: 
     setSaving(true);
     setError(null);
     try {
-      const created = await api.createProductCategory({ name: name.trim(), kind });
-      onCategoriesChange([...categories, created]);
+      await api.createProductCategory({ name: name.trim(), kind });
+      onCategoriesChange();
       setName("");
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : "Не удалось создать категорию");
@@ -93,8 +72,8 @@ export function ProductCategoryManager({ api, categories, onCategoriesChange }: 
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateProductCategory(category.id, { name: editingName.trim(), kind: editingKind });
-      onCategoriesChange(categories.map((item) => item.id === updated.id ? updated : item));
+      await api.updateProductCategory(category.id, { name: editingName.trim(), kind: editingKind });
+      onCategoriesChange();
       setEditingId(null);
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : "Не удалось изменить категорию");
@@ -109,7 +88,7 @@ export function ProductCategoryManager({ api, categories, onCategoriesChange }: 
     setError(null);
     try {
       await api.deleteProductCategory(category.id);
-      onCategoriesChange(categories.filter((item) => item.id !== category.id));
+      onCategoriesChange();
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : "Не удалось удалить категорию");
     } finally {
@@ -170,10 +149,9 @@ export function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubAp
   return <div className="panel-inner"><div className="panel-header"><div><p>Настройки клуба</p><h2>Новый пакет времени</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Пакет 1 час" autoFocus /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{tariffGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><label>Длительность, минут<input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label><label>Цена пакета, ₽<input type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} /></label><label>Начало действия<DateTimePicker value={validFrom} onChange={setValidFrom} mode="datetime" label="Начало действия тарифа" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Создать draft-тариф"}</button><p className="subheading">Поминутная ставка и бесплатные минуты настраиваются в карточке зоны, а здесь создаются только пакеты времени.</p></form></div>;
 }
 
-export function ProductPanel({ api, product, onClose, onSaved }: { api: GameClubApi; product?: BackendProduct; onClose: () => void; onSaved: () => void }) {
+export function ProductPanel({ api, product, categories, onClose, onSaved }: { api: GameClubApi; product?: BackendProduct; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(product?.name ?? "");
   const [category, setCategory] = useState(product?.category ?? "");
-  const [categories, setCategories] = useState<BackendProductCategory[]>([]);
   const [price, setPrice] = useState(product ? String(product.price_cents / 100) : "0");
   const [costPrice, setCostPrice] = useState(product ? String(product.cost_price_cents / 100) : "0");
   const [stock, setStock] = useState(product ? String(product.stock_quantity) : "0");
@@ -182,11 +160,8 @@ export function ProductPanel({ api, product, onClose, onSaved }: { api: GameClub
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    void api.listProductCategories().then((items) => {
-      setCategories(items);
-      setCategory((current) => current || items[0]?.id || "");
-    }).catch(() => setCategories([]));
-  }, [api]);
+    setCategory((current) => current || categories[0]?.id || "");
+  }, [categories]);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

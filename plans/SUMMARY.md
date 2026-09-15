@@ -1,6 +1,6 @@
 # GameClub / HubShell — сводка проекта
 
-Дата среза: `2026-09-13`<br>
+Дата среза: `2026-09-15`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
 Этот файл фиксирует фактическое состояние кода, планов и проверок на дату среза.
@@ -399,6 +399,15 @@ security boundary. Детали — в
       gRPC/HTTP polling, WebSocket для MVP не вводился.
     - password reset flow не возвращает временный пароль и переводит WinUI в
       обязательную форму установки нового пароля.
+13. Восстановление после restart/reconnect и зональные тарифы:
+    - heartbeat возвращает active session snapshot, а device-authenticated
+      `ClientPortalService.Resume` восстанавливает именованный portal session
+      без хранения клиентского пароля или portal token на диске;
+    - global tariffs и tariffs текущей workstation zone выдаются в Win portal
+      и operator sale checkout; backend дополнительно блокирует несовместимые
+      session start и guest payment;
+    - source/unit/API/gRPC/frontend проверки прошли, native Windows
+      restart/reconnect smoke остаётся отдельной границей плана 41.
 
 Детальные задачи и решения: [`plans/README.md`](README.md) и таблица
 проверок ниже. В README есть небольшое расхождение: Product Sales уже имеет
@@ -412,11 +421,12 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `139 passed, 18 skipped` без DSN; `157 passed` с dev PostgreSQL/Redis DSN (повторено 2026-09-02) | unit/API/contract/jobs и PostgreSQL flows, включая settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q` | `145 passed, 18 skipped` и 6 известных pre-existing contract-layout failures в dirty checkout на срезе 2026-09-15; DSN-прогон из предыдущего среза — `157 passed` | unit/API/contract/jobs, включая session recovery resume, tariff zone listing/guards, settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
 | `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
 | `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
-| `cd frontend && npm run typecheck` | успешно (повторено 2026-09-02) | TypeScript compile/type boundary |
-| `cd frontend && npm run build` | успешно (повторено 2026-09-02) | production Vite build |
+| `cd frontend && npm run typecheck` | успешно (повторено 2026-09-15) | TypeScript compile/type boundary; Redux workspace snapshot и stale-response guards |
+| `cd frontend && npm run lint` | успешно (2026-09-15) | noUnusedLocals/noUnusedParameters TypeScript boundary |
+| `cd frontend && npm run build` | успешно на срезе 2026-09-15 | TypeScript build и production Vite build, включая zone-scoped tariff requests |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
 | `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | backend stack пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; native Windows client в compose не входит |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |

@@ -6,31 +6,7 @@ import { themeLabels } from "../../shared/constants";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import type { Workstation } from "../../types";
 
-export function SettingsView({ api, pcs, refreshKey, onNewGroup, onEditGroup, onNewPaymentMethod, onEditPaymentMethod }: { api?: GameClubApi; pcs: Workstation[]; refreshKey: number; onNewGroup?: () => void; onEditGroup?: (group: BackendWorkstationGroup) => void; onNewPaymentMethod?: () => void; onEditPaymentMethod?: (method: BackendPaymentMethod) => void }) {
-  const [groups, setGroups] = useState<BackendWorkstationGroup[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<BackendPaymentMethod[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!api) {
-      return undefined;
-    }
-    let active = true;
-    Promise.all([api.listWorkstationGroups(), api.listPaymentMethods()]).then(([groupItems, methodItems]) => {
-      if (active) {
-        setGroups(groupItems);
-        setPaymentMethods(methodItems);
-        setError(null);
-      }
-    }).catch((requestError) => {
-      if (active) {
-        setError(requestError instanceof ApiError ? requestError.message : "Не удалось загрузить настройки");
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [api, refreshKey]);
+export function SettingsView({ api, pcs, groups, paymentMethods, error, onNewGroup, onEditGroup, onNewPaymentMethod, onEditPaymentMethod }: { api?: GameClubApi; pcs: Workstation[]; groups: BackendWorkstationGroup[]; paymentMethods: BackendPaymentMethod[]; error?: string | null; onNewGroup?: () => void; onEditGroup?: (group: BackendWorkstationGroup) => void; onNewPaymentMethod?: () => void; onEditPaymentMethod?: (method: BackendPaymentMethod) => void }) {
 
   const knownGroupIds = new Set(groups.map((group) => group.id));
   const legacyGroups = pcs.reduce<BackendWorkstationGroup[]>((items, pc) => {
