@@ -1,22 +1,17 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ApiError, GameClubApi } from "../../api";
 import type { BackendWorkstationGroup } from "../../api";
 import { X } from "lucide-react";
 import type { Workstation } from "../../types";
 
-export function WorkstationPanel({ api, workstation, onClose, onSaved }: { api: GameClubApi; workstation?: Workstation; onClose: () => void; onSaved: () => void }) {
+export function WorkstationPanel({ api, workstation, groups, onClose, onSaved }: { api: GameClubApi; workstation?: Workstation; groups: BackendWorkstationGroup[]; onClose: () => void; onSaved: () => void }) {
   const [deviceId] = useState(workstation?.deviceId ?? "");
   const [macAddress, setMacAddress] = useState(workstation?.macAddress ?? "");
   const [name, setName] = useState(workstation?.name ?? "");
   const [groupId, setGroupId] = useState(workstation?.groupId ?? (workstation?.group === "VIP-зона" ? "vip" : "main"));
   const [position, setPosition] = useState(workstation?.position && workstation.position > 0 ? String(workstation.position) : "");
-  const [groups, setGroups] = useState<BackendWorkstationGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    void api.listWorkstationGroups().then(setGroups).catch(() => setGroups([]));
-  }, [api]);
 
   const availableGroups = groups.length
     ? groups.some((item) => item.id === groupId) || !workstation

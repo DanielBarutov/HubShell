@@ -1,7 +1,7 @@
 import { useAppDispatch, useAppSelector } from "./hooks";
 import { useReduxApi } from "./reduxApi";
 import { LIVE_MODE } from "./config";
-import { closePanel, openBooking, openDeposit, openSale, openWorkstationEditor } from "../features/workspace/uiSlice";
+import { bumpBookingRefresh, closePanel, openBooking, openDeposit, openSale, openWorkstationEditor } from "../features/workspace/uiSlice";
 import { refreshWorkspace, selectWorkspace } from "../features/workspace/workspaceSlice";
 import { selectUi } from "../features/workspace/uiSlice";
 import { BookingEditPanel, BookingPanel } from "../features/bookings/BookingPanels";
@@ -22,7 +22,11 @@ export function PanelHost() {
   const selectedPc = ui.selectedPcId ? workspace.workstations.find((pc) => pc.id === ui.selectedPcId) ?? null : null;
   const selectedClient = ui.selectedClientId ? workspace.clients.find((client) => client.id === ui.selectedClientId) ?? null : null;
   const close = () => dispatch(closePanel());
-  const refresh = () => { void dispatch(refreshWorkspace()); close(); };
+  const refresh = async () => {
+    await dispatch(refreshWorkspace());
+    dispatch(bumpBookingRefresh());
+    close();
+  };
   const openClientDeposit = (client = selectedClient, bonusOnly = false) => dispatch(openDeposit({ clientId: client?.id, bonusOnly }));
 
   if (!ui.panel) return null;
@@ -30,22 +34,22 @@ export function PanelHost() {
   return <>
     {ui.panel !== "sale" && <div className="panel-overlay" aria-hidden="true" onClick={close} />}
     {ui.panel !== "sale" && <aside className="right-panel open" role="dialog" aria-modal aria-label="Контекстная панель">
-      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={workspace.workstations} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
+      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={workspace.workstations} tariffs={workspace.tariffs} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
       {ui.panel === "client" && selectedClient && <ClientPanel client={selectedClient} api={LIVE_MODE ? api : undefined} onClose={close} onSaved={refresh} onDeposit={() => openClientDeposit()} onBonusDeposit={() => openClientDeposit(selectedClient, true)} />}
       {ui.panel === "new-client" && LIVE_MODE && <NewClientPanel api={api} onClose={close} onSaved={refresh} />}
       {ui.panel === "deposit" && <DepositPanel initialClient={selectedClient ?? undefined} bonusOnly={ui.depositBonusOnly} onClose={close} onCompleted={refresh} clients={workspace.clients} api={LIVE_MODE ? api : undefined} />}
       {ui.panel === "booking" && <BookingPanel initialWorkstationId={ui.bookingWorkstationId} onClose={close} pcs={workspace.workstations} api={LIVE_MODE ? api : undefined} onCreated={refresh} />}
       {ui.panel === "booking-edit" && ui.selectedBooking && <BookingEditPanel reservation={ui.selectedBooking} clients={workspace.clients} onClose={close} pcs={workspace.workstations} api={LIVE_MODE ? api : undefined} onSaved={refresh} />}
       {ui.panel === "tariff" && LIVE_MODE && <TariffPanel api={api} groups={workspace.groups} onClose={close} onSaved={refresh} />}
-      {ui.panel === "product" && LIVE_MODE && <ProductPanel api={api} product={ui.selectedProduct ?? undefined} onClose={close} onSaved={refresh} />}
+      {ui.panel === "product" && LIVE_MODE && <ProductPanel api={api} product={ui.selectedProduct ?? undefined} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
       {ui.panel === "discount" && LIVE_MODE && <DiscountPanel api={api} onClose={close} onSaved={refresh} />}
-      {ui.panel === "workstation" && LIVE_MODE && <WorkstationEditor api={api} workstation={selectedPc ?? undefined} onClose={close} onSaved={refresh} />}
+      {ui.panel === "workstation" && LIVE_MODE && <WorkstationEditor api={api} workstation={selectedPc ?? undefined} groups={workspace.groups} onClose={close} onSaved={refresh} />}
       {ui.panel === "group" && LIVE_MODE && <GroupSettingsPanel api={api} group={ui.selectedGroup ?? undefined} onClose={close} onSaved={refresh} />}
       {ui.panel === "payment-method" && LIVE_MODE && <PaymentMethodPanel api={api} method={ui.selectedPaymentMethod ?? undefined} onClose={close} onSaved={refresh} />}
       {ui.panel === "cash-open" && LIVE_MODE && <CashOpenPanel api={api} onClose={close} onSaved={refresh} />}
       {ui.panel === "cash-movement" && LIVE_MODE && ui.selectedCashShift && <CashMovementPanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
       {ui.panel === "cash-close" && LIVE_MODE && ui.selectedCashShift && <CashClosePanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
     </aside>}
-    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialProduct={ui.saleInitialProduct} clients={workspace.clients} cashShifts={workspace.cashShifts} onClose={close} onSaved={refresh} />}
+    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialProduct={ui.saleInitialProduct} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
   </>;
 }

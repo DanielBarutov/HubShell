@@ -6,8 +6,15 @@ import { clients as demoClients, workstations as demoWorkstations } from "../../
 import { ApiError } from "../../api";
 import type {
   BackendAuditEvent,
+  BackendCashMovement,
   BackendCashShift,
+  BackendCashShiftSchedule,
+  BackendDiscountRule,
+  BackendPaymentMethod,
+  BackendProduct,
+  BackendProductCategory,
   BackendProductSale,
+  BackendTariff,
   BackendWorkstationGroup,
   Reservation,
 } from "../../api";
@@ -23,13 +30,25 @@ export type WorkspaceState = {
   revenueCents: number | null;
   revenueChargeCount: number;
   cashShifts: BackendCashShift[];
+  cashShiftSchedules: BackendCashShiftSchedule[];
+  cashMovements: BackendCashMovement[];
   reviewSales: BackendProductSale[];
+  tariffs: BackendTariff[];
+  products: BackendProduct[];
+  productCategories: BackendProductCategory[];
+  discountRules: BackendDiscountRule[];
+  paymentMethods: BackendPaymentMethod[];
+  bookingReservations: Reservation[];
+  bookingLoading: boolean;
+  bookingError: string | null;
   loading: boolean;
   error: string | null;
   lastUpdatedAt: string | null;
+  refreshRequestId: string | null;
+  bookingRequestId: string | null;
 };
 
-type WorkspaceSnapshot = Omit<WorkspaceState, "loading" | "error" | "lastUpdatedAt">;
+type WorkspaceSnapshot = Omit<WorkspaceState, "loading" | "error" | "lastUpdatedAt" | "refreshRequestId" | "bookingRequestId" | "bookingReservations" | "bookingLoading" | "bookingError">;
 
 const initialState: WorkspaceState = {
   workstations: LIVE_MODE ? [] : demoWorkstations,
@@ -40,10 +59,22 @@ const initialState: WorkspaceState = {
   revenueCents: null,
   revenueChargeCount: 0,
   cashShifts: [],
+  cashShiftSchedules: [],
+  cashMovements: [],
   reviewSales: [],
+  tariffs: [],
+  products: [],
+  productCategories: [],
+  discountRules: [],
+  paymentMethods: [],
+  bookingReservations: [],
+  bookingLoading: false,
+  bookingError: null,
   loading: LIVE_MODE,
   error: null,
   lastUpdatedAt: null,
+  refreshRequestId: null,
+  bookingRequestId: null,
 };
 
 export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void, { rejectValue: string }>(
@@ -57,7 +88,7 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, groups, sales, tariffs] = await Promise.all([
+      const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, groups, sales, tariffs, products, productCategories, discountRules, paymentMethods, cashShiftSchedules] = await Promise.all([
         api.listWorkstations(),
         api.listClients(),
         api.listSessions(true),
@@ -68,7 +99,14 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
         api.listWorkstationGroups(),
         api.listSales({ limit: 100 }),
         api.listTariffs(),
+        api.listProducts(),
+        api.listProductCategories(),
+        api.listDiscountRules(),
+        api.listPaymentMethods(),
+        api.listCashShiftSchedules(),
       ]);
+      const openShift = cashShifts.find((shift) => shift.status === "open");
+      const cashMovements = openShift ? await api.listCashMovements(openShift.id) : [];
       const sessionsByWorkstation = new Map(activeSessions.map((session) => [session.workstation_id, session]));
       const groupNames = new Map(groups.map((group) => [group.id, group.name]));
       const clientNames = new Map(backendClients.map((client) => [client.id, client.nickname]));
@@ -91,10 +129,32 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
         revenueCents: revenue.amount_cents,
         revenueChargeCount: revenue.charge_count,
         cashShifts,
+        cashShiftSchedules,
+        cashMovements,
         reviewSales: sales.filter((sale) => sale.status === "needs_review"),
+        tariffs,
+        products,
+        productCategories,
+        discountRules,
+        paymentMethods,
       } satisfies WorkspaceSnapshot;
     } catch (error) {
       return rejectWithValue(error instanceof ApiError ? error.message : "Не удалось обновить рабочие данные");
+    }
+  },
+);
+
+export const refreshBookings = createAsyncThunk<
+  Reservation[],
+  { startAt: string; endAt: string },
+  { rejectValue: string }
+>(
+  "workspace/refreshBookings",
+  async ({ startAt, endAt }, { rejectWithValue }) => {
+    try {
+      return await api.listReservations(startAt, endAt);
+    } catch (error) {
+      return rejectWithValue(error instanceof ApiError ? error.message : "Не удалось обновить бронирования");
     }
   },
 );
@@ -132,11 +192,24 @@ const workspaceSlice = createSlice({
       state.reservations = [];
       state.auditEvents = [];
       state.cashShifts = [];
+      state.cashShiftSchedules = [];
+      state.cashMovements = [];
       state.reviewSales = [];
+      state.tariffs = [];
+      state.products = [];
+      state.productCategories = [];
+      state.discountRules = [];
+      state.paymentMethods = [];
+      state.bookingReservations = [];
+      state.bookingLoading = false;
+      state.bookingError = null;
       state.revenueCents = null;
       state.revenueChargeCount = 0;
       state.error = null;
       state.loading = true;
+      state.lastUpdatedAt = null;
+      state.refreshRequestId = null;
+      state.bookingRequestId = null;
     },
     replaceWorkstations(state, action: { payload: Workstation[] }) {
       state.workstations = action.payload;
@@ -144,10 +217,12 @@ const workspaceSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(refreshWorkspace.pending, (state) => {
+      .addCase(refreshWorkspace.pending, (state, action) => {
+        state.refreshRequestId = action.meta.requestId;
         state.loading = true;
       })
       .addCase(refreshWorkspace.fulfilled, (state, action) => {
+        if (state.refreshRequestId !== action.meta.requestId) return;
         if (action.payload) {
           state.workstations = action.payload.workstations;
           state.groups = action.payload.groups;
@@ -157,15 +232,39 @@ const workspaceSlice = createSlice({
           state.revenueCents = action.payload.revenueCents;
           state.revenueChargeCount = action.payload.revenueChargeCount;
           state.cashShifts = action.payload.cashShifts;
+          state.cashShiftSchedules = action.payload.cashShiftSchedules;
+          state.cashMovements = action.payload.cashMovements;
           state.reviewSales = action.payload.reviewSales;
+          state.tariffs = action.payload.tariffs;
+          state.products = action.payload.products;
+          state.productCategories = action.payload.productCategories;
+          state.discountRules = action.payload.discountRules;
+          state.paymentMethods = action.payload.paymentMethods;
           state.lastUpdatedAt = new Date().toISOString();
         }
         state.loading = false;
         state.error = null;
       })
       .addCase(refreshWorkspace.rejected, (state, action) => {
+        if (state.refreshRequestId !== action.meta.requestId) return;
         state.loading = false;
         state.error = action.payload ?? "Не удалось обновить рабочие данные";
+      })
+      .addCase(refreshBookings.pending, (state, action) => {
+        state.bookingRequestId = action.meta.requestId;
+        state.bookingLoading = true;
+        state.bookingError = null;
+      })
+      .addCase(refreshBookings.fulfilled, (state, action) => {
+        if (state.bookingRequestId !== action.meta.requestId) return;
+        state.bookingReservations = action.payload;
+        state.bookingLoading = false;
+        state.bookingError = null;
+      })
+      .addCase(refreshBookings.rejected, (state, action) => {
+        if (state.bookingRequestId !== action.meta.requestId) return;
+        state.bookingLoading = false;
+        state.bookingError = action.payload ?? "Не удалось обновить бронирования";
       });
   },
 });

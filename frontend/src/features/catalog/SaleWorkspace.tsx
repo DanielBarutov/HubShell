@@ -33,10 +33,7 @@ const demoSaleProducts: BackendProduct[] = [
   { id: "demo-headset", name: "Игровые наушники", category: "accessories", price_cents: 45000, active: true, cost_price_cents: 29000, stock_quantity: 3 },
 ];
 
-export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShifts, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialProduct: BackendProduct | null; clients: Client[]; cashShifts: BackendCashShift[]; onClose: () => void; onSaved: () => void }) {
-  const [tariffs, setTariffs] = useState<BackendTariff[]>([]);
-  const [products, setProducts] = useState<BackendProduct[]>([]);
-  const [categories, setCategories] = useState<BackendProductCategory[]>([]);
+export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShifts, tariffs: catalogTariffs, products: catalogProducts, categories: catalogCategories, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialProduct: BackendProduct | null; clients: Client[]; cashShifts: BackendCashShift[]; tariffs: BackendTariff[]; products: BackendProduct[]; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
   const [activeTab, setActiveTab] = useState<"time" | "products">("time");
   const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
@@ -57,29 +54,15 @@ export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, ca
   const activeShift = cashShifts.find((shift) => shift.status === "open");
   const searchField = getSearchField(clientQuery);
 
-  useEffect(() => {
-    if (!api) {
-      setTariffs(demoSaleTariffs);
-      setProducts(demoSaleProducts);
-      setCategories([
-        { id: "drinks", name: "Напитки", kind: "drink", active: true },
-        { id: "snacks", name: "Снэки", kind: "product", active: true },
-        { id: "energy", name: "Энергетики", kind: "drink", active: true },
-        { id: "accessories", name: "Аксессуары", kind: "product", active: true },
-      ]);
-      return undefined;
-    }
-    let active = true;
-    void Promise.all([api.listTariffs(), api.listProducts(), api.listProductCategories()]).then(([tariffItems, productItems, categoryItems]) => {
-      if (!active) return;
-      setTariffs(tariffItems.filter((item) => item.lifecycle === "published" && item.active && item.billing_mode === "block"));
-      setProducts(productItems.filter((item) => item.active && item.stock_quantity > 0));
-      setCategories(categoryItems);
-    }).catch((requestError) => {
-      if (active) setError(requestError instanceof ApiError ? requestError.message : "Не удалось загрузить каталог");
-    });
-    return () => { active = false; };
-  }, [api]);
+  const categories = api ? catalogCategories : [
+    { id: "drinks", name: "Напитки", kind: "drink" as const, active: true },
+    { id: "snacks", name: "Снэки", kind: "product" as const, active: true },
+    { id: "energy", name: "Энергетики", kind: "drink" as const, active: true },
+    { id: "accessories", name: "Аксессуары", kind: "product" as const, active: true },
+  ];
+  const products = (api ? catalogProducts : demoSaleProducts).filter((item) => item.active && item.stock_quantity > 0);
+  const workstationGroupId = pc?.groupId?.trim().toLowerCase();
+  const tariffs = (api ? catalogTariffs : demoSaleTariffs).filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
 
   useEffect(() => {
     if (!initialProduct || seededProduct.current || !products.length) return;

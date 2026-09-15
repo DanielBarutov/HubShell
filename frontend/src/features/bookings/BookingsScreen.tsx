@@ -6,39 +6,33 @@ import type { Reservation } from "../../api";
 import { DateTimePicker, parsePickerValue } from "../../shared/components/DateTimePicker";
 import { Segmented } from "../../shared/components/Segmented";
 import { localDateInputValue } from "../../shared/formatters";
+import { useAppDispatch } from "../../app/hooks";
+import { refreshBookings } from "../workspace/workspaceSlice";
 
-export function BookingsView({ api, pcs, clients, zoneOptions, onNewBooking, onEditBooking, refreshKey }: { api?: GameClubApi; pcs: Workstation[]; clients: Client[]; zoneOptions: string[]; onNewBooking: () => void; onEditBooking: (reservation: Reservation) => void; refreshKey: number }) {
-  return api ? <LiveBookingsView api={api} pcs={pcs} clients={clients} zoneOptions={zoneOptions} onNewBooking={onNewBooking} onEditBooking={onEditBooking} refreshKey={refreshKey} /> : <MockBookingsView zoneOptions={zoneOptions} onNewBooking={onNewBooking} />;
+export function BookingsView({ api, pcs, clients, reservations, bookingLoading, bookingError, zoneOptions, onNewBooking, onEditBooking, refreshKey }: { api?: GameClubApi; pcs: Workstation[]; clients: Client[]; reservations: Reservation[]; bookingLoading: boolean; bookingError: string | null; zoneOptions: string[]; onNewBooking: () => void; onEditBooking: (reservation: Reservation) => void; refreshKey: number }) {
+  return api ? <LiveBookingsView api={api} pcs={pcs} clients={clients} reservations={reservations} bookingLoading={bookingLoading} bookingError={bookingError} zoneOptions={zoneOptions} onNewBooking={onNewBooking} onEditBooking={onEditBooking} refreshKey={refreshKey} /> : <MockBookingsView zoneOptions={zoneOptions} onNewBooking={onNewBooking} />;
 }
 
-export function LiveBookingsView({ api, pcs, clients, zoneOptions, onNewBooking, onEditBooking, refreshKey }: { api: GameClubApi; pcs: Workstation[]; clients: Client[]; zoneOptions: string[]; onNewBooking: () => void; onEditBooking: (reservation: Reservation) => void; refreshKey: number }) {
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [error, setError] = useState<string | null>(null);
+export function LiveBookingsView({ api, pcs, clients, reservations, bookingLoading, bookingError, zoneOptions, onNewBooking, onEditBooking, refreshKey }: { api: GameClubApi; pcs: Workstation[]; clients: Client[]; reservations: Reservation[]; bookingLoading: boolean; bookingError: string | null; zoneOptions: string[]; onNewBooking: () => void; onEditBooking: (reservation: Reservation) => void; refreshKey: number }) {
+  const dispatch = useAppDispatch();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? bookingError;
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
   const [bookingGroup, setBookingGroup] = useState("Все зоны");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
-
-  useEffect(() => {
-    let active = true;
-    const start = new Date(selectedDate);
+  const reservationRange = (date: Date) => {
+    const start = new Date(date);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    api.listReservations(start.toISOString(), end.toISOString()).then((items) => {
-      if (active) {
-        setReservations(items);
-        setError(null);
-      }
-    }).catch((requestError) => {
-      if (active) {
-        setError(requestError instanceof ApiError ? requestError.message : "Не удалось загрузить брони");
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [api, refreshKey, selectedDate]);
+    return { startAt: start.toISOString(), endAt: end.toISOString() };
+  };
+
+  useEffect(() => {
+    void dispatch(refreshBookings(reservationRange(selectedDate)));
+    return undefined;
+  }, [dispatch, refreshKey, selectedDate]);
 
   const resources = pcs.filter((pc) => bookingGroup === "Все зоны" || pc.group === bookingGroup);
   const timelineStart = new Date(selectedDate);
@@ -72,18 +66,18 @@ export function LiveBookingsView({ api, pcs, clients, zoneOptions, onNewBooking,
       }
     }
     setTransitioningId(reservation.id);
-    setError(null);
+    setActionError(null);
     try {
-      const updated = action === "activate"
-        ? await api.activateReservation(reservation.id)
+      await (action === "activate"
+        ? api.activateReservation(reservation.id)
         : action === "complete"
-          ? await api.completeReservation(reservation.id)
+          ? api.completeReservation(reservation.id)
           : action === "no-show"
-            ? await api.markNoShowReservation(reservation.id)
-            : await api.cancelReservation(reservation.id);
-      setReservations((items) => items.map((item) => item.id === reservation.id ? updated : item));
+            ? api.markNoShowReservation(reservation.id)
+            : api.cancelReservation(reservation.id));
+      dispatch(refreshBookings(reservationRange(selectedDate)));
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : `Не удалось ${actionLabels[action]} бронь`);
+      setActionError(requestError instanceof ApiError ? requestError.message : `Не удалось ${actionLabels[action]} бронь`);
     } finally {
       setTransitioningId(null);
     }
@@ -93,7 +87,7 @@ export function LiveBookingsView({ api, pcs, clients, zoneOptions, onNewBooking,
     await transition(reservation, "cancel");
   };
 
-  return <><div className="page-heading"><div><p className="eyebrow">Расписание · {selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</p><h1>Бронирования</h1><p className="subheading">Выбранная дата · {resources.length} мест в расписании</p></div><div className="heading-actions booking-heading-actions"><DateTimePicker value={localDateInputValue(selectedDate)} onChange={(value) => { const next = parsePickerValue(value, "date"); if (Number.isFinite(next.getTime())) setSelectedDate(next); }} mode="date" label="Дата расписания" className="booking-date-picker" /><button className="primary-button" onClick={onNewBooking}><Plus size={17} /> Новая бронь</button></div></div><div className="booking-toolbar"><div className="date-chip"><ChevronRight size={15} className="rotate-180" /> <strong>{selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</strong> <ChevronRight size={15} /></div><Segmented value={bookingGroup} onChange={setBookingGroup} options={zoneOptions} /><div className="timeline-note"><i /> Актуальное расписание</div></div>{error && <div className="search-hint error">{error}</div>}<div className="timeline"><div className="timeline-hours"><div className="resource-head">Место</div>{hours.map((hour) => <span key={hour}>{hour}</span>)}</div>{resources.map((resource) => <div className="timeline-row" key={resource.id}><div className="resource-name"><span className={`pc-status-dot ${resource.status}`} />{resource.name}</div>{hours.map((hour) => <div className="timeline-cell" key={hour} />)}{reservations.filter((reservation) => reservation.workstation_ids.includes(resource.id) && reservation.status !== "cancelled").map((reservation) => <div className={`booking-block ${statusClass(reservation.status)}`} style={blockStyle(reservation)} key={reservation.id} role="button" tabIndex={0} aria-label={`Открыть бронь ${clientLabel(reservation)}`} onClick={() => onEditBooking(reservation)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEditBooking(reservation); } }}><strong>{clientLabel(reservation)}</strong><span>{new Date(reservation.start_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} — {new Date(reservation.end_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span><div className="booking-actions">{reservation.status === "confirmed" && <><button className="booking-action" aria-label={`Активировать бронь ${clientLabel(reservation)}`} title="Активировать" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "activate"); }}><Play size={10} /></button><button className="booking-action" aria-label={`Отметить неявку ${clientLabel(reservation)}`} title="No-show" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "no-show"); }}><UserX size={11} /></button></>}{reservation.status === "active" && <button className="booking-action" aria-label={`Завершить бронь ${clientLabel(reservation)}`} title="Завершить" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "complete"); }}><Check size={10} /></button>}{(reservation.status === "confirmed" || reservation.status === "active") && <button className="booking-action danger" aria-label={`Отменить бронь ${clientLabel(reservation)}`} title="Отменить бронь" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void cancel(reservation); }}><X size={11} /></button>}</div></div>)}</div>)}{!resources.length && <div className="timeline-empty">Нет зарегистрированных мест</div>}</div></>;
+  return <><div className="page-heading"><div><p className="eyebrow">Расписание · {selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</p><h1>Бронирования</h1><p className="subheading">Выбранная дата · {resources.length} мест в расписании</p></div><div className="heading-actions booking-heading-actions"><DateTimePicker value={localDateInputValue(selectedDate)} onChange={(value) => { const next = parsePickerValue(value, "date"); if (Number.isFinite(next.getTime())) setSelectedDate(next); }} mode="date" label="Дата расписания" className="booking-date-picker" /><button className="primary-button" onClick={onNewBooking}><Plus size={17} /> Новая бронь</button></div></div><div className="booking-toolbar"><div className="date-chip"><ChevronRight size={15} className="rotate-180" /> <strong>{selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</strong> <ChevronRight size={15} /></div><Segmented value={bookingGroup} onChange={setBookingGroup} options={zoneOptions} /><div className="timeline-note"><i /> {bookingLoading ? "Обновляем расписание…" : "Актуальное расписание"}</div></div>{error && <div className="search-hint error">{error}</div>}<div className="timeline"><div className="timeline-hours"><div className="resource-head">Место</div>{hours.map((hour) => <span key={hour}>{hour}</span>)}</div>{resources.map((resource) => <div className="timeline-row" key={resource.id}><div className="resource-name"><span className={`pc-status-dot ${resource.status}`} />{resource.name}</div>{hours.map((hour) => <div className="timeline-cell" key={hour} />)}{reservations.filter((reservation) => reservation.workstation_ids.includes(resource.id) && reservation.status !== "cancelled").map((reservation) => <div className={`booking-block ${statusClass(reservation.status)}`} style={blockStyle(reservation)} key={reservation.id} role="button" tabIndex={0} aria-label={`Открыть бронь ${clientLabel(reservation)}`} onClick={() => onEditBooking(reservation)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEditBooking(reservation); } }}><strong>{clientLabel(reservation)}</strong><span>{new Date(reservation.start_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} — {new Date(reservation.end_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span><div className="booking-actions">{reservation.status === "confirmed" && <><button className="booking-action" aria-label={`Активировать бронь ${clientLabel(reservation)}`} title="Активировать" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "activate"); }}><Play size={10} /></button><button className="booking-action" aria-label={`Отметить неявку ${clientLabel(reservation)}`} title="No-show" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "no-show"); }}><UserX size={11} /></button></>}{reservation.status === "active" && <button className="booking-action" aria-label={`Завершить бронь ${clientLabel(reservation)}`} title="Завершить" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void transition(reservation, "complete"); }}><Check size={10} /></button>}{(reservation.status === "confirmed" || reservation.status === "active") && <button className="booking-action danger" aria-label={`Отменить бронь ${clientLabel(reservation)}`} title="Отменить бронь" disabled={transitioningId === reservation.id} onClick={(event) => { event.stopPropagation(); void cancel(reservation); }}><X size={11} /></button>}</div></div>)}</div>)}{!resources.length && <div className="timeline-empty">Нет зарегистрированных мест</div>}</div></>;
 }
 
 export function MockBookingsView({ zoneOptions, onNewBooking }: { zoneOptions: string[]; onNewBooking: () => void }) {

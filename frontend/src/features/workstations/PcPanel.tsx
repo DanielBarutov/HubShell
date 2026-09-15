@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Computer, Receipt, ShoppingCart, Settings, WalletCards } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
-import type { BackendSessionMeter, BackendSessionSnapshot, BackendTransferOffer } from "../../api";
+import type { BackendSessionMeter, BackendSessionSnapshot, BackendTariff, BackendTransferOffer } from "../../api";
 import { toUiClient } from "../../adapters";
 import { getSearchField } from "../../shared/formatters";
 import { PanelHeader } from "../../shared/components/PanelHeader";
@@ -11,6 +11,7 @@ import type { Client, Workstation } from "../../types";
 export function PcPanel({
   pc,
   workstations,
+  tariffs,
   onClose,
   onEdit,
   onBook,
@@ -21,6 +22,7 @@ export function PcPanel({
 }: {
   pc: Workstation;
   workstations: Workstation[];
+  tariffs: BackendTariff[];
   onClose: () => void;
   onEdit: () => void;
   onBook: () => void;
@@ -34,7 +36,6 @@ export function PcPanel({
   const [operationSuccess, setOperationSuccess] = useState(false);
   const [clientQuery] = useState("");
   const [clientCandidate, setClientCandidate] = useState<Client | undefined>();
-  const [, setTariffs] = useState<Awaited<ReturnType<GameClubApi["listTariffs"]>>>([]);
   const [tariffId, setTariffId] = useState<string>("");
   const [tariffQuantity] = useState("1");
   const [meter, setMeter] = useState<BackendSessionMeter | null>(null);
@@ -46,18 +47,10 @@ export function PcPanel({
   const clientField = getSearchField(clientQuery);
 
   useEffect(() => {
-    if (!api) {
-      return undefined;
-    }
-    void api.listTariffs().then((items) => {
-      const published = items.filter((item) => item.lifecycle === "published");
-      setTariffs(published);
-      setTariffId((current) => current || published[0]?.id || "");
-    }).catch(() => {
-      setTariffs([]);
-    });
-    return undefined;
-  }, [api]);
+    const workstationGroupId = pc.groupId?.trim().toLowerCase();
+    const availableTariffs = tariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
+    setTariffId((current) => availableTariffs.some((item) => item.id === current) ? current : availableTariffs[0]?.id || "");
+  }, [pc.groupId, tariffs]);
 
   useEffect(() => {
     if (!api || pc.status !== "busy" || !pc.sessionId) {

@@ -20,8 +20,6 @@ type UiState = {
   bookingWorkstationId: string | undefined;
   depositBonusOnly: boolean;
   search: string;
-  catalogRefreshKey: number;
-  settingsRefreshKey: number;
   bookingRefreshKey: number;
 };
 
@@ -40,8 +38,6 @@ const initialState: UiState = {
   bookingWorkstationId: undefined,
   depositBonusOnly: false,
   search: "",
-  catalogRefreshKey: 0,
-  settingsRefreshKey: 0,
   bookingRefreshKey: 0,
 };
 
@@ -70,8 +66,6 @@ const uiSlice = createSlice({
     selectPaymentMethod(state, action: PayloadAction<BackendPaymentMethod | null>) { state.selectedPaymentMethod = action.payload; state.panel = "payment-method"; },
     selectProduct(state, action: PayloadAction<BackendProduct | null>) { state.selectedProduct = action.payload; state.panel = "product"; },
     bumpBookingRefresh(state) { state.bookingRefreshKey += 1; },
-    bumpCatalogRefresh(state) { state.catalogRefreshKey += 1; },
-    bumpSettingsRefresh(state) { state.settingsRefreshKey += 1; },
   },
 });
 
@@ -79,7 +73,6 @@ export const {
   setSection, setGroup, setSearch, openPanel, closePanel, openPc, openClient, openNewClient,
   openDeposit, openBooking, openSale, openWorkstationEditor, openNewWorkstation, openBookingEdit, openCashShift, openCashMovement,
   openCashClose, selectGroup, selectPaymentMethod, selectProduct, bumpBookingRefresh,
-  bumpCatalogRefresh, bumpSettingsRefresh,
 } = uiSlice.actions;
 export const selectUi = (state: RootState) => state.ui;
 export default uiSlice.reducer;

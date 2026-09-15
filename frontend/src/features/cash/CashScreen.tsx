@@ -206,68 +206,24 @@ export function CashScheduleEditor({
 export function CashView({
   api,
   shifts,
+  cashShiftSchedules,
+  cashMovements,
+  onRefresh,
   onOpenShift,
   onRecordMovement,
   onCloseShift,
 }: {
   api?: GameClubApi;
   shifts: BackendCashShift[];
+  cashShiftSchedules: BackendCashShiftSchedule[];
+  cashMovements: BackendCashMovement[];
+  onRefresh: () => void;
   onOpenShift?: () => void;
   onRecordMovement?: (shift: BackendCashShift) => void;
   onCloseShift?: (shift: BackendCashShift) => void;
 }) {
-  const [movements, setMovements] = useState<BackendCashMovement[]>([]);
-  const [schedules, setSchedules] = useState<BackendCashShiftSchedule[]>([]);
   const [addingSchedule, setAddingSchedule] = useState(false);
-  const [movementError, setMovementError] = useState<string | null>(null);
   const openShift = shifts.find((shift) => shift.status === "open");
-
-  useEffect(() => {
-    if (!api) {
-      setSchedules([]);
-      return undefined;
-    }
-    let active = true;
-    void api
-      .listCashShiftSchedules()
-      .then((items) => {
-        if (active) setSchedules(items);
-      })
-      .catch(() => {
-        if (active) setSchedules([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
-
-  useEffect(() => {
-    if (!api || !openShift) {
-      setMovements([]);
-      return undefined;
-    }
-    let active = true;
-    void api
-      .listCashMovements(openShift.id)
-      .then((items) => {
-        if (active) {
-          setMovements(items);
-          setMovementError(null);
-        }
-      })
-      .catch((error) => {
-        if (active) {
-          setMovementError(
-            error instanceof ApiError
-              ? error.message
-              : "Не удалось загрузить движения",
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, openShift?.id, shifts]);
 
   if (!api) {
     return (
@@ -356,17 +312,12 @@ export function CashView({
           <div className="operation-section">
             <div className="operation-heading">
               <h3>Последние движения</h3>
-              <span>{movements.length}</span>
+              <span>{cashMovements.length}</span>
             </div>
-            {movementError && (
-              <div className="form-error" role="alert">
-                {movementError}
-              </div>
-            )}
-            {!movementError && !movements.length && (
+            {!cashMovements.length && (
               <div className="timeline-empty">Движений пока нет</div>
             )}
-            {movements.map((movement) => (
+            {cashMovements.map((movement) => (
               <div className="operation-row" key={movement.id}>
                 <div
                   className={`operation-icon ${movement.direction === "cash_out" ? "expense" : "income"}`}
@@ -429,31 +380,25 @@ export function CashView({
             пересчёт наличных оператор подтверждает вручную.
           </span>
         </div>
-        {schedules.map((schedule) => (
+        {cashShiftSchedules.map((schedule) => (
           <CashScheduleEditor
             key={schedule.register_id}
             api={api}
             schedule={schedule}
-            onSaved={(saved) =>
-              setSchedules((items) =>
-                items.map((item) =>
-                  item.register_id === saved.register_id ? saved : item,
-                ),
-              )
-            }
+            onSaved={() => onRefresh()}
           />
         ))}
         {addingSchedule && (
           <CashScheduleEditor
             api={api}
-            onSaved={(saved) => {
-              setSchedules((items) => [...items, saved]);
+            onSaved={() => {
+              onRefresh();
               setAddingSchedule(false);
             }}
             onCancel={() => setAddingSchedule(false)}
           />
         )}
-        {!schedules.length && !addingSchedule && (
+        {!cashShiftSchedules.length && !addingSchedule && (
           <div className="timeline-empty">
             Авторасписаний пока нет. Ручное управление сменой уже доступно выше.
           </div>
