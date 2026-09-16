@@ -1,0 +1,12 @@
+{
+  "name": "HubShell Local Canvas Bridge",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:3847"],
+    "reasoning": "The development-only plugin connects solely to the user-run local bridge on this port."
+  }
+}

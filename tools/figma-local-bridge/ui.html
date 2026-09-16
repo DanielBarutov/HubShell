@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color: var(--figma-color-text); font: 12px Inter, sans-serif; }
+      body { margin: 16px; background: var(--figma-color-bg); }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      p { color: var(--figma-color-text-secondary); line-height: 1.45; margin: 0 0 14px; }
+      label { display: block; font-weight: 600; margin: 10px 0 5px; }
+      input { box-sizing: border-box; width: 100%; border: 1px solid var(--figma-color-border); border-radius: 6px; padding: 8px; color: var(--figma-color-text); background: var(--figma-color-bg-secondary); }
+      button { margin-top: 14px; border: 0; border-radius: 6px; padding: 8px 12px; color: var(--figma-color-text-onbrand); background: var(--figma-color-bg-brand); font-weight: 600; cursor: pointer; }
+      #status { margin-left: 8px; color: var(--figma-color-text-secondary); }
+      .ok { color: var(--figma-color-text-success); }
+      .error { color: var(--figma-color-text-danger); }
+    </style>
+  </head>
+  <body>
+    <h1>Локальный bridge</h1>
+    <p>Плагин принимает только allowlist команд canvas. Токен хранится только в памяти этого окна.</p>
+    <label for="url">WebSocket URL</label>
+    <input id="url" value="ws://localhost:3847/bridge" autocomplete="off" />
+    <label for="token">Bridge token</label>
+    <input id="token" type="password" autocomplete="off" />
+    <button id="connect">Подключить</button><span id="status">Не подключен</span>
+    <script>
+      let socket;
+      const status = document.getElementById("status");
+      const setStatus = (text, kind = "") => { status.textContent = text; status.className = kind; };
+      const closeSocket = () => { if (socket) socket.close(); socket = undefined; };
+
+      document.getElementById("connect").onclick = () => {
+        closeSocket();
+        const base = document.getElementById("url").value.trim();
+        const token = document.getElementById("token").value;
+        if (!base || !token) return setStatus("Введите URL и токен", "error");
+        const separator = base.includes("?") ? "&" : "?";
+        socket = new WebSocket(base + separator + "token=" + encodeURIComponent(token));
+        setStatus("Подключение…");
+        socket.onopen = () => {
+          socket.send(JSON.stringify({ type: "plugin-hello", protocol: 1 }));
+          setStatus("Подключен", "ok");
+        };
+        socket.onclose = () => setStatus("Отключен", "error");
+        socket.onerror = () => setStatus("Ошибка подключения", "error");
+        socket.onmessage = (event) => {
+          let request;
+          try { request = JSON.parse(event.data); } catch { return; }
+          if (request.type !== "plugin-request") return;
+          parent.postMessage({ pluginMessage: request }, "*");
+        };
+      };
+
+      onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (message?.type === "plugin-result" && socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(message));
+        }
+      };
+    </script>
+  </body>
+</html>
