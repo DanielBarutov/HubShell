@@ -11,15 +11,26 @@ from gameclub_backend.modules.catalog.domain import BillingMode, Tariff, TariffL
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
 from gameclub_backend.modules.entitlements.domain import Entitlement
+from gameclub_backend.modules.payment_methods.domain import PaymentMethod
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 from gameclub_backend.modules.sales.domain import ProductSale
 from gameclub_backend.modules.sessions.domain import Session
-from gameclub_backend.modules.workstations.domain import Workstation
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    effective_workstation_group_id,
+)
 
 
 class SessionHistoryReader(typing.Protocol):
     async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
         """Return recent sessions for one client."""
+
+    async def list(
+        self,
+        workstation_id: uuid.UUID | None = None,
+        active_only: bool = False,
+    ) -> list[Session]:
+        """Return sessions for a workstation or operator display."""
 
 
 class ChargeHistoryReader(typing.Protocol):
@@ -46,6 +57,9 @@ class TariffReader(typing.Protocol):
     async def list_tariffs(self) -> list[Tariff]:
         """Return current tariff versions."""
 
+    async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:
+        """Return one tariff version."""
+
 
 class EntitlementReader(typing.Protocol):
     async def get(self, entitlement_id: uuid.UUID) -> Entitlement:
@@ -68,8 +82,16 @@ class EntitlementReader(typing.Protocol):
 
 
 class WorkstationReader(typing.Protocol):
+    async def get(self, workstation_id: uuid.UUID) -> Workstation | None:
+        """Return a workstation by its persistent identifier."""
+
     async def get_by_device_id(self, device_id: str) -> Workstation | None:
         """Return the workstation assigned to a device identity."""
+
+
+class PaymentMethodReader(typing.Protocol):
+    async def list(self) -> list[PaymentMethod]:
+        """Return payment methods with their customer-facing names."""
 
 
 class ReservationReader(typing.Protocol):
@@ -91,6 +113,9 @@ class ClientPortalSnapshot:
     purchases: tuple[ProductSale, ...]
     available_time_minutes: int
     tariff_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
+    workstation_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
+    session_duration_minutes: dict[uuid.UUID, int] = dataclasses.field(default_factory=dict)
+    payment_method_names: dict[str, str] = dataclasses.field(default_factory=dict)
     entitlements: tuple[Entitlement, ...] = ()
     tariffs: tuple[Tariff, ...] = ()
     reservations: tuple[Reservation, ...] = ()
@@ -106,6 +131,7 @@ class ClientPortalService:
         tariffs: TariffReader,
         entitlements: EntitlementReader | None = None,
         workstations: WorkstationReader | None = None,
+        payment_methods: PaymentMethodReader | None = None,
         reservations: ReservationReader | None = None,
     ) -> None:
         self._clients = clients
@@ -115,6 +141,7 @@ class ClientPortalService:
         self._tariffs = tariffs
         self._entitlements = entitlements
         self._workstations = workstations
+        self._payment_methods = payment_methods
         self._reservations = reservations
 
     async def register(self, nickname: str, phone: str, password: str) -> Client:
@@ -126,7 +153,12 @@ class ClientPortalService:
     async def set_password(self, client_id: uuid.UUID, password: str) -> Client:
         return await self._clients.set_portal_password(client_id, password)
 
-    async def snapshot(self, client_id: uuid.UUID, limit: int = 50) -> ClientPortalSnapshot:
+    async def snapshot(
+        self,
+        client_id: uuid.UUID,
+        limit: int = 50,
+        group_id: str | None = None,
+    ) -> ClientPortalSnapshot:
         client = await self._clients.get(client_id)
         if client.blocked_at is not None:
             raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
@@ -135,15 +167,26 @@ class ClientPortalService:
         charges = await self._charges.list_charges_for_client(client_id, limit)
         purchases = await self._sales.list_sales(client_id=client_id, limit=limit)
         tariffs = await self._tariffs.list_tariffs()
+        payment_methods = (
+            await self._payment_methods.list() if self._payment_methods is not None else []
+        )
         package_queue = (
             await self._entitlements.list_for_client(client_id)
             if self._entitlements is not None
             else []
         )
+        normalized_group_id = group_id.strip().lower() if group_id else None
         available_tariffs = tuple(
             tariff
             for tariff in tariffs
-            if tariff.active and tariff.lifecycle is TariffLifecycle.PUBLISHED
+            if tariff.active
+            and tariff.lifecycle is TariffLifecycle.PUBLISHED
+            and tariff.billing_mode is BillingMode.BLOCK
+            and (
+                normalized_group_id is None
+                or tariff.group_id is None
+                or tariff.group_id.strip().lower() == normalized_group_id
+            )
         )
         upcoming_reservations = (
             await self._reservations.list_for_client(
@@ -162,6 +205,12 @@ class ClientPortalService:
             purchases=tuple(purchases),
             available_time_minutes=self._available_time_minutes(client.balance_cents, tariffs),
             tariff_names={tariff.id: tariff.name for tariff in tariffs},
+            workstation_names=await self._workstation_names(sessions),
+            session_duration_minutes={
+                session.id: self._elapsed_minutes(session.started_at, session.ended_at)
+                for session in sessions
+            },
+            payment_method_names={method.key: method.name for method in payment_methods},
             entitlements=tuple(package_queue[: max(1, min(limit, 100))]),
             tariffs=available_tariffs,
             reservations=tuple(
@@ -169,24 +218,98 @@ class ClientPortalService:
             ),
         )
 
+    async def snapshot_for_device(
+        self,
+        client_id: uuid.UUID,
+        device_id: str,
+        limit: int = 50,
+    ) -> ClientPortalSnapshot:
+        if self._workstations is None:
+            return await self.snapshot(client_id, limit)
+        workstation = await self._workstation_for_device(device_id)
+        return await self.snapshot(
+            client_id,
+            limit,
+            group_id=effective_workstation_group_id(workstation.group_id),
+        )
+
+    async def resume_for_device(
+        self,
+        device_id: str,
+        limit: int = 50,
+    ) -> ClientPortalSnapshot | None:
+        workstation = await self._workstation_for_device(device_id)
+        active_sessions = await self._sessions.list(
+            workstation_id=workstation.id,
+            active_only=True,
+        )
+        active_client_id = next(
+            (session.client_id for session in active_sessions if session.client_id is not None),
+            None,
+        )
+        if active_client_id is None:
+            return None
+        return await self.snapshot(
+            active_client_id,
+            limit,
+            group_id=effective_workstation_group_id(workstation.group_id),
+        )
+
+    async def _workstation_names(self, sessions: list[Session]) -> dict[uuid.UUID, str]:
+        if self._workstations is None:
+            return {}
+        names: dict[uuid.UUID, str] = {}
+        for workstation_id in {session.workstation_id for session in sessions}:
+            workstation = await self._workstations.get(workstation_id)
+            if workstation is not None:
+                names[workstation_id] = workstation.name
+        return names
+
+    @staticmethod
+    def _elapsed_minutes(
+        started_at: datetime.datetime,
+        ended_at: datetime.datetime | None,
+    ) -> int:
+        finish = ended_at or datetime.datetime.now(datetime.UTC)
+        if finish <= started_at:
+            return 0
+        return max(1, int((finish - started_at).total_seconds() // 60))
+
     async def purchase_entitlement(
         self,
         client_id: uuid.UUID,
         tariff_id: uuid.UUID,
         idempotency_key: str,
+        device_id: str | None = None,
     ) -> ClientPortalSnapshot:
         if self._entitlements is None:
             raise ApplicationError(
                 ErrorCode.DEPENDENCY_UNAVAILABLE,
                 "Entitlement service is not configured",
             )
+        group_id = None
+        if device_id is not None and self._workstations is not None:
+            group_id = effective_workstation_group_id(
+                (await self._workstation_for_device(device_id)).group_id
+            )
+            tariff = await self._tariffs.get_tariff(tariff_id)
+            if tariff is None:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
+            if (
+                tariff.group_id is not None
+                and tariff.group_id.strip().lower() != (group_id or "").strip().lower()
+            ):
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Tariff is incompatible with this workstation zone",
+                )
         await self._entitlements.purchase(
             client_id=client_id,
             tariff_id=tariff_id,
             actor_id=f"client:{client_id}",
             idempotency_key=idempotency_key,
         )
-        return await self.snapshot(client_id)
+        return await self.snapshot(client_id, group_id=group_id)
 
     async def activate_entitlement(
         self,
@@ -206,13 +329,26 @@ class ClientPortalService:
             if workstation is None:
                 raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Device is not assigned")
             entitlement = await self._entitlements.get(entitlement_id)
-            if not entitlement.is_compatible(workstation.group_id):
+            if not entitlement.is_compatible(effective_workstation_group_id(workstation.group_id)):
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
                     "Package is incompatible with this workstation zone",
                 )
         await self._entitlements.activate(entitlement_id, client_id)
+        if device_id is not None:
+            return await self.snapshot_for_device(client_id, device_id)
         return await self.snapshot(client_id)
+
+    async def _workstation_for_device(self, device_id: str) -> Workstation:
+        if self._workstations is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Workstation lookup is not configured",
+            )
+        workstation = await self._workstations.get_by_device_id(device_id.strip())
+        if workstation is None:
+            raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Device is not assigned")
+        return workstation
 
     @staticmethod
     def _available_time_minutes(balance_cents: int, tariffs: list[Tariff]) -> int:

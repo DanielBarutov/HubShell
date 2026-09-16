@@ -41,9 +41,11 @@ public sealed class MainViewModelVisibilityTests
             nameof(MainViewModel.IsPortalContentVisible),
             nameof(MainViewModel.IsPortalPasswordSetupVisible),
             nameof(MainViewModel.IsPortalReadyVisible),
+            nameof(MainViewModel.IsAccessFeedbackVisible),
             nameof(MainViewModel.IsTariffsVisible),
             nameof(MainViewModel.IsUpcomingBookingVisible),
             nameof(MainViewModel.IsTransferPanelVisible),
+            nameof(MainViewModel.IsTransferWaiting),
             nameof(MainViewModel.IsActiveSessionVisible),
             nameof(MainViewModel.IsTransferMessageVisible),
             nameof(MainViewModel.IsPortalNotificationVisible),
@@ -73,6 +75,46 @@ public sealed class MainViewModelVisibilityTests
         Assert.True(viewModel.TryEnterMaintenance());
         Assert.True(viewModel.IsMaintenanceVisible);
         Assert.False(viewModel.IsPortalContentVisible);
+    }
+
+    [Fact]
+    public async Task PortalLoginFailureShowsAccessFeedbackInsteadOfRawTransportDetails()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        viewModel.PortalIdentifier = "player_01";
+        viewModel.PortalPassword = "password";
+
+        var loggedIn = await viewModel.LoginPortalAsync();
+
+        Assert.False(loggedIn);
+        Assert.True(viewModel.IsAccessFeedbackVisible);
+        Assert.Equal("Нет связи с сервером. Вход временно недоступен", viewModel.AccessMessage);
+    }
+
+    [Fact]
+    public async Task WorkstationLabelUsesServerProvidedNameInsteadOfTechnicalIdentifier()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        viewModel.SetDeviceIdentity("device-1", "b39315dd-eaf8-4ce5-966c-ffb8ab8b8d41");
+
+        Assert.Equal("Игровое место", viewModel.CurrentWorkstationLabel);
+
+        viewModel.SetDeviceIdentity(
+            "device-1",
+            "b39315dd-eaf8-4ce5-966c-ffb8ab8b8d41",
+            "VIP-01");
+
+        Assert.Equal("VIP-01", viewModel.CurrentWorkstationLabel);
+
+        viewModel.ApplyWorkstationName("VIP-02");
+
+        Assert.Equal("VIP-02", viewModel.CurrentWorkstationLabel);
     }
 
     private static IBackendClient CreateBackend() =>

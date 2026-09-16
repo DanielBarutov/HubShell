@@ -2,7 +2,7 @@ import datetime
 import typing
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
 from gameclub_backend.modules.auth.domain import Principal
@@ -238,9 +238,17 @@ def create_router(service: CatalogService) -> APIRouter:
         return TariffResponse.from_domain(await service.create_tariff(**body.model_dump()))
 
     @router.get("/tariffs", response_model=list[TariffResponse])
-    async def list_tariffs(principal: Operator) -> list[TariffResponse]:
+    async def list_tariffs(
+        principal: Operator,
+        group_id: str | None = Query(default=None),
+    ) -> list[TariffResponse]:
         del principal
-        return [TariffResponse.from_domain(item) for item in await service.list_tariffs()]
+        tariffs = (
+            await service.list_tariffs()
+            if group_id is None
+            else await service.list_tariffs_for_group(group_id or None)
+        )
+        return [TariffResponse.from_domain(item) for item in tariffs]
 
     @router.post("/tariffs/{tariff_id}/publish", response_model=TariffResponse)
     async def publish_tariff(

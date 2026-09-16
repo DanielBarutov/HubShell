@@ -215,6 +215,14 @@ class CatalogService:
     async def list_tariffs(self) -> list[Tariff]:
         return await self._repository.list_tariffs()
 
+    async def list_tariffs_for_group(self, group_id: str | None) -> list[Tariff]:
+        normalized_group_id = group_id.strip().lower() if group_id else None
+        return [
+            tariff
+            for tariff in await self._repository.list_tariffs()
+            if tariff.group_id is None or tariff.group_id.strip().lower() == normalized_group_id
+        ]
+
     async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:
         return await self._repository.get_tariff(tariff_id)
 

@@ -234,7 +234,7 @@ class PostgresEntitlementRepository:
         client_id: uuid.UUID,
         minutes: int,
         now: datetime.datetime,
-    ) -> Entitlement:
+    ) -> tuple[Entitlement, int]:
         async with open_session(self._engine_provider) as session:
             async with session.begin():
                 model = await session.scalar(

@@ -17,6 +17,14 @@ class InMemorySessionTransferRepository:
         offer_id = self._by_key.get(key)
         return self._items.get(offer_id) if offer_id else None
 
+    async def get_pending_for_client(self, client_id: uuid.UUID) -> SessionTransferOffer | None:
+        pending = [
+            item
+            for item in self._items.values()
+            if item.client_id == client_id and item.status is TransferStatus.PENDING
+        ]
+        return max(pending, key=lambda item: item.created_at, default=None)
+
     async def save(self, offer: SessionTransferOffer) -> SessionTransferOffer:
         async with self._lock:
             current = self._items.get(offer.id)

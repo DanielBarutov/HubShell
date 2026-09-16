@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import uuid
 
@@ -141,7 +142,7 @@ class PostgresSessionRepository:
         self,
         workstation_id: uuid.UUID | None = None,
         active_only: bool = False,
-    ) -> list[Session]:
+    ) -> builtins.list[Session]:
         async with open_session(self._engine_provider) as session:
             filters = []
             if workstation_id is not None:
@@ -153,7 +154,11 @@ class PostgresSessionRepository:
             )
             return [model.to_domain() for model in result]
 
-    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        limit: int,
+    ) -> builtins.list[Session]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(
                 select(SessionModel)

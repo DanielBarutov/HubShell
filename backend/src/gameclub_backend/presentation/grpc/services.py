@@ -113,15 +113,19 @@ async def require_principal(
 ) -> Principal:
     if token_service is None:
         await context.abort(grpc.StatusCode.UNAUTHENTICATED, "Authentication is not configured")
+        raise AssertionError("context.abort must not return")
     metadata = dict(context.invocation_metadata())
     authorization = metadata.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
         await context.abort(grpc.StatusCode.UNAUTHENTICATED, "Bearer token is required")
+        raise AssertionError("context.abort must not return")
+    assert token_service is not None
     try:
         principal = token_service.validate_access_token(token)
     except InvalidTokenError:
         await context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid bearer token")
+        raise AssertionError("context.abort must not return") from None
     return principal
 
 
@@ -133,6 +137,7 @@ async def require_operator(
     principal = await require_principal(context, token_service)
     if not principal.can(permission):
         await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Permission denied")
+        raise AssertionError("context.abort must not return")
     return principal
 
 
@@ -151,6 +156,7 @@ async def require_session_actor(
     ):
         return principal
     await context.abort(grpc.StatusCode.PERMISSION_DENIED, "Session identity is not permitted")
+    raise AssertionError("context.abort must not return")
 
 
 async def require_device(
@@ -454,7 +460,7 @@ def to_proto(
 async def abort_application_error(
     context: grpc.aio.ServicerContext,
     error: ApplicationError,
-) -> None:
+) -> typing.NoReturn:
     status_codes = {
         ErrorCode.INVALID_ARGUMENT: grpc.StatusCode.INVALID_ARGUMENT,
         ErrorCode.UNAUTHENTICATED: grpc.StatusCode.UNAUTHENTICATED,
@@ -465,6 +471,7 @@ async def abort_application_error(
         ErrorCode.INTERNAL: grpc.StatusCode.INTERNAL,
     }
     await context.abort(status_codes[error.code], error.message)
+    raise AssertionError("context.abort must not return")
 
 
 class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
@@ -571,6 +578,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         await require_operator(context, self._token_service, "workstations.manage")
         if self._command_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Command delivery is not configured")
+            raise AssertionError("context.abort must not return")
         try:
             command = await self._command_service.dispatch(
                 workstation_id=parse_uuid(request.workstation_id, "workstation_id"),
@@ -592,6 +600,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         await require_device(context, self._token_service, request.device_id)
         if self._command_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Command delivery is not configured")
+            raise AssertionError("context.abort must not return")
         sent_ids: set[uuid.UUID] = set()
         while True:
             try:
@@ -614,6 +623,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         await require_device(context, self._token_service, request.device_id)
         if self._command_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Command delivery is not configured")
+            raise AssertionError("context.abort must not return")
         try:
             command = await self._command_service.acknowledge(
                 command_id=parse_uuid(request.command_id, "command_id"),
@@ -636,6 +646,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         await require_operator(context, self._token_service, "workstations.manage")
         if self._group_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Group settings are not configured")
+            raise AssertionError("context.abort must not return")
         return workstations_pb2.ListWorkstationGroupsResponse(
             groups=[to_group_proto(group) for group in await self._group_service.list()]
         )
@@ -648,6 +659,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
         await require_operator(context, self._token_service, "workstations.manage")
         if self._group_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Group settings are not configured")
+            raise AssertionError("context.abort must not return")
         try:
             policy = (
                 from_lockdown_policy_proto(request.lockdown_policy)
@@ -854,6 +866,8 @@ def to_portal_snapshot_proto(
                 tariff_name=(
                     snapshot.tariff_names.get(session.tariff_id, "") if session.tariff_id else ""
                 ),
+                workstation_name=snapshot.workstation_names.get(session.workstation_id, ""),
+                duration_minutes=snapshot.session_duration_minutes.get(session.id, 0),
             )
             for session in snapshot.sessions
         ],
@@ -877,10 +891,22 @@ def to_portal_snapshot_proto(
                 total_price_cents=purchase.total_price_cents,
                 payment_method=purchase.payment_method.value,
                 created_at=to_timestamp(purchase.created_at),
+                payment_parts=[
+                    clients_pb2.PaymentPart(
+                        method=part.method,
+                        amount_cents=part.amount_cents,
+                        reference=part.reference or "",
+                    )
+                    for part in purchase.payment_parts
+                ],
             )
             for purchase in snapshot.purchases
         ],
         available_time_minutes=snapshot.available_time_minutes,
+        payment_methods=[
+            clients_pb2.PortalPaymentMethod(key=key, name=name)
+            for key, name in sorted(snapshot.payment_method_names.items())
+        ],
         entitlements=[
             clients_pb2.PortalEntitlement(
                 id=str(item.id),
@@ -1042,6 +1068,7 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
         await require_operator(context, self._token_service, "clients.manage")
         if self._guest_service is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Guest service is not configured")
+            raise AssertionError("context.abort must not return")
         try:
             guest = await self._guest_service.create(
                 nickname=request.nickname,
@@ -1060,6 +1087,7 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
         await require_operator(context, self._token_service, "clients.manage")
         if self._guest_service is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Guest service is not configured")
+            raise AssertionError("context.abort must not return")
         fields = {
             clients_pb2.SearchGuestsRequest.FIELD_NICKNAME: "nickname",
             clients_pb2.SearchGuestsRequest.FIELD_PHONE: "phone",
@@ -1081,6 +1109,7 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
         await require_operator(context, self._token_service, "clients.manage")
         if self._guest_service is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Guest service is not configured")
+            raise AssertionError("context.abort must not return")
         try:
             guest = await self._guest_service.get(parse_uuid(request.guest_id, "guest_id"))
         except ValueError as error:
@@ -1098,6 +1127,7 @@ class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
         await require_operator(context, self._token_service, "clients.manage")
         if self._guest_service is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "Guest service is not configured")
+            raise AssertionError("context.abort must not return")
         guests = await self._guest_service.list_guests()
         return clients_pb2.ListGuestsResponse(guests=[to_guest_proto(guest) for guest in guests])
 
@@ -1134,6 +1164,30 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             return await self._issue_session(client, request.device_id)
         except ApplicationError as error:
             await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def Resume(
+        self,
+        request: clients_pb2.ResumePortalRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> clients_pb2.ClientPortalSession:
+        await require_device(context, self._token_service, request.device_id)
+        try:
+            snapshot = await self._service.resume_for_device(
+                request.device_id,
+                request.limit or 50,
+            )
+            if snapshot is None:
+                return clients_pb2.ClientPortalSession(resumed=False)
+            return await self._issue_session(
+                snapshot.client,
+                request.device_id,
+                snapshot=snapshot,
+                resumed=True,
+            )
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
 
     async def ChangePassword(
         self,
@@ -1163,6 +1217,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:
             await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
 
     async def Refresh(
         self,
@@ -1177,8 +1232,9 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
                 principal.subject_id,
                 request.device_id,
             )
-            snapshot = await self._service.snapshot(
+            snapshot = await self._service.snapshot_for_device(
                 parse_uuid(principal.subject_id, "client_id"),
+                request.device_id,
                 request.limit or 50,
             )
             return await self._issue_session(
@@ -1190,6 +1246,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:
             await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
 
     async def Get(
         self,
@@ -1204,8 +1261,9 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
                 principal.subject_id,
                 request.device_id,
             )
-            snapshot = await self._service.snapshot(
+            snapshot = await self._service.snapshot_for_device(
                 parse_uuid(principal.subject_id, "client_id"),
+                request.device_id,
                 request.limit or 50,
             )
         except ValueError as error:
@@ -1255,6 +1313,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
                 parse_uuid(principal.subject_id, "client_id"),
                 parse_uuid(request.tariff_id, "tariff_id"),
                 request.idempotency_key,
+                request.device_id,
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1267,6 +1326,7 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
         client: Client,
         device_id: str,
         snapshot: ClientPortalSnapshot | None = None,
+        resumed: bool = False,
     ) -> clients_pb2.ClientPortalSession:
         if self._token_service is None:
             raise ApplicationError(
@@ -1282,12 +1342,13 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             password_reset_required=client.password_reset_required,
         )
         access_token, expires_in = self._token_service.issue_access_token(principal)
-        snapshot = snapshot or await self._service.snapshot(client.id)
+        snapshot = snapshot or await self._service.snapshot_for_device(client.id, device_id)
         return clients_pb2.ClientPortalSession(
             access_token=access_token,
             expires_in=expires_in,
             password_reset_required=client.password_reset_required,
             snapshot=to_portal_snapshot_proto(snapshot),
+            resumed=resumed,
         )
 
 
@@ -1922,7 +1983,7 @@ def to_transfer_offer_proto(offer: SessionTransferOffer) -> sessions_pb2.Transfe
         session_id=str(offer.session_id),
         client_id=str(offer.client_id),
         source_workstation_id=str(offer.source_workstation_id),
-        target_workstation_id=str(offer.target_workstation_id),
+        target_workstation_id=str(offer.target_workstation_id or ""),
         token=offer.token,
         status=offer.status.value,
         requires_package_burn=offer.requires_package_burn,
@@ -2097,6 +2158,7 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
     ) -> sessions_pb2.TransferOffer:
         if self._transfer_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Transfer service is not configured")
+            raise AssertionError("context.abort must not return")
         principal = await require_session_actor(
             context,
             self._token_service,
@@ -2105,7 +2167,11 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
         try:
             offer = await self._transfer_service.create_offer(
                 parse_uuid(request.session_id, "session_id"),
-                parse_uuid(request.target_workstation_id, "target_workstation_id"),
+                (
+                    parse_uuid(request.target_workstation_id, "target_workstation_id")
+                    if request.target_workstation_id
+                    else None
+                ),
                 request.idempotency_key,
                 actor_device_id=(
                     request.device_id if principal.subject_type is SubjectType.DEVICE else None
@@ -2122,6 +2188,9 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
         request: sessions_pb2.GetTransferOfferRequest,
         context: grpc.aio.ServicerContext,
     ) -> sessions_pb2.TransferOffer:
+        if self._transfer_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Transfer service is not configured")
+            raise AssertionError("context.abort must not return")
         principal = await require_principal(context, self._token_service)
         if not principal.can("sessions.manage"):
             if principal.subject_type is not SubjectType.DEVICE:
@@ -2151,6 +2220,9 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
         request: sessions_pb2.ConfirmTransferRequest,
         context: grpc.aio.ServicerContext,
     ) -> sessions_pb2.TransferResult:
+        if self._transfer_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Transfer service is not configured")
+            raise AssertionError("context.abort must not return")
         principal = await require_session_actor(
             context,
             self._token_service,
@@ -2175,6 +2247,37 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
             session=to_session_proto(session),
         )
 
+    async def ClaimPendingTransfer(
+        self,
+        request: sessions_pb2.ClaimPendingTransferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> sessions_pb2.TransferResult:
+        if self._transfer_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Transfer service is not configured")
+            raise AssertionError("context.abort must not return")
+        principal = await require_principal(context, self._token_service)
+        await require_client_portal(
+            context,
+            self._token_service,
+            principal.subject_id,
+            request.device_id,
+        )
+        try:
+            offer, session = await self._transfer_service.claim_pending(
+                parse_uuid(principal.subject_id, "client_id"),
+                parse_uuid(request.workstation_id, "workstation_id"),
+                request.idempotency_key,
+                actor_device_id=request.device_id,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return sessions_pb2.TransferResult(
+            offer=to_transfer_offer_proto(offer),
+            session=to_session_proto(session),
+        )
+
     async def ReplayOfflineBatch(
         self,
         request: sessions_pb2.ReplayOfflineBatchRequest,
@@ -2182,6 +2285,7 @@ class SessionGrpcService(sessions_pb2_grpc.SessionServiceServicer):
     ) -> sessions_pb2.ReplayOfflineBatchResponse:
         if self._offline_service is None:
             await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Offline service is not configured")
+            raise AssertionError("context.abort must not return")
         principal = await require_session_actor(
             context,
             self._token_service,
@@ -2491,7 +2595,7 @@ class CashShiftGrpcService(cash_shifts_pb2_grpc.CashShiftServiceServicer):
             parsed_shift_id = parse_uuid(request.shift_id, "shift_id")
             _, movement = await self._service.record_movement(
                 shift_id=parsed_shift_id,
-                direction=direction,
+                direction=direction or "",
                 amount_cents=request.amount_cents,
                 reason=request.reason,
                 actor_id=principal.subject_id,

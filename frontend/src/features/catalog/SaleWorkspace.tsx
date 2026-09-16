@@ -33,7 +33,7 @@ const demoSaleProducts: BackendProduct[] = [
   { id: "demo-headset", name: "Игровые наушники", category: "accessories", price_cents: 45000, active: true, cost_price_cents: 29000, stock_quantity: 3 },
 ];
 
-export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, cashShifts, tariffs: catalogTariffs, products: catalogProducts, categories: catalogCategories, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialProduct: BackendProduct | null; clients: Client[]; cashShifts: BackendCashShift[]; tariffs: BackendTariff[]; products: BackendProduct[]; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
+export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients: clientList, cashShifts, tariffs: catalogTariffs, products: catalogProducts, categories: catalogCategories, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialClient: Client | null; initialProduct: BackendProduct | null; clients: Client[]; cashShifts: BackendCashShift[]; tariffs: BackendTariff[]; products: BackendProduct[]; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
   const [activeTab, setActiveTab] = useState<"time" | "products">("time");
   const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
@@ -63,6 +63,14 @@ export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, ca
   const products = (api ? catalogProducts : demoSaleProducts).filter((item) => item.active && item.stock_quantity > 0);
   const workstationGroupId = pc?.groupId?.trim().toLowerCase();
   const tariffs = (api ? catalogTariffs : demoSaleTariffs).filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
+
+  useEffect(() => {
+    if (!initialClient) return;
+    setClient(initialClient);
+    setBuyerMode("client");
+    setClientQuery(initialClient.nickname);
+    setSearchResults([]);
+  }, [initialClient?.id]);
 
   useEffect(() => {
     if (!initialProduct || seededProduct.current || !products.length) return;
@@ -294,8 +302,8 @@ export function SaleWorkspace({ api, pc, initialProduct, clients: clientList, ca
     }
   };
 
-  return <div className="sale-workspace-backdrop">
-    <section className="sale-workspace" role="dialog" aria-modal="true" aria-labelledby="sale-workspace-title">
+  return <div className="sale-workspace-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="sale-workspace" role="dialog" aria-modal="true" aria-labelledby="sale-workspace-title" onMouseDown={(event) => event.stopPropagation()}>
       <header className="sale-workspace-header">
         <div className="sale-workspace-title"><button type="button" className="sale-close-button" aria-label="Закрыть продажу" onClick={onClose}><X size={19} /></button><div><p>ОПЕРАЦИЯ · НОВАЯ ПРОДАЖА</p><h1 id="sale-workspace-title">Продажа для {pc?.name ?? "магазина"}</h1><span>{pc ? `${pc.group} · ${pc.status === "online" ? "готов к запуску" : "карточка места"}` : "Товары без привязки к игровому месту"}</span></div></div>
         <div className="sale-header-meta"><div className="sale-shift-badge"><i /><div><small>Актуальная смена</small><strong>{activeShift?.register_id ?? (api ? "Не открыта" : "Демо-смена")}</strong></div></div><div className="sale-header-total"><small>Итого</small><strong>{money(totalCents)}</strong></div></div>

@@ -174,6 +174,11 @@ class ProductSaleService:
             )
             for index, part in enumerate(settlement_parts):
                 if part.method == ProductPaymentMethod.BALANCE.value:
+                    if client_id is None:
+                        raise ApplicationError(
+                            ErrorCode.INVALID_ARGUMENT,
+                            "Balance payment requires a client",
+                        )
                     settlement_attempted = True
                     await self._clients.debit(
                         client_id=client_id,

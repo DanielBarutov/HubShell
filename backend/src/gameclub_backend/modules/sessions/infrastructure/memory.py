@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import uuid
 
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
@@ -43,7 +44,7 @@ class InMemorySessionRepository:
         self,
         workstation_id: uuid.UUID | None = None,
         active_only: bool = False,
-    ) -> list[Session]:
+    ) -> builtins.list[Session]:
         return sorted(
             (
                 item
@@ -55,7 +56,11 @@ class InMemorySessionRepository:
             reverse=True,
         )
 
-    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        limit: int,
+    ) -> builtins.list[Session]:
         return sorted(
             (item for item in self._items.values() if item.client_id == client_id),
             key=lambda item: item.started_at,

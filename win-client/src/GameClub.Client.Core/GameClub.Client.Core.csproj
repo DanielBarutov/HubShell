@@ -21,6 +21,7 @@
     <Compile Include="..\GameClub.Client\Infrastructure\EndpointPolicy.cs" Link="Infrastructure\EndpointPolicy.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\EnvironmentAccessCredentialVerifier.cs" Link="Infrastructure\EnvironmentAccessCredentialVerifier.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\PasswordHashVerifier.cs" Link="Infrastructure\PasswordHashVerifier.cs" />
+    <Compile Include="..\GameClub.Client\Presentation\ClientPortalHistoryFormatter.cs" Link="Presentation\ClientPortalHistoryFormatter.cs" />
     <Compile Include="..\GameClub.Client\Presentation\MainViewModel.cs" Link="Presentation\MainViewModel.cs" />
   </ItemGroup>
 </Project>

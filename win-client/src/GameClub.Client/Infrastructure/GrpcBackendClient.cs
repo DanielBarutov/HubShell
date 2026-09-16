@@ -84,6 +84,24 @@ public sealed class GrpcBackendClient : IBackendClient
         return ToPortalAuthenticationSnapshot(response);
     }
 
+    public async Task<ClientPortalAuthenticationSnapshot?> ResumeAsync(
+        string deviceId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _clientPortalClient.ResumeAsync(
+            new Clients.ResumePortalRequest { DeviceId = deviceId, Limit = 50 },
+            headers: await CreateDeviceMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        if (!response.Resumed)
+        {
+            return null;
+        }
+
+        SetClientPortalToken(response);
+        return ToPortalAuthenticationSnapshot(response);
+    }
+
     public async Task<ClientPortalAuthenticationSnapshot> ChangePasswordAsync(
         string newPassword,
         string deviceId,
@@ -224,7 +242,8 @@ public sealed class GrpcBackendClient : IBackendClient
             ToLockdownPolicySnapshot(response.LockdownPolicy),
             response.SessionSnapshot is null || response.SessionSnapshot.CalculateSize() == 0
                 ? null
-                : ToSessionSnapshot(response.SessionSnapshot));
+                : ToSessionSnapshot(response.SessionSnapshot),
+            response.Name);
     }
 
     public async Task<SessionSnapshot> StartSessionAsync(
@@ -374,7 +393,7 @@ public sealed class GrpcBackendClient : IBackendClient
 
     public async Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
         string sessionId,
-        string targetWorkstationId,
+        string? targetWorkstationId,
         string deviceId,
         string idempotencyKey,
         CancellationToken cancellationToken = default)
@@ -383,7 +402,7 @@ public sealed class GrpcBackendClient : IBackendClient
             new Sessions.CreateTransferOfferRequest
             {
                 SessionId = sessionId,
-                TargetWorkstationId = targetWorkstationId,
+                TargetWorkstationId = targetWorkstationId ?? string.Empty,
                 DeviceId = deviceId,
                 IdempotencyKey = idempotencyKey,
             },
@@ -429,6 +448,29 @@ public sealed class GrpcBackendClient : IBackendClient
             },
             headers: await CreateMetadataAsync(cancellationToken),
             deadline: DateTime.UtcNow.AddSeconds(5),
+            cancellationToken: cancellationToken);
+        return new SessionTransferResultSnapshot(
+            ToTransferOfferSnapshot(response.Offer),
+            ToSessionSnapshot(response.Session));
+    }
+
+    public async Task<SessionTransferResultSnapshot> ClaimPendingTransferAsync(
+        string clientId,
+        string workstationId,
+        string deviceId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        _ = clientId;
+        var response = await _sessionClient.ClaimPendingTransferAsync(
+            new Sessions.ClaimPendingTransferRequest
+            {
+                DeviceId = deviceId,
+                WorkstationId = workstationId,
+                IdempotencyKey = idempotencyKey,
+            },
+            headers: await CreateClientPortalMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
             cancellationToken: cancellationToken);
         return new SessionTransferResultSnapshot(
             ToTransferOfferSnapshot(response.Offer),
@@ -622,7 +664,11 @@ public sealed class GrpcBackendClient : IBackendClient
                 operation.AmountCents,
                 operation.BonusAmount,
                 operation.Reason,
-                ToIsoTimestamp(operation.CreatedAt))).ToArray(),
+                ToIsoTimestamp(operation.CreatedAt),
+                operation.PaymentParts.Select(part => new ClientPortalPaymentPart(
+                    part.Method,
+                    part.AmountCents,
+                    string.IsNullOrWhiteSpace(part.Reference) ? null : part.Reference)).ToArray())).ToArray(),
             source.Sessions.Select(session => new ClientPortalSession(
                 session.Id,
                 session.WorkstationId,
@@ -631,7 +677,9 @@ public sealed class GrpcBackendClient : IBackendClient
                 session.EndedAt is null ? null : ToIsoTimestamp(session.EndedAt),
                 string.IsNullOrWhiteSpace(session.TariffId) ? null : session.TariffId,
                 string.IsNullOrWhiteSpace(session.TariffName) ? null : session.TariffName,
-                session.TariffQuantity)).ToArray(),
+                session.TariffQuantity,
+                string.IsNullOrWhiteSpace(session.WorkstationName) ? null : session.WorkstationName,
+                session.DurationMinutes)).ToArray(),
             source.Charges.Select(charge => new ClientPortalCharge(
                 charge.Id,
                 charge.SessionId,
@@ -646,7 +694,11 @@ public sealed class GrpcBackendClient : IBackendClient
                 purchase.Quantity,
                 purchase.TotalPriceCents,
                 purchase.PaymentMethod,
-                ToIsoTimestamp(purchase.CreatedAt))).ToArray(),
+                ToIsoTimestamp(purchase.CreatedAt),
+                purchase.PaymentParts.Select(part => new ClientPortalPaymentPart(
+                    part.Method,
+                    part.AmountCents,
+                    string.IsNullOrWhiteSpace(part.Reference) ? null : part.Reference)).ToArray())).ToArray(),
             source.Entitlements.Select(entitlement => new ClientPortalEntitlement(
                 entitlement.Id,
                 entitlement.TariffId,
@@ -671,7 +723,10 @@ public sealed class GrpcBackendClient : IBackendClient
                 ToIsoTimestamp(reservation.StartAt),
                 ToIsoTimestamp(reservation.EndAt),
                 reservation.Status,
-                string.IsNullOrWhiteSpace(reservation.TariffId) ? null : reservation.TariffId)).ToArray());
+                string.IsNullOrWhiteSpace(reservation.TariffId) ? null : reservation.TariffId)).ToArray(),
+            source.PaymentMethods.Select(method => new ClientPortalPaymentMethod(
+                method.Key,
+                method.Name)).ToArray());
 
     private static WorkstationCommandSnapshot ToSnapshot(Workstations.WorkstationCommand command) =>
         new(

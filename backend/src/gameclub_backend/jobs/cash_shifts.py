@@ -23,7 +23,7 @@ def _parse_now(value: str | None) -> datetime.datetime:
     return current
 
 
-@dramatiq.actor(queue_name="cash-shifts", max_retries=3)
+@dramatiq.actor(queue_name="cash-shifts", max_retries=3)  # type: ignore[arg-type]
 async def run_cash_shift_schedule(now_iso: str | None = None) -> None:
     """Apply configured register schedules; both actions are idempotent per local day."""
     settings = get_settings()

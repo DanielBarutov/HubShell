@@ -20,7 +20,8 @@
 [`win-client/PRODUCT-CONTRACT.md`](../../win-client/PRODUCT-CONTRACT.md).
 
 - Обычный второй вход не создаёт вторую сессию.
-- Новый ПК показывает offer и требует explicit confirm.
+- Исходный ПК показывает предупреждение и требует explicit confirm; новый ПК
+  подтверждает перенос самим входом в тот же аккаунт.
 - Перенос атомарен; старый ПК получает restart после server result.
 - Между зонами перенос разрешён, для per-minute применяется ставка новой зоны.
 - Активный несовместимый пакет сгорает после предупреждения; queued
@@ -38,7 +39,9 @@
 ## Реализовано в текущем срезе
 
 Добавлены offer/confirm DTO и application flow с token, expiry, idempotency и
-проверкой target workstation. PostgreSQL repository получил owner-side
+проверкой target workstation. Исходный ПК создаёт короткоживущий запрос без
+ручного target ID; новый ПК после входа в тот же аккаунт автоматически находит
+и подтверждает pending transfer по device/workstation identity. PostgreSQL repository получил owner-side
 `commit_transfer` с блокировками offer/session/source/target в одной транзакции,
 а также advisory lock для offer key и корректный conflict при двух разных
 confirm keys; frontend и WinUI умеют создать offer и явно подтвердить перенос.
@@ -65,7 +68,8 @@ PostgreSQL concurrency test.
 5. [x] Опубликовать versioned HTTP/gRPC DTO и идемпотентные retry semantics.
 6. [x] После commit отправлять old-PC restart с correlation/idempotency key;
    transport failure не откатывает уже подтверждённый transfer молча.
-7. [x] Подключить WinUI offer/confirm/result и operator read-only status.
+7. [x] Подключить WinUI подтверждение, автоматический claim на новом ПК,
+   waiting-state и operator read-only status.
 8. [x] Добавить fault/concurrency tests для двух подтверждений и двух target PCs.
 
 ## Критерии готовности
@@ -94,6 +98,6 @@ production transaction boundary.
 
 ## Открытые решения
 
-- сколько живёт offer и как новый ПК находит его без утечки PII;
+- operator UI для просмотра pending transfer без раскрытия токена;
 - нужен ли operator override для зависшего старого ПК;
 - точная политика окончания active package при смене зоны.

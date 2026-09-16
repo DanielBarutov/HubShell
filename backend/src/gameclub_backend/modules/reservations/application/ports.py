@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import typing
 import uuid
@@ -20,7 +21,7 @@ class ReservationRepository(typing.Protocol):
         self,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         """Return reservations intersecting a period."""
 
     async def list_for_client(
@@ -28,13 +29,13 @@ class ReservationRepository(typing.Protocol):
         client_id: uuid.UUID,
         start_at: datetime.datetime,
         limit: int,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         """Return future confirmed reservations assigned to one client."""
 
     async def list_pending_no_show(
         self,
         cutoff_at: datetime.datetime,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         """Return confirmed reservations whose grace-period cutoff has elapsed."""
 
     async def mark_no_show_if_eligible(

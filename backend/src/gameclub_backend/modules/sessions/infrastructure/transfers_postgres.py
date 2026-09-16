@@ -23,7 +23,9 @@ class SessionTransferOfferModel(TransferBase):
     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     client_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     source_workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
-    target_workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    target_workstation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), index=True, nullable=True
+    )
     token: Mapped[str] = mapped_column(String(128), unique=True)
     status: Mapped[str] = mapped_column(String(16), index=True)
     requires_package_burn: Mapped[bool] = mapped_column(Boolean(), default=False)
@@ -94,6 +96,19 @@ class PostgresSessionTransferRepository:
             )
             return model.to_domain() if model else None
 
+    async def get_pending_for_client(self, client_id: uuid.UUID) -> SessionTransferOffer | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(
+                select(SessionTransferOfferModel)
+                .where(
+                    SessionTransferOfferModel.client_id == client_id,
+                    SessionTransferOfferModel.status == TransferStatus.PENDING.value,
+                )
+                .order_by(SessionTransferOfferModel.created_at.desc())
+                .limit(1)
+            )
+            return model.to_domain() if model else None
+
     async def save(self, offer: SessionTransferOffer) -> SessionTransferOffer:
         async with open_session(self._engine_provider) as session:
             async with session.begin():
@@ -154,13 +169,16 @@ class PostgresSessionTransferRepository:
                 )
                 if current_session is None:
                     raise ValueError("Session not found")
+                target_id = offer.target_workstation_id
+                if target_id is None:
+                    raise ValueError("Transfer target workstation is required")
                 if current_offer.status == TransferStatus.CONFIRMED.value:
                     if current_offer.confirm_idempotency_key != offer.confirm_idempotency_key:
                         raise ValueError("Transfer already confirmed")
                     return current_offer.to_domain(), current_session.to_domain()
 
                 for workstation_id in sorted(
-                    {session.workstation_id, offer.target_workstation_id}, key=str
+                    {session.workstation_id, target_id}, key=str
                 ):
                     await db.execute(
                         text("SELECT id FROM workstations WHERE id = :workstation_id FOR UPDATE"),
@@ -169,7 +187,7 @@ class PostgresSessionTransferRepository:
                 occupied = await db.scalar(
                     select(SessionModel.id)
                     .where(
-                        SessionModel.workstation_id == offer.target_workstation_id,
+                        SessionModel.workstation_id == target_id,
                         SessionModel.status == "active",
                     )
                     .with_for_update()
@@ -181,7 +199,7 @@ class PostgresSessionTransferRepository:
                     or current_session.workstation_id != offer.source_workstation_id
                 ):
                     raise ValueError("Source session is no longer transferable")
-                current_session.workstation_id = offer.target_workstation_id
+                current_session.workstation_id = target_id
                 current_offer.status = offer.status.value
                 current_offer.confirm_idempotency_key = offer.confirm_idempotency_key
                 current_offer.confirmed_at = offer.confirmed_at

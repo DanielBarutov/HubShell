@@ -36,6 +36,8 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
 
     public string? WorkstationId { get; private set; }
 
+    public string? WorkstationName { get; private set; }
+
     public bool IsEnrolled => !string.IsNullOrWhiteSpace(DeviceId) && HasUsableToken();
 
     public async ValueTask<string?> GetAccessTokenAsync(
@@ -103,6 +105,7 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
 
             DeviceId = payload.DeviceId;
             WorkstationId = payload.WorkstationId;
+            WorkstationName = payload.WorkstationName;
             _accessToken = payload.AccessToken;
             _expiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(payload.ExpiresIn, 1));
             return _accessToken;
@@ -134,6 +137,7 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
         [property: JsonPropertyName("state")] string State,
         [property: JsonPropertyName("device_id")] string? DeviceId,
         [property: JsonPropertyName("workstation_id")] string? WorkstationId,
+        [property: JsonPropertyName("name")] string? WorkstationName,
         [property: JsonPropertyName("access_token")] string? AccessToken,
         [property: JsonPropertyName("expires_in")] int ExpiresIn);
 

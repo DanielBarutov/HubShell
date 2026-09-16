@@ -3,6 +3,7 @@ import typing
 import uuid
 
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
+from gameclub_backend.modules.workstations.domain import Workstation
 
 
 class GuestSessionPaymentRepository(typing.Protocol):
@@ -26,6 +27,11 @@ class GuestSessionPaymentRepository(typing.Protocol):
 class TariffLookup(typing.Protocol):
     async def get_tariff(self, tariff_id: uuid.UUID):
         """Return the tariff snapshot used for direct payment."""
+
+
+class WorkstationLookup(typing.Protocol):
+    async def get(self, workstation_id: uuid.UUID) -> Workstation | None:
+        """Return the workstation receiving the guest session."""
 
 
 class CashDirectSettlement(typing.Protocol):

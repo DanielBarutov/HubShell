@@ -229,7 +229,9 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 
 `SystemService`, `WorkstationService`, `ClientService`, `ClientPortalService`, `CatalogService`,
 `ReservationService`, `SessionService`, `BillingService`, `CashShiftService` и
-`AnalyticsService`.
+`AnalyticsService`. На runtime endpoint публично регистрируются только
+`SystemService`, `WorkstationService`, `ClientPortalService`, `ReservationService`
+и `SessionService`; операторские CRUD/read-сервисы остаются HTTP BFF-контуром.
 
 Generated Python находится в `backend/src/gameclub/v1/`, а C# project напрямую
 подключает исходные `.proto`. Payment Methods и Product Sales в текущем срезе

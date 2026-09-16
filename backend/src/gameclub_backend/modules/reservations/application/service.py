@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import typing
 import uuid
@@ -51,7 +52,7 @@ class ReservationService:
         self,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         self._validate_period(start_at, end_at)
         return await self._repository.list(start_at, end_at)
 
@@ -347,7 +348,7 @@ class ReservationService:
     async def sweep_no_shows(
         self,
         now: datetime.datetime | None = None,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         """Mark eligible reservations without overwriting a concurrent state change."""
         current_time = now or self._clock.now()
         if current_time.tzinfo is None:

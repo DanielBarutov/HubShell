@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -173,10 +174,10 @@ class CashShiftService:
             raise ApplicationError(ErrorCode.CONFLICT, "Cash approval does not match operation")
         return approval
 
-    async def list(self, limit: int = 50) -> list[CashShift]:
+    async def list(self, limit: int = 50) -> builtins.list[CashShift]:
         return await self._repository.list_shifts(max(1, min(limit, 100)))
 
-    async def list_schedules(self) -> list[CashShiftSchedule]:
+    async def list_schedules(self) -> builtins.list[CashShiftSchedule]:
         return await self._repository.list_schedules()
 
     async def save_schedule(
@@ -252,7 +253,7 @@ class CashShiftService:
         self,
         shift_id: uuid.UUID,
         limit: int = 50,
-    ) -> list[CashMovement]:
+    ) -> builtins.list[CashMovement]:
         await self.get(shift_id)
         return await self._repository.list_movements(shift_id, max(1, min(limit, 100)))
 

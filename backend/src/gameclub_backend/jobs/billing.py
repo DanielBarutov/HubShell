@@ -44,6 +44,7 @@ from gameclub_backend.modules.workstations.infrastructure.commands_memory import
 from gameclub_backend.modules.workstations.infrastructure.commands_postgres import (
     PostgresWorkstationCommandRepository,
 )
+from gameclub_backend.modules.workstations.infrastructure.commands_redis import RedisCommandNotifier
 from gameclub_backend.modules.workstations.infrastructure.groups_postgres import (
     PostgresWorkstationGroupRepository,
 )
@@ -71,7 +72,7 @@ def _engine_provider_or_raise(resources):
     return engine
 
 
-@dramatiq.actor(queue_name="billing", max_retries=3)
+@dramatiq.actor(queue_name="billing", max_retries=3)  # type: ignore[arg-type]
 async def reconcile_billing_charges(
     now_iso: str | None = None,
     limit: int = 100,
@@ -141,7 +142,7 @@ async def reconcile_billing_charges(
         await resources.close()
 
 
-@dramatiq.actor(queue_name="metering", max_retries=3)
+@dramatiq.actor(queue_name="metering", max_retries=3)  # type: ignore[arg-type]
 async def meter_active_sessions() -> None:
     """Charge minute deltas and stop devices whose spendable balance is exhausted."""
     settings = get_settings()
@@ -180,7 +181,11 @@ async def meter_active_sessions() -> None:
         commands = WorkstationCommandService(
             PostgresWorkstationCommandRepository(engine_provider),
             workstations=workstation_repository,
-            notifier=InMemoryCommandNotifier(),
+            notifier=(
+                RedisCommandNotifier(lambda: resources.redis)
+                if resources.redis is not None
+                else InMemoryCommandNotifier()
+            ),
             command_ttl_seconds=settings.workstation_command_ttl_seconds,
         )
         billing = BillingService(
@@ -228,7 +233,7 @@ async def meter_active_sessions() -> None:
         await resources.close()
 
 
-@dramatiq.actor(queue_name="billing", max_retries=3)
+@dramatiq.actor(queue_name="billing", max_retries=3)  # type: ignore[arg-type]
 async def reconcile_pending_settlements(
     now_iso: str | None = None,
     limit: int = 100,
@@ -261,6 +266,7 @@ async def reconcile_pending_settlements(
             tariffs=catalog,
             cash=CashShiftGuestPaymentSettlement(cash_shifts),
             audit=audit,
+            workstations=PostgresWorkstationRepository(engine_provider),
         )
         clients = ClientService(PostgresClientRepository(engine_provider))
         sales_repository = PostgresProductSaleRepository(engine_provider)

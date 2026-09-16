@@ -41,6 +41,11 @@ public sealed class ClientSessionCoordinatorTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ClientPortalAuthenticationSnapshot?> ResumeAsync(
+            string deviceId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ClientPortalAuthenticationSnapshot> ChangePasswordAsync(
             string newPassword,
             string deviceId,
@@ -167,7 +172,7 @@ public sealed class ClientSessionCoordinatorTests
 
         public Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
             string sessionId,
-            string targetWorkstationId,
+            string? targetWorkstationId,
             string deviceId,
             string idempotencyKey,
             CancellationToken cancellationToken = default) =>
@@ -234,7 +239,15 @@ public sealed class ClientSessionCoordinatorTests
                     null,
                     string.Empty,
                     string.Empty,
-                    DeviceId: deviceId)));
+                DeviceId: deviceId)));
+
+        public Task<SessionTransferResultSnapshot> ClaimPendingTransferAsync(
+            string clientId,
+            string workstationId,
+            string deviceId,
+            string idempotencyKey,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<OfflineBatchResultSnapshot> ReplayOfflineBatchAsync(
             string sessionId,

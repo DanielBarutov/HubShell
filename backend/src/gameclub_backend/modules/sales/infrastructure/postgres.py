@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -50,7 +51,7 @@ class ProductSaleModel(SalesBase):
     )
     settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
-    next_attempt_at: Mapped[datetime.datetime] = mapped_column(
+    next_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
 
@@ -276,7 +277,7 @@ class PostgresProductSaleRepository:
         client_id: uuid.UUID | None = None,
         limit: int = 100,
     ) -> list[ProductSale]:
-        filters = [
+        filters: list[sa.ColumnElement[bool]] = [
             ProductSaleModel.status.in_(
                 [ProductSaleStatus.COMPLETED.value, ProductSaleStatus.NEEDS_REVIEW.value]
             )

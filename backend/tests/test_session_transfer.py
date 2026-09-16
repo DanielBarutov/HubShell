@@ -134,3 +134,20 @@ async def test_transfer_publishes_duplicate_safe_restart_command_status() -> Non
     assert command.command_type == "system.restart"
     assert command.idempotency_key == f"transfer-restart:{offer.id}"
     assert command.status.value == "queued"
+
+
+@pytest.mark.asyncio
+async def test_pending_transfer_is_claimed_by_same_client_on_new_workstation() -> None:
+    transfer, sessions, session, target, _occupied = await build_transfer_services()
+
+    offer = await transfer.create_offer(session.id, None, "automatic-transfer-offer")
+    confirmed, moved = await transfer.claim_pending(
+        session.client_id,
+        target.id,
+        "automatic-transfer-confirm",
+        actor_device_id="transfer-target",
+    )
+
+    assert offer.target_workstation_id is None
+    assert confirmed.status.value == "confirmed"
+    assert moved.workstation_id == target.id

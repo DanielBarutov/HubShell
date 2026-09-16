@@ -8,6 +8,7 @@ export type Workstation = {
   group: string;
   status: PcStatus;
   client?: string;
+  clientId?: string;
   tariff?: string;
   session?: string;
   sessionId?: string;

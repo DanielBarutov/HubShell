@@ -17,6 +17,10 @@ public interface IClientPortalGateway
         string deviceId,
         CancellationToken cancellationToken = default);
 
+    Task<ClientPortalAuthenticationSnapshot?> ResumeAsync(
+        string deviceId,
+        CancellationToken cancellationToken = default);
+
     Task<ClientPortalAuthenticationSnapshot> ChangePasswordAsync(
         string newPassword,
         string deviceId,

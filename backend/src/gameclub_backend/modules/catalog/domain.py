@@ -78,12 +78,15 @@ class Tariff:
             raise ValueError("Invalid tariff billing mode") from error
         if (self.window_start_minute is None) != (self.window_end_minute is None):
             raise ValueError("Tariff time window requires both start and end")
-        if self.window_start_minute is not None and not (
-            0 <= self.window_start_minute < 24 * 60
-            and 0 <= self.window_end_minute < 24 * 60
-            and self.window_start_minute != self.window_end_minute
-        ):
-            raise ValueError("Tariff time window minutes are invalid")
+        if self.window_start_minute is not None:
+            window_end_minute = self.window_end_minute
+            assert window_end_minute is not None
+            if not (
+                0 <= self.window_start_minute < 24 * 60
+                and 0 <= window_end_minute < 24 * 60
+                and self.window_start_minute != window_end_minute
+            ):
+                raise ValueError("Tariff time window minutes are invalid")
         if self.window_timezone is not None and not self.window_timezone.strip():
             raise ValueError("Tariff time window timezone cannot be empty")
         if self.window_start_minute is not None and self.window_timezone is None:
@@ -95,10 +98,11 @@ class Tariff:
                 raise ValueError("Tariff time window timezone is invalid") from error
 
     def applies_at(self, moment: datetime.datetime, group_id: str | None) -> bool:
+        normalized_group_id = group_id.strip().lower() if group_id else None
         return (
             self.active
             and self.lifecycle is TariffLifecycle.PUBLISHED
-            and (self.group_id is None or self.group_id == group_id)
+            and (self.group_id is None or self.group_id.strip().lower() == normalized_group_id)
             and self.valid_from <= moment
             and (self.valid_to is None or moment < self.valid_to)
         )

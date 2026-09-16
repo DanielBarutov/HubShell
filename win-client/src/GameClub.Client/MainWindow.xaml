@@ -69,14 +69,10 @@
                                 <Button Click="DismissSessionNotification" Visibility="{Binding IsTransferMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" HorizontalAlignment="Left" Padding="4,3" Background="Transparent">
                                     <TextBlock Text="Закрыть уведомление" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" />
                                 </Button>
-                                <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
+                                <ProgressRing IsActive="{Binding IsTransferWaiting}" Width="24" Height="24" HorizontalAlignment="Left" Visibility="{Binding IsTransferWaiting, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <TextBlock Text="После подтверждения войдите в этот же аккаунт на другом ПК. Мы дождёмся входа и перенесём текущую сессию автоматически." Visibility="{Binding IsTransferWaiting, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" />
                                 <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,8">
-                                    <TextBlock Text="Подготовить перенос" FontSize="11" />
-                                </Button>
-                                <TextBox Header="ID предложения" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" PlaceholderText="Вставьте ID предложения" />
-                                <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" PlaceholderText="Одноразовый код" />
-                                <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,8" Background="{ThemeResource AccentBrush}" Foreground="{ThemeResource AccentTextBrush}">
-                                    <TextBlock Text="Подтвердить перенос" FontSize="11" FontWeight="SemiBold" />
+                                    <TextBlock Text="Пересесть на другой ПК" FontSize="11" />
                                 </Button>
                             </StackPanel>
                         </Border>
@@ -411,11 +407,9 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="Перенос сессии" Foreground="{ThemeResource PrimaryTextBrush}" FontSize="11" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding TransferMessage}" Visibility="{Binding IsTransferMessageVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="{ThemeResource AccentBrush}" FontSize="9" TextWrapping="Wrap" />
-                        <TextBox Header="ID нового ПК" Text="{Binding TransferTargetWorkstationId, Mode=TwoWay}" PlaceholderText="Например, vip-02" />
-                        <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,7"><TextBlock Text="Подготовить перенос" FontSize="9" /></Button>
-                        <TextBox Header="ID предложения" Text="{Binding IncomingTransferOfferId, Mode=TwoWay}" />
-                        <TextBox Header="Код подтверждения" Text="{Binding IncomingTransferToken, Mode=TwoWay}" />
-                        <Button Click="ConfirmTransfer" IsEnabled="{Binding CanConfirmTransfer}" Padding="0,8" Background="{ThemeResource AccentBrush}" Foreground="{ThemeResource AccentTextBrush}"><TextBlock Text="Подтвердить перенос" FontSize="9" FontWeight="SemiBold" /></Button>
+                        <ProgressRing IsActive="{Binding IsTransferWaiting}" Width="24" Height="24" HorizontalAlignment="Left" Visibility="{Binding IsTransferWaiting, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Text="После подтверждения войдите в этот же аккаунт на другом ПК. Мы дождёмся входа и перенесём текущую сессию автоматически." Visibility="{Binding IsTransferWaiting, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="{ThemeResource SecondaryTextBrush}" FontSize="9" TextWrapping="Wrap" />
+                        <Button Click="CreateTransferOffer" IsEnabled="{Binding CanCreateTransferOffer}" Padding="0,7"><TextBlock Text="Пересесть на другой ПК" FontSize="9" /></Button>
                     </StackPanel>
                 </Border>
 

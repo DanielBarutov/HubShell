@@ -65,7 +65,7 @@ class ProductSaleResponse(BaseModel):
     payment_parts: list[PaymentPartResponse]
     settlement_error: str | None
     attempts: int
-    next_attempt_at: datetime.datetime
+    next_attempt_at: datetime.datetime | None
 
     @classmethod
     def from_domain(cls, sale: ProductSale) -> "ProductSaleResponse":

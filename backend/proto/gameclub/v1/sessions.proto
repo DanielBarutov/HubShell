@@ -15,6 +15,7 @@ service SessionService {
   rpc CreateTransferOffer(CreateTransferOfferRequest) returns (TransferOffer);
   rpc GetTransferOffer(GetTransferOfferRequest) returns (TransferOffer);
   rpc ConfirmTransfer(ConfirmTransferRequest) returns (TransferResult);
+  rpc ClaimPendingTransfer(ClaimPendingTransferRequest) returns (TransferResult);
   rpc ReplayOfflineBatch(ReplayOfflineBatchRequest) returns (ReplayOfflineBatchResponse);
 }
 
@@ -152,6 +153,12 @@ message ConfirmTransferRequest {
   string device_id = 2;
   string token = 3;
   string idempotency_key = 4;
+}
+
+message ClaimPendingTransferRequest {
+  string device_id = 1;
+  string workstation_id = 2;
+  string idempotency_key = 3;
 }
 
 message TransferOffer {

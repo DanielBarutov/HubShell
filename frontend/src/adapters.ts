@@ -18,19 +18,22 @@ export function toUiWorkstation(
   const sessionAge = activeSession
     ? `${Math.max(0, Math.floor((Date.now() - Date.parse(activeSession.started_at)) / 60_000))} мин`
     : undefined;
+  const effectiveGroupId = workstation.group_id?.trim()
+    || (groupName?.toLowerCase().includes("vip") ? "vip" : "main");
 
   return {
     id: workstation.id,
     name: workstation.name,
-    group: groupName ?? (workstation.group_id?.toLowerCase().includes("vip") ? "VIP-зона" : "Обычный зал"),
+    group: groupName ?? (effectiveGroupId === "vip" ? "VIP-зона" : "Обычный зал"),
     status: activeSession ? "busy" : technicalStatus,
     client: activeSession?.guest_name ?? clientName ?? (activeSession?.client_id ? "Клиент" : undefined),
+    clientId: activeSession?.client_id ?? undefined,
     tariff: tariffName ?? activeSession?.tariff_id ?? undefined,
     session: sessionAge,
     sessionId: activeSession?.id,
     lastSeen: workstation.last_seen_at ?? undefined,
     position: workstation.position,
-    groupId: workstation.group_id,
+    groupId: effectiveGroupId,
     deviceId: workstation.device_id,
     macAddress: workstation.mac_address,
     installationBound: workstation.installation_bound,

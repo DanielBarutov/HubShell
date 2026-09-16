@@ -106,7 +106,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _viewModel.SetDeviceIdentity(enrolledDeviceId, _enrollmentTokenProvider.WorkstationId);
+        _viewModel.SetDeviceIdentity(
+            enrolledDeviceId,
+            _enrollmentTokenProvider.WorkstationId,
+            _enrollmentTokenProvider.WorkstationName);
         var deviceId = _viewModel.DeviceId;
         if (string.IsNullOrWhiteSpace(deviceId))
         {
@@ -116,6 +119,7 @@ public sealed partial class MainWindow : Window
         TrackBackgroundTask(
             _viewModel.RunWorkstationHeartbeatLoopAsync(
                 ApplyThemeFromHeartbeat,
+                _viewModel.ApplyWorkstationName,
                 ApplyManagerPasswordVerifierFromHeartbeat,
                 ApplyLockdownPolicyFromHeartbeat,
                 _viewModel.ApplySessionSnapshotFromHeartbeat,
@@ -146,6 +150,24 @@ public sealed partial class MainWindow : Window
 
     private async void CreateTransferOffer(object sender, RoutedEventArgs args)
     {
+        if (ContentRoot.XamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "Пересесть на другой ПК?",
+            Content = "После подтверждения текущая сессия будет ждать входа в этот же аккаунт на новом ПК. Активное время и доступные пакеты перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
+            PrimaryButtonText = "Пересесть",
+            CloseButtonText = "Отмена",
+            XamlRoot = ContentRoot.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
         await _viewModel.CreateTransferOfferAsync();
     }
 

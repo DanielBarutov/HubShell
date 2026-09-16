@@ -130,6 +130,12 @@ Read-only выручка за период доступна через защи�
 содержит payload запросов и персональные данные, которых нет в audit event.
 
 gRPC-сервер запускается командой `make run-grpc` на `127.0.0.1:51051`. В
+runtime публично регистрируются только `SystemService`, `WorkstationService`,
+`ClientPortalService`, `ReservationService` и `SessionService`: это граница
+нативного клиента и устройств. Операторские CRUD/read-сервисы из protobuf
+(`Client`, `Catalog`, `Billing`, `CashShift`, `Analytics`) обслуживаются через
+HTTP BFF и не регистрируются на этом endpoint; их protobuf-описания сохранены
+для совместимости и возможного отдельного внутреннего endpoint.
 закрытом private-LAN deployment insecure transport допустим и в `production`;
 сервер может работать без TLS-файлов. Если backend доступен за пределами
 доверенной LAN, задайте `GAMECLUB_GRPC_TLS_CERT_FILE` и

@@ -14,7 +14,12 @@ namespace GameClub.Client.Avalonia;
 
 public partial class MainWindow : Window
 {
+    private const double DeveloperAccessGateWidth = 1120;
+    private const double DeveloperAccessGateHeight = 680;
+    private const double DeveloperWidgetWidth = 390;
+    private const double DeveloperWidgetHeight = 700;
     private readonly IClientHost _clientHost;
+    private AccountHistoryWindow? _accountHistoryWindow;
     private bool _normalizingPhone;
 
     public MainWindow()
@@ -52,6 +57,7 @@ public partial class MainWindow : Window
 
     private async void MainWindowClosed(object? sender, EventArgs args)
     {
+        _accountHistoryWindow?.Close();
         ViewModel.PropertyChanged -= ViewModelPropertyChanged;
         _clientHost.WindowAdapter?.Dispose();
         await _clientHost.DisposeAsync();
@@ -191,14 +197,95 @@ public partial class MainWindow : Window
     private void ToggleTransferPanel(object? sender, RoutedEventArgs args) =>
         ViewModel.ToggleTransferPanel();
 
-    private async void CreateTransferOffer(object? sender, RoutedEventArgs args) =>
+    private async void CreateTransferOffer(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmTransferAsync())
+        {
+            return;
+        }
+
         await ViewModel.CreateTransferOfferAsync();
+    }
 
     private async void ConfirmTransfer(object? sender, RoutedEventArgs args) =>
         await ViewModel.ConfirmTransferAsync();
 
+    private async Task<bool> ConfirmTransferAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "Пересесть на другой ПК?",
+            Width = 440,
+            Height = 250,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = new SolidColorBrush(Color.Parse("#0F1719")),
+        };
+        var cancel = new Button { Content = "Отмена", MinWidth = 100 };
+        var confirm = new Button
+        {
+            Content = "Пересесть",
+            MinWidth = 100,
+            Background = new SolidColorBrush(Color.Parse("#B6F35A")),
+            Foreground = new SolidColorBrush(Color.Parse("#11180C")),
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        confirm.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new Border
+        {
+            Padding = new Thickness(22),
+            Child = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "Пересесть на другой ПК?",
+                        FontSize = 18,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
+                    },
+                    new TextBlock
+                    {
+                        Text = "После подтверждения войдите в этот же аккаунт на новом ПК. Активная сессия и доступное время перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { cancel, confirm },
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
+
     private void DismissSessionNotification(object? sender, RoutedEventArgs args) =>
         ViewModel.DismissSessionNotification();
+
+    private void OpenAccountHistory(object? sender, RoutedEventArgs args)
+    {
+        if (_accountHistoryWindow is null)
+        {
+            _accountHistoryWindow = new AccountHistoryWindow(
+                ViewModel,
+                _clientHost.WindowAdapter?.UsesTransparentWindow == true)
+            {
+                Topmost = Topmost,
+            };
+            _accountHistoryWindow.Closed += (_, _) => _accountHistoryWindow = null;
+            _accountHistoryWindow.Show(this);
+            return;
+        }
+
+        _accountHistoryWindow.Activate();
+    }
 
     private async void PurchaseTariff(object? sender, RoutedEventArgs args)
     {
@@ -280,9 +367,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyHostWindowMode() =>
-        _clientHost.WindowAdapter?.ApplyWindowMode(
-            ViewModel.IsAccessLocked || ViewModel.IsMaintenanceMode);
+    private void ApplyHostWindowMode()
+    {
+        var accessGateVisible = ViewModel.IsAccessLocked || ViewModel.IsMaintenanceMode;
+        if (_clientHost.WindowAdapter is not null)
+        {
+            _clientHost.WindowAdapter.ApplyWindowMode(accessGateVisible);
+            return;
+        }
+
+        WindowState = WindowState.Normal;
+        Width = accessGateVisible ? DeveloperAccessGateWidth : DeveloperWidgetWidth;
+        Height = accessGateVisible ? DeveloperAccessGateHeight : DeveloperWidgetHeight;
+    }
 
     private static string FormatRussianPhone(string value)
     {

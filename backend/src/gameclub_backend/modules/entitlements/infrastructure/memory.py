@@ -105,7 +105,7 @@ class InMemoryEntitlementRepository:
         client_id: uuid.UUID,
         minutes: int,
         now: datetime.datetime,
-    ) -> Entitlement:
+    ) -> tuple[Entitlement, int]:
         async with self._lock:
             item = self._items.get(entitlement_id)
             if item is None:

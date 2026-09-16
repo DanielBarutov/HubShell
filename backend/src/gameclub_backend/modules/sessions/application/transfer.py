@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import secrets
 import uuid
+from dataclasses import replace
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.reservations.application.ports import ReservationEntryLookup
@@ -69,7 +70,7 @@ class SessionTransferService:
     async def create_offer(
         self,
         session_id: uuid.UUID,
-        target_workstation_id: uuid.UUID,
+        target_workstation_id: uuid.UUID | None,
         idempotency_key: str,
         actor_device_id: str | None = None,
     ) -> SessionTransferOffer:
@@ -99,39 +100,42 @@ class SessionTransferService:
                     ErrorCode.PERMISSION_DENIED,
                     "Transfer offer must be created by the source device",
                 )
-        if session.workstation_id == target_workstation_id:
+        if target_workstation_id is not None and session.workstation_id == target_workstation_id:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
                 "Transfer target must be another workstation",
             )
-        target = await self._workstations.get(target_workstation_id)
-        if target is None:
-            raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer target workstation not found")
-        if target.status.value == "disabled":
-            raise ApplicationError(ErrorCode.CONFLICT, "Transfer target workstation is disabled")
-        if await self._sessions.get_active_for_workstation(target_workstation_id) is not None:
-            raise ApplicationError(
-                ErrorCode.CONFLICT,
-                "Transfer target already has an active session",
-            )
-        if self._reservations is not None:
-            decision = await self._reservations.check_entry(
-                target_workstation_id,
-                client_id=session.client_id,
-                now=self._clock.now(),
-            )
-            if not decision.allowed:
-                raise ApplicationError(
-                    ErrorCode.CONFLICT,
-                    f"Transfer entry denied: {decision.reason}",
-                )
         requires_burn = False
         warning = None
-        if self._entitlements is not None:
-            active = await self._entitlements.get_active_for_client(session.client_id)
-            requires_burn = active is not None and not active.is_compatible(target.group_id)
-            if requires_burn:
-                warning = "Активный пакет несовместим с новой зоной и сгорит после подтверждения"
+        if target_workstation_id is not None:
+            target = await self._workstations.get(target_workstation_id)
+            if target is None:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer target workstation not found")
+            if target.status.value == "disabled":
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Transfer target workstation is disabled",
+                )
+            if await self._sessions.get_active_for_workstation(target_workstation_id) is not None:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Transfer target already has an active session",
+                )
+            if self._reservations is not None:
+                decision = await self._reservations.check_entry(
+                    target_workstation_id,
+                    client_id=session.client_id,
+                    now=self._clock.now(),
+                )
+                if not decision.allowed:
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT,
+                        f"Transfer entry denied: {decision.reason}",
+                    )
+            requires_burn, warning = await self._target_package_warning(
+                session.client_id,
+                target_workstation_id,
+            )
         now = self._clock.now()
         offer = SessionTransferOffer(
             id=uuid.uuid4(),
@@ -153,12 +157,41 @@ class SessionTransferService:
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
+    async def get_pending_for_client(self, client_id: uuid.UUID) -> SessionTransferOffer | None:
+        offer = await self._offers.get_pending_for_client(client_id)
+        if offer is None:
+            return None
+        expired = offer.expire_if_needed(self._clock.now())
+        if expired.status is TransferStatus.EXPIRED:
+            await self._offers.save(expired)
+            return None
+        return offer
+
+    async def claim_pending(
+        self,
+        client_id: uuid.UUID,
+        target_workstation_id: uuid.UUID,
+        idempotency_key: str,
+        actor_device_id: str | None = None,
+    ) -> tuple[SessionTransferOffer, Session]:
+        offer = await self.get_pending_for_client(client_id)
+        if offer is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "No pending transfer for this account")
+        return await self.confirm(
+            offer.id,
+            idempotency_key,
+            token=offer.token,
+            actor_device_id=actor_device_id,
+            target_workstation_id=target_workstation_id,
+        )
+
     async def confirm(
         self,
         offer_id: uuid.UUID,
         idempotency_key: str,
         token: str | None = None,
         actor_device_id: str | None = None,
+        target_workstation_id: uuid.UUID | None = None,
     ) -> tuple[SessionTransferOffer, Session]:
         key = idempotency_key.strip()
         if not key or len(key) > 128:
@@ -167,13 +200,6 @@ class SessionTransferService:
             offer = await self.get(offer_id)
             if token is not None and not secrets.compare_digest(token, offer.token):
                 raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Invalid transfer token")
-            if actor_device_id is not None:
-                target = await self._workstations.get(offer.target_workstation_id)
-                if target is None or target.device_id != actor_device_id.strip():
-                    raise ApplicationError(
-                        ErrorCode.PERMISSION_DENIED,
-                        "Transfer must be confirmed by the target device",
-                    )
             now = self._clock.now()
             if offer.status is TransferStatus.CONFIRMED:
                 if offer.confirm_idempotency_key != key:
@@ -186,27 +212,79 @@ class SessionTransferService:
             if offer.status is TransferStatus.EXPIRED:
                 await self._offers.save(offer)
                 raise ApplicationError(ErrorCode.CONFLICT, "Transfer offer has expired")
+            if offer.target_workstation_id is None:
+                if target_workstation_id is None:
+                    raise ApplicationError(
+                        ErrorCode.INVALID_ARGUMENT,
+                        "Transfer target workstation is required",
+                    )
+                offer = replace(offer, target_workstation_id=target_workstation_id)
+            elif (
+                target_workstation_id is not None
+                and offer.target_workstation_id != target_workstation_id
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Transfer target does not match offer")
+            target_id = offer.target_workstation_id
+            assert target_id is not None
+            if actor_device_id is not None:
+                target = await self._workstations.get(target_id)
+                if target is None or target.device_id != actor_device_id.strip():
+                    raise ApplicationError(
+                        ErrorCode.PERMISSION_DENIED,
+                        "Transfer must be confirmed by the target device",
+                    )
             session = await self._sessions.get(offer.session_id)
             if session is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Session not found")
+            client_id = session.client_id
             if (
                 session.status.value != "active"
                 or session.workstation_id != offer.source_workstation_id
+                or client_id is None
             ):
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
                     "Source session is no longer transferable",
                 )
-            target_session = await self._sessions.get_active_for_workstation(
-                offer.target_workstation_id
-            )
+            target_session = await self._sessions.get_active_for_workstation(target_id)
             if target_session is not None:
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
                     "Transfer target already has an active session",
                 )
             try:
-                transferred = session.transfer(offer.target_workstation_id)
+                target = await self._workstations.get(target_id)
+                if target is None:
+                    raise ApplicationError(
+                        ErrorCode.NOT_FOUND,
+                        "Transfer target workstation not found",
+                    )
+                if target.status.value == "disabled":
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT,
+                        "Transfer target workstation is disabled",
+                    )
+                if self._reservations is not None:
+                    decision = await self._reservations.check_entry(
+                        target_id,
+                        client_id=client_id,
+                        now=now,
+                    )
+                    if not decision.allowed:
+                        raise ApplicationError(
+                            ErrorCode.CONFLICT,
+                            f"Transfer entry denied: {decision.reason}",
+                        )
+                requires_burn, warning = await self._target_package_warning(
+                    client_id,
+                    target_id,
+                )
+                offer = replace(
+                    offer,
+                    requires_package_burn=requires_burn,
+                    warning=warning,
+                )
+                transferred = session.transfer(target_id)
                 confirmed_offer = offer.confirm(key, now)
                 commit_transfer = getattr(self._offers, "commit_transfer", None)
                 if commit_transfer is not None:
@@ -237,3 +315,22 @@ class SessionTransferService:
                     # the duplicate-safe restart command independently.
                     pass
             return confirmed, saved_session
+
+    async def _target_package_warning(
+        self,
+        client_id: uuid.UUID,
+        target_workstation_id: uuid.UUID,
+    ) -> tuple[bool, str | None]:
+        if self._entitlements is None:
+            return False, None
+        target = await self._workstations.get(target_workstation_id)
+        if target is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer target workstation not found")
+        active = await self._entitlements.get_active_for_client(client_id)
+        requires_burn = active is not None and not active.is_compatible(target.group_id)
+        return (
+            requires_burn,
+            "Активный пакет несовместим с новой зоной и сгорит после подтверждения"
+            if requires_burn
+            else None,
+        )

@@ -523,8 +523,11 @@ export class GameClubApi {
     return this.request<Reservation[]>(`/reservations?${params}`);
   }
 
-  async listTariffs(): Promise<BackendTariff[]> {
-    return this.request<BackendTariff[]>("/catalog/tariffs");
+  async listTariffs(groupId?: string | null): Promise<BackendTariff[]> {
+    const query = groupId === undefined
+      ? ""
+      : `?group_id=${encodeURIComponent(groupId ?? "")}`;
+    return this.request<BackendTariff[]>(`/catalog/tariffs${query}`);
   }
 
   async createTariff(payload: {
