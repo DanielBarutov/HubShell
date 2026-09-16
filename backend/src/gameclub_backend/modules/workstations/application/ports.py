@@ -95,7 +95,7 @@ class CommandNotifier(typing.Protocol):
     async def notify(self, device_id: str) -> None:
         """Wake a connected device stream."""
 
-    async def wait(self, device_id: str) -> None:
+    async def wait(self, device_id: str, timeout_seconds: float = 15.0) -> None:
         """Wait until a command may be available for a device."""
 
 

@@ -39,7 +39,7 @@ fullscreen/window placement и kiosk policy.
 3. [x] Перенести access-gate layout и binding/event adapters. Первый frame
    остаётся тёмным; entry/login/register/password-reset rules остаются в
    `MainViewModel` и backend responses. Avalonia содержит полный dark gate,
-   manager entry/maintenance, phone mask, очистку password-полей после submit,
+    non-user-facing maintenance state, phone mask, очистку password-полей после submit,
    activity tracking и dynamic group-theme accent.
 4. [x] Перенести post-login portal/session widget: profile, server snapshot,
    balance, server-backed upcoming booking, tariffs with explicit local
@@ -89,5 +89,16 @@ fullscreen/window placement и kiosk policy.
   финансовый факт.
 - Тема workstation меняет Avalonia resource `AccentBrush`; пользовательского
   выбора темы нет.
+- Пользовательское имя станции переносится из `workstation.name` authenticated
+  heartbeat в общий `MainViewModel`; UUID станции остаётся только техническим
+  идентификатором и не выводится в access-gate или widget.
+- Пользовательский access-gate содержит только вход и создание аккаунта:
+  соединение обновляется автоматически, а ошибки portal показываются отдельной
+  плашкой с безопасным локализованным текстом. Primary/secondary buttons имеют
+  явные normal/hover/pressed/disabled состояния с короткой анимацией.
+- Основной post-login widget сохраняет фиксированную компактную ширину и
+  растягивает свои карточки на доступную колонку. История аккаунта вынесена в
+  отдельное borderless-окно с явным закрытием, той же палитрой и локальным
+  `dd.MM.yyyy HH:mm` форматом server-backed timestamps.
 - Запуск в Linux проверяет normal developer window, а не Windows fullscreen,
   compact placement, tray, restart, DPAPI journal или kiosk policy.

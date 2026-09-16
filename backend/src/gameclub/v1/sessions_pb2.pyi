@@ -251,6 +251,16 @@ class ConfirmTransferRequest(_message.Message):
     idempotency_key: str
     def __init__(self, offer_id: _Optional[str] = ..., device_id: _Optional[str] = ..., token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
+class ClaimPendingTransferRequest(_message.Message):
+    __slots__ = ("device_id", "workstation_id", "idempotency_key")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    workstation_id: str
+    idempotency_key: str
+    def __init__(self, device_id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+
 class TransferOffer(_message.Message):
     __slots__ = ("id", "session_id", "client_id", "source_workstation_id", "target_workstation_id", "token", "status", "requires_package_burn", "warning", "created_at", "expires_at", "confirmed_at")
     ID_FIELD_NUMBER: _ClassVar[int]

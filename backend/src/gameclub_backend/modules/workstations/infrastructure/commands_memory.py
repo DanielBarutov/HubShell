@@ -95,6 +95,6 @@ class InMemoryCommandNotifier:
         queue = await self._queue_for(device_id)
         queue.put_nowait(None)
 
-    async def wait(self, device_id: str) -> None:
+    async def wait(self, device_id: str, timeout_seconds: float = 15.0) -> None:
         queue = await self._queue_for(device_id)
-        await queue.get()
+        await asyncio.wait_for(queue.get(), timeout_seconds)

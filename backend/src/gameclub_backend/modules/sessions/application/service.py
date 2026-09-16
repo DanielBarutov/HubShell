@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus
+from gameclub_backend.modules.entitlements.domain import Entitlement
 from gameclub_backend.modules.reservations.domain import ReservationStatus
 from gameclub_backend.modules.sessions.application.ports import (
     ClientLookup,
@@ -24,7 +26,10 @@ from gameclub_backend.modules.sessions.domain import (
     SessionStatus,
     SessionTariffSnapshot,
 )
-from gameclub_backend.modules.workstations.domain import WorkstationStatus
+from gameclub_backend.modules.workstations.domain import (
+    WorkstationStatus,
+    effective_workstation_group_id,
+)
 
 
 class UtcClock:
@@ -93,6 +98,7 @@ class SessionService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
+        effective_group_id = effective_workstation_group_id(workstation.group_id)
         if device_id is not None and workstation.device_id != device_id:
             raise ApplicationError(
                 ErrorCode.PERMISSION_DENIED,
@@ -153,11 +159,20 @@ class SessionService:
             and self._tariffs is not None
         ):
             fallback_tariff = await self._tariffs.find_per_minute_tariff(
-                workstation.group_id,
+                effective_group_id,
                 self._clock.now(),
             )
             if fallback_tariff is not None:
                 tariff_id = fallback_tariff.id
+        if tariff_id is not None and self._tariffs is not None and entitlement_id is None:
+            selected_tariff = await self._tariffs.get_tariff(tariff_id)
+            if selected_tariff is None:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
+            if not selected_tariff.applies_at(self._clock.now(), effective_group_id):
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Tariff is incompatible with this workstation zone or is not active",
+                )
         if client_id is not None and guest_payment_id is not None:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
@@ -317,7 +332,11 @@ class SessionService:
     ) -> list[Session]:
         return await self._repository.list(workstation_id, active_only)
 
-    async def list_for_client(self, client_id: uuid.UUID, limit: int = 50) -> list[Session]:
+    async def list_for_client(
+        self,
+        client_id: uuid.UUID,
+        limit: int = 50,
+    ) -> builtins.list[Session]:
         return await self._repository.list_for_client(client_id, max(1, min(limit, 100)))
 
     async def snapshot(
@@ -331,7 +350,7 @@ class SessionService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         client = await self._clients.get(session.client_id) if session.client_id else None
         active_entitlement = None
-        entitlements = ()
+        entitlements: tuple[Entitlement, ...] = ()
         if session.client_id is not None and self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
             entitlements = tuple(await self._entitlements.list_for_client(session.client_id))
@@ -373,7 +392,7 @@ class SessionService:
         balance_remaining_minutes = None
         if client is not None and self._tariffs is not None:
             per_minute_tariff = await self._tariffs.find_per_minute_tariff(
-                workstation.group_id,
+                effective_workstation_group_id(workstation.group_id),
                 server_time,
             )
             if per_minute_tariff is not None and per_minute_tariff.price_per_minute_cents > 0:

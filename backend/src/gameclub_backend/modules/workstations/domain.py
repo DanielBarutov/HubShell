@@ -16,6 +16,12 @@ def normalize_mac_address(value: str) -> str:
     return ":".join(normalized[index : index + 2] for index in range(0, 12, 2))
 
 
+def effective_workstation_group_id(group_id: str | None) -> str:
+    """Use the ordinary hall for legacy workstations without a saved group."""
+    normalized = group_id.strip().lower() if group_id else ""
+    return normalized or "main"
+
+
 class WorkstationStatus(enum.StrEnum):
     UNKNOWN = "unknown"
     ONLINE = "online"

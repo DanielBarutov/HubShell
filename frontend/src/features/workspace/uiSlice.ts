@@ -55,7 +55,7 @@ const uiSlice = createSlice({
     openNewClient(state) { state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.panel = "new-client"; },
     openDeposit(state, action: PayloadAction<{ clientId?: string | null; bonusOnly?: boolean } | undefined>) { state.panel = "deposit"; state.selectedPcId = null; state.selectedClientId = action.payload?.clientId ?? null; state.depositBonusOnly = Boolean(action.payload?.bonusOnly); },
     openBooking(state, action: PayloadAction<string | undefined>) { state.panel = "booking"; state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.bookingWorkstationId = action.payload; },
-    openSale(state, action: PayloadAction<{ pcId?: string | null; product?: BackendProduct | null } | undefined>) { state.selectedPcId = action.payload?.pcId ?? null; state.selectedClientId = null; state.saleInitialProduct = action.payload?.product ?? null; state.panel = "sale"; },
+    openSale(state, action: PayloadAction<{ pcId?: string | null; clientId?: string | null; product?: BackendProduct | null } | undefined>) { state.selectedPcId = action.payload?.pcId ?? null; state.selectedClientId = action.payload?.clientId ?? null; state.saleInitialProduct = action.payload?.product ?? null; state.panel = "sale"; },
     openWorkstationEditor(state) { state.panel = "workstation"; },
     openNewWorkstation(state) { state.selectedPcId = null; state.panel = "workstation"; },
     openBookingEdit(state, action: PayloadAction<Reservation>) { state.panel = "booking-edit"; state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = action.payload; },

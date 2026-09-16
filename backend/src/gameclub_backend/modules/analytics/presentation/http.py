@@ -274,7 +274,7 @@ def _csv_text(value: object) -> str:
     return text
 
 
-def _write_csv_row(writer: csv.writer, section: str, **values: object) -> None:
+def _write_csv_row(writer: typing.Any, section: str, **values: object) -> None:
     writer.writerow(
         [_csv_text(section), *(_csv_text(values.get(header)) for header in _CSV_HEADERS[1:])]
     )

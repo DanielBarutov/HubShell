@@ -47,12 +47,15 @@ class Entitlement:
             raise ValueError("Entitlement purchase time must include timezone")
         if (self.window_start_minute is None) != (self.window_end_minute is None):
             raise ValueError("Entitlement time window requires both start and end")
-        if self.window_start_minute is not None and not (
-            0 <= self.window_start_minute < 24 * 60
-            and 0 <= self.window_end_minute < 24 * 60
-            and self.window_start_minute != self.window_end_minute
-        ):
-            raise ValueError("Entitlement time window minutes are invalid")
+        if self.window_start_minute is not None:
+            window_end_minute = self.window_end_minute
+            assert window_end_minute is not None
+            if not (
+                0 <= self.window_start_minute < 24 * 60
+                and 0 <= window_end_minute < 24 * 60
+                and self.window_start_minute != window_end_minute
+            ):
+                raise ValueError("Entitlement time window minutes are invalid")
         if self.window_start_minute is not None and not self.window_timezone:
             raise ValueError("Entitlement time window timezone is required")
         if self.window_timezone:
@@ -78,6 +81,7 @@ class Entitlement:
         minute = local.hour * 60 + local.minute
         start = self.window_start_minute
         end = self.window_end_minute
+        assert start is not None and end is not None
         if start < end:
             return start <= minute < end
         return minute >= start or minute < end

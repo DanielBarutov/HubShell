@@ -36,7 +36,7 @@ class GuestSessionPaymentModel(DirectPaymentBase):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(128), nullable=False, server_default="system")
     attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
-    next_attempt_at: Mapped[datetime.datetime] = mapped_column(
+    next_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
     settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)

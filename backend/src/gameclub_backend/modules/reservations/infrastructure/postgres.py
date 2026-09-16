@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import uuid
 
@@ -105,7 +106,7 @@ class PostgresReservationRepository:
         self,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(
                 select(ReservationModel)
@@ -122,7 +123,7 @@ class PostgresReservationRepository:
         client_id: uuid.UUID,
         start_at: datetime.datetime,
         limit: int,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(
                 select(ReservationModel)
@@ -136,7 +137,10 @@ class PostgresReservationRepository:
             )
             return [model.to_domain() for model in result]
 
-    async def list_pending_no_show(self, cutoff_at: datetime.datetime) -> list[Reservation]:
+    async def list_pending_no_show(
+        self,
+        cutoff_at: datetime.datetime,
+    ) -> builtins.list[Reservation]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(
                 select(ReservationModel)

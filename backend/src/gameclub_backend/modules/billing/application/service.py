@@ -27,6 +27,7 @@ from gameclub_backend.modules.billing.domain import (
 from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.sessions.domain import SessionStatus
+from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
 
 
 class UtcClock:
@@ -127,7 +128,10 @@ class BillingService:
         if (
             selected_tariff is not None
             and selected_tariff.billing_mode is BillingMode.PER_MINUTE
-            and not selected_tariff.applies_at(session.started_at, workstation.group_id)
+            and not selected_tariff.applies_at(
+                session.started_at,
+                effective_workstation_group_id(workstation.group_id),
+            )
         ):
             # A session can outlive a replaced zone snapshot. Use the current
             # zone snapshot for legacy sessions instead of retrying forever with
@@ -136,7 +140,7 @@ class BillingService:
 
         if tariff_id is None:
             fallback_tariff = await self._catalog.find_per_minute_tariff(
-                workstation.group_id,
+                effective_workstation_group_id(workstation.group_id),
                 moment,
             )
             if fallback_tariff is not None:
@@ -239,7 +243,7 @@ class BillingService:
         )
         quote = await self._catalog.quote_for_tariff(
             tariff_id=tariff.id,
-            group_id=workstation.group_id,
+            group_id=effective_workstation_group_id(workstation.group_id),
             moment=quote_moment,
             discount_category=client.discount_category,
             duration_minutes=max(
@@ -332,6 +336,11 @@ class BillingService:
             )
         except ApplicationError as error:
             if error.message == "Insufficient balance":
+                if self._meter_repository is None:
+                    raise ApplicationError(
+                        ErrorCode.DEPENDENCY_UNAVAILABLE,
+                        "Meter repository is not configured",
+                    ) from error
                 meter = await self._meter_repository.get(session_id)
                 if meter is not None:
                     await self._meter_repository.save(
@@ -488,7 +497,7 @@ class BillingService:
                 )
             quote = await self._catalog.quote_for_tariff(
                 tariff_id=session.tariff_id,
-                group_id=workstation.group_id,
+                group_id=effective_workstation_group_id(workstation.group_id),
                 moment=session.started_at,
                 discount_category=client.discount_category,
                 duration_minutes=duration_minutes,
@@ -497,7 +506,7 @@ class BillingService:
         else:
             quote = await self._catalog.quote(
                 duration_minutes=duration_minutes,
-                group_id=workstation.group_id,
+                group_id=effective_workstation_group_id(workstation.group_id),
                 moment=session.started_at,
                 discount_category=client.discount_category,
             )

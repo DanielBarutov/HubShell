@@ -53,7 +53,7 @@ export function AppShell() {
   const openPcPanel = (pc: Workstation) => dispatch(openPc(pc.id));
   const openClientPanel = (client: Client) => dispatch(openClient(client.id));
   const openDepositPanel = (client?: Client, bonusOnly = false) => dispatch(openDeposit({ clientId: client?.id, bonusOnly }));
-  const openSalePanel = (pc?: Workstation, product?: BackendProduct | null) => dispatch(openSale({ pcId: pc?.id, product }));
+  const openSalePanel = (pc?: Workstation, product?: BackendProduct | null) => dispatch(openSale({ pcId: pc?.id, clientId: pc?.clientId, product }));
   const refreshAfterMutation = () => { void dispatch(refreshWorkspace()); };
 
   return <div className="app-shell">

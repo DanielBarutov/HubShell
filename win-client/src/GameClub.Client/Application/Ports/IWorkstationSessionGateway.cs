@@ -34,7 +34,7 @@ public interface IWorkstationSessionGateway
 
     Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
         string sessionId,
-        string targetWorkstationId,
+        string? targetWorkstationId,
         string deviceId,
         string idempotencyKey,
         CancellationToken cancellationToken = default);
@@ -49,6 +49,13 @@ public interface IWorkstationSessionGateway
         string offerId,
         string deviceId,
         string token,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default);
+
+    Task<SessionTransferResultSnapshot> ClaimPendingTransferAsync(
+        string clientId,
+        string workstationId,
+        string deviceId,
         string idempotencyKey,
         CancellationToken cancellationToken = default);
 

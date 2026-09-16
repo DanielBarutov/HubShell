@@ -230,6 +230,14 @@ class LoginPortalRequest(_message.Message):
     device_id: str
     def __init__(self, identifier: _Optional[str] = ..., password: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
+class ResumePortalRequest(_message.Message):
+    __slots__ = ("device_id", "limit")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    limit: int
+    def __init__(self, device_id: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
 class ChangePortalPasswordRequest(_message.Message):
     __slots__ = ("new_password", "device_id")
     NEW_PASSWORD_FIELD_NUMBER: _ClassVar[int]
@@ -273,19 +281,21 @@ class PurchaseEntitlementRequest(_message.Message):
     def __init__(self, tariff_id: _Optional[str] = ..., device_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class ClientPortalSession(_message.Message):
-    __slots__ = ("access_token", "expires_in", "snapshot", "password_reset_required")
+    __slots__ = ("access_token", "expires_in", "snapshot", "password_reset_required", "resumed")
     ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_FIELD_NUMBER: _ClassVar[int]
     PASSWORD_RESET_REQUIRED_FIELD_NUMBER: _ClassVar[int]
+    RESUMED_FIELD_NUMBER: _ClassVar[int]
     access_token: str
     expires_in: int
     snapshot: ClientPortalSnapshot
     password_reset_required: bool
-    def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ..., password_reset_required: _Optional[bool] = ...) -> None: ...
+    resumed: bool
+    def __init__(self, access_token: _Optional[str] = ..., expires_in: _Optional[int] = ..., snapshot: _Optional[_Union[ClientPortalSnapshot, _Mapping]] = ..., password_reset_required: _Optional[bool] = ..., resumed: _Optional[bool] = ...) -> None: ...
 
 class ClientPortalSnapshot(_message.Message):
-    __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes", "entitlements", "tariffs", "reservations")
+    __slots__ = ("client", "balance_operations", "sessions", "charges", "purchases", "available_time_minutes", "entitlements", "tariffs", "reservations", "payment_methods")
     CLIENT_FIELD_NUMBER: _ClassVar[int]
     BALANCE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
     SESSIONS_FIELD_NUMBER: _ClassVar[int]
@@ -295,6 +305,7 @@ class ClientPortalSnapshot(_message.Message):
     ENTITLEMENTS_FIELD_NUMBER: _ClassVar[int]
     TARIFFS_FIELD_NUMBER: _ClassVar[int]
     RESERVATIONS_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_METHODS_FIELD_NUMBER: _ClassVar[int]
     client: Client
     balance_operations: _containers.RepeatedCompositeFieldContainer[PortalBalanceOperation]
     sessions: _containers.RepeatedCompositeFieldContainer[PortalSession]
@@ -304,7 +315,16 @@ class ClientPortalSnapshot(_message.Message):
     entitlements: _containers.RepeatedCompositeFieldContainer[PortalEntitlement]
     tariffs: _containers.RepeatedCompositeFieldContainer[PortalTariff]
     reservations: _containers.RepeatedCompositeFieldContainer[PortalReservation]
-    def __init__(self, client: _Optional[_Union[Client, _Mapping]] = ..., balance_operations: _Optional[_Iterable[_Union[PortalBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[PortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[PortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[PortalPurchase, _Mapping]]] = ..., available_time_minutes: _Optional[int] = ..., entitlements: _Optional[_Iterable[_Union[PortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[PortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[PortalReservation, _Mapping]]] = ...) -> None: ...
+    payment_methods: _containers.RepeatedCompositeFieldContainer[PortalPaymentMethod]
+    def __init__(self, client: _Optional[_Union[Client, _Mapping]] = ..., balance_operations: _Optional[_Iterable[_Union[PortalBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[PortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[PortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[PortalPurchase, _Mapping]]] = ..., available_time_minutes: _Optional[int] = ..., entitlements: _Optional[_Iterable[_Union[PortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[PortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[PortalReservation, _Mapping]]] = ..., payment_methods: _Optional[_Iterable[_Union[PortalPaymentMethod, _Mapping]]] = ...) -> None: ...
+
+class PortalPaymentMethod(_message.Message):
+    __slots__ = ("key", "name")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    name: str
+    def __init__(self, key: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class PortalTariff(_message.Message):
     __slots__ = ("id", "name", "zone_id", "duration_minutes", "price_cents")
@@ -381,7 +401,7 @@ class PortalBalanceOperation(_message.Message):
     def __init__(self, id: _Optional[str] = ..., operation_type: _Optional[str] = ..., amount_cents: _Optional[int] = ..., bonus_amount: _Optional[int] = ..., reason: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., payment_parts: _Optional[_Iterable[_Union[PaymentPart, _Mapping]]] = ...) -> None: ...
 
 class PortalSession(_message.Message):
-    __slots__ = ("id", "workstation_id", "status", "started_at", "ended_at", "tariff_id", "tariff_quantity", "tariff_name")
+    __slots__ = ("id", "workstation_id", "status", "started_at", "ended_at", "tariff_id", "tariff_quantity", "tariff_name", "workstation_name", "duration_minutes")
     ID_FIELD_NUMBER: _ClassVar[int]
     WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -390,6 +410,8 @@ class PortalSession(_message.Message):
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_QUANTITY_FIELD_NUMBER: _ClassVar[int]
     TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
+    WORKSTATION_NAME_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
     id: str
     workstation_id: str
     status: str
@@ -398,7 +420,9 @@ class PortalSession(_message.Message):
     tariff_id: str
     tariff_quantity: int
     tariff_name: str
-    def __init__(self, id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., status: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., ended_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_id: _Optional[str] = ..., tariff_quantity: _Optional[int] = ..., tariff_name: _Optional[str] = ...) -> None: ...
+    workstation_name: str
+    duration_minutes: int
+    def __init__(self, id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., status: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., ended_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_id: _Optional[str] = ..., tariff_quantity: _Optional[int] = ..., tariff_name: _Optional[str] = ..., workstation_name: _Optional[str] = ..., duration_minutes: _Optional[int] = ...) -> None: ...
 
 class PortalCharge(_message.Message):
     __slots__ = ("id", "session_id", "tariff_id", "duration_minutes", "amount_cents", "created_at", "tariff_name")
@@ -419,17 +443,19 @@ class PortalCharge(_message.Message):
     def __init__(self, id: _Optional[str] = ..., session_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., amount_cents: _Optional[int] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tariff_name: _Optional[str] = ...) -> None: ...
 
 class PortalPurchase(_message.Message):
-    __slots__ = ("id", "product_name", "quantity", "total_price_cents", "payment_method", "created_at")
+    __slots__ = ("id", "product_name", "quantity", "total_price_cents", "payment_method", "created_at", "payment_parts")
     ID_FIELD_NUMBER: _ClassVar[int]
     PRODUCT_NAME_FIELD_NUMBER: _ClassVar[int]
     QUANTITY_FIELD_NUMBER: _ClassVar[int]
     TOTAL_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
     PAYMENT_METHOD_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_PARTS_FIELD_NUMBER: _ClassVar[int]
     id: str
     product_name: str
     quantity: int
     total_price_cents: int
     payment_method: str
     created_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., product_name: _Optional[str] = ..., quantity: _Optional[int] = ..., total_price_cents: _Optional[int] = ..., payment_method: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    payment_parts: _containers.RepeatedCompositeFieldContainer[PaymentPart]
+    def __init__(self, id: _Optional[str] = ..., product_name: _Optional[str] = ..., quantity: _Optional[int] = ..., total_price_cents: _Optional[int] = ..., payment_method: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., payment_parts: _Optional[_Iterable[_Union[PaymentPart, _Mapping]]] = ...) -> None: ...

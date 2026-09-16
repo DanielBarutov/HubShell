@@ -64,7 +64,9 @@ class CatalogRepository(typing.Protocol):
 
 
 class ZoneRate(typing.Protocol):
-    per_minute_price_cents: int
+    @property
+    def per_minute_price_cents(self) -> int:
+        """Return the configured metered price for a zone."""
 
 
 class ZoneRateLookup(typing.Protocol):

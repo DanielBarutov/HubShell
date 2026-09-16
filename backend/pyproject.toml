@@ -23,6 +23,7 @@ dependencies = [
 dev = [
     "grpcio-tools>=1.68,<2",
     "httpx>=0.28,<1",
+    "mypy>=1.14,<2",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.25,<1",
     "ruff>=0.9,<1",
@@ -54,3 +55,14 @@ extend-immutable-calls = ["fastapi.Depends"]
 addopts = "-ra"
 asyncio_mode = "auto"
 pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+ignore_missing_imports = true
+exclude = "^src/gameclub/v1/"
+
+[[tool.mypy.overrides]]
+module = ["gameclub.*"]
+follow_imports = "skip"
+ignore_missing_imports = true

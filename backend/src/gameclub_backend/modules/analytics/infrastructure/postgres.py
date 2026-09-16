@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import datetime
+import typing
 import uuid
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.analytics.domain import (
@@ -83,11 +85,11 @@ def _period_filter(column: sa.ColumnClause, start_at: datetime.datetime, end_at:
 
 
 def _int(value: object) -> int:
-    return int(value or 0)
+    return int(typing.cast(typing.SupportsInt, value or 0))
 
 
 def _minutes(value: object) -> int:
-    return int(float(value or 0))
+    return int(float(typing.cast(typing.SupportsFloat, value or 0)))
 
 
 def _share_bps(value: int, total: int) -> int:
@@ -321,7 +323,7 @@ class PostgresAnalyticsRepository:
 
     async def _activity_buckets(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         limit: int | None,
@@ -342,7 +344,7 @@ class PostgresAnalyticsRepository:
         if client_id is not None:
             session_filters.append(sessions.c.client_id == client_id)
         day_bucket = sa.func.date_trunc("day", sessions.c.started_at)
-        result = await session.execute(
+        query_result = await session.execute(
             sa.select(
                 day_bucket,
                 sa.func.count(sessions.c.id),
@@ -357,7 +359,7 @@ class PostgresAnalyticsRepository:
             .where(*session_filters)
             .group_by(day_bucket)
         )
-        for row in result:
+        for row in query_result:
             item = bucket_values(row[0].date().isoformat())
             item["session_count"] = _int(row[1])
             item["played_minutes"] = _minutes(row[2])
@@ -367,7 +369,7 @@ class PostgresAnalyticsRepository:
         if client_id is not None:
             charge_filters.append(charges.c.client_id == client_id)
         charge_day_bucket = sa.func.date_trunc("day", charges.c.created_at)
-        result = await session.execute(
+        query_result = await session.execute(
             sa.select(
                 charge_day_bucket,
                 sa.func.coalesce(sa.func.sum(charges.c.amount_cents), 0),
@@ -375,7 +377,7 @@ class PostgresAnalyticsRepository:
             .where(*charge_filters)
             .group_by(charge_day_bucket)
         )
-        for row in result:
+        for row in query_result:
             bucket_values(row[0].date().isoformat())["session_revenue_cents"] = _int(row[1])
 
         sale_filters = [
@@ -385,7 +387,7 @@ class PostgresAnalyticsRepository:
         if client_id is not None:
             sale_filters.append(sales.c.client_id == client_id)
         sale_day_bucket = sa.func.date_trunc("day", sales.c.created_at)
-        result = await session.execute(
+        query_result = await session.execute(
             sa.select(
                 sale_day_bucket,
                 sa.func.coalesce(sa.func.sum(sales.c.total_price_cents), 0),
@@ -395,24 +397,24 @@ class PostgresAnalyticsRepository:
             .where(*sale_filters)
             .group_by(sale_day_bucket)
         )
-        for row in result:
+        for row in query_result:
             item = bucket_values(row[0].date().isoformat())
             item["product_revenue_cents"] = _int(row[1])
             item["product_sale_count"] = _int(row[2])
             item["product_units"] = _int(row[3])
 
-        result: list[AnalyticsBucket] = []
+        buckets: list[AnalyticsBucket] = []
         cursor = start_at.replace(hour=0, minute=0, second=0, microsecond=0)
         last_day = (end_at - datetime.timedelta(microseconds=1)).date()
         while cursor.date() <= last_day:
             key = cursor.date().isoformat()
-            result.append(_bucket(key, cursor.strftime("%d.%m"), bucket_values(key)))
+            buckets.append(_bucket(key, cursor.strftime("%d.%m"), bucket_values(key)))
             cursor += datetime.timedelta(days=1)
-        return result[:limit] if limit is not None else result
+        return buckets[:limit] if limit is not None else buckets
 
     async def _hourly_activity(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         client_id: uuid.UUID | None = None,
@@ -488,7 +490,7 @@ class PostgresAnalyticsRepository:
 
     async def _workstation_breakdown(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         total_revenue_cents: int,
@@ -535,7 +537,7 @@ class PostgresAnalyticsRepository:
 
     async def _zone_breakdown(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         total_revenue_cents: int,
@@ -584,7 +586,7 @@ class PostgresAnalyticsRepository:
 
     async def _tariff_breakdown(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         total_revenue_cents: int,
@@ -624,7 +626,7 @@ class PostgresAnalyticsRepository:
 
     async def _payment_breakdown(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         total_revenue_cents: int,
@@ -679,7 +681,7 @@ class PostgresAnalyticsRepository:
 
     async def _product_category_breakdown(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         total_revenue_cents: int,
@@ -717,7 +719,7 @@ class PostgresAnalyticsRepository:
 
     async def _top_products(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         limit: int,
@@ -753,7 +755,7 @@ class PostgresAnalyticsRepository:
 
     async def _top_clients(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
         limit: int,
@@ -946,7 +948,7 @@ class PostgresAnalyticsRepository:
 
     async def _top_products_for_client(
         self,
-        session: sa.ext.asyncio.AsyncSession,
+        session: AsyncSession,
         client_id: uuid.UUID,
         start_at: datetime.datetime,
         end_at: datetime.datetime,

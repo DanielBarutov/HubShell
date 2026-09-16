@@ -132,7 +132,7 @@ class SessionTransferOffer:
     session_id: uuid.UUID
     client_id: uuid.UUID
     source_workstation_id: uuid.UUID
-    target_workstation_id: uuid.UUID
+    target_workstation_id: uuid.UUID | None
     token: str
     status: TransferStatus
     requires_package_burn: bool

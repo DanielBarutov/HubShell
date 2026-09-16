@@ -219,7 +219,14 @@ public sealed class WindowsCommandExecutor : IWorkstationCommandExecutor
         }
     }
 
-    private CommandExecutionResult RestartWorkstation() => _powerController.ScheduleRestart();
+    private CommandExecutionResult RestartWorkstation()
+    {
+        // A restart command may arrive before the source-side transfer poll has
+        // observed the server result. Lock and clear the client shell first so
+        // the machine never reboots while the account view remains unlocked.
+        _displayLockConsumer?.Invoke();
+        return _powerController.ScheduleRestart();
+    }
 
     private static string? ReadOptionalString(JsonElement payload, string propertyName)
     {

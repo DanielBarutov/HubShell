@@ -34,7 +34,7 @@ export function PanelHost() {
   return <>
     {ui.panel !== "sale" && <div className="panel-overlay" aria-hidden="true" onClick={close} />}
     {ui.panel !== "sale" && <aside className="right-panel open" role="dialog" aria-modal aria-label="Контекстная панель">
-      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={workspace.workstations} tariffs={workspace.tariffs} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
+      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={workspace.workstations} tariffs={workspace.tariffs} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id, clientId: selectedPc.clientId }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
       {ui.panel === "client" && selectedClient && <ClientPanel client={selectedClient} api={LIVE_MODE ? api : undefined} onClose={close} onSaved={refresh} onDeposit={() => openClientDeposit()} onBonusDeposit={() => openClientDeposit(selectedClient, true)} />}
       {ui.panel === "new-client" && LIVE_MODE && <NewClientPanel api={api} onClose={close} onSaved={refresh} />}
       {ui.panel === "deposit" && <DepositPanel initialClient={selectedClient ?? undefined} bonusOnly={ui.depositBonusOnly} onClose={close} onCompleted={refresh} clients={workspace.clients} api={LIVE_MODE ? api : undefined} />}
@@ -50,6 +50,6 @@ export function PanelHost() {
       {ui.panel === "cash-movement" && LIVE_MODE && ui.selectedCashShift && <CashMovementPanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
       {ui.panel === "cash-close" && LIVE_MODE && ui.selectedCashShift && <CashClosePanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
     </aside>}
-    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialProduct={ui.saleInitialProduct} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
+    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialClient={selectedClient} initialProduct={ui.saleInitialProduct} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
   </>;
 }

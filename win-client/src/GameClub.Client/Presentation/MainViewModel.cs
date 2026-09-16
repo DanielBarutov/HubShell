@@ -30,6 +30,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private WorkstationLockdownPolicySnapshot _lockdownPolicy =
         WorkstationLockdownPolicySnapshot.SafeDefault;
     private SessionSnapshot? _activeSession;
+    private int _portalResumeInFlight;
     private ClientPortalSnapshot? _portalSnapshot;
     private bool _isPortalRegistrationRequested;
     private string _portalIdentifier = string.Empty;
@@ -41,11 +42,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private string _portalPasswordSetupConfirmation = string.Empty;
     private bool _portalPasswordResetRequired;
     private string _portalMessage = string.Empty;
+    private string _workstationName = string.Empty;
     private string _transferTargetWorkstationId = string.Empty;
     private string _incomingTransferOfferId = string.Empty;
     private string _incomingTransferToken = string.Empty;
+    private string _transferOfferId = string.Empty;
+    private string _transferOfferToken = string.Empty;
     private string _sessionNotification = string.Empty;
     private bool _isTransferExpanded;
+    private bool _isTransferWaiting;
     private string? _portalSessionIdempotencyKey;
     private CancellationTokenSource? _sessionNotificationLifetime;
 
@@ -79,6 +84,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string ConnectionColor => IsOnline ? "#A8ED62" : "#E3A14E";
     public string? DeviceId { get; private set; }
     public string? WorkstationId { get; private set; }
+    public string WorkstationName => _workstationName;
     public string ClientVersion { get; }
     public IReadOnlyCollection<string> Capabilities { get; }
     public AccessMode AccessMode => _accessGate.Snapshot.Mode;
@@ -109,6 +115,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string AccessMessage => string.IsNullOrWhiteSpace(_portalMessage)
         ? _accessGate.Snapshot.Message
         : _portalMessage;
+    public bool IsAccessFeedbackVisible => !string.IsNullOrWhiteSpace(_portalMessage);
     public string AccessTitle => IsMaintenanceMode
         ? "Режим обслуживания"
         : IsWaitingForAssignment
@@ -273,7 +280,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string PortalContactSummary => _portalSnapshot is null
         ? string.Empty
         : _portalSnapshot.Phone;
-    public string CurrentWorkstationLabel => WorkstationId ?? DeviceId ?? "это место";
+    public string CurrentWorkstationLabel => string.IsNullOrWhiteSpace(WorkstationName)
+        ? "Игровое место"
+        : WorkstationName;
     public string PortalBalanceAmountSummary => _portalSnapshot is null
         ? string.Empty
         : FormatMoney(_portalSnapshot.BalanceCents);
@@ -289,22 +298,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string PortalAvailableTimeSummary => _portalSnapshot is null
         ? string.Empty
         : $"Осталось примерно {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
-    public IReadOnlyList<string> PortalBalanceHistory => _portalSnapshot?.BalanceOperations
-        .Select(operation =>
-            $"{operation.CreatedAt} · {operation.OperationType} · {FormatMoney(operation.AmountCents)} · {operation.Reason}")
-        .ToArray() ?? Array.Empty<string>();
-    public IReadOnlyList<string> PortalPurchaseHistory => _portalSnapshot?.Purchases
-        .Select(purchase =>
-            $"{purchase.CreatedAt} · {purchase.ProductName} × {purchase.Quantity} · {FormatMoney(purchase.TotalPriceCents)}")
-        .ToArray() ?? Array.Empty<string>();
-    public IReadOnlyList<string> PortalChargeHistory => _portalSnapshot?.Charges
-        .Select(charge =>
-            $"{charge.CreatedAt} · {charge.TariffName ?? "тариф"} · списание времени · {FormatMoney(charge.AmountCents)} · {charge.DurationMinutes} мин")
-        .ToArray() ?? Array.Empty<string>();
-    public IReadOnlyList<string> PortalSessionHistory => _portalSnapshot?.Sessions
-        .Select(session =>
-            $"{session.StartedAt} · место {session.WorkstationId} · тариф {session.TariffName ?? session.TariffId ?? "—"} × {session.TariffQuantity} · {session.Status}")
-        .ToArray() ?? Array.Empty<string>();
+    public IReadOnlyList<string> PortalBalanceHistory => _portalSnapshot is null
+        ? Array.Empty<string>()
+        : ClientPortalHistoryFormatter.FormatBalanceOperations(_portalSnapshot);
+    public IReadOnlyList<string> PortalPurchaseHistory => _portalSnapshot is null
+        ? Array.Empty<string>()
+        : ClientPortalHistoryFormatter.FormatPurchases(_portalSnapshot);
+    public IReadOnlyList<string> PortalChargeHistory => _portalSnapshot is null
+        ? Array.Empty<string>()
+        : ClientPortalHistoryFormatter.FormatCharges(_portalSnapshot);
+    public IReadOnlyList<string> PortalSessionHistory => _portalSnapshot is null
+        ? Array.Empty<string>()
+        : ClientPortalHistoryFormatter.FormatSessions(_portalSnapshot);
     public IReadOnlyList<string> PortalEntitlementQueue => _portalSnapshot?.Entitlements
         .OrderBy(item => item.QueuePosition)
         .Select(item =>
@@ -324,8 +329,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         CurrentWorkstationLabel);
     public bool IsTransferPanelVisible => _isTransferExpanded && !_portalPasswordResetRequired;
     public string TransferToggleLabel => _isTransferExpanded
-        ? "Свернуть перенос"
+        ? _isTransferWaiting ? "Ожидаем вход на новом ПК" : "Свернуть перенос"
         : "Перенести сессию на другой ПК";
+    public bool IsTransferWaiting => _isTransferWaiting;
     public bool CanActivatePortalEntitlement => _portalSnapshot?.Entitlements
         .Any(item => item.Status == "queued") == true
         && !string.IsNullOrWhiteSpace(DeviceId)
@@ -426,7 +432,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool CanCreateTransferOffer => _activeSession is not null
         && !_portalPasswordResetRequired
         && !string.IsNullOrWhiteSpace(DeviceId)
-        && !string.IsNullOrWhiteSpace(_transferTargetWorkstationId);
+        && !_isTransferWaiting;
     public bool CanConfirmTransfer => !string.IsNullOrWhiteSpace(DeviceId)
         && !string.IsNullOrWhiteSpace(_incomingTransferOfferId)
         && !string.IsNullOrWhiteSpace(_incomingTransferToken);
@@ -523,7 +529,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(AccessSubtitle));
     }
 
-    public void SetDeviceIdentity(string deviceId, string? workstationId = null)
+    public void SetDeviceIdentity(
+        string deviceId,
+        string? workstationId = null,
+        string? workstationName = null)
     {
         var normalized = deviceId.Trim();
         if (string.IsNullOrWhiteSpace(normalized))
@@ -547,7 +556,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(WorkstationId));
         }
 
-        if (deviceChanged || workstationChanged)
+        var normalizedWorkstationName = workstationName?.Trim();
+        var workstationNameChanged = string.IsNullOrWhiteSpace(WorkstationName)
+            && !string.IsNullOrWhiteSpace(normalizedWorkstationName);
+        if (workstationNameChanged)
+        {
+            _workstationName = normalizedWorkstationName!;
+            OnPropertyChanged(nameof(WorkstationName));
+        }
+
+        if (deviceChanged || workstationChanged || workstationNameChanged)
         {
             OnPropertyChanged(nameof(DeviceStatus));
             OnPropertyChanged(nameof(CurrentWorkstationLabel));
@@ -557,6 +575,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(CanCreateTransferOffer));
             OnPropertyChanged(nameof(CanConfirmTransfer));
         }
+    }
+
+    public void ApplyWorkstationName(string workstationName)
+    {
+        var normalized = workstationName.Trim();
+        if (string.IsNullOrWhiteSpace(normalized)
+            || string.Equals(WorkstationName, normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _workstationName = normalized;
+        OnPropertyChanged(nameof(WorkstationName));
+        OnPropertyChanged(nameof(CurrentWorkstationLabel));
+        OnPropertyChanged(nameof(DeviceStatus));
+        OnPropertyChanged(nameof(UpcomingBookingTitle));
+        OnPropertyChanged(nameof(UpcomingBookingDetails));
     }
 
     public async Task RunHeartbeatLoopAsync()
@@ -634,6 +669,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 PortalPassword,
                 DeviceId,
                 _lifetime.Token);
+            var transferred = await TryClaimPendingTransferAsync(authentication.Snapshot.ClientId);
+            if (transferred is not null)
+            {
+                _activeSession = transferred.Session;
+                PublishSessionState();
+                _portalPasswordResetRequired = authentication.PasswordResetRequired;
+                PortalPasswordSetup = string.Empty;
+                PortalPasswordSetupConfirmation = string.Empty;
+                SetPortalSnapshot(authentication.Snapshot);
+                _accessGate.OpenUserSession("Сессия перенесена на этот ПК");
+                _portalMessage = string.Empty;
+                PortalPassword = string.Empty;
+                PublishAccessState();
+                return true;
+            }
             if (!await EnsureEntryAllowedAsync(authentication.Snapshot.ClientId))
             {
                 return false;
@@ -822,6 +872,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
+        catch (DeviceAuthenticationRequiredException)
+        {
+            if (_activeSession?.ClientId is not null && !IsAccessLocked)
+            {
+                await ResumePortalSessionQuietlyAsync(_activeSession.Id);
+            }
+        }
         catch (Exception)
         {
             _portalMessage = "История временно недоступна";
@@ -930,6 +987,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public void LockClient(string message = "Экран заблокирован")
     {
+        _activeSession = null;
         _clientPortal.Logout();
         _portalSnapshot = null;
         _portalPasswordResetRequired = false;
@@ -940,6 +998,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _isManagerLoginRequested = false;
         UserAccessCode = string.Empty;
         ManagerPassword = string.Empty;
+        PublishSessionState();
         PublishAccessState();
         PublishPortalState();
     }
@@ -1015,8 +1074,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         var activeSession = _activeSession;
         var deviceId = DeviceId;
-        var target = _transferTargetWorkstationId.Trim();
-        if (activeSession is null || string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(target))
+        if (activeSession is null
+            || string.IsNullOrWhiteSpace(deviceId)
+            || _isTransferWaiting)
         {
             return false;
         }
@@ -1025,15 +1085,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             var offer = await _session.BackendClient.CreateTransferOfferAsync(
                 activeSession.Id,
-                target,
-                deviceId,
-                $"win-transfer-{Guid.NewGuid():N}",
-                cancellationToken);
-            IncomingTransferOfferId = offer.Id;
-            IncomingTransferToken = offer.Token;
-            ShowSessionNotification(offer.RequiresPackageBurn
-                ? $"Перенос подготовлен. Внимание: пакет будет сожжён при подтверждении. Код: {offer.Token}"
-                : $"Перенос подготовлен. Передайте на новый ПК ID {offer.Id} и код {offer.Token}");
+                targetWorkstationId: null,
+                deviceId: deviceId,
+                idempotencyKey: $"win-transfer-{Guid.NewGuid():N}",
+                cancellationToken: cancellationToken);
+            _transferOfferId = offer.Id;
+            _transferOfferToken = offer.Token;
+            _isTransferWaiting = true;
+            OnPropertyChanged(nameof(IsTransferWaiting));
+            OnPropertyChanged(nameof(CanCreateTransferOffer));
+            OnPropertyChanged(nameof(TransferToggleLabel));
+            ShowSessionNotification(
+                "Перенос запущен. Войдите в этот же аккаунт на новом ПК — активная сессия и доступное время перейдут автоматически.");
+            TrackBackgroundTask(WaitForTransferCompletionAsync(_lifetime.Token));
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1045,6 +1109,106 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             ShowSessionNotification("Не удалось подготовить перенос: проверьте целевое место и повторите.");
             return false;
         }
+    }
+
+    private async Task<SessionTransferResultSnapshot?> TryClaimPendingTransferAsync(string clientId)
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId) || string.IsNullOrWhiteSpace(WorkstationId))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _session.BackendClient.ClaimPendingTransferAsync(
+                clientId,
+                WorkstationId,
+                DeviceId,
+                $"win-transfer-claim-{Guid.NewGuid():N}",
+                _lifetime.Token);
+        }
+        catch (RpcException error) when (
+            error.StatusCode is StatusCode.NotFound or StatusCode.FailedPrecondition or StatusCode.Aborted)
+        {
+            return null;
+        }
+        catch (Exception)
+        {
+            // A failed claim must not block an ordinary login. The next login
+            // attempt can claim the still-pending offer.
+            return null;
+        }
+    }
+
+    private async Task WaitForTransferCompletionAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (_isTransferWaiting
+                && !string.IsNullOrWhiteSpace(DeviceId)
+                && !string.IsNullOrWhiteSpace(_transferOfferId)
+                && !string.IsNullOrWhiteSpace(_transferOfferToken)
+                && await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    var offer = await _session.BackendClient.GetTransferOfferAsync(
+                        _transferOfferId,
+                        DeviceId,
+                        _transferOfferToken,
+                        cancellationToken);
+                    if (offer.Status.Equals("confirmed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        CompleteSourceTransfer();
+                        return;
+                    }
+
+                    if (offer.Status.Equals("expired", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _isTransferWaiting = false;
+                        _transferOfferId = string.Empty;
+                        _transferOfferToken = string.Empty;
+                        OnPropertyChanged(nameof(IsTransferWaiting));
+                        OnPropertyChanged(nameof(CanCreateTransferOffer));
+                        OnPropertyChanged(nameof(TransferToggleLabel));
+                        ShowSessionNotification("Время ожидания переноса истекло. Попробуйте ещё раз.");
+                        return;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception)
+                {
+                    // The source remains in the waiting state until the server
+                    // confirms or expires the offer.
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void CompleteSourceTransfer()
+    {
+        _isTransferWaiting = false;
+        _transferOfferId = string.Empty;
+        _transferOfferToken = string.Empty;
+        _activeSession = null;
+        _portalSessionIdempotencyKey = null;
+        _clientPortal.Logout();
+        _portalSnapshot = null;
+        _portalPasswordResetRequired = false;
+        _accessGate.LockSession("Сессия перенесена на новый ПК. Этот экран будет перезапущен.");
+        PublishSessionState();
+        PublishPortalState();
+        PublishAccessState();
+        OnPropertyChanged(nameof(IsTransferWaiting));
+        OnPropertyChanged(nameof(CanCreateTransferOffer));
+        OnPropertyChanged(nameof(TransferToggleLabel));
     }
 
     public async Task<bool> ConfirmTransferAsync(CancellationToken cancellationToken = default)
@@ -1078,13 +1242,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            ShowSessionNotification("Не удалось подтвердить перенос: проверьте ID предложения и код.");
+            ShowSessionNotification("Не удалось подтвердить перенос. Повторите вход на новом ПК.");
             return false;
         }
     }
 
     public Task RunWorkstationHeartbeatLoopAsync(
         Action<string>? onThemeReceived = null,
+        Action<string>? onWorkstationNameReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
         Action<SessionSnapshot>? onSessionSnapshotReceived = null,
@@ -1096,6 +1261,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ClientVersion,
                 Capabilities,
                 onThemeReceived,
+                onWorkstationNameReceived,
                 onManagerPasswordVerifierReceived,
                 onLockdownPolicyReceived,
                 onSessionSnapshotReceived,
@@ -1141,6 +1307,58 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             || _activeSession.Id.Equals(snapshot.Id, StringComparison.Ordinal))
         {
             ApplyActiveSessionSnapshot(snapshot);
+            if (snapshot.ClientId is not null
+                && _portalSnapshot is null
+                && !IsMaintenanceMode
+                && !string.IsNullOrWhiteSpace(DeviceId))
+            {
+                _ = ResumePortalSessionQuietlyAsync(snapshot.Id);
+            }
+        }
+    }
+
+    private async Task ResumePortalSessionQuietlyAsync(string sessionId)
+    {
+        if (Interlocked.Exchange(ref _portalResumeInFlight, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_activeSession?.Id != sessionId
+                || _portalSnapshot is not null
+                || string.IsNullOrWhiteSpace(DeviceId))
+            {
+                return;
+            }
+
+            var authentication = await _clientPortal.ResumeAsync(
+                DeviceId,
+                _lifetime.Token);
+            if (authentication is null
+                || _activeSession?.Id != sessionId
+                || _portalSnapshot is not null)
+            {
+                return;
+            }
+
+            _portalPasswordResetRequired = authentication.PasswordResetRequired;
+            SetPortalSnapshot(authentication.Snapshot);
+            _portalMessage = string.Empty;
+            _accessGate.OpenUserSession("Сессия восстановлена");
+            PublishAccessState();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            // Heartbeat will retry resume after a transient backend/network error.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _portalResumeInFlight, 0);
         }
     }
 
@@ -1244,8 +1462,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         await _session.DisposeAsync();
     }
 
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        if (propertyName == nameof(AccessMessage))
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAccessFeedbackVisible)));
+        }
+    }
 
     private void PublishAccessState()
     {
@@ -1314,6 +1538,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         return hours > 0 ? $"{hours} ч {remainder} мин" : $"{remainder} мин";
     }
 
+    private static string FormatHistoryTimestamp(string value)
+    {
+        if (!DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var timestamp))
+        {
+            return value;
+        }
+
+        return timestamp.ToLocalTime().ToString(
+            "dd.MM.yyyy HH:mm",
+            CultureInfo.GetCultureInfo("ru-RU"));
+    }
+
     private void PublishSessionState()
     {
         OnPropertyChanged(nameof(IsActiveSessionVisible));
@@ -1324,6 +1564,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(CurrentSessionTariffSummary));
         OnPropertyChanged(nameof(CanCreateTransferOffer));
         OnPropertyChanged(nameof(CanConfirmTransfer));
+        OnPropertyChanged(nameof(IsTransferWaiting));
+        OnPropertyChanged(nameof(TransferToggleLabel));
     }
 
     private void ApplyActiveSessionSnapshot(SessionSnapshot snapshot)
@@ -1449,11 +1691,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void ApplySessionStopPolicy()
     {
+        _clientPortal.Logout();
+        _portalSnapshot = null;
+        _portalPasswordResetRequired = false;
+        PortalPasswordSetup = string.Empty;
+        PortalPasswordSetupConfirmation = string.Empty;
+        _portalSessionIdempotencyKey = null;
+
         if (_lockdownPolicy.LockAfterSession)
         {
             _accessGate.LockSession("Сессия завершена. Введите код для нового входа");
             PublishAccessState();
         }
+
+        PublishPortalState();
 
         if (_lockdownPolicy.RestartAfterSession)
         {

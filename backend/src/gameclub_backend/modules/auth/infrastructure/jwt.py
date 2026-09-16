@@ -20,7 +20,7 @@ class JwtTokenService:
     def issue_access_token(self, principal: Principal) -> tuple[str, int]:
         now = datetime.datetime.now(datetime.UTC)
         expires_at = now + datetime.timedelta(seconds=self._settings.jwt_access_ttl_seconds)
-        payload = {
+        payload: dict[str, object] = {
             "sub": principal.subject_id,
             "subject_type": principal.subject_type.value,
             "roles": sorted(principal.roles),

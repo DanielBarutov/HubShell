@@ -296,6 +296,80 @@ async def test_guest_tariff_requires_confirmed_direct_payment_before_session_sta
     assert (await cash_shifts.get(shift.id)).expected_close_cents == 250
 
 
+async def test_tariffs_are_scoped_to_workstation_group_on_listing_and_session_start() -> None:
+    catalog = CatalogService(InMemoryCatalogRepository())
+    now = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+    global_tariff = await catalog.create_tariff("Global", None, 60, 100, now, None)
+    vip_tariff = await catalog.create_tariff("VIP", "VIP", 60, 200, now, None)
+    main_tariff = await catalog.create_tariff("Main", "main", 60, 150, now, None)
+
+    listed = await catalog.list_tariffs_for_group("vip")
+    assert {item.id for item in listed} == {global_tariff.id, vip_tariff.id}
+
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations).register(
+        "zone-device",
+        "Zone PC",
+        group_id="vip",
+    )
+    clients = InMemoryClientRepository()
+    client = await ClientService(clients).create("ZoneFox")
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations,
+        clients=clients,
+        tariffs=catalog,
+    )
+
+    with pytest.raises(ApplicationError) as error:
+        await sessions.start(
+            workstation.id,
+            created_by="operator",
+            client_id=client.id,
+            tariff_id=main_tariff.id,
+        )
+    assert error.value.code is ErrorCode.CONFLICT
+
+
+async def test_guest_payment_rejects_tariff_from_another_workstation_group() -> None:
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations).register(
+        "payment-zone-device",
+        "Payment Zone PC",
+        group_id="main",
+    )
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "VIP package",
+        "vip",
+        60,
+        250,
+        datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        None,
+    )
+    cash_shifts = CashShiftService(InMemoryCashShiftRepository())
+    shift = await cash_shifts.open("zone-register", 0, "operator", "zone-payment-shift")
+    payments = GuestSessionPaymentService(
+        InMemoryGuestSessionPaymentRepository(),
+        tariffs=catalog,
+        cash=CashShiftGuestPaymentSettlement(cash_shifts),
+        workstations=workstations,
+    )
+
+    with pytest.raises(ApplicationError) as error:
+        await payments.confirm(
+            workstation_id=workstation.id,
+            tariff_id=tariff.id,
+            tariff_quantity=1,
+            guest_name="Гость",
+            actor_id="operator",
+            idempotency_key="zone-payment-mismatch",
+            cash_shift_id=shift.id,
+            payment_parts=[{"method": "cash", "amount_cents": 250}],
+        )
+    assert error.value.code is ErrorCode.CONFLICT
+
+
 async def test_guest_profile_search_and_booking_session_links() -> None:
     guest_repository = InMemoryGuestRepository()
     guest_service = GuestService(guest_repository)

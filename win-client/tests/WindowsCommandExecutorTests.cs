@@ -51,6 +51,29 @@ public sealed class WindowsCommandExecutorTests
     }
 
     [Fact]
+    public async Task RestartLocksClientShellBeforeSchedulingPowerAction()
+    {
+        var events = new List<string>();
+        var executor = new WindowsCommandExecutor(
+            powerController: new RecordingPowerController(() => events.Add("restart")),
+            displayLockConsumer: () => events.Add("lock"));
+        var command = new WorkstationCommandSnapshot(
+            "command-1",
+            "workstation-1",
+            "system.restart",
+            "{}",
+            "restart-1",
+            string.Empty,
+            string.Empty,
+            string.Empty);
+
+        var result = await executor.ExecuteAsync(command);
+
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "lock", "restart" }, events);
+    }
+
+    [Fact]
     public async Task StartSessionRequiresAuthoritativeEntryDecision()
     {
         var gateway = new EntryDecisionGateway(new EntryDecisionSnapshot(
@@ -122,7 +145,7 @@ public sealed class WindowsCommandExecutorTests
 
         public Task<SessionTransferOfferSnapshot> CreateTransferOfferAsync(
             string sessionId,
-            string targetWorkstationId,
+            string? targetWorkstationId,
             string deviceId,
             string idempotencyKey,
             CancellationToken cancellationToken = default) =>
@@ -139,6 +162,14 @@ public sealed class WindowsCommandExecutorTests
             string offerId,
             string deviceId,
             string token,
+            string idempotencyKey,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<SessionTransferResultSnapshot> ClaimPendingTransferAsync(
+            string clientId,
+            string workstationId,
+            string deviceId,
             string idempotencyKey,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -162,5 +193,18 @@ public sealed class WindowsCommandExecutorTests
                 string.Empty,
                 string.Empty,
                 DeviceId: deviceId);
+    }
+
+    private sealed class RecordingPowerController : IWorkstationPowerController
+    {
+        private readonly Action _onRestart;
+
+        public RecordingPowerController(Action onRestart) => _onRestart = onRestart;
+
+        public CommandExecutionResult ScheduleRestart()
+        {
+            _onRestart();
+            return new CommandExecutionResult(true, "restart scheduled");
+        }
     }
 }

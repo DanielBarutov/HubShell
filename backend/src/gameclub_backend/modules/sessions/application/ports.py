@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import datetime
 import typing
 import uuid
@@ -30,10 +31,10 @@ class SessionRepository(typing.Protocol):
         self,
         workstation_id: uuid.UUID | None = None,
         active_only: bool = False,
-    ) -> list[Session]:
+    ) -> builtins.list[Session]:
         """Return sessions for operator display."""
 
-    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> list[Session]:
+    async def list_for_client(self, client_id: uuid.UUID, limit: int) -> builtins.list[Session]:
         """Return recent sessions belonging to one client."""
 
     async def save(self, session: Session) -> Session:
@@ -47,15 +48,11 @@ class SessionTransferRepository(typing.Protocol):
     async def get_by_idempotency_key(self, key: str) -> SessionTransferOffer | None:
         """Return an offer created by the same request key."""
 
+    async def get_pending_for_client(self, client_id: uuid.UUID) -> SessionTransferOffer | None:
+        """Return the newest pending transfer request for one client."""
+
     async def save(self, offer: SessionTransferOffer) -> SessionTransferOffer:
         """Persist an offer transition idempotently."""
-
-    async def commit_transfer(
-        self,
-        offer: SessionTransferOffer,
-        session: Session,
-    ) -> tuple[SessionTransferOffer, Session]:
-        """Commit offer confirmation and session ownership in one owner transaction."""
 
 
 class WorkstationLookup(typing.Protocol):

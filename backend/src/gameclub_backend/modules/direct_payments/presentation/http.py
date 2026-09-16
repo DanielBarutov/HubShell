@@ -42,7 +42,7 @@ class GuestSessionPaymentResponse(BaseModel):
     idempotency_key: str
     created_at: str
     attempts: int
-    next_attempt_at: str
+    next_attempt_at: str | None
     settlement_error: str | None
 
     @classmethod
@@ -68,7 +68,9 @@ class GuestSessionPaymentResponse(BaseModel):
             idempotency_key=payment.idempotency_key,
             created_at=payment.created_at.isoformat(),
             attempts=payment.attempts,
-            next_attempt_at=payment.next_attempt_at.isoformat(),
+            next_attempt_at=(
+                payment.next_attempt_at.isoformat() if payment.next_attempt_at is not None else None
+            ),
             settlement_error=payment.settlement_error,
         )
 

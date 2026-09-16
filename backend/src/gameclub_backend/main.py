@@ -1,6 +1,7 @@
 import asyncio
 import signal
 
+from gameclub_backend.bootstrap import build_application_services
 from gameclub_backend.config import get_settings
 from gameclub_backend.infrastructure.resources import create_resources
 from gameclub_backend.presentation.grpc.server import create_server
@@ -9,7 +10,8 @@ from gameclub_backend.presentation.grpc.server import create_server
 async def serve() -> None:
     settings = get_settings()
     resources = create_resources(settings)
-    server = create_server(settings, resources)
+    services = build_application_services(settings, resources)
+    server = create_server(settings, resources, services)
     await server.start()
     shutdown_event = asyncio.Event()
     loop = asyncio.get_running_loop()

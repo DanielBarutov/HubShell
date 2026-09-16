@@ -19,7 +19,7 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("sessions.man
 
 class CreateTransferOfferRequest(BaseModel):
     session_id: uuid.UUID
-    target_workstation_id: uuid.UUID
+    target_workstation_id: uuid.UUID | None = None
 
 
 class TransferOfferResponse(BaseModel):
@@ -27,7 +27,7 @@ class TransferOfferResponse(BaseModel):
     session_id: uuid.UUID
     client_id: uuid.UUID
     source_workstation_id: uuid.UUID
-    target_workstation_id: uuid.UUID
+    target_workstation_id: uuid.UUID | None
     token: str
     status: str
     requires_package_burn: bool

@@ -6,4 +6,5 @@ public sealed record WorkstationHeartbeatSnapshot(
     string Theme,
     string ManagerPasswordVerifier = "",
     WorkstationLockdownPolicySnapshot? LockdownPolicy = null,
-    SessionSnapshot? SessionSnapshot = null);
+    SessionSnapshot? SessionSnapshot = null,
+    string WorkstationName = "");

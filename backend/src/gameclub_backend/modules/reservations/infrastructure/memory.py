@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import datetime
 import uuid
 
@@ -24,7 +25,7 @@ class InMemoryReservationRepository:
         self,
         start_at: datetime.datetime,
         end_at: datetime.datetime,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         return sorted(
             (item for item in self._items.values() if item.overlaps(start_at, end_at)),
             key=lambda item: item.start_at,
@@ -35,7 +36,7 @@ class InMemoryReservationRepository:
         client_id: uuid.UUID,
         start_at: datetime.datetime,
         limit: int,
-    ) -> list[Reservation]:
+    ) -> builtins.list[Reservation]:
         return sorted(
             (
                 item
@@ -47,7 +48,10 @@ class InMemoryReservationRepository:
             key=lambda item: (item.start_at, str(item.id)),
         )[:limit]
 
-    async def list_pending_no_show(self, cutoff_at: datetime.datetime) -> list[Reservation]:
+    async def list_pending_no_show(
+        self,
+        cutoff_at: datetime.datetime,
+    ) -> builtins.list[Reservation]:
         return sorted(
             (
                 item

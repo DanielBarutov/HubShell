@@ -69,10 +69,14 @@ public sealed class LocalBackendClientHost : IClientHost
             return;
         }
 
-        ViewModel.SetDeviceIdentity(_enrollment.DeviceId, _enrollment.WorkstationId);
+        ViewModel.SetDeviceIdentity(
+            _enrollment.DeviceId,
+            _enrollment.WorkstationId,
+            _enrollment.WorkstationName);
         ViewModel.TrackBackgroundTask(
             ViewModel.RunWorkstationHeartbeatLoopAsync(
                 ViewModel.ApplyTheme,
+                ViewModel.ApplyWorkstationName,
                 ViewModel.ApplyManagerPasswordVerifier,
                 ViewModel.ApplyLockdownPolicy,
                 ViewModel.ApplySessionSnapshotFromHeartbeat,

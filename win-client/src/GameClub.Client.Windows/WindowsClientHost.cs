@@ -78,7 +78,10 @@ public sealed class WindowsClientHost : IClientHost
             return;
         }
 
-        ViewModel.SetDeviceIdentity(_enrollment.DeviceId, _enrollment.WorkstationId);
+        ViewModel.SetDeviceIdentity(
+            _enrollment.DeviceId,
+            _enrollment.WorkstationId,
+            _enrollment.WorkstationName);
         var deviceId = ViewModel.DeviceId;
         if (string.IsNullOrWhiteSpace(deviceId))
         {
@@ -88,6 +91,7 @@ public sealed class WindowsClientHost : IClientHost
         ViewModel.TrackBackgroundTask(
             ViewModel.RunWorkstationHeartbeatLoopAsync(
                 ViewModel.ApplyTheme,
+                ViewModel.ApplyWorkstationName,
                 ViewModel.ApplyManagerPasswordVerifier,
                 ViewModel.ApplyLockdownPolicy,
                 ViewModel.ApplySessionSnapshotFromHeartbeat,

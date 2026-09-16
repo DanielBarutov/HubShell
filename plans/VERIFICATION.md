@@ -1,6 +1,6 @@
 # Verification matrix
 
-Дата последней проверки: `2026-09-13`.
+Дата последней проверки: `2026-09-15`.
 
 Документ разделяет фактически проверенное поведение и то, что пока подтверждено
 только исходниками или требует другой платформы.
@@ -27,6 +27,7 @@
 | Live metered sessions | per-minute tariff, tariff-configured free minutes, separate device login-grant subtraction, package consumption/auto-next, local time-window eligibility, delta debit, insufficient-balance stop и session meter persistence | успешно на source/unit slice; PostgreSQL DSN suite включает locked package delta и offline duplicate debit | cross-repository settlement UoW и fault injection не доказаны |
 | Operator map quick operations | карта как главный экран, PC context menu, tariff mini-cards, guest/client selection, inline product sale and top-up | успешно | Playwright headed smoke на локальном Compose; device command runtime требует Windows |
 | Product contract audit | сравнение backend/frontend/win-client product contracts с кодом, CODEX и планами; implementation progress зафиксирован в плане 29 и планах 31–37 | source/unit + Compose/HTTP/gRPC/headed slice реализован; DSN suite добавила package/transfer/offline/settlement evidence; 11 subitems сведены в `EVIDENCE-20260902.md` | native Windows/kiosk, full browser/accessibility matrix и production security evidence остаются незакрыты |
+| Session recovery and tariff zones | heartbeat active-session snapshot, device-authenticated gRPC `Resume`, Win-client resume wiring, operator `group_id` tariff query, Win portal scoped snapshot, session/guest-payment backend guards | targeted HTTP/unit/gRPC checks и frontend production build успешно; backend suite: `145 passed, 18 skipped`, плюс 6 pre-existing contract-layout failures в dirty checkout | C# compilation и native Windows restart/power-loss/reconnect smoke требуют Windows/.NET окружения; operator management catalog намеренно остаётся unscoped |
 
 Сборка и startup diagnostics: [../win-client/docs/WINDOWS-BUILD-AND-RUN.md](../win-client/docs/WINDOWS-BUILD-AND-RUN.md).
 Функциональный smoke: [../win-client/docs/REAL-PC-VERIFICATION.md](../win-client/docs/REAL-PC-VERIFICATION.md).

@@ -150,6 +150,7 @@ public sealed class ClientSessionCoordinator
         string clientVersion,
         IReadOnlyCollection<string> capabilities,
         Action<string>? onThemeReceived = null,
+        Action<string>? onWorkstationNameReceived = null,
         Action<string>? onManagerPasswordVerifierReceived = null,
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
         Action<SessionSnapshot>? onSessionSnapshotReceived = null,
@@ -171,6 +172,10 @@ public sealed class ClientSessionCoordinator
                 if (!string.IsNullOrWhiteSpace(heartbeat.Theme))
                 {
                     onThemeReceived?.Invoke(heartbeat.Theme);
+                }
+                if (!string.IsNullOrWhiteSpace(heartbeat.WorkstationName))
+                {
+                    onWorkstationNameReceived?.Invoke(heartbeat.WorkstationName);
                 }
                 if (!string.IsNullOrWhiteSpace(heartbeat.ManagerPasswordVerifier))
                 {

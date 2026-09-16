@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import uuid
@@ -148,8 +147,7 @@ class WorkstationCommandService:
 
     async def wait_for_commands(self, device_id: str, wait_seconds: float = 15.0) -> None:
         try:
-            async with asyncio.timeout(wait_seconds):
-                await self._notifier.wait(device_id.strip())
+            await self._notifier.wait(device_id.strip(), wait_seconds)
         except TimeoutError:
             return
 

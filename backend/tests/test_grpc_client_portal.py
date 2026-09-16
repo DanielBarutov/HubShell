@@ -26,6 +26,10 @@ from gameclub_backend.modules.sales.application.service import ProductSaleServic
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
+from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.infrastructure.memory import (
+    InMemoryWorkstationRepository,
+)
 from gameclub_backend.presentation.grpc.services import ClientPortalGrpcService
 
 
@@ -51,7 +55,39 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
         datetime.datetime.now(datetime.UTC),
         None,
     )
+    main_tariff = await catalog.create_tariff(
+        "Обычный пакет",
+        "main",
+        180,
+        2_800,
+        datetime.datetime.now(datetime.UTC),
+        None,
+    )
+    await catalog.create_tariff(
+        "VIP пакет",
+        "vip",
+        180,
+        4_000,
+        datetime.datetime.now(datetime.UTC),
+        None,
+    )
+    await catalog.create_tariff(
+        "Обычный поминутный",
+        "main",
+        1,
+        0,
+        datetime.datetime.now(datetime.UTC),
+        None,
+        billing_mode="per_minute",
+        price_per_minute_cents=100,
+    )
     session_repository = InMemorySessionRepository()
+    workstation_repository = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstation_repository).register(
+        "device-01",
+        "Portal PC",
+        group_id=None,
+    )
     reservation_repository = InMemoryReservationRepository()
     sales = ProductSaleService(
         InMemoryProductSaleRepository(),
@@ -71,6 +107,7 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
         sales=sales,
         tariffs=catalog,
         entitlements=entitlement_service,
+        workstations=workstation_repository,
         reservations=reservation_repository,
     )
 
@@ -153,6 +190,25 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
                 tariff_id=tariff.id,
             )
         )
+        await session_repository.save(
+            Session(
+                id=uuid.uuid4(),
+                workstation_id=workstation.id,
+                client_id=uuid.UUID(registered.snapshot.client.id),
+                guest_name=None,
+                status=SessionStatus.ACTIVE,
+                started_at=datetime.datetime.now(datetime.UTC),
+                ended_at=None,
+                source="device",
+                created_by="test",
+                created_at=datetime.datetime.now(datetime.UTC),
+                tariff_id=tariff.id,
+            )
+        )
+        resumed = await client.Resume(
+            clients_pb2.ResumePortalRequest(device_id="device-01"),
+            metadata=(("authorization", f"Bearer {device_token}"),),
+        )
         snapshot = await client.Get(
             clients_pb2.GetPortalRequest(device_id="device-01"),
             metadata=(("authorization", f"Bearer {registered.access_token}"),),
@@ -201,6 +257,8 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
 
     assert registered.snapshot.client.nickname == "NightFox"
     assert renewed.access_token != registered.access_token
+    assert resumed.resumed is True
+    assert resumed.snapshot.client.id == registered.snapshot.client.id
     assert renewed.snapshot.client.id == registered.snapshot.client.id
     assert snapshot.client.id == registered.snapshot.client.id
     assert snapshot.available_time_minutes == 0
@@ -210,6 +268,8 @@ async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
     assert len(snapshot.reservations) == 1
     assert snapshot.reservations[0].workstation_ids == ["00000000-0000-0000-0000-000000000009"]
     assert snapshot.tariffs[0].name == "Ночной тариф"
+    assert {item.name for item in snapshot.tariffs} == {"Ночной тариф", "Обычный пакет"}
+    assert main_tariff.id in {uuid.UUID(item.id) for item in snapshot.tariffs}
     assert activated.entitlements[0].status == "active"
     assert error.value.code() is grpc.StatusCode.PERMISSION_DENIED
     assert passwordless.password_reset_required is True

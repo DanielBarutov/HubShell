@@ -28,7 +28,7 @@ def _parse_sweep_time(value: str | None) -> datetime.datetime:
     return parsed
 
 
-@dramatiq.actor(queue_name="reservations", max_retries=3)
+@dramatiq.actor(queue_name="reservations", max_retries=3)  # type: ignore[arg-type]
 async def sweep_reservation_no_shows(now_iso: str | None = None) -> None:
     """Mark reservations past their grace period; safe to run repeatedly."""
     settings = get_settings()

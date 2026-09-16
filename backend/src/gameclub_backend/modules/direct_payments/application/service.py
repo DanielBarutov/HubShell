@@ -13,12 +13,14 @@ from gameclub_backend.modules.direct_payments.application.ports import (
     Clock,
     GuestSessionPaymentRepository,
     TariffLookup,
+    WorkstationLookup,
 )
 from gameclub_backend.modules.direct_payments.domain import (
     DirectPaymentStatus,
     GuestSessionPayment,
 )
 from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
+from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
 
 
 class UtcClock:
@@ -34,12 +36,14 @@ class GuestSessionPaymentService:
         cash: CashDirectSettlement,
         clock: Clock | None = None,
         audit: AuditRepository | None = None,
+        workstations: WorkstationLookup | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
         self._cash = cash
         self._clock = clock or UtcClock()
         self._audit = audit
+        self._workstations = workstations
         self._reconciliation_lock = asyncio.Lock()
 
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment:
@@ -95,6 +99,19 @@ class GuestSessionPaymentService:
         tariff = await self._tariffs.get_tariff(tariff_id)
         if tariff is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
+        if self._workstations is not None:
+            workstation = await self._workstations.get(workstation_id)
+            if workstation is None:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+            if (
+                tariff.group_id is not None
+                and tariff.group_id.strip().lower()
+                != effective_workstation_group_id(workstation.group_id)
+            ):
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Tariff is incompatible with this workstation zone",
+                )
         if not tariff.active or tariff.price_cents <= 0:
             raise ApplicationError(ErrorCode.CONFLICT, "Tariff is not payable as a guest package")
         try:
@@ -177,6 +194,11 @@ class GuestSessionPaymentService:
                 part.amount_cents for part in payment.payment_parts if part.method == "cash"
             )
             if cash_amount_cents:
+                if payment.cash_shift_id is None:
+                    raise ApplicationError(
+                        ErrorCode.INVALID_ARGUMENT,
+                        "Cash payment requires a cash shift",
+                    )
                 await self._cash.settle(
                     shift_id=payment.cash_shift_id,
                     amount_cents=cash_amount_cents,
