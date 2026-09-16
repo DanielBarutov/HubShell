@@ -357,14 +357,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             : _activeSession.ActiveTariff is not null
                 && _activeSession.ActiveTariff.BillingMode == "per_minute"
                 && _activeSession.BalanceRemainingMinutes is not null
-                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)} по балансу"
+                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
             : _activeSession.ActiveTariff is not null
                 ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
             : _activeSession.LoginGrantRemainingMinutes > 0
                 ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
             : _activeSession.Meter is not null
                 && _activeSession.BalanceRemainingMinutes is not null
-                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)} по балансу"
+                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
             : _activeSession.Meter is not null
                 ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
                 : "Время обновляется сервером";
