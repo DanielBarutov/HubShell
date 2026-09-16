@@ -26,6 +26,7 @@ dev = [
     "mypy>=1.14,<2",
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.25,<1",
+    "pytest-cov>=7.1.0",
     "ruff>=0.9,<1",
 ]
 
@@ -55,6 +56,16 @@ extend-immutable-calls = ["fastapi.Depends"]
 addopts = "-ra"
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "unit: быстрые тесты доменных и application-правил без внешней инфраструктуры",
+    "api: тесты публичных HTTP/gRPC API с контролируемыми transport boundaries",
+    "contract: тесты protobuf, transport и platform contract",
+    "integration: тесты с реальными инфраструктурными адаптерами",
+    "postgres: тесты, требующие GAMECLUB_TEST_POSTGRES_DSN",
+    "redis: тесты, требующие GAMECLUB_TEST_REDIS_URL",
+    "concurrency: тесты конкурентности, блокировок и идемпотентности",
+    "slow: длительные или инфраструктурно-зависимые тесты",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -66,3 +77,10 @@ exclude = "^src/gameclub/v1/"
 module = ["gameclub.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src/gameclub_backend"]
+
+[tool.coverage.report]
+fail_under = 70
+skip_empty = true

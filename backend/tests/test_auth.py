@@ -12,12 +12,20 @@ from gameclub_backend.presentation.http.auth import refresh_token_hash
 
 
 def test_refresh_token_default_ttl_is_ninety_days() -> None:
+    """
+    Проверяет сценарий «test_refresh_token_default_ttl_is_ninety_days» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(_env_file=None, jwt_secret="test-secret-with-at-least-32-bytes-long")
 
     assert settings.jwt_refresh_ttl_seconds == 90 * 24 * 60 * 60
 
 
 async def test_dev_operator_can_issue_and_use_bearer_token() -> None:
+    """
+    Проверяет сценарий «test_dev_operator_can_issue_and_use_bearer_token» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         dev_operator_username="operator",
@@ -44,6 +52,10 @@ async def test_dev_operator_can_issue_and_use_bearer_token() -> None:
 
 
 async def test_refresh_token_rotates_and_logout_revokes_current_token() -> None:
+    """
+    Проверяет сценарий «test_refresh_token_rotates_and_logout_revokes_current_token» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         dev_operator_username="operator",
@@ -85,6 +97,10 @@ async def test_refresh_token_rotates_and_logout_revokes_current_token() -> None:
 
 
 async def test_dev_refresh_rehydrates_permissions_for_legacy_operator_record() -> None:
+    """
+    Проверяет сценарий «test_dev_refresh_rehydrates_permissions_for_legacy_operator_record» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         dev_operator_username="operator",
@@ -118,6 +134,10 @@ async def test_dev_refresh_rehydrates_permissions_for_legacy_operator_record() -
 
 
 async def test_invalid_bearer_token_is_rejected() -> None:
+    """
+    Проверяет сценарий «test_invalid_bearer_token_is_rejected» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(Settings(jwt_secret="test-secret-with-at-least-32-bytes-long"))
     async with application.router.lifespan_context(application):
         transport = httpx.ASGITransport(app=application)
@@ -131,6 +151,10 @@ async def test_invalid_bearer_token_is_rejected() -> None:
 
 
 async def test_device_bootstrap_issues_connect_only_token() -> None:
+    """
+    Проверяет сценарий «test_device_bootstrap_issues_connect_only_token» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         device_bootstrap_token="bootstrap-secret",
@@ -157,6 +181,10 @@ async def test_device_bootstrap_issues_connect_only_token() -> None:
 
 
 async def test_invalid_device_bootstrap_is_rejected() -> None:
+    """
+    Проверяет сценарий «test_invalid_device_bootstrap_is_rejected» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         device_bootstrap_token="bootstrap-secret",
@@ -174,6 +202,10 @@ async def test_invalid_device_bootstrap_is_rejected() -> None:
 
 
 async def test_device_bootstrap_is_disabled_without_configured_token() -> None:
+    """
+    Проверяет сценарий «test_device_bootstrap_is_disabled_without_configured_token» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(Settings(jwt_secret="test-secret-with-at-least-32-bytes-long"))
     async with application.router.lifespan_context(application):
         transport = httpx.ASGITransport(app=application)
@@ -195,6 +227,10 @@ async def test_device_bootstrap_is_disabled_without_configured_token() -> None:
     ],
 )
 def test_jwt_rejects_invalid_trust_claims(claim: str, value: str) -> None:
+    """
+    Проверяет сценарий «test_jwt_rejects_invalid_trust_claims» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(
         jwt_secret="test-secret-with-at-least-32-bytes-long",
         jwt_issuer="gameclub-backend",
@@ -220,6 +256,10 @@ def test_jwt_rejects_invalid_trust_claims(claim: str, value: str) -> None:
 
 
 def test_jwt_rejects_expired_access_token() -> None:
+    """
+    Проверяет сценарий «test_jwt_rejects_expired_access_token» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(jwt_secret="test-secret-with-at-least-32-bytes-long")
     now = datetime.datetime.now(datetime.UTC)
     token = jwt.encode(

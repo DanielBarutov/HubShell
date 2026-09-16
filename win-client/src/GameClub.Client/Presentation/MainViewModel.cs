@@ -349,44 +349,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
     public string ActiveTimeSummary => _activeSession is null
         ? "Сессия не запущена"
+        : _activeSession.LoginGrantRemainingMinutes > 0
+            ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
         : _activeSession.ActivePackage is not null
             ? $"Осталось {FormatDuration(_activeSession.ActivePackage.RemainingMinutes)}"
-            : _activeSession.ActiveTariff is not null
-                && _activeSession.ActiveTariff.BillingMode == "block"
-                ? $"Осталось {FormatDuration(_activeSession.ActiveTariff.RemainingMinutes)}"
-            : _activeSession.ActiveTariff is not null
-                && _activeSession.ActiveTariff.BillingMode == "per_minute"
-                && _activeSession.BalanceRemainingMinutes is not null
-                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
-            : _activeSession.ActiveTariff is not null
-                ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
-            : _activeSession.LoginGrantRemainingMinutes > 0
-                ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
-            : _activeSession.Meter is not null
-                && _activeSession.BalanceRemainingMinutes is not null
-                ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
-            : _activeSession.Meter is not null
-                ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
-                : "Время обновляется сервером";
+        : _activeSession.ActiveTariff is not null
+            && _activeSession.ActiveTariff.BillingMode == "block"
+            ? $"Осталось {FormatDuration(_activeSession.ActiveTariff.RemainingMinutes)}"
+        : _activeSession.ActiveTariff is not null
+            && _activeSession.ActiveTariff.BillingMode == "per_minute"
+            && _activeSession.BalanceRemainingMinutes is not null
+            ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
+        : _activeSession.ActiveTariff is not null
+            ? $"Использовано {_activeSession.ActiveTariff.ElapsedMinutes} мин"
+        : _activeSession.Meter is not null
+            && _activeSession.BalanceRemainingMinutes is not null
+            ? $"Осталось {FormatDuration(_activeSession.BalanceRemainingMinutes.Value)}"
+        : _activeSession.Meter is not null
+            ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
+            : "Время обновляется сервером";
     public string CurrentSessionModeSummary => _activeSession is null
         ? string.Empty
-        : _activeSession.ActiveTariff?.BillingMode == "per_minute" || _activeSession.Meter is not null
+        : _activeSession.LoginGrantRemainingMinutes > 0
+            ? "Бесплатное время входа"
+        : _activeSession.ActivePackage is not null
+            ? "Пакет времени"
+        : _activeSession.ActiveTariff?.BillingMode == "per_minute"
             ? "Поминутная игра"
-            : _activeSession.ActivePackage is not null
-                ? "Пакет времени"
-                : _activeSession.ActiveTariff?.Name ?? "Игровая сессия";
-    public string CurrentSessionTariffSummary => _activeSession?.ActivePackage is not null
-        ? _activeSession.ActivePackage.RemainingMinutes > 0
-            ? $"Пакет · {_activeSession.ActivePackage.RemainingMinutes} мин"
-            : "Пакет завершён"
-        : _activeSession?.ActiveTariff is not null
+        : _activeSession.ActiveTariff?.Name ?? (_activeSession.Meter is not null
+            ? "Поминутная игра"
+            : "Игровая сессия");
+    public string CurrentSessionTariffSummary => _activeSession is null
+        ? string.Empty
+        : _activeSession.LoginGrantRemainingMinutes > 0
+            ? $"Бесплатные минуты · осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
+        : _activeSession.ActivePackage is not null
+            ? FormatActivePackageSummary(_activeSession.ActivePackage)
+        : _activeSession.ActiveTariff is not null
+            && _activeSession.ActiveTariff.BillingMode == "per_minute"
+            ? FormatPerMinuteTariffSummary(_activeSession.ActiveTariff)
+        : _activeSession.ActiveTariff is not null
             ? $"{_activeSession.ActiveTariff.Name} · {_activeSession.ActiveTariff.Quantity} × "
                 + $"{_activeSession.ActiveTariff.DurationMinutes} мин"
-            : _activeSession?.Meter is not null
-                ? "Поминутный режим"
-            : _activeSession?.LoginGrantRemainingMinutes > 0
-                ? "Бесплатное время входа"
-                : "Тариф не выбран";
+        : _activeSession.Meter is not null
+            ? "Поминутный режим"
+            : "Тариф не выбран";
     public string TransferTargetWorkstationId
     {
         get => _transferTargetWorkstationId;
@@ -688,11 +695,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             {
                 return false;
             }
-            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             _portalPasswordResetRequired = authentication.PasswordResetRequired;
             PortalPasswordSetup = string.Empty;
             PortalPasswordSetupConfirmation = string.Empty;
             SetPortalSnapshot(authentication.Snapshot);
+            await ActivateQueuedPortalEntitlementQuietlyAsync();
+            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             _accessGate.OpenUserSession();
             _portalMessage = string.Empty;
             PortalPassword = string.Empty;
@@ -786,9 +794,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             {
                 return false;
             }
-            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             _portalPasswordResetRequired = false;
             SetPortalSnapshot(authentication.Snapshot);
+            await ActivateQueuedPortalEntitlementQuietlyAsync();
+            await StartPortalSessionAsync(authentication.Snapshot.ClientId);
             _accessGate.OpenUserSession();
             _isPortalRegistrationRequested = false;
             _portalMessage = string.Empty;
@@ -868,6 +877,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         try
         {
             SetPortalSnapshot(await _clientPortal.RefreshAsync(DeviceId, cancellationToken: _lifetime.Token));
+            if (_activeSession is not null && _activeSession.ActivePackage is null)
+            {
+                await ActivateQueuedPortalEntitlementQuietlyAsync();
+            }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -883,6 +896,37 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             _portalMessage = "История временно недоступна";
             OnPropertyChanged(nameof(AccessMessage));
+        }
+    }
+
+    private async Task ActivateQueuedPortalEntitlementQuietlyAsync()
+    {
+        var queued = _portalSnapshot?.Entitlements
+            .OrderBy(item => item.QueuePosition)
+            .FirstOrDefault(item => item.Status.Equals("queued", StringComparison.OrdinalIgnoreCase));
+        if (queued is null
+            || string.IsNullOrWhiteSpace(DeviceId)
+            || _portalSnapshot?.Entitlements.Any(item =>
+                item.Status.Equals("active", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            return;
+        }
+
+        try
+        {
+            SetPortalSnapshot(await _clientPortal.ActivateEntitlementAsync(
+                DeviceId,
+                queued.Id,
+                _lifetime.Token));
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // A queued package can be outside its time window or incompatible
+            // with the zone. The session can still start in its normal mode.
         }
     }
 
@@ -932,8 +976,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 tariffId,
                 $"win-portal-tariff-{Guid.NewGuid():N}",
                 cancellationToken));
+            if (_activeSession is not null && _activeSession.ActivePackage is null)
+            {
+                await ActivateQueuedPortalEntitlementQuietlyAsync();
+            }
             await RefreshActiveSessionSnapshotQuietlyAsync();
-            ShowSessionNotification("Тариф куплен и добавлен в очередь времени.");
+            ShowSessionNotification("Тариф куплен и применён к текущей сессии или добавлен в очередь.");
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -1497,6 +1545,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         _portalSnapshot = snapshot;
         PublishPortalState();
+        PublishSessionState();
     }
 
     private void PublishPortalState()
@@ -1526,6 +1575,29 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(UpcomingBookingTitle));
         OnPropertyChanged(nameof(UpcomingBookingDetails));
         OnPropertyChanged(nameof(CanActivatePortalEntitlement));
+    }
+
+    private string FormatActivePackageSummary(SessionPackageSnapshot package)
+    {
+        var entitlement = _portalSnapshot?.Entitlements.FirstOrDefault(item => item.Id == package.Id);
+        var tariff = _portalSnapshot?.Tariffs.FirstOrDefault(item => item.Id == package.TariffId);
+        var name = entitlement?.TariffName ?? tariff?.Name ?? package.TariffId;
+        long? priceCents = entitlement?.PriceCents ?? tariff?.PriceCents;
+        var price = priceCents is not null ? $" · {FormatMoney(priceCents.Value)}" : string.Empty;
+        return package.RemainingMinutes > 0
+            ? $"Пакет «{name}» · {package.RemainingMinutes} мин{price}"
+            : $"Пакет «{name}» завершён";
+    }
+
+    private static string FormatPerMinuteTariffSummary(SessionTariffSnapshot tariff)
+    {
+        var rate = tariff.PricePerMinuteCents > 0
+            ? $" · {FormatMoney(tariff.PricePerMinuteCents)}/мин"
+            : string.Empty;
+        var free = tariff.FreeMinutes > 0
+            ? $" · первые {tariff.FreeMinutes} мин бесплатно"
+            : string.Empty;
+        return $"{tariff.Name}{rate}{free}";
     }
 
     private static string FormatMoney(long cents) =>

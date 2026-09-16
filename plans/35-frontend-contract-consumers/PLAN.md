@@ -19,7 +19,9 @@ Typed BFF DTO, guest payment confirmation и mixed product sale уже доба�
 Snapshot, queue, entry refusal, transfer confirmation, settlement review и
 offline/stale workstation fields подключены в основные operator consumers;
 headed route smoke и sale-confirmation visual evidence добавлены в текущем
-срезе.
+срезе. Checkout занятого места разрешает покупку пакетного тарифа с депозита
+текущего зарегистрированного клиента через server-backed entitlement purchase;
+карточка места показывает пополнение депозита только для такого клиента.
 
 ## Реализовано в текущем срезе
 

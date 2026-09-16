@@ -27,6 +27,10 @@ class FailingCashSettlement:
 
 
 async def test_product_sale_debits_client_once_and_is_idempotent() -> None:
+    """
+    Проверяет сценарий «test_product_sale_debits_client_once_and_is_idempotent» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Coffee", "drinks", 250, stock_quantity=5)
@@ -63,6 +67,10 @@ async def test_product_sale_debits_client_once_and_is_idempotent() -> None:
 
 
 async def test_concurrent_product_sale_requests_settle_once() -> None:
+    """
+    Проверяет сценарий «test_concurrent_product_sale_requests_settle_once» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Snack", "food", 300, stock_quantity=2)
@@ -94,6 +102,10 @@ async def test_concurrent_product_sale_requests_settle_once() -> None:
 
 
 async def test_concurrent_sale_key_with_different_payload_is_conflict() -> None:
+    """
+    Проверяет сценарий «test_concurrent_sale_key_with_different_payload_is_conflict» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Conflicting snack", "food", 300, stock_quantity=3)
@@ -148,6 +160,10 @@ async def test_concurrent_sale_key_with_different_payload_is_conflict() -> None:
 
 
 async def test_guest_product_sale_is_settled_in_cash_shift() -> None:
+    """
+    Проверяет сценарий «test_guest_product_sale_is_settled_in_cash_shift» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Water", "drinks", 100, stock_quantity=3)
@@ -175,6 +191,10 @@ async def test_guest_product_sale_is_settled_in_cash_shift() -> None:
 
 
 async def test_product_sale_can_use_manual_transfer_without_cash_shift() -> None:
+    """
+    Проверяет сценарий «test_product_sale_can_use_manual_transfer_without_cash_shift» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Transfer water", "drinks", 150, stock_quantity=2)
@@ -202,6 +222,10 @@ async def test_product_sale_can_use_manual_transfer_without_cash_shift() -> None
 
 
 async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:
+    """
+    Проверяет сценарий «test_unknown_cash_settlement_is_kept_for_manual_review» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Review water", "drinks", 100, stock_quantity=2)
@@ -231,6 +255,10 @@ async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:
 
 
 async def test_mixed_product_sale_persists_and_settles_each_payment_part() -> None:
+    """
+    Проверяет сценарий «test_mixed_product_sale_persists_and_settles_each_payment_part» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Mixed snack", "food", 300, stock_quantity=2)
@@ -275,6 +303,10 @@ async def test_mixed_product_sale_persists_and_settles_each_payment_part() -> No
 
 
 async def test_analytics_service_rejects_naive_period() -> None:
+    """
+    Проверяет сценарий «test_analytics_service_rejects_naive_period» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     service = AnalyticsService(InMemoryAnalyticsRepository())
     with pytest.raises(Exception, match="aware"):
         await service.overview(
@@ -284,6 +316,10 @@ async def test_analytics_service_rejects_naive_period() -> None:
 
 
 async def test_sales_and_analytics_routes_are_available_to_operator() -> None:
+    """
+    Проверяет сценарий «test_sales_and_analytics_routes_are_available_to_operator» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(
         Settings(
             jwt_secret="test-secret-with-at-least-32-bytes-long",

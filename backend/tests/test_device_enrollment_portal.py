@@ -30,6 +30,10 @@ class ChargeHistoryReader:
 
 
 async def test_workstation_enrollment_normalizes_mac_and_binds_installation() -> None:
+    """
+    Проверяет сценарий «test_workstation_enrollment_normalizes_mac_and_binds_installation» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     repository = InMemoryWorkstationRepository()
     service = WorkstationService(repository)
     workstation = await service.register(
@@ -63,6 +67,10 @@ async def test_workstation_enrollment_normalizes_mac_and_binds_installation() ->
 
 
 async def test_device_enrollment_http_covers_pending_approved_and_disabled() -> None:
+    """
+    Проверяет сценарий «test_device_enrollment_http_covers_pending_approved_and_disabled» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(Settings(jwt_secret="test-secret-with-at-least-32-bytes-long"))
     async with application.router.lifespan_context(application):
         transport = httpx.ASGITransport(app=application)
@@ -123,6 +131,10 @@ async def test_device_enrollment_http_covers_pending_approved_and_disabled() -> 
 
 
 async def test_client_portal_is_scoped_and_reports_balance_time_and_purchases() -> None:
+    """
+    Проверяет сценарий «test_client_portal_is_scoped_and_reports_balance_time_and_purchases» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     client_service = ClientService(InMemoryClientRepository())
     catalog = CatalogService(InMemoryCatalogRepository())
     session_repository = InMemorySessionRepository()
@@ -195,6 +207,11 @@ async def test_client_portal_is_scoped_and_reports_balance_time_and_purchases() 
 
 
 async def test_password_reset_allows_one_passwordless_login_until_new_password_is_set() -> None:
+    """
+    Проверяет сценарий
+    «test_password_reset_allows_one_passwordless_login_until_new_password_is_set» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clients = ClientService(InMemoryClientRepository())
     client = await clients.register_portal("ResetFox", "+7 999 111-22-33", "old-pass")
 

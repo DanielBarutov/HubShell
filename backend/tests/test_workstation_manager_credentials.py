@@ -19,6 +19,10 @@ from gameclub_backend.presentation.grpc.services import to_proto
 
 @pytest.mark.asyncio
 async def test_manager_password_is_stored_as_verifier_and_reaches_device_config() -> None:
+    """
+    Проверяет сценарий «test_manager_password_is_stored_as_verifier_and_reaches_device_config» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     groups = InMemoryWorkstationGroupRepository()
     group_service = WorkstationGroupService(groups)
     await group_service.save("vip", "VIP-зона", "vip")
@@ -57,6 +61,10 @@ async def test_manager_password_is_stored_as_verifier_and_reaches_device_config(
 
 @pytest.mark.asyncio
 async def test_zone_rate_is_stored_and_synced_as_internal_metered_tariff() -> None:
+    """
+    Проверяет сценарий «test_zone_rate_is_stored_and_synced_as_internal_metered_tariff» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     groups = InMemoryWorkstationGroupRepository()
     catalog = CatalogService(InMemoryCatalogRepository(), zones=groups)
     group_service = WorkstationGroupService(groups, zone_rate_synchronizer=catalog)
@@ -78,6 +86,10 @@ async def test_zone_rate_is_stored_and_synced_as_internal_metered_tariff() -> No
 
 @pytest.mark.asyncio
 async def test_manager_password_rejects_short_values_and_unknown_group() -> None:
+    """
+    Проверяет сценарий «test_manager_password_rejects_short_values_and_unknown_group» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     groups = InMemoryWorkstationGroupRepository()
     service = WorkstationGroupService(groups)
 

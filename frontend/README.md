@@ -26,6 +26,8 @@ Backend по умолчанию выдаёт refresh token на 90 дней.
 npm install
 npm run dev
 npm run typecheck
+npm run test
+npm run test:coverage
 npm run build
 ```
 

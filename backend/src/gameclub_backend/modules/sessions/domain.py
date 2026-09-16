@@ -84,6 +84,8 @@ class SessionTariffSnapshot:
     quantity: int
     elapsed_minutes: int
     remaining_minutes: int
+    price_per_minute_cents: int = 0
+    free_minutes: int = 0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -92,6 +94,8 @@ class SessionTariffSnapshot:
             raise ValueError("Session tariff duration and quantity must be positive")
         if self.elapsed_minutes < 0 or self.remaining_minutes < 0:
             raise ValueError("Session tariff time cannot be negative")
+        if self.price_per_minute_cents < 0 or self.free_minutes < 0:
+            raise ValueError("Session tariff pricing cannot be negative")
 
 
 @dataclasses.dataclass(frozen=True)

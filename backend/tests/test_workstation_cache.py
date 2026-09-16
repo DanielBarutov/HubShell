@@ -29,6 +29,10 @@ class FakeWorkstationSnapshotCache:
 
 
 async def test_workstation_list_uses_cache_for_twenty_seconds() -> None:
+    """
+    Проверяет сценарий «test_workstation_list_uses_cache_for_twenty_seconds» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     cache = FakeWorkstationSnapshotCache()
     service = WorkstationService(
         InMemoryWorkstationRepository(),

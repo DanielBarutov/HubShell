@@ -28,6 +28,8 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
 
+pytestmark = [pytest.mark.unit, pytest.mark.concurrency]
+
 
 class FixedClock:
     def __init__(self) -> None:
@@ -164,6 +166,10 @@ async def build_package_metered_services(
 
 @pytest.mark.asyncio
 async def test_metered_session_charges_only_delta_after_free_minutes() -> None:
+    """
+    Проверяет сценарий «test_metered_session_charges_only_delta_after_free_minutes» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
         clock
@@ -203,6 +209,10 @@ async def test_metered_session_charges_only_delta_after_free_minutes() -> None:
 
 @pytest.mark.asyncio
 async def test_device_login_adds_separate_five_minute_grant() -> None:
+    """
+    Проверяет сценарий «test_device_login_adds_separate_five_minute_grant» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, _meters, clients = await build_metered_services(
         clock
@@ -230,6 +240,10 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
 
 @pytest.mark.asyncio
 async def test_device_login_selects_zone_per_minute_tariff_without_package() -> None:
+    """
+    Проверяет сценарий «test_device_login_selects_zone_per_minute_tariff_without_package» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
         clock,
@@ -247,6 +261,8 @@ async def test_device_login_selects_zone_per_minute_tariff_without_package() -> 
     snapshot = await sessions.snapshot(session.id)
     assert snapshot.active_tariff is not None
     assert snapshot.active_tariff.id == tariff.id
+    assert snapshot.active_tariff.price_per_minute_cents == tariff.price_per_minute_cents
+    assert snapshot.active_tariff.free_minutes == tariff.free_minutes
 
     clock.current += datetime.timedelta(minutes=6)
     meter = await billing.meter_session(session.id)
@@ -260,6 +276,11 @@ async def test_device_login_selects_zone_per_minute_tariff_without_package() -> 
 
 @pytest.mark.asyncio
 async def test_metering_replaces_archived_legacy_minute_tariff_with_current_zone_snapshot() -> None:
+    """
+    Проверяет сценарий
+    «test_metering_replaces_archived_legacy_minute_tariff_with_current_zone_snapshot» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -303,6 +324,10 @@ async def test_metering_replaces_archived_legacy_minute_tariff_with_current_zone
 
 @pytest.mark.asyncio
 async def test_repeated_device_login_returns_the_same_grant() -> None:
+    """
+    Проверяет сценарий «test_repeated_device_login_returns_the_same_grant» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -336,6 +361,10 @@ async def test_repeated_device_login_returns_the_same_grant() -> None:
 
 @pytest.mark.asyncio
 async def test_metered_session_becomes_exhausted_without_overdraft() -> None:
+    """
+    Проверяет сценарий «test_metered_session_becomes_exhausted_without_overdraft» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
         clock
@@ -366,6 +395,10 @@ async def test_metered_session_becomes_exhausted_without_overdraft() -> None:
 
 @pytest.mark.asyncio
 async def test_concurrent_metering_is_serialized_per_session() -> None:
+    """
+    Проверяет сценарий «test_concurrent_metering_is_serialized_per_session» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
         clock
@@ -393,6 +426,10 @@ async def test_concurrent_metering_is_serialized_per_session() -> None:
 
 @pytest.mark.asyncio
 async def test_package_meter_auto_advances_and_stop_burns_only_active_remainder() -> None:
+    """
+    Проверяет сценарий «test_package_meter_auto_advances_and_stop_burns_only_active_remainder» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -447,6 +484,11 @@ async def test_package_meter_auto_advances_and_stop_burns_only_active_remainder(
 
 @pytest.mark.asyncio
 async def test_package_purchased_during_uncovered_active_session_activates_immediately() -> None:
+    """
+    Проверяет сценарий
+    «test_package_purchased_during_uncovered_active_session_activates_immediately» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -479,6 +521,10 @@ async def test_package_purchased_during_uncovered_active_session_activates_immed
 
 @pytest.mark.asyncio
 async def test_package_purchased_with_active_package_stays_queued() -> None:
+    """
+    Проверяет сценарий «test_package_purchased_with_active_package_stays_queued» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -509,6 +555,10 @@ async def test_package_purchased_with_active_package_stays_queued() -> None:
 
 @pytest.mark.asyncio
 async def test_parallel_package_consumers_count_actual_locked_delta() -> None:
+    """
+    Проверяет сценарий «test_parallel_package_consumers_count_actual_locked_delta» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -549,6 +599,10 @@ async def test_parallel_package_consumers_count_actual_locked_delta() -> None:
 
 @pytest.mark.asyncio
 async def test_auto_next_accepts_exhausted_session_package_baseline() -> None:
+    """
+    Проверяет сценарий «test_auto_next_accepts_exhausted_session_package_baseline» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -592,6 +646,10 @@ async def test_auto_next_accepts_exhausted_session_package_baseline() -> None:
 
 @pytest.mark.asyncio
 async def test_windowed_package_consumes_only_minutes_inside_local_window() -> None:
+    """
+    Проверяет сценарий «test_windowed_package_consumes_only_minutes_inside_local_window» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     clock.current = datetime.datetime(2026, 8, 29, 18, tzinfo=datetime.UTC)
     (
@@ -633,6 +691,10 @@ async def test_windowed_package_consumes_only_minutes_inside_local_window() -> N
 
 @pytest.mark.asyncio
 async def test_session_snapshot_exposes_server_time_package_queue_and_meter() -> None:
+    """
+    Проверяет сценарий «test_session_snapshot_exposes_server_time_package_queue_and_meter» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,
@@ -669,6 +731,10 @@ async def test_session_snapshot_exposes_server_time_package_queue_and_meter() ->
 
 @pytest.mark.asyncio
 async def test_package_time_window_uses_configured_timezone() -> None:
+    """
+    Проверяет сценарий «test_package_time_window_uses_configured_timezone» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(

@@ -384,6 +384,8 @@ class SessionService:
                     quantity=session.tariff_quantity,
                     elapsed_minutes=elapsed_minutes,
                     remaining_minutes=remaining_minutes,
+                    price_per_minute_cents=tariff.price_per_minute_cents,
+                    free_minutes=tariff.free_minutes,
                 )
         elapsed_minutes = self._elapsed_minutes(
             session.started_at,

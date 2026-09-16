@@ -32,6 +32,10 @@ class FakeSessionContext:
 
 
 async def test_save_product_updates_existing_postgres_row(monkeypatch) -> None:
+    """
+    Проверяет сценарий «test_save_product_updates_existing_postgres_row» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     product_id = uuid.uuid4()
     existing = postgres.ProductModel(
         id=product_id,

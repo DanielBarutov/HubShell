@@ -21,6 +21,9 @@ export function PanelHost() {
   const api = useReduxApi();
   const selectedPc = ui.selectedPcId ? workspace.workstations.find((pc) => pc.id === ui.selectedPcId) ?? null : null;
   const selectedClient = ui.selectedClientId ? workspace.clients.find((client) => client.id === ui.selectedClientId) ?? null : null;
+  const selectedPcClient = selectedPc?.clientId
+    ? workspace.clients.find((client) => client.id === selectedPc.clientId) ?? null
+    : null;
   const close = () => dispatch(closePanel());
   const refresh = async () => {
     await dispatch(refreshWorkspace());
@@ -34,7 +37,7 @@ export function PanelHost() {
   return <>
     {ui.panel !== "sale" && <div className="panel-overlay" aria-hidden="true" onClick={close} />}
     {ui.panel !== "sale" && <aside className="right-panel open" role="dialog" aria-modal aria-label="Контекстная панель">
-      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} workstations={workspace.workstations} tariffs={workspace.tariffs} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id, clientId: selectedPc.clientId }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
+      {ui.panel === "pc" && selectedPc && <PcPanel pc={selectedPc} client={selectedPcClient ?? undefined} workstations={workspace.workstations} tariffs={workspace.tariffs} onClose={close} onEdit={() => dispatch(openWorkstationEditor())} onBook={() => dispatch(openBooking(selectedPc.id))} onDeposit={openClientDeposit} onOpenSale={() => dispatch(openSale({ pcId: selectedPc.id, clientId: selectedPc.clientId }))} onSessionChanged={refresh} api={LIVE_MODE ? api : undefined} />}
       {ui.panel === "client" && selectedClient && <ClientPanel client={selectedClient} api={LIVE_MODE ? api : undefined} onClose={close} onSaved={refresh} onDeposit={() => openClientDeposit()} onBonusDeposit={() => openClientDeposit(selectedClient, true)} />}
       {ui.panel === "new-client" && LIVE_MODE && <NewClientPanel api={api} onClose={close} onSaved={refresh} />}
       {ui.panel === "deposit" && <DepositPanel initialClient={selectedClient ?? undefined} bonusOnly={ui.depositBonusOnly} onClose={close} onCompleted={refresh} clients={workspace.clients} api={LIVE_MODE ? api : undefined} />}

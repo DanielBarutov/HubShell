@@ -269,7 +269,10 @@ CSS сохранён в исходном каскадном порядке, но
 - polling карты и операционных данных с целевой задержкой до 5 секунд; backend snapshot cache
   в Redis — ключ `gameclub:workstations:snapshot:v1`, bounded TTL 20 секунд;
 - карта/панель ПК, старт/стоп/interrupt session, выбор клиента или анонимного
-  гостя, тариф и товарный checkout;
+  гостя, тариф и товарный checkout; для занятого места пакетный тариф можно
+  купить с депозита текущего клиента с немедленной server-backed активацией или
+  постановкой в очередь, а кнопка пополнения депозита показывается только для
+  зарегистрированного клиента;
 - сохранение session/product idempotency keys в рамках одной попытки checkout,
   чтобы повторный запрос не создавал вторую сессию или второе списание;
 - один retry через refresh token для BFF `401/403`; stale operator permissions
@@ -423,12 +426,17 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `145 passed, 18 skipped` и 6 известных pre-existing contract-layout failures в dirty checkout на срезе 2026-09-15; DSN-прогон из предыдущего среза — `157 passed` | unit/API/contract/jobs, включая session recovery resume, tariff zone listing/guards, settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q` | `153 passed, 18 skipped` без DSN на срезе 2026-09-16; contract-layout assertions обновлены под текущие API/Avalonia boundaries; markers, bounded-context split и docstring convention guard добавлены | unit/API/contract/jobs, включая session recovery resume, tariff zone listing/guards, settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
+| `cd backend && uv run pytest -q -m "not integration and not slow"` | `153 passed, 18 deselected` на срезе 2026-09-16 | явный offline/release-safe прогон без инфраструктурных suites |
+| `cd backend && uv run pytest -q -m "api or contract"` | `37 passed, 134 deselected` на срезе 2026-09-16 | отдельная проверка HTTP/gRPC/protobuf boundaries |
 | `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
 | `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
 | `cd frontend && npm run typecheck` | успешно (повторено 2026-09-15) | TypeScript compile/type boundary; Redux workspace snapshot и stale-response guards |
 | `cd frontend && npm run lint` | успешно (2026-09-15) | noUnusedLocals/noUnusedParameters TypeScript boundary |
 | `cd frontend && npm run build` | успешно на срезе 2026-09-15 | TypeScript build и production Vite build, включая zone-scoped tariff requests |
+| `cd frontend && npm run test` | `19 passed` на срезе 2026-09-16 | Vitest API boundary плюс component/accessibility slice для login, map, sale, booking, offline-routing и confirmation; browser visual/realtime matrix ещё не закрыта |
+| `cd frontend && npm run test:coverage` | `19 passed`; line coverage `17.18%`, guardrail `17%` | первый измеренный frontend baseline; coverage не заменяет behavior/accessibility tests |
+| `cd backend && uv run pytest --cov=src/gameclub_backend --cov-report=term-missing` | `154 passed, 18 skipped`; line coverage `70.10%`, guardrail `70%` | первый измеренный backend baseline без DSN; integration coverage не доказана |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
 | `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | backend stack пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; native Windows client в compose не входит |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
@@ -442,7 +450,7 @@ security boundary. Детали — в
 | Направление | Почему не закрыто |
 | --- | --- |
 | PostgreSQL integration/concurrency | без DSN 18 тестов пропускаются; при dev DSN все 157 backend-тестов проходят, включая package/transfer/offline/settlement mixed-fault evidence; production cross-owner UoW/provider policy остаётся открытой |
-| Avalonia migration | Core/Avalonia/tests Linux solution собрана SDK `8.0.425`: Debug build без warnings, `24 passed`, GUI host удерживался запущенным 10 секунд; `win-x64` framework-dependent artifact собран cross-publish. `MainViewModel` emitted only из portable Core и не использует `Microsoft.UI.*`; access-gate и portal перенесены |
+| Avalonia migration | Core/Avalonia/tests Linux solution собрана SDK `8.0.425`: Debug build без warnings, `28 passed`, GUI host удерживался запущенным 10 секунд; `win-x64` framework-dependent artifact собран cross-publish. `MainViewModel` emitted only из portable Core и не использует `Microsoft.UI.*`; access-gate и portal перенесены |
 | Windows native | `GameClub.Client.Windows.sln` ведёт на Avalonia production host; Linux source build без warnings и self-contained `win-x64` folder-publish создаёт PE GUI artifact с `hostfxr.dll`. DPAPI, restart/power, command stream, fullscreen/скруглённый compact widget и native tray изолированы в Windows adapter; Windows runtime и kiosk evidence остаются обязательны |
 | Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
@@ -450,6 +458,17 @@ security boundary. Детали — в
 | Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
 
 ## 11. Следующие задачи
+
+### P0 — тестовый контур
+
+Выполняется план [`42-test-overhaul`](42-test-overhaul/PLAN.md): backend сохраняет
+рабочий unit/API/contract слой, устаревшие source-level assertions обновлены,
+крупные test modules разделены по bounded context, а русские behavior-docstring
+закреплены convention guard-тестом. Для backend добавлены явные unit/API/contract
+и PostgreSQL/Redis/concurrency markers с offline-командами. Frontend получил
+Vitest foundation; C# Linux-runnable solution восстановила компиляцию после
+Avalonia-миграции. Открыты browser visual/realtime, DSN и native Windows gates;
+coverage guardrail установлен на измеренном старте.
 
 ### P0 — доказать текущий MVP
 

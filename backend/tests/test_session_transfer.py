@@ -53,6 +53,10 @@ async def build_transfer_services():
 
 @pytest.mark.asyncio
 async def test_transfer_confirm_is_idempotent_under_concurrency() -> None:
+    """
+    Проверяет сценарий «test_transfer_confirm_is_idempotent_under_concurrency» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     transfer, sessions, session, target, _occupied = await build_transfer_services()
     offer = await transfer.create_offer(session.id, target.id, "transfer-offer")
 
@@ -71,6 +75,10 @@ async def test_transfer_confirm_is_idempotent_under_concurrency() -> None:
 
 @pytest.mark.asyncio
 async def test_transfer_rejects_second_confirmation_with_another_key() -> None:
+    """
+    Проверяет сценарий «test_transfer_rejects_second_confirmation_with_another_key» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     transfer, _sessions, session, target, _occupied = await build_transfer_services()
     offer = await transfer.create_offer(session.id, target.id, "transfer-offer-2")
     await transfer.confirm(offer.id, "transfer-confirm-2")
@@ -81,6 +89,10 @@ async def test_transfer_rejects_second_confirmation_with_another_key() -> None:
 
 @pytest.mark.asyncio
 async def test_transfer_rejects_target_with_active_session() -> None:
+    """
+    Проверяет сценарий «test_transfer_rejects_target_with_active_session» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     transfer, sessions, session, target, occupied = await build_transfer_services()
     await sessions.start(
         occupied.id,
@@ -95,6 +107,10 @@ async def test_transfer_rejects_target_with_active_session() -> None:
 
 @pytest.mark.asyncio
 async def test_transfer_publishes_duplicate_safe_restart_command_status() -> None:
+    """
+    Проверяет сценарий «test_transfer_publishes_duplicate_safe_restart_command_status» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     workstation_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstation_repository)
     source = await workstations.register("restart-source", "Restart source", group_id="vip")
@@ -138,6 +154,10 @@ async def test_transfer_publishes_duplicate_safe_restart_command_status() -> Non
 
 @pytest.mark.asyncio
 async def test_pending_transfer_is_claimed_by_same_client_on_new_workstation() -> None:
+    """
+    Проверяет сценарий «test_pending_transfer_is_claimed_by_same_client_on_new_workstation» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     transfer, sessions, session, target, _occupied = await build_transfer_services()
 
     offer = await transfer.create_offer(session.id, None, "automatic-transfer-offer")

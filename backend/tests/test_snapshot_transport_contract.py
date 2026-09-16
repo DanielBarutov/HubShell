@@ -22,9 +22,17 @@ from gameclub_backend.presentation.grpc.services import (
     to_session_snapshot_proto,
 )
 
+pytestmark = pytest.mark.contract
+
 
 @pytest.mark.asyncio
-async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture() -> None:
+async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture(
+    snapshot_contract: dict[str, object],
+) -> None:
+    """
+    Проверяет сценарий «test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     workstations_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstations_repository)
     workstation = await workstations.register(
@@ -54,16 +62,24 @@ async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture() 
     grpc_snapshot = to_session_snapshot_proto(snapshot)
     device_heartbeat = to_proto(workstation, session_snapshot=snapshot)
 
-    assert http_snapshot["schema_version"] == grpc_snapshot.schema_version == 1
+    assert (
+        http_snapshot["schema_version"]
+        == grpc_snapshot.schema_version
+        == snapshot_contract["schema_version"]
+    )
     assert http_snapshot["server_time"] == server_time.isoformat()
     assert http_snapshot["session"]["id"] == grpc_snapshot.session.id == str(session.id)
     assert http_snapshot["workstation_id"] == grpc_snapshot.workstation_id == str(workstation.id)
     assert http_snapshot["device_id"] == grpc_snapshot.device_id == workstation.device_id
-    assert http_snapshot["allowed_actions"] == list(grpc_snapshot.allowed_actions) == ["stop"]
+    assert (
+        http_snapshot["allowed_actions"]
+        == list(grpc_snapshot.allowed_actions)
+        == snapshot_contract["allowed_actions"]
+    )
     assert (
         http_snapshot["login_grant_remaining_minutes"]
         == grpc_snapshot.login_grant_remaining_minutes
-        == 0
+        == snapshot_contract["login_grant_remaining_minutes"]
     )
     assert device_heartbeat.active_session_id == str(session.id)
     assert device_heartbeat.active_session_status == session.status.value
@@ -74,6 +90,10 @@ async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture() 
 
 @pytest.mark.asyncio
 async def test_session_snapshot_exposes_balance_time_for_current_zone_rate() -> None:
+    """
+    Проверяет сценарий «test_session_snapshot_exposes_balance_time_for_current_zone_rate» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     workstations_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstations_repository)
     workstation = await workstations.register(
@@ -131,6 +151,11 @@ async def test_session_snapshot_exposes_balance_time_for_current_zone_rate() -> 
 
 @pytest.mark.asyncio
 async def test_stale_workstation_does_not_become_available_when_snapshot_is_present() -> None:
+    """
+    Проверяет сценарий
+    «test_stale_workstation_does_not_become_available_when_snapshot_is_present» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     workstations_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstations_repository)
     workstation = await workstations.register("stale-device", "Stale PC", group_id="main")
@@ -170,6 +195,10 @@ async def test_stale_workstation_does_not_become_available_when_snapshot_is_pres
 
 @pytest.mark.asyncio
 async def test_snapshot_exposes_guest_style_tariff_time_from_server() -> None:
+    """
+    Проверяет сценарий «test_snapshot_exposes_guest_style_tariff_time_from_server» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     workstations_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstations_repository).register(
         "guest-tariff-device",

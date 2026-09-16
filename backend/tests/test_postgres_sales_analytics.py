@@ -14,6 +14,8 @@ from gameclub_backend.modules.clients.infrastructure.postgres import PostgresCli
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 
+pytestmark = [pytest.mark.integration, pytest.mark.postgres, pytest.mark.slow]
+
 
 class FaultInjectingCashSettlement:
     def __init__(self) -> None:
@@ -35,6 +37,10 @@ def postgres_dsn() -> str:
 
 
 async def test_postgres_product_sale_reserves_stock_and_debits_once(postgres_dsn: str) -> None:
+    """
+    Проверяет сценарий «test_postgres_product_sale_reserves_stock_and_debits_once» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     product_id: uuid.UUID | None = None
     client_id: uuid.UUID | None = None
@@ -114,6 +120,10 @@ async def test_postgres_product_sale_reserves_stock_and_debits_once(postgres_dsn
 async def test_postgres_concurrent_sale_key_with_different_payload_is_conflict(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_concurrent_sale_key_with_different_payload_is_conflict» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     product_id: uuid.UUID | None = None
     client_id: uuid.UUID | None = None
@@ -202,6 +212,10 @@ async def test_postgres_concurrent_sale_key_with_different_payload_is_conflict(
 async def test_postgres_mixed_sale_fault_between_parts_reuses_balance_key(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_mixed_sale_fault_between_parts_reuses_balance_key» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     product_id: uuid.UUID | None = None
     client_id: uuid.UUID | None = None
