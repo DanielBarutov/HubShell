@@ -1,7 +1,10 @@
 import httpx
+import pytest
 
 from gameclub_backend.config import Settings
 from gameclub_backend.presentation.http.app import create_app
+
+pytestmark = pytest.mark.api
 
 
 async def request(application, method: str, path: str, **kwargs):
@@ -12,6 +15,10 @@ async def request(application, method: str, path: str, **kwargs):
 
 
 async def test_live_endpoint() -> None:
+    """
+    Проверяет сценарий «test_live_endpoint» и подтверждает ожидаемый публичный результат
+    согласно соответствующему бизнес-правилу.
+    """
     application = create_app(Settings())
     response = await request(application, "GET", "/health/live")
 
@@ -20,6 +27,10 @@ async def test_live_endpoint() -> None:
 
 
 async def test_ready_endpoint_without_configured_dependencies() -> None:
+    """
+    Проверяет сценарий «test_ready_endpoint_without_configured_dependencies» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(Settings())
     response = await request(application, "GET", "/health/ready")
 

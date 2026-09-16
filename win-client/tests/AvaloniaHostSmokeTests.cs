@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Layout;
 using Avalonia.Media;
 using GameClub.Client.Avalonia;
 using GameClub.Client.Presentation;

@@ -1972,6 +1972,8 @@ def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.Session
                 quantity=tariff.quantity,
                 elapsed_minutes=tariff.elapsed_minutes,
                 remaining_minutes=tariff.remaining_minutes,
+                price_per_minute_cents=tariff.price_per_minute_cents,
+                free_minutes=tariff.free_minutes,
             )
         )
     return response

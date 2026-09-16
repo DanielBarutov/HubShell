@@ -49,6 +49,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const [submitting, setSubmitting] = useState(false);
   const seededProduct = useRef(false);
   const sessionIdempotencyKey = useRef(`sale-session-${crypto.randomUUID()}`);
+  const tariffIdempotencyKeys = useRef(new Map<string, string[]>());
   const productIdempotencyKeys = useRef(new Map<string, string>());
   const [startedSession, setStartedSession] = useState<{ id: string; signature: string } | null>(null);
   const activeShift = cashShifts.find((shift) => shift.status === "open");
@@ -119,6 +120,11 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const productTotalCents = productLines.reduce((sum, line) => sum + line.priceCents * line.quantity, 0);
   const totalMinutes = timeLines.reduce((sum, line) => sum + (line.durationMinutes ?? 0) * line.quantity, 0);
   const mixedTariffs = new Set(timeLines.map((line) => line.sourceId)).size > 1;
+  const activeClientSession = Boolean(
+    pc?.status === "busy"
+    && pc.clientId
+    && client?.id === pc.clientId,
+  );
   const lineCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const visibleTariffs = tariffCategory === "all" ? tariffs : tariffs.filter((tariff) => tariff.billing_mode === "block");
   const productCategoryOptions = ["all", ...Array.from(new Set(products.map((product) => product.category)))];
@@ -127,6 +133,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const addTariff = (tariff: BackendTariff) => {
     setError(null);
     setSuccess(null);
+    if (activeClientSession) setPaymentMethod("balance");
     setLines((current) => {
       const key = `tariff:${tariff.id}`;
       const existing = current.find((line) => line.key === key);
@@ -182,16 +189,20 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
       setError("Продажа времени доступна из карточки игрового места");
       return;
     }
-    if (timeLines.length && pc && pc.status === "busy") {
-      setError("На этом месте уже идёт сессия. Удалите игровое время из заказа — товары можно оформить отдельно.");
+    if (timeLines.length && pc && pc.status === "busy" && !activeClientSession) {
+      setError("Тариф можно добавить только в активную сессию зарегистрированного клиента этого места. Товары можно оформить отдельно.");
       return;
     }
-    if (timeLines.length && pc && pc.status !== "online") {
+    if (timeLines.length && pc && pc.status !== "online" && !activeClientSession) {
       setError("Новую сессию нельзя открыть: игровое место не в сети");
       return;
     }
     if ((paymentMethod === "balance" || paymentMethod === "mixed") && !client) {
       setError("Для оплаты с баланса выберите зарегистрированного клиента");
+      return;
+    }
+    if (activeClientSession && timeLines.length && paymentMethod !== "balance") {
+      setError("Тариф для активной поминутной сессии покупается с депозита клиента. Пополните депозит или выберите оплату «Баланс».");
       return;
     }
     if (api && (paymentMethod === "cash" || paymentMethod === "mixed") && !activeShift) {
@@ -253,16 +264,28 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
         guestPaymentId = payment.id;
       }
       if (pc && timeLines[0] && !startedSession) {
-        const session = await api.startSession({
-            workstation_id: pc.id,
-            client_id: client?.id,
-            guest_name: client ? undefined : "Гость",
-            guest_payment_id: guestPaymentId,
-            source: "operator",
-            tariff_id: timeLines[0].sourceId,
-            tariff_quantity: timeLines[0].quantity,
-          }, sessionIdempotencyKey.current);
-        setStartedSession({ id: session.id, signature: timeSignature });
+        if (activeClientSession) {
+          const tariffLine = timeLines[0];
+          const purchaseKeys = tariffIdempotencyKeys.current.get(tariffLine.key) ?? [];
+          for (let index = purchaseKeys.length; index < tariffLine.quantity; index += 1) {
+            purchaseKeys.push(`sale-tariff-${crypto.randomUUID()}`);
+          }
+          tariffIdempotencyKeys.current.set(tariffLine.key, purchaseKeys);
+          for (const purchaseKey of purchaseKeys.slice(0, tariffLine.quantity)) {
+            await api.purchaseEntitlement(client!.id, tariffLine.sourceId, purchaseKey);
+          }
+        } else {
+          const session = await api.startSession({
+              workstation_id: pc.id,
+              client_id: client?.id,
+              guest_name: client ? undefined : "Гость",
+              guest_payment_id: guestPaymentId,
+              source: "operator",
+              tariff_id: timeLines[0].sourceId,
+              tariff_quantity: timeLines[0].quantity,
+            }, sessionIdempotencyKey.current);
+          setStartedSession({ id: session.id, signature: timeSignature });
+        }
       }
       for (const line of productLines) {
         const operationKey = productIdempotencyKeys.current.get(line.key) ?? `sale-product-${crypto.randomUUID()}`;
@@ -330,7 +353,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
           </div><div className="sale-line-info"><strong>{line.name}</strong><small>{line.detail}</small><b>{money(line.priceCents * line.quantity)}</b></div><div className="sale-quantity"><button type="button" aria-label={`Уменьшить ${line.name}`} onClick={() => changeQuantity(line.key, -1)}><Minus size={13} /></button><span>{line.quantity}</span><button type="button" aria-label={`Увеличить ${line.name}`} onClick={() => changeQuantity(line.key, 1)}><Plus size={13} /></button></div><button type="button" className="sale-remove-line" aria-label={`Удалить ${line.name}`} onClick={() => removeLine(line.key)}><X size={14} /></button></div>) : <div className="sale-empty-order"><Receipt size={24} /><strong>Заказ пока пуст</strong><span>Нажимайте на карточки слева, чтобы добавить время или товары</span></div>}</div>
           <div className="sale-order-summary"><div><span>Игровое время</span><strong>{totalMinutes ? formatDuration(totalMinutes) : "—"}</strong></div><div><span>Товары</span><strong>{productLines.length ? `${productLines.reduce((sum, line) => sum + line.quantity, 0)} шт.` : "—"}</strong></div><div className="sale-total-row"><span>Итого к оплате</span><strong>{money(totalCents)}</strong></div></div>
           {mixedTariffs && <div className="sale-inline-warning"><Tags size={16} /><span>В корзине разные пакеты времени. Оформите их отдельными покупками.</span></div>}
-          <div className="sale-payment"><div className="sale-payment-heading"><span>Способ оплаты товаров и гостевого времени</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")}><ArrowRightLeft size={15} /> Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
+          <div className="sale-payment"><div className="sale-payment-heading"><span>{activeClientSession && timeLines.length ? "Оплата тарифа с депозита клиента" : "Способ оплаты товаров и гостевого времени"}</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")} disabled={Boolean(activeClientSession && timeLines.length)}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")} disabled={Boolean(activeClientSession && timeLines.length)}><ArrowRightLeft size={15} /> Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1 || Boolean(activeClientSession && timeLines.length)} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{activeClientSession && timeLines.length && <p className="sale-payment-hint">Пакет будет сразу подключён к текущей сессии и начнёт действовать после покупки.</p>}{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
           {error && <div className="sale-form-error" role="alert">{error}</div>}
           {success && <div className="sale-form-success" role="status">{success}</div>}
           <button className="sale-submit-button" disabled={submitting || !lines.length || mixedTariffs}>{submitting ? "Проводим заказ…" : `Оформить продажу · ${money(totalCents)}`}<ChevronRight size={17} /></button>

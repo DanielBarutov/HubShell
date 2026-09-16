@@ -1,6 +1,7 @@
 using System.Reflection;
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
+using GameClub.Client.Domain;
 using GameClub.Client.Presentation;
 using Xunit;
 
@@ -92,6 +93,73 @@ public sealed class MainViewModelVisibilityTests
         Assert.False(loggedIn);
         Assert.True(viewModel.IsAccessFeedbackVisible);
         Assert.Equal("Нет связи с сервером. Вход временно недоступен", viewModel.AccessMessage);
+    }
+
+    [Fact]
+    public async Task SessionSummariesPrioritizeFreeGrantAndDoNotTreatPackageMeterAsPerMinute()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-1",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            LoginGrantRemainingMinutes: 5,
+            ActivePackage: new SessionPackageSnapshot(
+                "package-1",
+                "tariff-1",
+                null,
+                60,
+                60,
+                1,
+                "active",
+                0,
+                0,
+                null),
+            Meter: new SessionMeterSnapshot(
+                "session-1",
+                0,
+                0,
+                0,
+                null,
+                "running",
+                "2026-01-01T12:00:00Z")));
+
+        Assert.Equal("Бесплатное время входа", viewModel.CurrentSessionModeSummary);
+        Assert.Equal("Осталось 5 мин", viewModel.ActiveTimeSummary);
+
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-2",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            ActiveTariff: new SessionTariffSnapshot(
+                "tariff-2",
+                "Поминутный тариф",
+                "per_minute",
+                1,
+                1,
+                0,
+                0,
+                150,
+                5)));
+
+        Assert.Equal("Поминутная игра", viewModel.CurrentSessionModeSummary);
+        Assert.Contains("1,50 ₽/мин", viewModel.CurrentSessionTariffSummary);
+        Assert.Contains("первые 5 мин бесплатно", viewModel.CurrentSessionTariffSummary);
     }
 
     [Fact]

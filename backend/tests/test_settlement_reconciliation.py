@@ -55,6 +55,10 @@ class RecordingAudit:
 
 @pytest.mark.asyncio
 async def test_guest_payment_review_requires_explicit_supervisor_retry() -> None:
+    """
+    Проверяет сценарий «test_guest_payment_review_requires_explicit_supervisor_retry» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
         "Guest hour",
@@ -97,6 +101,10 @@ async def test_guest_payment_review_requires_explicit_supervisor_retry() -> None
 
 @pytest.mark.asyncio
 async def test_sale_review_retry_reuses_original_cash_key_and_reserved_stock() -> None:
+    """
+    Проверяет сценарий «test_sale_review_retry_reuses_original_cash_key_and_reserved_stock» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)
     product = await catalog.create_product("Review drink", "drinks", 700, stock_quantity=2)
@@ -135,6 +143,10 @@ async def test_sale_review_retry_reuses_original_cash_key_and_reserved_stock() -
 
 @pytest.mark.asyncio
 async def test_guest_transient_failure_has_durable_backoff_and_settlement_audit() -> None:
+    """
+    Проверяет сценарий «test_guest_transient_failure_has_durable_backoff_and_settlement_audit» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     now = datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
@@ -190,6 +202,10 @@ async def test_guest_transient_failure_has_durable_backoff_and_settlement_audit(
 
 @pytest.mark.asyncio
 async def test_guest_payment_can_use_manual_transfer_without_cash_shift() -> None:
+    """
+    Проверяет сценарий «test_guest_payment_can_use_manual_transfer_without_cash_shift» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
         "Guest transfer hour",
@@ -222,6 +238,11 @@ async def test_guest_payment_can_use_manual_transfer_without_cash_shift() -> Non
 
 @pytest.mark.asyncio
 async def test_product_transient_failure_has_durable_backoff_and_keeps_reserved_stock() -> None:
+    """
+    Проверяет сценарий
+    «test_product_transient_failure_has_durable_backoff_and_keeps_reserved_stock» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     now = datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
     catalog_repository = InMemoryCatalogRepository()
     catalog = CatalogService(catalog_repository)

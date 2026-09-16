@@ -20,6 +20,10 @@ from gameclub_backend.presentation.grpc.services import (
 
 
 def test_lockdown_policy_round_trips_through_storage_and_proto() -> None:
+    """
+    Проверяет сценарий «test_lockdown_policy_round_trips_through_storage_and_proto» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     policy = LockdownPolicy(
         deployment_mode=LockdownDeploymentMode.SHELL_LAUNCHER,
         user_self_login_enabled=False,
@@ -44,6 +48,10 @@ def test_lockdown_policy_round_trips_through_storage_and_proto() -> None:
 
 
 def test_malformed_or_permissive_policy_data_falls_back_to_safe_app_gate() -> None:
+    """
+    Проверяет сценарий «test_malformed_or_permissive_policy_data_falls_back_to_safe_app_gate» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     assert policy_from_json("not-json") == LockdownPolicy()
     assert policy_from_json('{"shell_enabled":"false"}') == LockdownPolicy()
     assert policy_from_json('{"hidden_drives":["C"]}') == LockdownPolicy()
@@ -51,6 +59,10 @@ def test_malformed_or_permissive_policy_data_falls_back_to_safe_app_gate() -> No
 
 
 async def test_group_policy_is_preserved_when_only_theme_changes() -> None:
+    """
+    Проверяет сценарий «test_group_policy_is_preserved_when_only_theme_changes» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     repository = InMemoryWorkstationGroupRepository()
     service = WorkstationGroupService(repository)
     policy = LockdownPolicy(
@@ -67,6 +79,10 @@ async def test_group_policy_is_preserved_when_only_theme_changes() -> None:
 
 
 def test_empty_policy_proto_uses_safe_defaults() -> None:
+    """
+    Проверяет сценарий «test_empty_policy_proto_uses_safe_defaults» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     policy = from_lockdown_policy_proto(workstations_pb2.WorkstationLockdownPolicy())
 
     assert policy == LockdownPolicy()

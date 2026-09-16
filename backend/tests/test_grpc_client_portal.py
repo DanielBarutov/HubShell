@@ -32,6 +32,8 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 )
 from gameclub_backend.presentation.grpc.services import ClientPortalGrpcService
 
+pytestmark = pytest.mark.api
+
 
 class ChargeHistoryReader:
     def __init__(self, repository: InMemoryChargeRepository) -> None:
@@ -43,6 +45,10 @@ class ChargeHistoryReader:
 
 @pytest.mark.asyncio
 async def test_client_portal_grpc_scopes_snapshot_to_enrolled_device() -> None:
+    """
+    Проверяет сценарий «test_client_portal_grpc_scopes_snapshot_to_enrolled_device» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(jwt_secret="test-secret-with-at-least-32-bytes-long")
     token_service = JwtTokenService(settings)
     client_service = ClientService(InMemoryClientRepository())

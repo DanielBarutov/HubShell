@@ -8,6 +8,8 @@ from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.presentation.grpc.interceptors import GrpcAuditInterceptor
 from gameclub_backend.presentation.grpc.server import create_grpc_server_credentials
 
+pytestmark = pytest.mark.api
+
 
 class FakeContext:
     def __init__(self, metadata: tuple[tuple[str, str], ...], code: grpc.StatusCode) -> None:
@@ -22,6 +24,11 @@ class FakeContext:
 
 
 def test_grpc_tls_is_optional_for_private_deployments_and_requires_a_certificate_pair() -> None:
+    """
+    Проверяет сценарий
+    «test_grpc_tls_is_optional_for_private_deployments_and_requires_a_certificate_pair» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     assert create_grpc_server_credentials(Settings(environment="dev")) is None
     assert create_grpc_server_credentials(Settings(environment="production")) is None
 
@@ -30,6 +37,10 @@ def test_grpc_tls_is_optional_for_private_deployments_and_requires_a_certificate
 
 
 async def test_grpc_audit_interceptor_records_actor_and_request_id() -> None:
+    """
+    Проверяет сценарий «test_grpc_audit_interceptor_records_actor_and_request_id» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     settings = Settings(jwt_secret="test-secret-with-at-least-32-bytes-long")
     token, _ = JwtTokenService(settings).issue_access_token(
         Principal(
@@ -72,6 +83,10 @@ async def test_grpc_audit_interceptor_records_actor_and_request_id() -> None:
 
 
 async def test_grpc_audit_interceptor_records_failed_mutation_without_payload() -> None:
+    """
+    Проверяет сценарий «test_grpc_audit_interceptor_records_failed_mutation_without_payload» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     repository = InMemoryAuditRepository()
     interceptor = GrpcAuditInterceptor(repository, None)
 

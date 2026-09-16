@@ -18,6 +18,7 @@ export function PcPanel({
   onDeposit,
   onOpenSale,
   onSessionChanged,
+  client,
   api,
 }: {
   pc: Workstation;
@@ -29,6 +30,7 @@ export function PcPanel({
   onDeposit: (client?: Client, bonusOnly?: boolean) => void;
   onOpenSale: () => void;
   onSessionChanged: () => void;
+  client?: Client;
   api?: GameClubApi;
 }) {
   const meta = statusMeta[pc.status];
@@ -283,7 +285,7 @@ export function PcPanel({
       <ChevronRight size={17} />
     </button>}
     <div className="panel-actions">
-      <button className="secondary-button wide" onClick={() => onDeposit(clientCandidate)}><WalletCards size={15} /> Пополнить баланс</button>
+      {pc.status === "busy" && client && <button className="secondary-button wide" onClick={() => onDeposit(client)}><WalletCards size={15} /> Пополнить депозит</button>}
       <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
       {pc.status === "busy" ? <><button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
       {stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}

@@ -41,6 +41,13 @@ from gameclub_backend.modules.workstations.infrastructure.postgres import (
     PostgresWorkstationRepository,
 )
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.postgres,
+    pytest.mark.concurrency,
+    pytest.mark.slow,
+]
+
 
 @pytest.fixture
 def postgres_dsn() -> str:
@@ -54,6 +61,10 @@ def postgres_dsn() -> str:
 async def test_postgres_parallel_package_consumers_preserve_locked_delta(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_parallel_package_consumers_preserve_locked_delta» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     client_id: uuid.UUID | None = None
     tariff_id: uuid.UUID | None = None
@@ -139,6 +150,10 @@ async def test_postgres_parallel_package_consumers_preserve_locked_delta(
 async def test_postgres_transfer_confirms_once_and_rejects_other_key(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_transfer_confirms_once_and_rejects_other_key» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     workstation_ids: list[uuid.UUID] = []
     client_id: uuid.UUID | None = None
@@ -260,6 +275,10 @@ async def test_postgres_transfer_confirms_once_and_rejects_other_key(
 async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_offline_duplicate_delivery_does_not_debit_twice» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
@@ -427,6 +446,10 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
 async def test_postgres_transfer_to_two_targets_commits_only_one_owner(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_transfer_to_two_targets_commits_only_one_owner» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     workstation_ids: list[uuid.UUID] = []
     offer_ids: list[uuid.UUID] = []

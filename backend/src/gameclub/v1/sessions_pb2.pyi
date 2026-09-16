@@ -142,7 +142,7 @@ class SessionMeterSnapshot(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., billed_minutes: _Optional[int] = ..., billed_cents: _Optional[int] = ..., package_minutes: _Optional[int] = ..., active_entitlement_id: _Optional[str] = ..., status: _Optional[str] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class SessionTariffSnapshot(_message.Message):
-    __slots__ = ("id", "name", "billing_mode", "duration_minutes", "quantity", "elapsed_minutes", "remaining_minutes")
+    __slots__ = ("id", "name", "billing_mode", "duration_minutes", "quantity", "elapsed_minutes", "remaining_minutes", "price_per_minute_cents", "free_minutes")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
@@ -150,6 +150,8 @@ class SessionTariffSnapshot(_message.Message):
     QUANTITY_FIELD_NUMBER: _ClassVar[int]
     ELAPSED_MINUTES_FIELD_NUMBER: _ClassVar[int]
     REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    PRICE_PER_MINUTE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    FREE_MINUTES_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     billing_mode: str
@@ -157,7 +159,9 @@ class SessionTariffSnapshot(_message.Message):
     quantity: int
     elapsed_minutes: int
     remaining_minutes: int
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., billing_mode: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., quantity: _Optional[int] = ..., elapsed_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ...) -> None: ...
+    price_per_minute_cents: int
+    free_minutes: int
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., billing_mode: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., quantity: _Optional[int] = ..., elapsed_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ...) -> None: ...
 
 class SessionSnapshot(_message.Message):
     __slots__ = ("schema_version", "server_time", "session", "workstation_id", "zone_id", "client_id", "balance_cents", "balance_bonus", "active_package", "package_queue", "meter", "allowed_actions", "device_id", "active_tariff", "login_grant_remaining_minutes", "balance_remaining_minutes")

@@ -181,7 +181,7 @@ public sealed class ClientSessionCoordinatorTests
                 sessionId,
                 string.Empty,
                 deviceId,
-                targetWorkstationId,
+                targetWorkstationId ?? string.Empty,
                 string.Empty,
                 "pending",
                 false,

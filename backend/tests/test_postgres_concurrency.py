@@ -36,8 +36,19 @@ from gameclub_backend.modules.workstations.infrastructure.postgres import (
     PostgresWorkstationRepository,
 )
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.postgres,
+    pytest.mark.concurrency,
+    pytest.mark.slow,
+]
+
 
 def test_postgres_dsn_is_explicitly_configured() -> None:
+    """
+    Проверяет сценарий «test_postgres_dsn_is_explicitly_configured» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     if not os.getenv("GAMECLUB_TEST_POSTGRES_DSN"):
         pytest.skip("Set GAMECLUB_TEST_POSTGRES_DSN to run PostgreSQL integration tests")
 
@@ -51,6 +62,10 @@ def postgres_dsn() -> str:
 
 
 async def test_postgres_preserves_concurrent_distinct_top_ups(postgres_dsn: str) -> None:
+    """
+    Проверяет сценарий «test_postgres_preserves_concurrent_distinct_top_ups» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     client_id = None
     try:
@@ -93,6 +108,10 @@ async def test_postgres_preserves_concurrent_distinct_top_ups(postgres_dsn: str)
 async def test_postgres_persists_guest_links_for_reservation_and_session(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_persists_guest_links_for_reservation_and_session» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     guest_id = None
     workstation_id = None
@@ -168,6 +187,10 @@ async def test_postgres_persists_guest_links_for_reservation_and_session(
 
 
 async def test_postgres_quote_applies_versioned_discount_rule_data(postgres_dsn: str) -> None:
+    """
+    Проверяет сценарий «test_postgres_quote_applies_versioned_discount_rule_data» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     tariff_id = None
     rule_id = None
@@ -210,6 +233,10 @@ async def test_postgres_quote_applies_versioned_discount_rule_data(postgres_dsn:
 async def test_postgres_assigns_unique_versions_under_concurrent_tariff_creates(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_assigns_unique_versions_under_concurrent_tariff_creates» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     tariff_ids: list[uuid.UUID] = []
     try:
@@ -246,6 +273,10 @@ async def test_postgres_assigns_unique_versions_under_concurrent_tariff_creates(
 async def test_postgres_charges_one_completed_session_once_under_concurrency(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_charges_one_completed_session_once_under_concurrency» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     class FixedClock:
         current = datetime.datetime(2037, 1, 15, 12, tzinfo=datetime.UTC)
 
@@ -367,6 +398,10 @@ async def test_postgres_charges_one_completed_session_once_under_concurrency(
 
 
 async def test_postgres_serializes_conflicting_reservations(postgres_dsn: str) -> None:
+    """
+    Проверяет сценарий «test_postgres_serializes_conflicting_reservations» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     workstation_id = None
     client_id = None
@@ -442,6 +477,10 @@ async def test_postgres_serializes_conflicting_reservations(postgres_dsn: str) -
 async def test_postgres_serializes_active_sessions_and_retries_by_key(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_serializes_active_sessions_and_retries_by_key» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     workstation_id = None
     try:
@@ -507,6 +546,10 @@ async def test_postgres_serializes_active_sessions_and_retries_by_key(
 async def test_postgres_cash_shift_serializes_open_and_distinct_movements(
     postgres_dsn: str,
 ) -> None:
+    """
+    Проверяет сценарий «test_postgres_cash_shift_serializes_open_and_distinct_movements» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     shift_id = None
     try:
@@ -557,6 +600,10 @@ async def test_postgres_cash_shift_serializes_open_and_distinct_movements(
 
 
 async def test_postgres_cash_movement_reference_is_unique(postgres_dsn: str) -> None:
+    """
+    Проверяет сценарий «test_postgres_cash_movement_reference_is_unique» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     shift_id = None
     try:

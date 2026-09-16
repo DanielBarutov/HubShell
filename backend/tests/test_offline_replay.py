@@ -118,6 +118,10 @@ def make_operation(
 
 @pytest.mark.asyncio
 async def test_offline_replay_is_duplicate_safe_and_returns_snapshot() -> None:
+    """
+    Проверяет сценарий «test_offline_replay_is_duplicate_safe_and_returns_snapshot» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, offline = await build_offline_services(clock)
     session = await sessions.start(
@@ -168,6 +172,10 @@ async def test_offline_replay_is_duplicate_safe_and_returns_snapshot() -> None:
 
 @pytest.mark.asyncio
 async def test_offline_stop_is_replayed_and_gap_is_rejected() -> None:
+    """
+    Проверяет сценарий «test_offline_stop_is_replayed_and_gap_is_rejected» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, _tariff, sessions, _billing, offline = await build_offline_services(clock)
     session = await sessions.start(
@@ -210,6 +218,10 @@ async def test_offline_stop_is_replayed_and_gap_is_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_offline_replay_uses_server_clock_when_device_clock_is_skewed() -> None:
+    """
+    Проверяет сценарий «test_offline_replay_uses_server_clock_when_device_clock_is_skewed» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     workstation, client, tariff, sessions, billing, offline = await build_offline_services(clock)
     session = await sessions.start(
@@ -245,6 +257,10 @@ async def test_offline_replay_uses_server_clock_when_device_clock_is_skewed() ->
 
 @pytest.mark.asyncio
 async def test_offline_replay_does_not_authorize_an_unknown_session() -> None:
+    """
+    Проверяет сценарий «test_offline_replay_does_not_authorize_an_unknown_session» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     clock = FixedClock()
     (
         workstation,

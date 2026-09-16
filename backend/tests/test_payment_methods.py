@@ -11,6 +11,10 @@ from gameclub_backend.presentation.http.app import create_app
 
 
 async def test_payment_method_service_supports_create_update_and_delete() -> None:
+    """
+    Проверяет сценарий «test_payment_method_service_supports_create_update_and_delete» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     service = PaymentMethodService(InMemoryPaymentMethodRepository())
 
     method = await service.create(" Terminal ", " Терминал ", sort_order=3)
@@ -27,6 +31,10 @@ async def test_payment_method_service_supports_create_update_and_delete() -> Non
 
 
 async def test_payment_method_service_rejects_duplicate_key() -> None:
+    """
+    Проверяет сценарий «test_payment_method_service_rejects_duplicate_key» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     service = PaymentMethodService(InMemoryPaymentMethodRepository())
     await service.create("cash", "Наличные")
 
@@ -37,6 +45,10 @@ async def test_payment_method_service_rejects_duplicate_key() -> None:
 
 
 async def test_payment_method_http_crud_uses_settings_permission() -> None:
+    """
+    Проверяет сценарий «test_payment_method_http_crud_uses_settings_permission» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     application = create_app(
         Settings(
             jwt_secret="test-secret-with-at-least-32-bytes-long",

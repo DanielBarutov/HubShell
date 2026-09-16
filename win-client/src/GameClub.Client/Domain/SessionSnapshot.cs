@@ -56,7 +56,9 @@ public sealed record SessionTariffSnapshot(
     int DurationMinutes,
     int Quantity,
     int ElapsedMinutes,
-    int RemainingMinutes);
+    int RemainingMinutes,
+    long PricePerMinuteCents = 0,
+    int FreeMinutes = 0);
 
 public sealed record SessionTransferOfferSnapshot(
     string Id,

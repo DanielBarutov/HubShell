@@ -24,6 +24,20 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+Быстрые проверки без внешней инфраструктуры и отдельный integration gate:
+
+```text
+uv run pytest -m "not integration and not slow"
+uv run pytest -m "api or contract"
+uv run pytest --cov=src/gameclub_backend --cov-report=term-missing
+GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run pytest -m integration
+```
+
+Тесты с PostgreSQL и Redis намеренно требуют явных DSN и не считаются пройденными
+в offline-прогоне, если инфраструктура не задана. Маркеры также доступны для
+точечных запусков: `unit`, `api`, `contract`, `postgres`, `redis`, `concurrency`
+и `slow`.
+
 При заданном `GAMECLUB_POSTGRES_DSN` приложение выбирает PostgreSQL-репозитории;
 без него используется in-memory адаптер для быстрых unit/API тестов.
 

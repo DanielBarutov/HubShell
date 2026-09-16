@@ -13,6 +13,10 @@ from gameclub_backend.jobs.scheduler import run
 
 
 def test_broker_uses_stub_without_redis_and_enables_asyncio_middleware() -> None:
+    """
+    Проверяет сценарий «test_broker_uses_stub_without_redis_and_enables_asyncio_middleware» и
+    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     broker = create_broker(Settings())
 
     assert isinstance(broker, dramatiq.brokers.stub.StubBroker)
@@ -20,17 +24,29 @@ def test_broker_uses_stub_without_redis_and_enables_asyncio_middleware() -> None
 
 
 def test_sweep_time_requires_timezone() -> None:
+    """
+    Проверяет сценарий «test_sweep_time_requires_timezone» и подтверждает ожидаемый публичный
+    результат согласно соответствующему бизнес-правилу.
+    """
     parsed = _parse_sweep_time("2036-01-01T12:00:00+00:00")
 
     assert parsed == datetime.datetime(2036, 1, 1, 12, tzinfo=datetime.UTC)
 
 
 def test_background_actors_do_not_publish_discarded_results() -> None:
+    """
+    Проверяет сценарий «test_background_actors_do_not_publish_discarded_results» и подтверждает
+    ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    """
     assert sweep_reservation_no_shows.fn.__annotations__["return"] is None
     assert reconcile_billing_charges.fn.__annotations__["return"] is None
 
 
 def test_background_actors_share_one_broker() -> None:
+    """
+    Проверяет сценарий «test_background_actors_share_one_broker» и подтверждает ожидаемый
+    публичный результат согласно соответствующему бизнес-правилу.
+    """
     assert sweep_reservation_no_shows.broker is reconcile_billing_charges.broker
     assert reconcile_billing_charges.broker is run_cash_shift_schedule.broker
     assert set(reconcile_billing_charges.broker.actors) >= {
@@ -44,5 +60,9 @@ def test_background_actors_share_one_broker() -> None:
 
 
 def test_scheduler_requires_redis() -> None:
+    """
+    Проверяет сценарий «test_scheduler_requires_redis» и подтверждает ожидаемый публичный
+    результат согласно соответствующему бизнес-правилу.
+    """
     with pytest.raises(RuntimeError, match="GAMECLUB_REDIS_URL is required"):
         asyncio.run(run())
