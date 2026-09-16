@@ -1,0 +1,101 @@
+/* Final shared palette for the map, booking schedule and checkout workspace. */
+:root {
+  --operator-accent: #b6f06a;
+  --operator-accent-strong: #8bd34c;
+  --operator-accent-soft: #1d3b2d;
+  --operator-surface: #111d1e;
+  --operator-surface-raised: #17252d;
+  --operator-surface-deep: #0f1921;
+  --operator-line: #2b4541;
+}
+
+/* Map */
+.map-stage {
+  border-color: var(--operator-line);
+  background: radial-gradient(circle at 80% 10%, #1b302c 0, #122127 38%, #0d151c 100%);
+  box-shadow: 0 18px 45px rgba(7, 20, 18, .2);
+}
+.map-legend-panel { border-color: rgba(182, 240, 106, .12); background: rgba(13, 25, 27, .9); }
+.map-panel-title { border-color: rgba(182, 240, 106, .12); }
+.map-panel-zone { color: #c9f39c; background: rgba(182, 240, 106, .1); }
+.map-canvas {
+  border-color: var(--operator-line);
+  background-color: rgba(7, 15, 17, .24);
+  background-image: linear-gradient(rgba(145, 176, 135, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(145, 176, 135, .06) 1px, transparent 1px);
+}
+.map-slot { border-color: rgba(117, 151, 137, .18); }
+.map-slot.drop-target { border-color: var(--operator-accent); background: rgba(182, 240, 106, .11); box-shadow: 0 0 0 2px rgba(182, 240, 106, .14); }
+.map-seat { color: #b7cbbf; border-color: #40564f; background: linear-gradient(145deg, rgba(29, 51, 48, .9), rgba(18, 32, 34, .95)); }
+.map-seat:hover { border-color: var(--operator-accent); background: #213b36; }
+.map-seat.online { border-color: #4c9368; }
+.map-seat.busy { border-color: #8e72c0; background: linear-gradient(145deg, rgba(66, 51, 93, .76), rgba(29, 31, 43, .95)); }
+.map-seat.offline { border-color: #4b5b5c; }
+.map-seat.maintenance { border-color: #b27a3b; }
+.map-seat-screen { color: #83a79b; }
+.map-seat.busy .map-seat-screen { color: #c4a9ff; }
+.map-edit-toggle.active { color: #10180e; border-color: var(--operator-accent); background: var(--operator-accent); box-shadow: 0 6px 16px rgba(119, 181, 54, .22); }
+.map-toolbar .segmented, .booking-toolbar .segmented { border-color: #2a413c; background: #142321; }
+.map-toolbar .segmented button.selected, .booking-toolbar .segmented button.selected { color: #10180e; background: var(--operator-accent); }
+
+/* Booking schedule */
+.booking-heading-actions .primary-button { color: #10180e; border-color: var(--operator-accent); background: linear-gradient(135deg, var(--operator-accent), var(--operator-accent-strong)); box-shadow: 0 6px 16px rgba(119, 181, 54, .18); }
+.booking-heading-actions .primary-button:hover { border-color: #cff99a; background: #c5f887; }
+.date-chip { color: #c1d4c9; border-color: #304841; background: #152622; }
+.date-chip:hover { border-color: #5c855c; background: #1a3029; }
+.booking-toolbar .timeline-note { color: #91a79b; }
+.timeline { border-color: var(--operator-line); background: #111d1e; }
+.timeline-hours { border-color: var(--operator-line); background: #142321; }
+.timeline-hours span, .timeline-cell { color: #829a8f; border-color: var(--operator-line); }
+.timeline-row { border-color: var(--operator-line); background: #111d1e; }
+.booking-block.confirmed { color: #d8f5bd; border-color: #6d9f54; background: #315132; }
+.booking-block.pending { color: #f5d49d; border-color: #9b713a; background: #4b351f; }
+.booking-block.active { color: #ccebd7; border-color: #4d9a74; background: #245542; }
+.booking-action { color: #b9d9c3; border-color: #467258; background: #1d3a2c; }
+.booking-action:hover { color: #102016; border-color: var(--operator-accent); background: var(--operator-accent); }
+.booking-date-picker .date-time-trigger { border-color: #304841; background: #152622; }
+.booking-date-picker .date-time-trigger:hover, .booking-date-picker.date-time-picker.open .date-time-trigger { border-color: #5c855c; background: #1a3029; box-shadow: 0 0 0 3px rgba(182, 240, 106, .1); }
+.date-time-trigger > svg:first-child { color: var(--operator-accent-strong); }
+.date-time-popover { border-color: #385448; background: #111e1d; }
+
+/* Checkout */
+.sale-entry-card { color: #d8eadd; border-color: #315844; background: linear-gradient(135deg, #17382d, #142a28); }
+.sale-entry-card:hover { border-color: #6caa66; background: linear-gradient(135deg, #1e4937, #17312d); }
+.sale-workspace { color: #d9e9df; border-color: #38534a; background: var(--operator-surface-deep); }
+.sale-workspace-header { border-color: #2c493e; background: linear-gradient(110deg, #172e2a, #101f22 65%, #17342d); }
+.sale-close-button { border-color: #3a574d; background: #1a302c; }
+.sale-close-button:hover { border-color: var(--operator-accent); background: #2b4939; }
+.sale-workspace-title p { color: var(--operator-accent-strong); }
+.sale-shift-badge { border-color: #315844; background: rgba(25, 58, 45, .66); }
+.sale-buyer-card, .sale-catalog-card { border-color: #2c493e; background: #142522; }
+.sale-step { color: #c8f39a; border-color: #4b7d4f; background: #1c3b2d; }
+.sale-buyer-choice { border-color: #2f4b43; background: #172c2b; }
+.sale-buyer-choice:hover { border-color: #659b69; background: #1d3932; }
+.sale-buyer-choice.selected { border-color: #68a873; background: linear-gradient(135deg, #1d4938, #18352f); }
+.sale-choice-icon.guest { color: #bfd1c4; background: #2a3b42; }
+.sale-choice-icon.client { color: #c4ef9c; background: #28513a; }
+.sale-client-search { color: #8fbd84; border-color: #3b604d; background: #172f2e; }
+.sale-client-search:focus-within { border-color: #72ae68; box-shadow: 0 0 0 3px rgba(182, 240, 106, .12); }
+.sale-client-result { border-color: #315044; background: #172d2b; }
+.sale-client-result:hover { border-color: #6ca76b; background: #1d3b32; }
+.sale-main-tabs { border-color: #2c493e; }
+.sale-main-tabs button:hover { background: #1b3831; }
+.sale-main-tabs button.selected { color: #102016; border-color: var(--operator-accent); background: var(--operator-accent); box-shadow: 0 5px 14px rgba(119, 181, 54, .2); }
+.sale-main-tabs button.selected svg { color: #102016; }
+.sale-category-tabs button { border-color: #315044; background: #172b2a; }
+.sale-category-tabs button:hover, .sale-category-tabs button.selected { color: #102016; border-color: var(--operator-accent); background: var(--operator-accent); }
+.sale-item-card { border-color: #315044; background: linear-gradient(160deg, #1a3530, #142a29); }
+.sale-item-card:hover { border-color: #79b66b; background: linear-gradient(160deg, #21443a, #18332f); }
+.sale-add-icon { border-color: #3e6251; background: #1d3930; }
+.sale-item-card:hover .sale-add-icon { color: #102016; border-color: var(--operator-accent); background: var(--operator-accent); }
+.sale-item-icon.product, .sale-line-icon.product { color: #c6e6c3; background: #2b4a39; }
+.sale-empty-catalog, .sale-empty-order { border-color: #355248; background: #142826; }
+.sale-empty-order svg { color: #7fbe79; }
+.sale-order-panel { border-color: #2c493e; background: #111f20; scrollbar-color: #416b54 transparent; }
+.sale-order-heading { border-color: #2c493e; }
+.sale-order-target { border-color: #315044; background: #172d2b; }
+.sale-target-icon { color: #c7f39d; background: #28513a; }
+.sale-quantity { border-color: #365548; background: #182e2c; }
+.sale-quantity button:hover { color: #102016; background: var(--operator-accent); }
+.sale-payment-tabs button { border-color: #315044; background: #172c2b; }
+.sale-payment-tabs button:hover, .sale-payment-tabs button.selected { color: #102016; border-color: var(--operator-accent); background: var(--operator-accent); }
+.sale-cancel-button:hover { color: #dff5df; }
