@@ -34,6 +34,7 @@ public partial class MainWindow : Window
         Title = clientHost.WindowTitle;
         this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
         this.FindControl<Button>("HideToTrayButton")!.IsVisible = clientHost.WindowAdapter is not null;
+        this.FindControl<Button>("OpenDesktopButton")!.IsVisible = clientHost.WindowAdapter is not null;
         if (clientHost.WindowAdapter?.UsesTransparentWindow == true)
         {
             TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
@@ -83,8 +84,31 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RecordKeyActivity(object? sender, KeyEventArgs args) =>
+    private void RecordKeyActivity(object? sender, KeyEventArgs args)
+    {
+        if (ViewModel.TrySuppressLockedSystemShortcut(
+                altPressed: (args.KeyModifiers & KeyModifiers.Alt) != 0,
+                tabPressed: args.Key == Key.Tab,
+                windowsPressed: (args.KeyModifiers & KeyModifiers.Meta) != 0,
+                rPressed: args.Key == Key.R))
+        {
+            args.Handled = true;
+            ViewModel.TouchAccessActivity();
+            return;
+        }
+
+        var openedManagerLogin = ViewModel.TryOpenManagerLoginShortcut(
+            controlPressed: (args.KeyModifiers & KeyModifiers.Control) != 0,
+            altPressed: (args.KeyModifiers & KeyModifiers.Alt) != 0,
+            pPressed: args.Key == Key.P);
+        if (openedManagerLogin)
+        {
+            args.Handled = true;
+            Dispatcher.UIThread.Post(() => this.FindControl<TextBox>("ManagerPasswordBox")?.Focus());
+        }
+
         ViewModel.TouchAccessActivity();
+    }
 
     private void RecordPointerActivity(object? sender, PointerPressedEventArgs args) =>
         ViewModel.TouchAccessActivity();
@@ -178,6 +202,9 @@ public partial class MainWindow : Window
             this.FindControl<TextBox>("ManagerPasswordBox")?.Focus();
         }
     }
+
+    private void OpenDesktop(object? sender, RoutedEventArgs args) =>
+        _clientHost.WindowAdapter?.HideToTray();
 
     private async void LockClient(object? sender, RoutedEventArgs args) =>
         await ViewModel.LogoutAsync();
@@ -369,16 +396,21 @@ public partial class MainWindow : Window
 
     private void ApplyHostWindowMode()
     {
-        var accessGateVisible = ViewModel.IsAccessLocked || ViewModel.IsMaintenanceMode;
+        var mode = ViewModel.IsMaintenanceMode
+            ? ClientWindowMode.Maintenance
+            : ViewModel.IsAccessLocked
+                ? ClientWindowMode.Locked
+                : ClientWindowMode.User;
         if (_clientHost.WindowAdapter is not null)
         {
-            _clientHost.WindowAdapter.ApplyWindowMode(accessGateVisible);
+            _clientHost.WindowAdapter.ApplyWindowMode(mode);
             return;
         }
 
         WindowState = WindowState.Normal;
-        Width = accessGateVisible ? DeveloperAccessGateWidth : DeveloperWidgetWidth;
-        Height = accessGateVisible ? DeveloperAccessGateHeight : DeveloperWidgetHeight;
+        var useAccessGateSize = mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance;
+        Width = useAccessGateSize ? DeveloperAccessGateWidth : DeveloperWidgetWidth;
+        Height = useAccessGateSize ? DeveloperAccessGateHeight : DeveloperWidgetHeight;
     }
 
     private static string FormatRussianPhone(string value)

@@ -12,10 +12,10 @@
 
 Закрыть подтверждённые разрывы между тремя `PRODUCT-CONTRACT.md`,
 `CODEX.md` и фактическим кодом. План является сквозным: backend остаётся
-источником истины, BFF и protobuf передают его решения, frontend и WinUI только
+источником истины, BFF и protobuf передают его решения, frontend и Avalonia-клиент только
 показывают DTO и вызывают явные команды.
 
-Зафиксированное решение по окну WinUI: до server-backed авторизации действует
+Зафиксированное решение по окну Avalonia-клиента: до server-backed авторизации действует
 полноэкранный borderless access-gate; после авторизации клиент не заменяет
 Windows shell, переходит к обычному Windows Desktop и показывает компактный
 borderless-виджет сессии с возможностью скрытия в трей. App-level gate не
@@ -37,7 +37,7 @@ borderless-виджет сессии с возможностью скрытия 
   payment methods;
 - enrollment по MAC с installation binding, device JWT, heartbeat, command ACK,
   access-gate и личный кабинет пользователя;
-- frontend map/checkout/CRM/analytics/settings и WinUI heartbeat, reconnect,
+- frontend map/checkout/CRM/analytics/settings и Avalonia heartbeat, reconnect,
   server commands и source-level publish/deployment scripts.
 
 ### Не имеется или имеется только частично
@@ -49,11 +49,11 @@ borderless-виджет сессии с возможностью скрытия 
 | Session invariants | Application guard и PostgreSQL partial unique index добавлены; текущий DSN suite прошёл | Транзакционная уникальность и объяснимая ошибка; специализированные новые concurrency cases остаются в backlog |
 | Гость и деньги | Guest fixed tariff требует подтверждённого direct payment и сохраняет payment link; guest metered billing отложен | Server decision после подтверждённой direct payment, без guest balance |
 | Payment parts | Provider-neutral parts, mixed `balance`/`cash`, immutable snapshots, durable per-record retry/backoff, audit и `needs_review` boundary добавлены | Production cross-owner UoW/outbox policy и provider-specific fault matrix |
-| Reservation access | `CheckEntry` с 30-minute protection, named/guest matching и machine-readable reason добавлен в session start/HTTP/gRPC; WinUI login/register и command start вызывают server decision | Native device login smoke и full browser matrix |
+| Reservation access | `CheckEntry` с 30-minute protection, named/guest matching и machine-readable reason добавлен в session start/HTTP/gRPC; Avalonia login/register и command start вызывают server decision | Native device login smoke и full browser matrix |
 | Transfer | API/proto/use case, PostgreSQL owner transaction, client confirmations, post-commit restart status и two-target concurrency добавлены; native ACK не доказан | Явное подтверждение на новом ПК и native integration evidence |
 | Snapshot/offline | Snapshot/entry HTTP+gRPC, heartbeat/read-model, DPAPI journal и backend replay добавлены; duplicate/order/clock-skew guards покрыты | Native power-loss/disk-full/reconnect evidence |
 | Operator web | Карта/panel получают queue/snapshot/entry decision, mixed payment, guest paid-start, transfer и stale/offline fields; основные headed routes и confirmation smoke пройдены | Полная browser/accessibility/error matrix |
-| WinUI post-login | Post-auth desktop/widget/tray, package queue/activation, snapshot gateway, transfer, DPAPI journal и EntryDecision login gate добавлены на source-level; native smoke не доказан | Native dynamic presentation/widget/tray/reconnect evidence |
+| Avalonia post-login | Post-auth desktop/widget/tray, package queue/activation, snapshot gateway, transfer, DPAPI journal и EntryDecision login gate добавлены на source-level; native smoke не доказан | Native dynamic presentation/widget/tray/reconnect evidence |
 | Native security | Native Windows build, обычный пользователь и kiosk не доказаны | Windows smoke и отдельный reversible Assigned Access/Shell Launcher rollout |
 
 ## Фактический прогресс текущего среза
@@ -74,19 +74,19 @@ borderless-виджет сессии с возможностью скрытия 
 - device-start получает 5 минут login grant, а metered billing вычитает его
   отдельно от `free_minutes`; одна активная client session защищена use-case
   guard и PostgreSQL partial unique index;
-- client portal snapshot теперь содержит ordered entitlement queue, а WinUI
+- client portal snapshot теперь содержит ordered entitlement queue, а Avalonia-клиент
   имеет explicit activation RPC/UI; frontend получил typed BFF methods и mixed
   payment controls.
 - session snapshot/entry HTTP+gRPC и heartbeat/read-model, PostgreSQL transfer
   owner transaction, backend offline replay с idempotency/checksum и
-  frontend/WinUI consumers добавлены на source/unit-уровне; Compose migration,
+  frontend/Avalonia consumers добавлены на source/unit-уровне; Compose migration,
   HTTP/gRPC и headed map/offline smoke подтверждены отдельно в
   `plans/VERIFICATION.md`.
 
 Остаётся принципиально незакрытым: production-политика общего
 settlement/reconciliation UoW между ledger owners, full browser/accessibility
 matrix и native Windows build/runtime/kiosk/security evidence. Per-record
-retry/backoff, settlement audit, PostgreSQL mixed-fault path и WinUI login gate
+retry/backoff, settlement audit, PostgreSQL mixed-fault path и Avalonia login gate
 добавлены и отражены в планах 31–37.
 
 ### Матрица результата текущего среза
@@ -95,17 +95,17 @@ retry/backoff, settlement audit, PostgreSQL mixed-fault path и WinUI login gate
 | --- | --- | --- | --- |
 | Payment parts и mixed settlement | DTO, валидация суммы, balance/cash для product sale, cash-shift boundary, stock reservation, durable `pending/needs_review`, per-record backoff/audit и supervisor retry | unit/API tests; DSN suite `157 passed` с settlement mixed-fault/payload-conflict regression | production cross-owner UoW/outbox policy и настройки payment methods |
 | Guest fixed tariff | durable direct payment с idempotency, cash movement boundary и ссылка в session start | unit/API/fault-injection tests; DSN suite | полный PostgreSQL cross-owner settlement fault matrix |
-| Entry decision | backend `CheckEntry`, HTTP/gRPC, session start и WinUI portal login/register consumer | unit/API/contract tests, live HTTP entry decision и generated C# signature check | native device login smoke и full browser matrix |
+| Entry decision | backend `CheckEntry`, HTTP/gRPC, session start и Avalonia portal login/register consumer | unit/API/contract tests, live HTTP entry decision и generated C# signature check | native device login smoke и full browser matrix |
 | One active client session | application guard и PostgreSQL partial unique index | unit/concurrency tests; DSN suite проходит | production load/lock evidence |
 | Entitlement queue | durable queue, purchase, ordering, explicit activation, window-aware session consumption и auto-next | unit и in-process gRPC smoke | PostgreSQL concurrency и общий debit/package transaction |
 | Login grant | поле session, отдельное вычитание в meter, device-start grant | unit tests и PostgreSQL offline/meter evidence | отдельный audit/idempotency test для повторного device session start |
-| Transfer/offline/snapshot | HTTP/gRPC snapshot/transfer/replay, heartbeat/read-model, WinUI gateway/journal и frontend consumers добавлены | source/unit tests; PostgreSQL DSN suite проверяет transfer two-target race, offline duplicate debit и settlement mixed fault; Compose/gRPC/headed smoke | native power-loss/disk-full, kiosk и full reconnect evidence |
+| Transfer/offline/snapshot | HTTP/gRPC snapshot/transfer/replay, heartbeat/read-model, Avalonia gateway/journal и frontend consumers добавлены | source/unit tests; PostgreSQL DSN suite проверяет transfer two-target race, offline duplicate debit и settlement mixed fault; Compose/gRPC/headed smoke | native power-loss/disk-full, kiosk и full reconnect evidence |
 
 ## Декомпозиция следующего среза
 
 Чтобы не смешивать разные транзакционные и платформенные границы, остаток
 разделён на дочерние планы. Реализация идёт в указанном порядке, но frontend и
-WinUI подключаются только после публикации DTO владельцем backend:
+Avalonia подключаются только после публикации DTO владельцем backend:
 
 1. [`30-entitlements-meter`](../30-entitlements-meter/PLAN.md) — state machine
    пакетов, consumption, time windows, auto-next и device session-start grant.
@@ -119,7 +119,7 @@ WinUI подключаются только после публикации DTO 
    idempotent batch replay и offline safety.
 6. [`35-frontend-contract-consumers`](../35-frontend-contract-consumers/PLAN.md) —
    карта, queue, guest decision, settlement states, transfer и stale PC.
-7. [`36-winui-contract-consumers`](../36-winui-contract-consumers/PLAN.md) —
+7. [`36-windows-client-contract-consumers`](../36-windows-client-contract-consumers/PLAN.md) —
    snapshot, package lifecycle, transfer, offline и reconnect consumers.
 8. [`37-platform-integration-evidence`](../37-platform-integration-evidence/PLAN.md) —
    PostgreSQL/Compose/browser/native Windows/kiosk/security evidence.
@@ -133,14 +133,14 @@ WinUI подключаются только после публикации DTO 
 1. Все новые money, package, session и entry state хранятся в PostgreSQL и
    изменяются транзакционно. Redis остаётся cache/transport, не ledger.
 2. Публичные DTO сначала фиксируются в versioned protobuf/BFF-контрактах. В
-   UI и WinUI не переносится расчёт доступности, цены, совместимости, 30 минут,
+   UI и Avalonia-клиент не переносится расчёт доступности, цены, совместимости, 30 минут,
    списания или выбора следующего пакета.
 3. Каждая изменяющая команда имеет actor/device context, deadline, audit и
    idempotency. Offline replay использует sequence вместе с idempotency key и
    не создаёт новую сессию без успешной online-аутентификации.
 4. Guest остаётся отдельным участником без balance/ledger. Его session start
    разрешается только после server-confirmed direct payment.
-5. Сохранённый пакет на новом WinUI login не расходуется автоматически:
+5. Сохранённый пакет на новом Avalonia login не расходуется автоматически:
    совместимый пакет показывается и активируется отдельным подтверждением;
    после активации следующий совместимый элемент очереди стартует по правилам
    backend.
@@ -184,8 +184,8 @@ WinUI подключаются только после публикации DTO 
   interval, 30-minute lock, assigned client match, anonymous guest reservation,
   disabled/offline workstation и machine-readable refusal reason.
 - [x] Встроить entry decision в login/session start и сделать одинаковый результат
-  для HTTP, gRPC и WinUI; UI default `now + 30m` не считать бизнес-правилом.
-  Backend session start, WinUI portal login/register и command consumer вызывают
+  для HTTP, gRPC и Avalonia; UI default `now + 30m` не считать бизнес-правилом.
+  Backend session start, Avalonia portal login/register и command consumer вызывают
   server decision; native runtime остаётся отдельной проверкой.
 - [x] Реализовать transfer offer/confirm на новом ПК: explicit confirmation,
   atomic move of session/meter/queue, old-PC restart command и duplicate-safe
@@ -223,7 +223,7 @@ WinUI подключаются только после публикации DTO 
 - [x] Добавить transfer UI с offer/confirm/result и отображением offline ПК,
   last client/time/status. VNC и remote control не добавлять.
 
-### 6. WinUI: post-login widget, snapshot и offline behavior
+### 6. Avalonia: post-login widget, snapshot и offline behavior
 
 - [x] Разделить window presentation по состояниям: fullscreen gate до auth,
   normal desktop + compact borderless widget после auth; убрать fullscreen-only
@@ -237,7 +237,7 @@ WinUI подключаются только после публикации DTO 
 - [x] Реализовать device/client token storage и durable offline journal по
   approved Windows storage boundary; replay только через backend batch protocol.
 - [x] Добавить transfer confirmation на новом ПК и проверку повторной доставки;
-  WinUI не рассчитывает тариф, деньги или совместимость.
+  Avalonia-клиент не рассчитывает тариф, деньги или совместимость.
 
 ### 7. Production hardening и native boundary
 
@@ -265,7 +265,7 @@ WinUI подключаются только после публикации DTO 
 
 Сначала фиксируются DTO и terminology (этап 1). Затем backend entitlements и
 settlement (этапы 2 и 4), после чего backend access/transfer/offline (этап 3).
-Frontend и WinUI подключаются только к опубликованным контрактам (этапы 5 и 6).
+Frontend и Avalonia подключаются только к опубликованным контрактам (этапы 5 и 6).
 Native hardening и полный smoke (этапы 7 и 8) завершают релизный срез.
 
 ## Критерии готовности
@@ -277,7 +277,7 @@ Native hardening и полный smoke (этапы 7 и 8) завершают р
   активации и не создаёт вторую активную сессию клиента.
 - Перенос, offline replay, payment parts и reservation entry decision атомарны,
   повторяемы и объяснимы оператору/пользователю.
-- WinUI до входа locked, после входа widget-mode соответствует контракту; native
+- Avalonia до входа locked, после входа widget-mode соответствует контракту; native
   kiosk явно отделён и проверен отдельным evidence.
 
 ## Открытые решения
@@ -286,4 +286,4 @@ Native hardening и полный smoke (этапы 7 и 8) завершают р
 - Набор payment method types, который будет доступен в MVP после provider-neutral
   boundary; продуктовый контракт не фиксирует конкретные внешние providers.
 - Границы и Windows API tray/widget/offline storage при native smoke.
-- Политика отображения минимального snapshot/PII на operator map и в WinUI.
+- Политика отображения минимального snapshot/PII на operator map и в Avalonia-клиенте.

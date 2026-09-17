@@ -6,7 +6,7 @@
 Зависимости: `28-integration-checks`, `30-entitlements-meter`,
 `31-settlement-reconciliation`, `32-session-snapshot-entry`,
 `33-session-transfer`, `34-durable-offline`, `35-frontend-contract-consumers`,
-`36-winui-contract-consumers`, `38-avalonia-linux-first`
+`36-windows-client-contract-consumers`, `38-avalonia-linux-first`
 
 ## Цель
 

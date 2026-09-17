@@ -24,7 +24,7 @@
 
 - бизнес-сущности и полноценный JWT flow;
 - production deployment/Kubernetes;
-- готовые web-экраны и WinUI;
+- готовые web-экраны и Avalonia-клиент;
 - выделение модулей в отдельные процессы.
 
 ## Решения, которые нужно зафиксировать
@@ -45,7 +45,7 @@
 5. [x] Довести test database lifecycle и graceful shutdown до отдельной проверки.
 6. [x] Настроить Ruff, тесты и проверку импортов.
 7. [x] Создать первый versioned protobuf package и генерацию Python-кода.
-8. [x] Проверить source-of-truth/generation layout для web gateway и C#; WinUI compile остаётся platform-specific проверкой.
+8. [x] Проверить source-of-truth/generation layout для web gateway и C#; Avalonia Windows compile остаётся platform-specific проверкой.
 9. [x] Описать общий error/status convention, timeout, cancellation и request/correlation ID.
 10. [x] Добавить README, `.gitignore` и безопасный example environment.
 11. [x] Подключить async Dramatiq broker boundary и первый worker use case для reservations.

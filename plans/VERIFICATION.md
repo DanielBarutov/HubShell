@@ -18,9 +18,9 @@
 | Coverage guardrail | V8 frontend and pytest-cov backend reports with explicit thresholds | frontend `17.18%` lines / `17%` guardrail; backend `70.10%` lines / `70%` guardrail | first measured baseline; DSN/native/browser coverage remains unproven |
 | Frontend live flow | operator login, persistent refresh после reload, spatial map, tariff/product checkout idempotency, catalog sale confirmation, analytics overview, settings и payment-methods CRUD | успешно; headed mock smoke прошёл dashboard/map, offline panel и booking panel; component tests покрывают базовую accessibility semantics | Полный browser matrix, duplicate/error/queue/entry/transfer/guest UI, visual regression и realtime transport ещё не проверялись |
 | Windows client | структура слоёв, protobuf consumers, server EntryDecision в portal login/register и session start, snapshot/transfer gateway, DPAPI journal/sequence, package notification, server-backed guest tariff/remaining time, pre-auth gate, post-auth widget/tray и restart flow | source-level успешно; generated protobuf signature проверена временным protoc | WindowsAppSDK compile/runtime, reconnect/power-loss и native Windows пока не доказаны |
-| Avalonia Linux developer host | `net8.0` Core emits shared `MainViewModel` with 16 portable `bool Is*Visible` states; Avalonia host contains access-gate, manager, portal/session, tariff confirmation, queue, transfer, history and booking UI | Ubuntu `26.04`, .NET SDK `8.0.425`: Debug build без warnings, `28 passed`; окно удерживалось запущенным 10 секунд в Wayland/Xwayland GUI session | Linux does not prove Windows tray, compact placement, DPAPI, restart or kiosk behaviour |
+| Avalonia Linux developer host | `net8.0` Core emits shared `MainViewModel` with portable visibility states; Avalonia host contains access-gate, local `Ctrl+Alt+P` manager route, manager password/maintenance, portal/session, tariff confirmation, queue, transfer, history and booking UI | source/unit slice добавляет shortcut state tests и headless manager-surface checks; Linux build/test проверяют portable behavior | Linux does not prove physical Windows chord delivery, Windows tray, compact placement, DPAPI, restart or kiosk behaviour |
 | Avalonia Windows-target artifact | `GameClub.Client.Avalonia` cross-publish `net8.0/win-x64` из Linux | создан `win-client/artifacts/avalonia-cross-publish/win-x64/Debug/GameClub.Client.Avalonia.exe` (`152064` bytes), framework-dependent | это только cross-compile artifact; Windows runtime, publish delivery и kiosk evidence не проверены |
-| Avalonia Windows production host | `GameClub.Client.Windows` composes shared Avalonia UI with DPAPI journal, Windows restart/power, command stream, fullscreen/compact window mode with transparent rounded outer corners and native tray; `GameClub.Client.Windows.sln` replaces legacy WinUI as Windows entry | Linux source build succeeds with `0` warnings/errors; self-contained `win-x64` folder-publish creates `GameClub.Client.Windows.exe` (`152064` bytes, PE32+ GUI) and `hostfxr.dll` | Runtime, actual transparency/tray/window placement and kiosk policy need a native Windows machine |
+| Avalonia Windows production host | `GameClub.Client.Windows` composes shared Avalonia UI with DPAPI journal, Windows restart/power, command stream, fullscreen/compact window mode with transparent rounded outer corners and native tray; `GameClub.Client.Windows.sln` is the Windows production entry | Linux source build succeeds with `0` warnings/errors; self-contained `win-x64` folder-publish creates `GameClub.Client.Windows.exe` (`152064` bytes, PE32+ GUI) and `hostfxr.dll` | Runtime, actual transparency/tray/window placement and kiosk policy need a native Windows machine |
 | Local Figma canvas bridge | Node WebSocket parser/secret comparison tests, JavaScript syntax, `manifest.json` parse, local loopback `/health`, MCP `initialize` и `tools/list` | source-level успешно: `3` Node tests passed; bridge bound only to `127.0.0.1:3847` and exposed only `figma_status`/`figma_apply_batch` | Figma Desktop dev-plugin was not manually imported or paired in this Linux check; native layer creation, edit permission and cloud file access remain unverified |
 | Windows publish | воспроизводимый self-contained publish script и single-file portable EXE через `build-portable-exe.ps1` | source-level успешно | Сам publish и запуск требуют Windows/.NET/Windows SDK; один EXE ещё не запускался на целевой машине |
 | Windows native | Avalonia production host restore/build, access-gate под обычным пользователем, reconnect, темы, restart, tray и compact widget | не проверено | Native build/runtime запускать на Windows; Linux source build не заменяет этот check |
@@ -40,30 +40,34 @@
 
 ## Повторяемые команды
 
+Каждый блок запускается из корня `/home/daniel/HubShell`; не переходите в
+`backend`, `frontend` или `win-client`.
+
 Backend:
 
 ```text
-cd backend
-uv run pytest -q -m "not integration and not slow"
-uv run pytest -q -m "api or contract"
-GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run pytest -q -m integration
-uv run ruff format --check src tests
-uv run ruff check .
-GAMECLUB_POSTGRES_DSN=... uv run alembic current
+cd /home/daniel/HubShell
+uv run --directory ./backend pytest -q -m "not integration and not slow"
+uv run --directory ./backend pytest -q -m "api or contract"
+GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run --directory ./backend pytest -q -m integration
+uv run --directory ./backend ruff format --check src tests
+uv run --directory ./backend ruff check .
+GAMECLUB_POSTGRES_DSN=... uv run --directory ./backend alembic current
 ```
 
 Frontend:
 
 ```text
-cd frontend
-npm run typecheck
-npm run test
-npm run build
+cd /home/daniel/HubShell
+npm --prefix ./frontend run typecheck
+npm --prefix ./frontend run test
+npm --prefix ./frontend run build
 ```
 
 Linux Avalonia developer host:
 
 ```text
+cd /home/daniel/HubShell
 dotnet restore win-client/GameClub.Client.sln --disable-parallel
 dotnet build win-client/GameClub.Client.sln --configuration Debug --no-restore
 dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
@@ -78,8 +82,8 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
 Windows native:
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 ```
 
 ## Правило обновления

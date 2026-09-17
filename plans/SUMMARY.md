@@ -1,6 +1,6 @@
 # GameClub / HubShell — сводка проекта
 
-Дата среза: `2026-09-15`<br>
+Дата среза: `2026-09-17`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
 Этот файл фиксирует фактическое состояние кода, планов и проверок на дату среза.
@@ -51,17 +51,17 @@ GameClub / HUBSHELL — операторская система игрового
 срез добавляет durable entitlement queue и consumption с окнами/auto-next,
 device login-grant, payment parts, guest paid-start prerequisite, entry
 decision, one-active-client guard, session snapshot, transfer, offline replay,
-durable settlement retry/audit и portal/legacy WinUI queue activation. В качестве
-следующего архитектурного решения утверждена миграция Windows UI с WinUI на
-Avalonia: Linux становится development-host для build/run/test, тогда как
-Windows остаётся производственной платформой и финальной platform-smoke
-границей. Первая остановка миграции описана в
+durable settlement retry/audit и portal/Avalonia queue activation. В качестве
+следующего архитектурного решения зафиксирован Avalonia как единственный
+Windows UI production path: Linux становится development-host для
+build/run/test, тогда как Windows остаётся производственной платформой и
+финальной platform-smoke границей. Историческая миграция описана в
 [`plans/38-avalonia-linux-first`](38-avalonia-linux-first/PLAN.md). Полное
 контрактное закрытие ещё не достигнуто: открыты production cross-owner UoW/
 provider policy, полная browser/accessibility matrix и native Windows evidence.
 Остаток нарезан на планы
 [`30–34`](30-entitlements-meter/PLAN.md), [`35`](35-frontend-contract-consumers/PLAN.md),
-[`36`](36-winui-contract-consumers/PLAN.md), [`37`](37-platform-integration-evidence/PLAN.md)
+[`36`](36-windows-client-contract-consumers/PLAN.md), [`37`](37-platform-integration-evidence/PLAN.md)
 и [`38`](38-avalonia-linux-first/PLAN.md). Локальный development-only инструмент
 для Figma authoring описан отдельно в
 [`39-figma-local-bridge`](39-figma-local-bridge/PLAN.md): он не входит в
@@ -82,7 +82,7 @@ runtime Windows-клиента и не служит доказательство
 | [`frontend/src/features/`](../frontend/src/features/) | feature-экраны и контекстные панели operator UI | локальный UI-flow по bounded feature-модулям |
 | [`frontend/src/api/`](../frontend/src/api/) | DTO, HTTP API client и нормализаторы | typed API boundary; вызовы экранов проходят через Redux facade |
 | [`frontend/src/styles/`](../frontend/src/styles/) | каскад operator UI, разложенный по тематическим блокам | сохранённый порядок CSS-правил |
-| [`win-client/`](../win-client/) | Linux-first Core/Avalonia solution, legacy WinUI source, scripts, tests | клиент игрового ПК |
+| [`win-client/`](../win-client/) | Linux-first Core/Avalonia solution, Windows production adapters, scripts, tests | клиент игрового ПК |
 | [`win-client/src/GameClub.Client/`](../win-client/src/GameClub.Client/) | Domain/Application/Infrastructure/Presentation | Windows implementation |
 | [`win-client/src/GameClub.Client.Core/`](../win-client/src/GameClub.Client.Core/) | portable Domain/Application/ports, safe infrastructure helpers and shared `MainViewModel` | `net8.0` migration core |
 | [`win-client/src/GameClub.Client.Avalonia/`](../win-client/src/GameClub.Client.Avalonia/) | shared Avalonia App/MainWindow, resources and Linux developer host | Avalonia `11.3.2` UI host |
@@ -130,9 +130,8 @@ FastAPI, PostgreSQL, Redis, gRPC или Dramatiq; application работает �
 ### Windows client
 
 - C# / .NET `8`;
-- текущая реализация: WinUI 3 через Microsoft Windows App SDK `1.6.240829007`
-  на `net8.0-windows10.0.19041.0` — legacy source до миграции;
-- Avalonia `11.3.2`, shared Core/Tests и Windows production composition на
+- текущая production реализация: Avalonia `11.3.2`, shared Core/Tests и Windows
+  production composition на
   `net8.0` собираются с SDK `8.0.425` в Linux; Windows-only adapters
   изолированы в `GameClub.Client.Windows` и публикуются только для `win-*`;
 - минимальная Windows deployment ОС сохраняется Windows 10 build `17763`;
@@ -203,7 +202,7 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
 | Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, password reset with one-time passwordless login and forced change, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
 | Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive | entitlement package consumption, time windows and next-compatible auto-start |
-| Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | WinUI/operator decision consumer and PostgreSQL concurrency matrix |
+| Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | Avalonia/operator decision consumer and PostgreSQL concurrency matrix |
 | Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot с server-backed `active_tariff`/remaining time | PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
 | Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing with login-grant subtraction | entitlement-aware billing, guest direct settlement reconciliation; bonus/refund/reserve/external finance — отдельный backlog |
 | Reports/Dashboard | read-only current revenue/dashboard data and audit-backed activity | расширенные reports/read models по нагрузке |
@@ -306,8 +305,8 @@ flows.
 | `Domain` | connection state, heartbeat, command/session snapshots, lockdown policy |
 | `Application` | access-gate и session coordinators, ports для backend/token/executor |
 | `Infrastructure` | gRPC adapter, bearer metadata, health, enrollment, token storage, Windows command/power adapters, endpoint policy |
-| `Presentation` | legacy WinUI reference plus UI-only bool-to-Visibility adapter; `MainViewModel` belongs to portable Core; Avalonia `MainWindow` contains access-gate, manager, portal/session, tariffs, transfer, history and booking surfaces |
-| `tests` | Linux: access-gate, session coordinator, password verifier, endpoint policy и Avalonia headless smoke; Windows command executor остаётся legacy test |
+| `Presentation` | portable `MainViewModel` and Avalonia bindings; Avalonia `MainWindow` contains access-gate, manager, portal/session, tariffs, transfer, history and booking surfaces |
+| `tests` | Linux: access-gate, session coordinator, password verifier, endpoint policy и Avalonia headless smoke; Windows adapters проверяются отдельным native smoke |
 
 Уже реализовано в source-level срезе:
 
@@ -320,11 +319,16 @@ flows.
   payload; произвольные shell-команды не принимаются;
 - группы передают theme key через heartbeat; неизвестная тема возвращается к
   `standard`;
-- locked startup/access-gate, manager maintenance через отдельный credential,
-  idle relock, relock при auth 401/403;
-- явный вход в режим обслуживания менеджера без скрытой глобальной горячей
-  клавиши, session locked/zero-balance handling и controlled restart после
-  подтверждённого stop;
+- locked startup/access-gate, manager maintenance через отдельный credential и
+  локальный `Ctrl+Alt+P` route на сфокусированном access-gate, idle relock,
+  relock при auth 401/403;
+- manager shortcut открывает только password form, а успешная проверка переводит
+  в maintenance без пользовательской сессии; session locked/zero-balance handling
+  и controlled restart после подтверждённого stop;
+- план [`43-manager-maintenance-hotkey`](43-manager-maintenance-hotkey/PLAN.md)
+  добавляет локальный `Ctrl+Alt+P` route: shortcut открывает только manager
+  password form на сфокусированном Locked gate; OS shell disable остаётся
+  отдельным native Windows/policy этапом.
 - deployment/publish/kiosk preview scripts с backup/restore и явным `-Apply`;
   `build-portable-exe.ps1` собирает single-file self-contained EXE с заранее
   зашитыми non-secret HTTP/HTTPS endpoint metadata для передачи на клиентский ПК;
@@ -336,7 +340,7 @@ flows.
   клиента для текущего места;
 - операторский сброс пароля очищает старый hash без генерации временного
   секрета; сброшенный аккаунт входит без пароля только до обязательной смены
-  пароля в WinUI с повтором и серверным подтверждением.
+  пароля в Avalonia-клиенте с повтором и серверным подтверждением.
 
 Windows-клиент не хранит баланс и не выполняет финансовые операции. Сервер
 остаётся источником истины сессии и billing.
@@ -346,7 +350,9 @@ production hardening enrollment/rebind/token rotation, native
 `dotnet restore/build/test`, запуск под обычным пользователем, реальный
 reconnect/theme/restart smoke и Assigned Access/Shell Launcher с ограничением
 Explorer/Alt+Tab/других приложений. App-level lock не считается заменой Windows
-security boundary. Детали — в
+security boundary. Каноническая матрица профилей и rollback — в
+[`plans/22-windows-lockdown/POLICY.md`](22-windows-lockdown/POLICY.md); детали
+evidence — в
 [`win-client/docs/SUPPORT-MATRIX.md`](../win-client/docs/SUPPORT-MATRIX.md) и
 [`plans/29-contract-alignment/PLAN.md`](29-contract-alignment/PLAN.md).
 
@@ -391,7 +397,7 @@ security boundary. Детали — в
       миграциями `0032/0033`;
     - `ClientPortalService` в gRPC с device-scoped registration/login и
       client-scoped JWT, histories и available time;
-    - WinUI pre-auth fullscreen gate и server-backed login/register/profile/history;
+    - Avalonia pre-auth fullscreen gate и server-backed login/register/profile/history;
     - portable publish получил baked HTTP/HTTPS endpoint parameters и не требует
       env/bootstrap/token setup на игровом ПК.
     - enrollment получает понятный rejected-state при конфликте installation id;
@@ -400,9 +406,9 @@ security boundary. Детали — в
     - добавлен in-process gRPC smoke для portal registration/snapshot с проверкой
       client/device scope.
     - portal login/register теперь создаёт server-backed active session на текущем
-      ПК; WinUI и карта администратора получают snapshot через короткие циклы
+      ПК; Avalonia-клиент и карта администратора получают snapshot через короткие циклы
       gRPC/HTTP polling, WebSocket для MVP не вводился.
-    - password reset flow не возвращает временный пароль и переводит WinUI в
+    - password reset flow не возвращает временный пароль и переводит Avalonia-клиент в
       обязательную форму установки нового пароля.
 13. Восстановление после restart/reconnect и зональные тарифы:
     - heartbeat возвращает active session snapshot, а device-authenticated
@@ -426,17 +432,17 @@ security boundary. Детали — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `cd backend && uv run pytest -q` | `153 passed, 18 skipped` без DSN на срезе 2026-09-16; contract-layout assertions обновлены под текущие API/Avalonia boundaries; markers, bounded-context split и docstring convention guard добавлены | unit/API/contract/jobs, включая session recovery resume, tariff zone listing/guards, settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
-| `cd backend && uv run pytest -q -m "not integration and not slow"` | `153 passed, 18 deselected` на срезе 2026-09-16 | явный offline/release-safe прогон без инфраструктурных suites |
-| `cd backend && uv run pytest -q -m "api or contract"` | `37 passed, 134 deselected` на срезе 2026-09-16 | отдельная проверка HTTP/gRPC/protobuf boundaries |
-| `cd backend && uv run ruff check .` | успешно (повторено 2026-09-02) | lint backend |
-| `cd backend && uv run ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
-| `cd frontend && npm run typecheck` | успешно (повторено 2026-09-15) | TypeScript compile/type boundary; Redux workspace snapshot и stale-response guards |
-| `cd frontend && npm run lint` | успешно (2026-09-15) | noUnusedLocals/noUnusedParameters TypeScript boundary |
-| `cd frontend && npm run build` | успешно на срезе 2026-09-15 | TypeScript build и production Vite build, включая zone-scoped tariff requests |
-| `cd frontend && npm run test` | `19 passed` на срезе 2026-09-16 | Vitest API boundary плюс component/accessibility slice для login, map, sale, booking, offline-routing и confirmation; browser visual/realtime matrix ещё не закрыта |
-| `cd frontend && npm run test:coverage` | `19 passed`; line coverage `17.18%`, guardrail `17%` | первый измеренный frontend baseline; coverage не заменяет behavior/accessibility tests |
-| `cd backend && uv run pytest --cov=src/gameclub_backend --cov-report=term-missing` | `154 passed, 18 skipped`; line coverage `70.10%`, guardrail `70%` | первый измеренный backend baseline без DSN; integration coverage не доказана |
+| `uv run --directory ./backend pytest -q` | `153 passed, 18 skipped` без DSN на срезе 2026-09-16; contract-layout assertions обновлены под текущие API/Avalonia boundaries; markers, bounded-context split и docstring convention guard добавлены | unit/API/contract/jobs, включая session recovery resume, tariff zone listing/guards, settlement retry/review/mixed-fault, package windows/auto-next, locked delta, snapshot/heartbeat, transfer two-target race, offline replay, entry decision, guest paid-start и login grant |
+| `uv run --directory ./backend pytest -q -m "not integration and not slow"` | `153 passed, 18 deselected` на срезе 2026-09-16 | явный offline/release-safe прогон без инфраструктурных suites |
+| `uv run --directory ./backend pytest -q -m "api or contract"` | `37 passed, 134 deselected` на срезе 2026-09-16 | отдельная проверка HTTP/gRPC/protobuf boundaries |
+| `uv run --directory ./backend ruff check .` | успешно (повторено 2026-09-02) | lint backend |
+| `uv run --directory ./backend ruff format --check <затронутые Python-файлы>` | успешно | форматирование текущего среза; полный checkout дополнительно содержит 2 старых неформатированных файла |
+| `npm --prefix ./frontend run typecheck` | успешно (повторено 2026-09-15) | TypeScript compile/type boundary; Redux workspace snapshot и stale-response guards |
+| `npm --prefix ./frontend run lint` | успешно (2026-09-15) | noUnusedLocals/noUnusedParameters TypeScript boundary |
+| `npm --prefix ./frontend run build` | успешно на срезе 2026-09-15 | TypeScript build и production Vite build, включая zone-scoped tariff requests |
+| `npm --prefix ./frontend run test` | `19 passed` на срезе 2026-09-16 | Vitest API boundary плюс component/accessibility slice для login, map, sale, booking, offline-routing и confirmation; browser visual/realtime matrix ещё не закрыта |
+| `npm --prefix ./frontend run test:coverage` | `19 passed`; line coverage `17.18%`, guardrail `17%` | первый измеренный frontend baseline; coverage не заменяет behavior/accessibility tests |
+| `uv run --directory ./backend pytest --cov=src/gameclub_backend --cov-report=term-missing` | `154 passed, 18 skipped`; line coverage `70.10%`, guardrail `70%` | первый измеренный backend baseline без DSN; integration coverage не доказана |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
 | `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | backend stack пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; native Windows client в compose не входит |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
@@ -450,9 +456,9 @@ security boundary. Детали — в
 | Направление | Почему не закрыто |
 | --- | --- |
 | PostgreSQL integration/concurrency | без DSN 18 тестов пропускаются; при dev DSN все 157 backend-тестов проходят, включая package/transfer/offline/settlement mixed-fault evidence; production cross-owner UoW/provider policy остаётся открытой |
-| Avalonia migration | Core/Avalonia/tests Linux solution собрана SDK `8.0.425`: Debug build без warnings, `28 passed`, GUI host удерживался запущенным 10 секунд; `win-x64` framework-dependent artifact собран cross-publish. `MainViewModel` emitted only из portable Core и не использует `Microsoft.UI.*`; access-gate и portal перенесены |
+| Avalonia migration | Core/Avalonia/tests Linux solution собрана SDK `8.0.425`: Debug build без warnings, `34 passed`; `win-x64` framework-dependent artifact собран cross-publish. `MainViewModel` emitted only из portable Core; access-gate и portal перенесены |
 | Windows native | `GameClub.Client.Windows.sln` ведёт на Avalonia production host; Linux source build без warnings и self-contained `win-x64` folder-publish создаёт PE GUI artifact с `hostfxr.dll`. DPAPI, restart/power, command stream, fullscreen/скруглённый compact widget и native tray изолированы в Windows adapter; Windows runtime и kiosk evidence остаются обязательны |
-| Kiosk security | Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
+| Kiosk security | `NoRun=1` provisioning доступен только как optional full-kiosk profile; базовый `app_gate` возвращает `Win+R` после входа. Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
 | Production security | нужны real secret storage, enrollment rate-limit/rebind, backups и deployment policy; TLS/mTLS certificates обязательны только при внешнем доступе |
 | Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
@@ -477,7 +483,7 @@ coverage guardrail установлен на измеренном старте.
    Linux Core/Avalonia build/test/run и `win-x64` cross-compile artifact уже
    получены; это не Windows runtime proof.
 
-1. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-winui-contract-consumers/PLAN.md)
+1. Repo-side задачи планов [`30`](30-entitlements-meter/PLAN.md)–[`36`](36-windows-client-contract-consumers/PLAN.md)
    закрыты доступными source/unit/API/visual checks; native/runtime границы
    остаются явно отмеченными в [`37`](37-platform-integration-evidence/PLAN.md)
    и его evidence report.
@@ -487,8 +493,8 @@ coverage guardrail установлен на измеренном старте.
 2. На Windows выполнить:
 
    ```powershell
-   Set-Location "C:\Git\HubShell\win-client"
-   .\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
+   Set-Location "C:\Git\HubShell"
+   .\win-client\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
    ```
 
    После этого вручную проверить access-gate, обычного пользователя,
@@ -496,9 +502,10 @@ coverage guardrail установлен на измеренном старте.
    Для передачи на клиентский ПК собрать portable-файл:
 
    ```powershell
+   Set-Location "C:\Git\HubShell"
    $authAddress = Read-Host "Production AuthAddress (http://private-LAN или https://external)"
    $grpcAddress = Read-Host "Production GrpcAddress (http://private-LAN или https://external)"
-   .\scripts\build-portable-exe.ps1 `
+   .\win-client\scripts\build-portable-exe.ps1 `
      -Architecture x64 `
      -Configuration Release `
      -EnvironmentName production `
@@ -538,6 +545,7 @@ coverage guardrail установлен на измеренном старте.
 Из корня:
 
 ```bash
+cd /home/daniel/HubShell
 cp .env.example .env
 docker compose up -d --build
 docker compose ps
@@ -547,37 +555,37 @@ docker compose logs -f backend-http
 Backend:
 
 ```bash
-cd backend
-uv sync
-uv run python scripts/generate_proto.py
-uv run alembic upgrade head
-uv run pytest -q
-uv run ruff check .
-uv run ruff format --check src tests alembic/versions/20260830_0031_payment_methods.py
+cd /home/daniel/HubShell
+uv sync --project ./backend
+uv run --directory ./backend python scripts/generate_proto.py
+uv run --directory ./backend alembic upgrade head
+uv run --directory ./backend pytest -q
+uv run --directory ./backend ruff check .
+uv run --directory ./backend ruff format --check src tests alembic/versions/20260830_0031_payment_methods.py
 ```
 
 Интеграционные проверки требуют DSN:
 
 ```bash
-cd backend
-GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run pytest -q
+cd /home/daniel/HubShell
+GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run --directory ./backend pytest -q
 ```
 
 Frontend:
 
 ```bash
-cd frontend
-npm install
-npm run typecheck
-npm run build
+cd /home/daniel/HubShell
+npm --prefix ./frontend install
+npm --prefix ./frontend run typecheck
+npm --prefix ./frontend run build
 ```
 
 Windows — только PowerShell на Windows:
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
-dotnet test GameClub.Client.sln --configuration Debug -p:Platform=x64
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
+dotnet test win-client\GameClub.Client.sln --configuration Debug -p:Platform=x64
 ```
 
 Для solution используется `-p:Platform=x64`; `--arch` для solution не является

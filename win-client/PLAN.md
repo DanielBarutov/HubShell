@@ -6,11 +6,14 @@
 Зависимости: `backend/PLAN.md`, Workstations и Auth, а также планы
 [`33-session-transfer`](../plans/33-session-transfer/PLAN.md),
 [`34-durable-offline`](../plans/34-durable-offline/PLAN.md),
-[`36-winui-contract-consumers`](../plans/36-winui-contract-consumers/PLAN.md),
+[`36-windows-client-contract-consumers`](../plans/36-windows-client-contract-consumers/PLAN.md),
 [`37-platform-integration-evidence`](../plans/37-platform-integration-evidence/PLAN.md) и
 [`38-avalonia-linux-first`](../plans/38-avalonia-linux-first/PLAN.md)
 
 Детальный план lockdown и Windows provisioning: [`plans/22-windows-lockdown/PLAN.md`](../plans/22-windows-lockdown/PLAN.md).
+Матрица профилей, ограничений и native release gates: [`plans/22-windows-lockdown/POLICY.md`](../plans/22-windows-lockdown/POLICY.md).
+
+Детальный менеджерский route и реализация `Ctrl+Alt+P`: [`plans/43-manager-maintenance-hotkey/PLAN.md`](../plans/43-manager-maintenance-hotkey/PLAN.md).
 
 ## Цель
 
@@ -28,13 +31,13 @@ Windows-продукт и не делает Linux-версию kiosk-клиен�
 autostart и Assigned Access/Shell Launcher. Порядок и первая остановка
 миграции зафиксированы в плане 38.
 
-Первая техническая остановка плана 38 выполнена: `GameClub.Client.Core`,
+Технический срез плана 38 выполнен: `GameClub.Client.Core`,
 `GameClub.Client.Avalonia` и cross-platform tests собираются в Linux; headless
 smoke прошёл, diagnostic окно запускалось в GUI-сеансе, а `win-x64` artifact
-собран cross-publish. `MainViewModel` emitted only из Core и больше не зависит
-от WinUI; legacy XAML использует отдельный bool-to-Visibility adapter. Это ещё
-не перенос access-gate/portal в Avalonia и не Windows runtime proof: full
-product UI и Windows adapters пока остаются legacy WinUI source. Точное evidence — в
+собран cross-publish. `MainViewModel` и production UI работают через Avalonia;
+исторический UI source удалён из active build path и не является целью текущих
+изменений. Это ещё не Windows runtime proof: native window, tray и kiosk
+проверяются отдельно на Windows. Точное evidence — в
 [`plans/VERIFICATION.md`](../plans/VERIFICATION.md).
 
 Подробный целевой flow и личный кабинет: [`plans/23-windows-enrollment-member-portal/PLAN.md`](../plans/23-windows-enrollment-member-portal/PLAN.md).
@@ -77,7 +80,7 @@ product UI и Windows adapters пока остаются legacy WinUI source. Т
 
 ## Задачи
 
-1. [x] Зафиксировать Windows support matrix, .NET/WinUI versions и способ сборки.
+1. [x] Зафиксировать Windows support matrix, .NET/Avalonia versions и способ сборки.
 2. [x] Создать solution с UI, application logic, domain models и infrastructure adapters.
 3. [x] Реализовать generated gRPC client и auth metadata boundary.
 4. [x] Реализовать state-dependent window presentation: fullscreen gate до auth,
@@ -95,7 +98,7 @@ product UI и Windows adapters пока остаются legacy WinUI source. Т
 11. [x] Зафиксировать отсутствие C++ до появления доказанной системной потребности.
 12. [x] Реализовать device-authenticated SessionService gateway, capability `sessions.v1` и структурированный `session.start/stop` executor; локальные игровые процессы остаются вне этого среза.
 13. [x] Получать theme key группы в ответе heartbeat, применять безопасную палитру
-    legacy WinUI implementation и сохранять safe default для неизвестной темы.
+    Avalonia implementation и сохранять safe default для неизвестной темы.
 14. [x] Убрать пользовательский compact/full-window переключатель из Locked-flow;
     старый marker сохранён только как source-compatibility boundary.
 15. [x] Зафиксировать endpoint transport policy: HTTP разрешён для loopback и
@@ -111,9 +114,10 @@ product UI и Windows adapters пока остаются legacy WinUI source. Т
     401/403/Unauthenticated; потеря фокуса окна сама по себе не вызывает relock.
     Добавлены unit-тесты coordinator.
 17. [ ] Зафиксировать kiosk deployment: app-level lock не заменяет Windows
-    logon. Для запрета Alt+Tab, запуска оболочки и ухода в другой desktop нужен
-    Assigned Access/Shell Launcher, отдельная учётная запись ПК и ручная Windows
-    проверка под ограниченным пользователем.
+    logon. Базовый lock требует Topmost и подавления `Alt+Tab`/`Win+R`, но не
+    запрещает запуск приложений; для запрета запуска оболочки и ухода в другой
+    desktop нужен Assigned Access/Shell Launcher, отдельная учётная запись ПК и
+    ручная Windows-проверка под ограниченным пользователем.
 18. [x] Добавить воспроизводимый self-contained publish-скрипт для `win-x64`,
     `win-x86` и `win-arm64`, а также `build-portable-exe.ps1` с single-file
     режимом по умолчанию для передачи одного EXE; native publish остаётся
@@ -121,9 +125,11 @@ product UI и Windows adapters пока остаются legacy WinUI source. Т
 19. [x] Реализовать manager maintenance login через явный пользовательский
     flow, lock действий до входа, обработку завершения/исчерпания баланса и
     контролируемый restart после подтверждённой сервером остановки сессии.
-    Скрытая глобальная горячая клавиша `Ctrl+Alt+P` удалена из пользовательского
-    клиента. Команда `session.start` также передаёт `tariff_id`/`tariff_quantity`,
-    а клиент показывает активную сессию и позволяет завершить её самостоятельно.
+    Скрытый локальный `Ctrl+Alt+P` теперь открывает manager password на
+    сфокусированном Locked access-gate; системное отключение shell вынесено в
+    отдельный platform-policy этап плана 43. Команда `session.start` также
+    передаёт `tariff_id`/`tariff_quantity`, а клиент показывает активную сессию
+    и позволяет завершить её самостоятельно.
 20. [x] Подготовить Windows deployment/autostart bootstrap, который
     регистрирует автозапуск клиента и опциональные recovery policy; настоящий
     Assigned Access/Shell Launcher и native installer smoke требуют Windows.
@@ -153,14 +159,14 @@ product UI и Windows adapters пока остаются legacy WinUI source. Т
     баланса показываются отдельным уведомлением авторизованного виджета.
 26. [x] Поддержать операторский сброс пароля без генерации временного секрета:
     passwordless-вход только для сброшенного аккаунта, обязательная форма нового
-    пароля с повтором в legacy WinUI implementation и блокировка действий портала до подтверждения.
+    пароля с повтором в Avalonia implementation и блокировка действий портала до подтверждения.
     Native Windows publish/smoke остаётся отдельной проверкой на Windows.
 
 Декомпозиция оставшегося runtime: entitlement/meter и snapshot принадлежат
 планам [`30`](../plans/30-entitlements-meter/PLAN.md) и
 [`32`](../plans/32-session-snapshot-entry/PLAN.md), transfer — [`33`](../plans/33-session-transfer/PLAN.md),
-offline — [`34`](../plans/34-durable-offline/PLAN.md), legacy WinUI consumers —
-[`36`](../plans/36-winui-contract-consumers/PLAN.md), а native/kiosk evidence —
+offline — [`34`](../plans/34-durable-offline/PLAN.md), contract consumers —
+[`36`](../plans/36-windows-client-contract-consumers/PLAN.md), а native/kiosk evidence —
 [`37`](../plans/37-platform-integration-evidence/PLAN.md). Avalonia migration
 до первого Linux build/run — [`38`](../plans/38-avalonia-linux-first/PLAN.md).
 
@@ -178,14 +184,11 @@ Session-команды принимают только JSON-поля `client_id`
 или `session_id`, вызывают SessionService с device identity и получают ACK после
 серверного результата; billing в клиент не переносится.
 Heartbeat возвращает тему настроенной группы; клиент принимает только allowlist
-`standard`, `vip`, `neon`, `minimal`, преобразует её в безопасную палитру WinUI и
-использует стандартную тему при неизвестном значении. До завершения плана 38
-это описание относится к legacy WinUI source; продуктовой реализацией станет
-Avalonia host с теми же server-backed правилами.
-Session snapshot/transfer/replay DTO и gateway подключены на source-level.
-Текущий WinUI source не собирается и не запускается как нативное окно в Linux.
-Миграция на Avalonia должна закрыть Linux build/run для developer host; Windows
-native evidence остаётся отдельной обязательной границей. Ограничения и порядок
+`standard`, `vip`, `neon`, `minimal`, преобразует её в безопасную палитру Avalonia
+и использует стандартную тему при неизвестном значении. Session
+snapshot/transfer/replay DTO и gateway подключены на source-level. Avalonia
+native evidence остаётся отдельной обязательной границей на Windows.
+Ограничения и порядок
 зафиксированы в [`docs/SUPPORT-MATRIX.md`](docs/SUPPORT-MATRIX.md) и плане 38.
 App-level access-gate и тестируемая проверка PBKDF2-хешей добавлены, но итоговая
 защита рабочего стола зависит от Windows Assigned Access/Shell Launcher и ещё

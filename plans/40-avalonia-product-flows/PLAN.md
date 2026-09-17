@@ -20,7 +20,7 @@ fullscreen/window placement и kiosk policy.
 - Backend, protobuf semantics, EntryDecision, session lifecycle, balance,
   tariff purchase/activation и transfer не меняются; UI только отображает DTO
   и вызывает существующие ports.
-- gRPC transport, enrollment and portable composition отделяются от WinUI,
+- gRPC transport, enrollment and portable composition отделяются от UI-host,
   чтобы Avalonia могла работать с test/dev backend без Windows API.
 - DPAPI offline journal, NativeTrayIcon, restart/power, AppWindow and Shell
   integration остаются Windows adapters. Linux host не подменяет их и не
@@ -32,7 +32,7 @@ fullscreen/window placement и kiosk policy.
 
 1. [x] Выделить `net8.0` gRPC transport/enrollment project: generated protobuf
    consumers, `GrpcBackendClient`, MAC enrollment and endpoint validation.
-   Перенести эти types из legacy WinUI compilation без изменения wire calls.
+   Перенести эти types в portable compilation без изменения wire calls.
 2. [x] Добавить безопасную Avalonia developer composition: offline/connection
    state виден без endpoint; текущий dev host жёстко ограничен loopback
    `127.0.0.1` и не использует DPAPI journal как Linux security guarantee.
@@ -58,12 +58,12 @@ fullscreen/window placement и kiosk policy.
    the new `GameClub.Client.Windows` solution without warnings and produces a
    self-contained `win-x64` PE folder-publish; native execution remains
    unverified.
-7. [x] Заменить legacy WinUI executable host отдельным
+7. [x] Заменить исторический UI executable host отдельным
    `GameClub.Client.Windows` Avalonia production host (portable `net8.0`,
    published only as `win-*`). Он должен переиспользовать
    `MainWindow`/Core/transport, а Windows-only composition подключает DPAPI
    journal, restart/power, command stream, native window/tray adapters и baked
-   production endpoints. Не оставлять второй WinUI UI как production path;
+   production endpoints. Не оставлять второй UI-host как production path;
    native Windows execution остаётся обязательным evidence.
    Реализовано source-level: `GameClub.Client.Windows.sln` ведёт на новый
    Avalonia host; DPAPI journal, restart/power, command stream, fullscreen
@@ -74,7 +74,7 @@ fullscreen/window placement и kiosk policy.
 
 ## Критерии готовности этапа
 
-- Avalonia uses the same Core contracts and portable transport as legacy;
+- Avalonia uses the same Core contracts and portable transport without a second UI path;
   no copied business state or duplicate client implementation.
 - Linux opens the dark access-gate and exercises safe UI state transitions
   without Windows P/Invoke or production secrets.

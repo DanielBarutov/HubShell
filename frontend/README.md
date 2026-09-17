@@ -23,12 +23,13 @@ Backend по умолчанию выдаёт refresh token на 90 дней.
 ## Запуск
 
 ```text
-npm install
-npm run dev
-npm run typecheck
-npm run test
-npm run test:coverage
-npm run build
+cd /home/daniel/HubShell
+npm --prefix ./frontend install
+npm --prefix ./frontend run dev
+npm --prefix ./frontend run typecheck
+npm --prefix ./frontend run test
+npm --prefix ./frontend run test:coverage
+npm --prefix ./frontend run build
 ```
 
 При отдельном `npm run dev` Vite использует порт `3101` и проксирует `/api` на

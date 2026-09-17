@@ -39,7 +39,7 @@ public interface IClientWindowAdapter : IDisposable
 
     void Attach(Window window);
 
-    void ApplyWindowMode(bool accessGateVisible);
+    void ApplyWindowMode(ClientWindowMode mode);
 
     void HideToTray();
 }

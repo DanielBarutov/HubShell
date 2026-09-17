@@ -21,6 +21,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
     private Window? _window;
     private Border? _windowContentSurface;
     private NativeTrayIcon? _trayIcon;
+    private ClientWindowMode _windowMode = ClientWindowMode.Locked;
     private bool _disposed;
 
     public bool UsesTransparentWindow => true;
@@ -32,6 +33,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         _windowContentSurface = window.FindControl<Border>("WindowContentSurface");
         window.SystemDecorations = SystemDecorations.None;
         window.CanResize = false;
+        window.Topmost = true;
         if (window.ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
         {
             StartupDiagnostics.Info(
@@ -59,7 +61,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         }
     }
 
-    public void ApplyWindowMode(bool accessGateVisible)
+    public void ApplyWindowMode(ClientWindowMode mode)
     {
         if (_disposed || _window is null)
         {
@@ -69,8 +71,9 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         _window.SystemDecorations = SystemDecorations.None;
         _window.CanResize = false;
         _window.Topmost = true;
+        _windowMode = mode;
 
-        if (accessGateVisible)
+        if (mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance)
         {
             SetWindowContentCornerRadius(0);
             _window.WindowState = WindowState.FullScreen;
@@ -86,7 +89,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
 
     public void HideToTray()
     {
-        if (_disposed || _window is null || _window.WindowState == WindowState.FullScreen)
+        if (_disposed || _window is null || _windowMode == ClientWindowMode.Locked)
         {
             return;
         }

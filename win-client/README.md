@@ -4,8 +4,7 @@
 developer host для build/test/UI-smoke. `GameClub.Client.Windows` — отдельный
 production composition: он подключает тот же UI к Windows-only DPAPI journal,
 restart, command stream, fullscreen/compact window adapter и native tray.
-Старый `GameClub.Client` остаётся legacy WinUI reference до отдельной Windows
-native проверки и не является новым production entry point.
+`GameClub.Client.Windows` — единственная production entry point для Windows.
 
 Продуктовой flow не меняется: до авторизации клиент показывает fullscreen Locked
 access-gate; после входа — компактный borderless виджет без замены Windows shell.
@@ -19,6 +18,7 @@ production solution — `GameClub.Client.Windows.sln`. После установ
 .NET SDK версии из [`../global.json`](../global.json) первый host запускается так:
 
 ```bash
+cd /home/daniel/HubShell
 dotnet restore win-client/GameClub.Client.sln --disable-parallel
 dotnet build win-client/GameClub.Client.sln --configuration Debug --no-restore
 dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
@@ -29,6 +29,7 @@ dotnet run --project win-client/src/GameClub.Client.Avalonia --configuration Deb
 Для локального integration-smoke сначала поднять только backend-контур:
 
 ```bash
+cd /home/daniel/HubShell
 docker compose up -d --build postgres redis backend-migrate backend-http backend-grpc worker meter-worker scheduler
 curl --fail --silent --show-error http://127.0.0.1:8100/health/ready
 ```
@@ -40,6 +41,7 @@ curl --fail --silent --show-error http://127.0.0.1:8100/health/ready
 запускается только явно и создаёт отдельный случайный dev-аккаунт:
 
 ```bash
+cd /home/daniel/HubShell
 GAMECLUB_RUN_LOCAL_INTEGRATION=1 \
   /home/daniel/.local/share/dotnet-sdk-8/dotnet test win-client/GameClub.Client.sln \
   --configuration Debug --no-build --filter LocalAvaloniaBackendIntegrationTests
@@ -49,6 +51,7 @@ Linux не реализует DPAPI, tray, restart или kiosk-policy. Для W
 compile из Linux использовать:
 
 ```bash
+cd /home/daniel/HubShell
 dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj \
   --configuration Debug --runtime win-x64 --self-contained false
 ```
@@ -57,10 +60,10 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
 
 ## Windows Avalonia host
 
-На Windows новая точка входа собирается из отдельного solution, а не из legacy
-WinUI project:
+На Windows production entry point собирается из Avalonia solution:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 dotnet restore win-client\GameClub.Client.Windows.sln
 dotnet build win-client\GameClub.Client.Windows.sln -c Debug -p:Platform=x64
 dotnet publish win-client\src\GameClub.Client.Windows\GameClub.Client.Windows.csproj `
@@ -102,7 +105,9 @@ C:\Git\HubShell\win-client\scripts
 C:\Git\HubShell\win-client\artifacts
 ```
 
-Скрипты запускаются из `C:\Git\HubShell\win-client`.
+Все команды и скрипты запускаются из `C:\Git\HubShell`. Не переходите в
+`win-client`: используйте пути `.\win-client\scripts\...`, а сами скрипты
+строят внутренние пути от `$PSScriptRoot`.
 
 ## Скрипты
 
@@ -120,6 +125,9 @@ C:\Git\HubShell\win-client\artifacts
 - `scripts\uninstall-windows.ps1` — явное удаление этой установки и автозапуска;
 - `scripts\configure-windows-kiosk.ps1` — отдельный preview/apply/restore только для
   Windows Shell Launcher; не использовать до успешного обычного smoke;
+- `scripts\configure-windows-user-policy.ps1` — optional preview/apply/restore
+  full-kiosk user policy `NoRun=1`; не применять в базовом `app_gate`, если
+  `Win+R` должен работать после входа;
 - `scripts\new-access-hash.ps1` — только developer helper для PBKDF2 verifier,
   не часть обычной установки клиента.
 

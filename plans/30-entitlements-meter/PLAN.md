@@ -62,7 +62,7 @@ concurrency-коррекции прошёл 146 тестов.
 - изменение tariff `free_minutes`;
 - guest balance или guest package ledger;
 - external payment providers, refunds, bonuses и reservation of funds;
-- локальный расчёт следующего пакета во frontend/WinUI.
+- локальный расчёт следующего пакета во frontend/Avalonia-клиенте.
 
 ## Порядок задач
 

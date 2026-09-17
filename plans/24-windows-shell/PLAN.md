@@ -19,9 +19,16 @@ session widget без системных кнопок окна, с собств�
 - [x] Сохранять фокус и возвращать locked state при потере активации.
 - [ ] Реализовать переключение fullscreen gate → post-auth desktop/widget и
       tray hide/show; compact widget является штатным пользовательским режимом.
-- [x] Получать shell/lock policy после heartbeat и безопасно применять allowlist.
-- [x] Проверить source-level контракт входа менеджера через явный пункт меню;
-      глобальная горячая клавиша не используется.
+- [x] Получать shell/lock policy после heartbeat и безопасно применять только
+      поддерживаемую application-часть; OS policy остаётся provisioning boundary.
+- [x] Зафиксировать source-level контракт скрытого manager route через локальную
+      `Ctrl+Alt+P` только на сфокусированном Locked access-gate; глобальные hooks
+      и `BlockInput` не используются.
+- [x] Реализовать первый application-level slice: shortcut открывает password
+      form, успешный verifier переводит в Maintenance, а менеджер может скрыть
+      client shell в tray для просмотра Desktop.
+- [ ] Реализовать отдельный OS policy route для временного shell disable с
+      правами, audit, rollback и native Windows smoke.
 - [ ] Выполнить native smoke с обычным пользователем.
 - [ ] Отдельно проверить Assigned Access/Shell Launcher, Explorer, Alt+Tab,
   restart и recovery; app-level fullscreen не считать kiosk security.

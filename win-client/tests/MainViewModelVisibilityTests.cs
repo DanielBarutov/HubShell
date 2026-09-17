@@ -79,6 +79,78 @@ public sealed class MainViewModelVisibilityTests
     }
 
     [Fact]
+    public async Task ManagerShortcutOpensPasswordPromptOnlyFromLockedGate()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        Assert.True(viewModel.TryOpenManagerLoginShortcut(true, true, true));
+        Assert.True(viewModel.IsAccessLocked);
+        Assert.True(viewModel.IsManagerLoginVisible);
+        Assert.False(viewModel.IsMaintenanceVisible);
+
+        viewModel.ManagerPassword = "partial-input";
+        Assert.True(viewModel.TryOpenManagerLoginShortcut(true, true, true));
+        Assert.Equal("partial-input", viewModel.ManagerPassword);
+
+        viewModel.ManagerPassword = "manager-secret";
+
+        Assert.True(viewModel.TryEnterMaintenance());
+        Assert.True(viewModel.IsMaintenanceVisible);
+        Assert.False(viewModel.IsPortalContentVisible);
+    }
+
+    [Fact]
+    public async Task ManagerShortcutDoesNotOpenForOtherKeysOrAuthenticatedUser()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        Assert.False(viewModel.TryOpenManagerLoginShortcut(true, true, false));
+        Assert.False(viewModel.IsManagerLoginVisible);
+
+        viewModel.UserAccessCode = "4826";
+        Assert.True(viewModel.TryUnlockUser());
+
+        Assert.False(viewModel.TryOpenManagerLoginShortcut(true, true, true));
+        Assert.False(viewModel.IsManagerLoginVisible);
+        Assert.False(viewModel.IsMaintenanceVisible);
+    }
+
+    [Fact]
+    public async Task ManagerShortcutDoesNotOpenBeforeWorkstationAssignment()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.WaitingForAssignment);
+
+        Assert.False(viewModel.TryOpenManagerLoginShortcut(true, true, true));
+        Assert.False(viewModel.IsManagerLoginVisible);
+        Assert.True(viewModel.IsAccessLocked);
+    }
+
+    [Fact]
+    public async Task LockedSystemShortcutsAreSuppressedOnlyAtTheAccessGate()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials());
+
+        Assert.True(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
+        Assert.True(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+
+        viewModel.UserAccessCode = "4826";
+        Assert.True(viewModel.TryUnlockUser());
+
+        Assert.False(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
+        Assert.False(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+    }
+
+    [Fact]
     public async Task PortalLoginFailureShowsAccessFeedbackInsteadOfRawTransportDetails()
     {
         await using var viewModel = new MainViewModel(

@@ -34,7 +34,7 @@
 - смена workstation/zone, meter baseline и package compatibility;
 - duplicate-safe old-PC restart command;
 - audit, actor/device scope и idempotency;
-- WinUI new-device confirmation и error/retry states.
+- Avalonia-клиент new-device confirmation и error/retry states.
 
 ## Реализовано в текущем срезе
 
@@ -44,7 +44,7 @@
 и подтверждает pending transfer по device/workstation identity. PostgreSQL repository получил owner-side
 `commit_transfer` с блокировками offer/session/source/target в одной транзакции,
 а также advisory lock для offer key и корректный conflict при двух разных
-confirm keys; frontend и WinUI умеют создать offer и явно подтвердить перенос.
+confirm keys; frontend и Avalonia умеют создать offer и явно подтвердить перенос.
 Добавлены audit operations, source-level duplicate-safe mapping и реальный
 PostgreSQL concurrency test.
 
@@ -68,7 +68,7 @@ PostgreSQL concurrency test.
 5. [x] Опубликовать versioned HTTP/gRPC DTO и идемпотентные retry semantics.
 6. [x] После commit отправлять old-PC restart с correlation/idempotency key;
    transport failure не откатывает уже подтверждённый transfer молча.
-7. [x] Подключить WinUI подтверждение, автоматический claim на новом ПК,
+7. [x] Подключить Avalonia подтверждение, автоматический claim на новом ПК,
    waiting-state и operator read-only status.
 8. [x] Добавить fault/concurrency tests для двух подтверждений и двух target PCs.
 

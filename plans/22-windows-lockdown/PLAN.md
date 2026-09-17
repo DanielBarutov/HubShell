@@ -12,7 +12,10 @@
 компактный widget-интерфейс, а менеджер имеет отдельный контролируемый путь
 обслуживания.
 Поведение должно быть близким к SmartShell/Gizmo, но без копирования их закрытой
-реализации и без попытки заменить системную безопасность Windows кодом WinUI.
+реализации и без попытки заменить системную безопасность Windows кодом Avalonia.
+
+Каноническая матрица уровней ограничений, production baseline и release gates:
+[`POLICY.md`](POLICY.md).
 
 ## Принцип двух границ
 
@@ -21,7 +24,7 @@
 2. **Windows security boundary** — Assigned Access/Shell Launcher, стандартная
    учётная запись, ограничения Explorer/Start Menu/USB/дисков и политика запуска.
 
-Обычный WinUI-процесс не считается достаточной защитой рабочего стола. Не применять
+Обычный Avalonia-процесс не считается достаточной защитой рабочего стола. Не применять
 глобальные keyboard hooks, `BlockInput` или скрытые обходы Ctrl+Alt+Del как замену
 политике ОС. Любое изменение системной политики должно быть явно подтверждено,
 проверять права администратора и иметь обратимый сценарий.
@@ -58,8 +61,14 @@
 - таймаут access-gate и grace period пополнения;
 - версия политики и время последнего применения.
 
+Семантика этих полей, граница применения и правила manager maintenance описаны в
+[`POLICY.md`](POLICY.md). Backend policy является desired state; обычный client
+runtime не получает права молча менять Windows registry, shell или kiosk profile.
+
 Сервер хранит декларативную policy, а клиент применяет только известные ключи.
-Неизвестная или неподдерживаемая политика откатывается к безопасному профилю.
+Неизвестная или неподдерживаемая policy не ослабляет режим: клиент остаётся
+`Locked`/`OfflineSafe`, Windows policy не меняется, а причина фиксируется для
+audit и диагностики.
 
 ## Команды и безопасность
 
@@ -68,7 +77,8 @@
 - `display.lock` / `display.unlock`;
 - `session.start` / `session.stop`;
 - `maintenance.enter` / `maintenance.exit`;
-- `shell.enable` / `shell.disable`;
+- `shell.enable` / `shell.disable` — reserved for a future OS-policy adapter;
+  these commands are not accepted by the current client runtime;
 - `system.restart`;
 - `policy.apply` с валидированной структурой.
 
@@ -88,16 +98,26 @@ Windows Logon через `LockWorkStation`, если сценарий требу
 4. [x] Перевести `display.lock` в управляемый app-level lock и добавить тесты
    повторной доставки, offline-safe и session stop.
 5. [x] Добавить dashboard-настройки политики зоны с preview, версией и audit.
+5a. [ ] Зафиксировать отдельные права и audit lifecycle для OS policy apply,
+    restore и drift; manager access не должен получать эти права автоматически.
+5b. [x] Добавить отдельный optional provisioning для полного kiosk-профиля с
+    пользовательской policy `NoRun=1`, preview/apply/restore и backup:
+    `scripts/configure-windows-user-policy.ps1`. Не применять в базовом `app_gate`.
 6. [x] Подключить клиентскую визуализацию `Locked/User/SessionLocked/Maintenance`
    и безопасный возврат к locked после потери auth; policy приходит heartbeat-ом,
    а отключённый shell/self-login переводит клиент в locked.
-7. [x] Подготовить Windows provisioning scripts с preview и поддержкой
-   `-WhatIf` по умолчанию, backup/restore и явным `-Apply` для Assigned
-   Access/Shell Launcher.
+7. [x] Подготовить Windows provisioning script для Shell Launcher с preview,
+   `-WhatIf` по умолчанию, backup/restore и явным `-Apply`.
+7a. [ ] Добавить и отдельно проверить Assigned Access profile; текущий script его
+    не настраивает, поэтому Shell Launcher и Assigned Access не считаются одной
+    завершённой реализацией.
 8. [ ] Добавить проверку Windows edition, обычного пользователя, автозапуска,
    restart/recovery и фактический smoke на Windows.
-9. [ ] Добавить security profile для дисков, USB, Start Menu, desktop switching,
-   блокируемых окон и разрешённых приложений только после native проверки.
+8a. [ ] Выполнить native smoke базового lock: `Topmost`, `Alt+Tab`, `Win+R`,
+    `Ctrl+Alt+Del` → Task Manager под access-gate и offline manager fallback.
+9. [ ] Добавить Windows security profile для дисков, USB, Start Menu, desktop
+   switching, блокируемых окон и разрешённых приложений только после native
+   проверки и policy lifecycle из [`POLICY.md`](POLICY.md).
 10. [ ] Обновить installer: зарегистрировать клиент, применить выбранный профиль
     только по явному флагу, не выдавать production manager secret в командной строке.
 
