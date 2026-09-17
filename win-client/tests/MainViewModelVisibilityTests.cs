@@ -235,6 +235,55 @@ public sealed class MainViewModelVisibilityTests
     }
 
     [Fact]
+    /// <summary>
+    /// Проверяет, что выход сначала получает подтверждение остановки сессии
+    /// от backend, а затем блокирует клиент и планирует перезапуск ПК.
+    /// </summary>
+    public async Task LogoutWaitsForServerStopBeforeApplyingRestartPolicy()
+    {
+        var events = new List<string>();
+        var backend = DispatchProxy.Create<IBackendClient, StopRecordingBackendProxy>();
+        var backendProxy = (StopRecordingBackendProxy)(object)backend;
+        backendProxy.Events = events;
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(backend),
+            new StubCredentials(),
+            deviceId: "device-1",
+            powerController: new RecordingPowerController(() => events.Add("restart")));
+
+        viewModel.ApplyLockdownPolicy(new WorkstationLockdownPolicySnapshot(
+            "app_gate",
+            ShellEnabled: true,
+            UserSelfLoginEnabled: true,
+            LockAfterSession: true,
+            RestartAfterSession: true,
+            HiddenDrives: Array.Empty<string>(),
+            BlockExternalStorage: false,
+            DisableStartMenu: false,
+            DisableDesktopSwitching: false,
+            BlockedWindowRules: Array.Empty<string>(),
+            AllowedApplicationIds: Array.Empty<string>(),
+            Version: 1));
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-1",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            DeviceId: "device-1"));
+
+        Assert.True(await viewModel.LogoutAsync());
+        Assert.Equal(1, backendProxy.StopCalls);
+        Assert.Equal(1, events.Count(item => item == "restart"));
+        Assert.True(viewModel.IsAccessLocked);
+        Assert.True(events.IndexOf("backend.stop") < events.IndexOf("restart"));
+    }
+
+    [Fact]
     public async Task WorkstationLabelUsesServerProvidedNameInsteadOfTechnicalIdentifier()
     {
         await using var viewModel = new MainViewModel(
@@ -285,6 +334,58 @@ public sealed class MainViewModelVisibilityTests
 
         public void UpdateManagerPasswordVerifier(string verifier)
         {
+        }
+    }
+
+    private sealed class RecordingPowerController : IWorkstationPowerController
+    {
+        private readonly Action _onRestart;
+
+        public RecordingPowerController(Action onRestart) => _onRestart = onRestart;
+
+        public CommandExecutionResult ScheduleRestart()
+        {
+            _onRestart();
+            return new CommandExecutionResult(true, "restart scheduled");
+        }
+    }
+
+    private class StopRecordingBackendProxy : DispatchProxy
+    {
+        public List<string> Events { get; set; } = [];
+
+        public int StopCalls { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name == nameof(IWorkstationSessionGateway.StopSessionAsync))
+            {
+                StopCalls++;
+                Events.Add("backend.stop");
+                return Task.FromResult(new SessionSnapshot(
+                    "session-1",
+                    "workstation-1",
+                    null,
+                    null,
+                    "completed",
+                    "2026-01-01T12:00:00Z",
+                    "2026-01-01T12:02:00Z",
+                    "device",
+                    string.Empty,
+                    DeviceId: "device-1"));
+            }
+
+            if (targetMethod?.Name == nameof(IClientPortalGateway.Logout))
+            {
+                return null;
+            }
+
+            if (targetMethod?.ReturnType == typeof(ValueTask))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            throw new NotSupportedException($"Unexpected backend call: {targetMethod?.Name}");
         }
     }
 }

@@ -203,6 +203,22 @@ class BillingService:
                 package_minutes += package_result.consumed_minutes
                 active_entitlement_id = package_result.active_entitlement_id
         package_progressed = package_minutes > current.package_minutes
+        package_finished = (
+            active_entitlement_id is None
+            and (
+                package_progressed
+                or (current.package_minutes > 0 and active_entitlement is None)
+            )
+        )
+        if tariff.billing_mode is not BillingMode.PER_MINUTE and package_finished:
+            fallback_tariff = await self._catalog.find_per_minute_tariff(
+                effective_workstation_group_id(workstation.group_id),
+                moment,
+            )
+            if fallback_tariff is not None:
+                tariff_id = fallback_tariff.id
+                quote_moment = moment
+                tariff = fallback_tariff
         if tariff.billing_mode is not BillingMode.PER_MINUTE:
             if not package_progressed:
                 if (
@@ -278,6 +294,7 @@ class BillingService:
                 status=status,
                 package_minutes=package_minutes,
                 active_entitlement_id=active_entitlement_id,
+                tariff_id=tariff.id,
             )
         )
 

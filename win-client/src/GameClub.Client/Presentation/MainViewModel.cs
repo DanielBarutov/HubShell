@@ -15,6 +15,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly IAccessCredentialVerifier _accessCredentials;
     private readonly IWorkstationPowerController? _powerController;
     private readonly IClientPortalGateway _clientPortal;
+    private readonly SessionTimeProjection _sessionTimeProjection = new();
+    private readonly Func<DateTimeOffset> _clock;
     private readonly List<Task> _backgroundTasks = [];
     private CancellationTokenSource _lifetime = new();
     private ClientConnectionSnapshot _connection = new(
@@ -60,13 +62,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         string? deviceId = null,
         string clientVersion = "0.1.0",
         IReadOnlyCollection<string>? capabilities = null,
-        IWorkstationPowerController? powerController = null)
+        IWorkstationPowerController? powerController = null,
+        Func<DateTimeOffset>? clock = null)
     {
         _session = session;
         _accessCredentials = accessCredentials;
         _accessGate = new AccessGateCoordinator(_accessCredentials);
         _clientPortal = session.ClientPortal;
         _powerController = powerController;
+        _clock = clock ?? (() => DateTimeOffset.UtcNow);
         DeviceId = deviceId;
         ClientVersion = clientVersion;
         Capabilities = capabilities ?? Array.Empty<string>();
@@ -349,6 +353,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
     public string ActiveTimeSummary => _activeSession is null
         ? "Сессия не запущена"
+        : _sessionTimeProjection.GetRemainingMinutes(_clock()) is int projectedMinutes
+            ? $"Осталось {FormatDuration(projectedMinutes)}"
         : _activeSession.LoginGrantRemainingMinutes > 0
             ? $"Осталось {FormatDuration(_activeSession.LoginGrantRemainingMinutes)}"
         : _activeSession.ActivePackage is not null
@@ -624,6 +630,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             if (_accessGate.LockIfIdle())
             {
                 PublishAccessState();
+            }
+        }
+    }
+
+    public async Task RunSessionCountdownLoopAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        while (await timer.WaitForNextTickAsync(_lifetime.Token))
+        {
+            if (_activeSession is not null)
+            {
+                OnPropertyChanged(nameof(ActiveTimeSummary));
             }
         }
     }
@@ -1073,6 +1091,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public void LockClient(string message = "Экран заблокирован")
     {
         _activeSession = null;
+        _sessionTimeProjection.Reset();
         _clientPortal.Logout();
         _portalSnapshot = null;
         _portalPasswordResetRequired = false;
@@ -1681,6 +1700,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         var previous = _activeSession;
         _activeSession = snapshot;
+        _sessionTimeProjection.Apply(snapshot, _clock());
         if (IsAccessLocked
             && !IsMaintenanceMode
             && snapshot.ClientId is null
