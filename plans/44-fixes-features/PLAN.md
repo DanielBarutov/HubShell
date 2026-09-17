@@ -163,7 +163,8 @@ native smoke для access-gate, restart и power/session failure.
 10. [ ] **F-06.** После top-up публиковать/получать новый server snapshot и
     пересчитывать доступное per-minute время по актуальному zone tariff.
     Пакетный источник времени не должен заменяться балансом до его исчерпания.
-11. [ ] **F-07.** Передавать `active_session.client_id` из карты ПК в
+11. [ ] **F-07.** [partial: PanelHost → DepositPanel и component test реализованы]
+    Передавать `active_session.client_id` из карты ПК в
     `DepositPanel`, предзаполнять и показывать имя клиента, а смену получателя
     делать явным подтверждённым действием. Backend остаётся последней проверкой.
 12. [ ] **F-08.** Добавить bounded client-group policy: allow-negative и
@@ -179,7 +180,8 @@ PostgreSQL ledger/concurrency tests, settings/client UI tests и обновлё�
 
 ### Фаза 3 — P1: гостевые тарифы и operator checkout
 
-14. [ ] **F-10.** Развести audience (`guest`/`registered`) и channel
+14. [ ] **F-10.** [partial: frontend active-client guard и backend busy-workstation test реализованы]
+    Развести audience (`guest`/`registered`) и channel
     (`operator`/`self-service`) в каталоге/quote. Зарегистрированный активный
     клиент не может быть переименован в guest через UI; backend отклоняет guest
     tariff sale для занятого ПК с его session. Самостоятельный Win Client flow
