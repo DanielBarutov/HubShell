@@ -41,6 +41,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const [buyerMode, setBuyerMode] = useState<"guest" | "client">("guest");
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
+  const [availableTariffs, setAvailableTariffs] = useState<BackendTariff[] | null>(null);
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "transfer" | "mixed">("cash");
   const [balancePartAmount, setBalancePartAmount] = useState("");
@@ -63,7 +64,26 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   ];
   const products = (api ? catalogProducts : demoSaleProducts).filter((item) => item.active && item.stock_quantity > 0);
   const workstationGroupId = pc?.groupId?.trim().toLowerCase();
-  const tariffs = (api ? catalogTariffs : demoSaleTariffs).filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
+  const sourceTariffs = availableTariffs ?? (api ? catalogTariffs : demoSaleTariffs);
+  const tariffs = sourceTariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
+
+  useEffect(() => {
+    if (!api || !pc || typeof api.listAvailableTariffs !== "function") {
+      setAvailableTariffs(null);
+      return;
+    }
+    let cancelled = false;
+    void api.listAvailableTariffs(pc.groupId ?? null, buyerMode === "guest" ? "guest" : "registered")
+      .then((items) => {
+        if (!cancelled) setAvailableTariffs(items);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableTariffs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, buyerMode, pc]);
 
   useEffect(() => {
     if (!initialClient) return;

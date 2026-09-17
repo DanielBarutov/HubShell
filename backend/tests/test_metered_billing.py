@@ -16,6 +16,10 @@ from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
+from gameclub_backend.modules.direct_payments.infrastructure.memory import (
+    InMemoryGuestSessionPaymentRepository,
+)
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
 from gameclub_backend.modules.entitlements.domain import EntitlementStatus
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
@@ -37,6 +41,17 @@ class FixedClock:
 
     def now(self) -> datetime.datetime:
         return self.current
+
+
+class NoopCashSettlement:
+    async def settle(
+        self,
+        shift_id: uuid.UUID,
+        amount_cents: int,
+        payment_idempotency_key: str,
+        actor_id: str,
+    ) -> None:
+        del shift_id, amount_cents, payment_idempotency_key, actor_id
 
 
 async def build_metered_services(clock: FixedClock, tariff_free_minutes: int = 5):
@@ -91,8 +106,11 @@ async def build_metered_services(clock: FixedClock, tariff_free_minutes: int = 5
 async def build_package_metered_services(
     clock: FixedClock,
     duration_minutes: int = 3,
-    window_start_minute: int | None = None,
-    window_end_minute: int | None = None,
+    time_restricted: bool = False,
+    sale_window_start_minute: int | None = None,
+    sale_window_end_minute: int | None = None,
+    usage_window_start_minute: int | None = None,
+    usage_window_end_minute: int | None = None,
     window_timezone: str | None = None,
 ):
     workstation_repository = InMemoryWorkstationRepository()
@@ -119,8 +137,11 @@ async def build_package_metered_services(
         valid_from=clock.current,
         valid_to=None,
         billing_mode=BillingMode.BLOCK,
-        window_start_minute=window_start_minute,
-        window_end_minute=window_end_minute,
+        time_restricted=time_restricted,
+        sale_window_start_minute=sale_window_start_minute,
+        sale_window_end_minute=sale_window_end_minute,
+        usage_window_start_minute=usage_window_start_minute,
+        usage_window_end_minute=usage_window_end_minute,
         window_timezone=window_timezone,
     )
     session_repository = InMemorySessionRepository()
@@ -664,8 +685,11 @@ async def test_windowed_package_consumes_only_minutes_inside_local_window() -> N
     ) = await build_package_metered_services(
         clock,
         duration_minutes=60,
-        window_start_minute=22 * 60,
-        window_end_minute=6 * 60,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=23 * 60 + 59,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=6 * 60,
         window_timezone="Europe/Moscow",
     )
     package = await entitlements.purchase(client.id, tariff.id, "operator", "night-meter")
@@ -687,6 +711,76 @@ async def test_windowed_package_consumes_only_minutes_inside_local_window() -> N
     outside = await billing.meter_session(session.id)
     assert outside is None
     assert (await meters.get(session.id)).package_minutes == 30
+
+
+@pytest.mark.asyncio
+async def test_package_purchase_is_rejected_outside_sale_window() -> None:
+    """
+    Проверяет, что зарегистрированный клиент не может купить тариф вне окна продажи.
+    """
+    clock = FixedClock()
+    (
+        _workstation,
+        client,
+        _tariff,
+        _sessions,
+        _billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(
+        clock,
+        time_restricted=True,
+        sale_window_start_minute=22 * 60,
+        sale_window_end_minute=6 * 60,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=6 * 60,
+        window_timezone="UTC",
+    )
+
+    with pytest.raises(ApplicationError, match="not available"):
+        await entitlements.purchase(client.id, _tariff.id, "operator", "outside-sale-window")
+
+
+@pytest.mark.asyncio
+async def test_guest_purchase_is_rejected_outside_sale_window() -> None:
+    """
+    Проверяет тот же запрет для прямой гостевой покупки тарифа.
+    """
+    clock = FixedClock()
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Guest night package",
+        "vip",
+        duration_minutes=60,
+        price_cents=500,
+        valid_from=clock.current,
+        valid_to=None,
+        time_restricted=True,
+        sale_window_start_minute=22 * 60,
+        sale_window_end_minute=6 * 60,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=6 * 60,
+        window_timezone="UTC",
+        audience="guest",
+    )
+    payments = GuestSessionPaymentService(
+        InMemoryGuestSessionPaymentRepository(),
+        tariffs=catalog,
+        cash=NoopCashSettlement(),
+        clock=clock,
+    )
+
+    with pytest.raises(ApplicationError, match="not available for guests"):
+        await payments.confirm(
+            workstation_id=uuid.uuid4(),
+            tariff_id=tariff.id,
+            tariff_quantity=1,
+            guest_name="Night Guest",
+            actor_id="operator",
+            idempotency_key="guest-outside-sale-window",
+            payment_parts=[{"method": "cash", "amount_cents": 500}],
+        )
 
 
 @pytest.mark.asyncio
@@ -744,8 +838,11 @@ async def test_package_time_window_uses_configured_timezone() -> None:
         price_cents=100,
         valid_from=clock.current,
         valid_to=None,
-        window_start_minute=22 * 60,
-        window_end_minute=6 * 60,
+        time_restricted=True,
+        sale_window_start_minute=22 * 60,
+        sale_window_end_minute=6 * 60,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=6 * 60,
         window_timezone="Europe/Moscow",
     )
     clients = ClientService(InMemoryClientRepository(), clock=clock)
@@ -764,9 +861,10 @@ async def test_package_time_window_uses_configured_timezone() -> None:
         clients=clients,
         clock=clock,
     )
+    clock.current = datetime.datetime(2026, 8, 29, 19, tzinfo=datetime.UTC)
     item = await entitlements.purchase(client.id, tariff.id, "operator", "night-package")
+    clock.current = datetime.datetime(2026, 8, 29, 18, tzinfo=datetime.UTC)
     assert await entitlements.next_compatible(client.id, "vip", now=clock.current) is None
-
     clock.current = datetime.datetime(2026, 8, 29, 19, tzinfo=datetime.UTC)
     assert (await entitlements.next_compatible(client.id, "vip", now=clock.current)).id == item.id
     assert (await entitlements.activate(item.id, client.id)).status is EntitlementStatus.ACTIVE

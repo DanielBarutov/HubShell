@@ -21,9 +21,13 @@ class EntitlementResponse(BaseModel):
     client_id: uuid.UUID
     tariff_id: uuid.UUID
     zone_id: str | None
-    window_start_minute: int | None
-    window_end_minute: int | None
+    time_restricted: bool
+    sale_window_start_minute: int | None
+    sale_window_end_minute: int | None
+    usage_window_start_minute: int | None
+    usage_window_end_minute: int | None
     window_timezone: str | None
+    audience: str
     duration_minutes: int
     remaining_minutes: int
     price_cents: int
@@ -42,9 +46,13 @@ class EntitlementResponse(BaseModel):
             client_id=item.client_id,
             tariff_id=item.tariff_id,
             zone_id=item.zone_id,
-            window_start_minute=item.window_start_minute,
-            window_end_minute=item.window_end_minute,
+            time_restricted=item.time_restricted,
+            sale_window_start_minute=item.sale_window_start_minute,
+            sale_window_end_minute=item.sale_window_end_minute,
+            usage_window_start_minute=item.usage_window_start_minute,
+            usage_window_end_minute=item.usage_window_end_minute,
             window_timezone=item.window_timezone,
+            audience=item.audience.value,
             duration_minutes=item.duration_minutes,
             remaining_minutes=item.remaining_minutes,
             price_cents=item.price_cents,

@@ -12,7 +12,7 @@ from gameclub_backend.modules.billing.infrastructure.memory import (
     InMemoryChargeRepository,
 )
 from gameclub_backend.modules.catalog.application.service import CatalogService
-from gameclub_backend.modules.catalog.domain import TariffLifecycle
+from gameclub_backend.modules.catalog.domain import TariffAudience, TariffLifecycle
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
@@ -24,6 +24,60 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+async def test_catalog_available_tariffs_apply_audience_and_independent_windows() -> None:
+    """
+    Проверяет, что каталог разделяет окно продажи и окно использования тарифа,
+    а также не показывает тариф неподходящей аудитории.
+    """
+    service = CatalogService(InMemoryCatalogRepository())
+    start = datetime.datetime(2026, 8, 27, 0, tzinfo=datetime.UTC)
+    night = await service.create_tariff(
+        "Night guest package",
+        "vip",
+        60,
+        500,
+        start,
+        None,
+        time_restricted=True,
+        sale_window_start_minute=9 * 60,
+        sale_window_end_minute=17 * 60,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=6 * 60,
+        window_timezone="UTC",
+        audience=TariffAudience.GUEST,
+    )
+    registered = await service.create_tariff(
+        "Registered package",
+        "vip",
+        60,
+        600,
+        start,
+        None,
+        audience=TariffAudience.REGISTERED,
+    )
+
+    visible = await service.list_available_tariffs(
+        "VIP",
+        TariffAudience.GUEST,
+        moment=datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC),
+    )
+    quote = await service.quote(
+        60,
+        "VIP",
+        datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC),
+        audience=TariffAudience.GUEST,
+    )
+
+    assert [item.id for item in visible] == [night.id]
+    assert quote.tariff_id == night.id
+    assert registered.time_restricted is False
+    assert registered.sale_window_start_minute is None
+    assert registered.usage_window_start_minute is None
+    assert registered.window_timezone is None
+    assert night.is_usable_at(datetime.datetime(2026, 8, 27, 23, tzinfo=datetime.UTC))
+    assert not night.is_usable_at(datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC))
 
 async def test_catalog_quote_selects_the_cheapest_applicable_tariff() -> None:
     """

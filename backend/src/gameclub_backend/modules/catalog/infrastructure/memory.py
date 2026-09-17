@@ -3,7 +3,13 @@ import dataclasses
 import datetime
 import uuid
 
-from gameclub_backend.modules.catalog.domain import DiscountRule, Product, ProductCategory, Tariff
+from gameclub_backend.modules.catalog.domain import (
+    DiscountRule,
+    Product,
+    ProductCategory,
+    Tariff,
+    TariffAudience,
+)
 
 
 class InMemoryCatalogRepository:
@@ -108,8 +114,13 @@ class InMemoryCatalogRepository:
         self,
         group_id: str | None,
         moment: datetime.datetime,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> list[Tariff]:
-        return [tariff for tariff in self._tariffs.values() if tariff.applies_at(moment, group_id)]
+        return [
+            tariff
+            for tariff in self._tariffs.values()
+            if tariff.applies_at(moment, group_id, audience)
+        ]
 
     async def save_discount_rule(self, rule: DiscountRule) -> DiscountRule:
         self._discount_rules[rule.id] = rule

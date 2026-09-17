@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.direct_payments.application.ports import (
     CashDirectSettlement,
     Clock,
@@ -112,8 +113,14 @@ class GuestSessionPaymentService:
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone",
                 )
+        now = self._clock.now()
         if not tariff.active or tariff.price_cents <= 0:
             raise ApplicationError(ErrorCode.CONFLICT, "Tariff is not payable as a guest package")
+        if not tariff.is_visible_to(now, TariffAudience.GUEST):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Tariff is not available for guests at this time",
+            )
         try:
             parts = normalize_payment_parts(
                 payment_parts,
@@ -131,7 +138,7 @@ class GuestSessionPaymentService:
                 cash_shift_id=cash_shift_id,
                 status=DirectPaymentStatus.PENDING,
                 idempotency_key=key,
-                created_at=self._clock.now(),
+                created_at=now,
                 created_by=actor,
             )
         except ValueError as error:

@@ -327,18 +327,32 @@ class PortalPaymentMethod(_message.Message):
     def __init__(self, key: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class PortalTariff(_message.Message):
-    __slots__ = ("id", "name", "zone_id", "duration_minutes", "price_cents")
+    __slots__ = ("id", "name", "zone_id", "duration_minutes", "price_cents", "time_restricted", "sale_window_start_minute", "sale_window_end_minute", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "audience")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
     DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
     PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    TIME_RESTRICTED_FIELD_NUMBER: _ClassVar[int]
+    SALE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    SALE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     zone_id: str
     duration_minutes: int
     price_cents: int
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ...) -> None: ...
+    time_restricted: bool
+    sale_window_start_minute: int
+    sale_window_end_minute: int
+    usage_window_start_minute: int
+    usage_window_end_minute: int
+    window_timezone: str
+    audience: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., time_restricted: _Optional[bool] = ..., sale_window_start_minute: _Optional[int] = ..., sale_window_end_minute: _Optional[int] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class PortalReservation(_message.Message):
     __slots__ = ("id", "workstation_ids", "start_at", "end_at", "status", "tariff_id")
@@ -357,7 +371,7 @@ class PortalReservation(_message.Message):
     def __init__(self, id: _Optional[str] = ..., workstation_ids: _Optional[_Iterable[str]] = ..., start_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., end_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status: _Optional[str] = ..., tariff_id: _Optional[str] = ...) -> None: ...
 
 class PortalEntitlement(_message.Message):
-    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "price_cents", "queue_position", "status", "tariff_name", "purchased_at", "activated_at")
+    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "price_cents", "queue_position", "status", "tariff_name", "purchased_at", "activated_at", "time_restricted", "sale_window_start_minute", "sale_window_end_minute", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "audience")
     ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -369,6 +383,13 @@ class PortalEntitlement(_message.Message):
     TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
     PURCHASED_AT_FIELD_NUMBER: _ClassVar[int]
     ACTIVATED_AT_FIELD_NUMBER: _ClassVar[int]
+    TIME_RESTRICTED_FIELD_NUMBER: _ClassVar[int]
+    SALE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    SALE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     id: str
     tariff_id: str
     zone_id: str
@@ -380,7 +401,14 @@ class PortalEntitlement(_message.Message):
     tariff_name: str
     purchased_at: _timestamp_pb2.Timestamp
     activated_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., tariff_name: _Optional[str] = ..., purchased_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., activated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    time_restricted: bool
+    sale_window_start_minute: int
+    sale_window_end_minute: int
+    usage_window_start_minute: int
+    usage_window_end_minute: int
+    window_timezone: str
+    audience: str
+    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., price_cents: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., tariff_name: _Optional[str] = ..., purchased_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., activated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., time_restricted: _Optional[bool] = ..., sale_window_start_minute: _Optional[int] = ..., sale_window_end_minute: _Optional[int] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class PortalBalanceOperation(_message.Message):
     __slots__ = ("id", "operation_type", "amount_cents", "bonus_amount", "reason", "created_at", "payment_parts")

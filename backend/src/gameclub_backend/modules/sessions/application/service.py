@@ -5,6 +5,7 @@ import datetime
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus
 from gameclub_backend.modules.entitlements.domain import Entitlement
 from gameclub_backend.modules.reservations.domain import ReservationStatus
@@ -168,7 +169,12 @@ class SessionService:
             selected_tariff = await self._tariffs.get_tariff(tariff_id)
             if selected_tariff is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
-            if not selected_tariff.applies_at(self._clock.now(), effective_group_id):
+            buyer_audience = (
+                TariffAudience.REGISTERED if client_id is not None else TariffAudience.GUEST
+            )
+            if not selected_tariff.applies_at(
+                self._clock.now(), effective_group_id, buyer_audience
+            ):
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone or is not active",

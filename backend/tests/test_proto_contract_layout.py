@@ -95,6 +95,38 @@ def test_catalog_contract_contains_discount_and_lifecycle_methods() -> None:
     }.issubset(methods)
 
 
+def test_tariff_contract_contains_time_windows_and_audience() -> None:
+    """
+    Проверяет, что HTTP/gRPC snapshot-контракты не теряют ограничения тарифа.
+    """
+    tariff_fields = catalog_pb2.Tariff.DESCRIPTOR.fields_by_name
+    create_fields = catalog_pb2.CreateTariffRequest.DESCRIPTOR.fields_by_name
+    quote_fields = catalog_pb2.QuoteRequest.DESCRIPTOR.fields_by_name
+    portal_tariff_fields = clients_pb2.PortalTariff.DESCRIPTOR.fields_by_name
+    portal_entitlement_fields = clients_pb2.PortalEntitlement.DESCRIPTOR.fields_by_name
+    package_fields = sessions_pb2.PackageSnapshot.DESCRIPTOR.fields_by_name
+
+    for fields in (
+        tariff_fields,
+        create_fields,
+        portal_tariff_fields,
+        portal_entitlement_fields,
+    ):
+        assert "time_restricted" in fields
+        assert "sale_window_start_minute" in fields
+        assert "sale_window_end_minute" in fields
+        assert "usage_window_start_minute" in fields
+        assert "usage_window_end_minute" in fields
+        assert "window_timezone" in fields
+        assert "audience" in fields
+    assert "audience" in quote_fields
+    assert "time_restricted" in package_fields
+    assert "usage_window_start_minute" in package_fields
+    assert "usage_window_end_minute" in package_fields
+    assert "window_timezone" in package_fields
+    assert "audience" in package_fields
+
+
 def test_reservation_contract_contains_availability_and_lifecycle_methods() -> None:
     """
     Проверяет сценарий «test_reservation_contract_contains_availability_and_lifecycle_methods» и
