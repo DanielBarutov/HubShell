@@ -44,6 +44,7 @@ public sealed class MainViewModelVisibilityTests
             nameof(MainViewModel.IsPortalReadyVisible),
             nameof(MainViewModel.IsAccessFeedbackVisible),
             nameof(MainViewModel.IsTariffsVisible),
+            nameof(MainViewModel.IsPortalBalanceTimeVisible),
             nameof(MainViewModel.IsUpcomingBookingVisible),
             nameof(MainViewModel.IsTransferPanelVisible),
             nameof(MainViewModel.IsTransferWaiting),
@@ -232,6 +233,81 @@ public sealed class MainViewModelVisibilityTests
         Assert.Equal("Поминутная игра", viewModel.CurrentSessionModeSummary);
         Assert.Contains("1,50 ₽/мин", viewModel.CurrentSessionTariffSummary);
         Assert.Contains("первые 5 мин бесплатно", viewModel.CurrentSessionTariffSummary);
+
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-3",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            ActivePackage: new SessionPackageSnapshot(
+                "package-2",
+                "tariff-package",
+                null,
+                60,
+                30,
+                1,
+                "active",
+                0,
+                0,
+                null),
+            BalanceRemainingMinutes: 120));
+
+        Assert.Equal("Пакет времени", viewModel.CurrentSessionModeSummary);
+        Assert.Equal("Осталось 30 мин", viewModel.ActiveTimeSummary);
+    }
+
+    [Fact]
+    /// <summary>
+    /// Проверяет, что клиент показывает только активные и queued-пакеты,
+    /// локализует их статусы и не предлагает ручную активацию при активном пакете.
+    /// </summary>
+    public async Task PortalEntitlementQueueHidesTerminalStatusesAndLocalizesVisibleStatuses()
+    {
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials(),
+            deviceId: "device-1");
+
+        viewModel.SetDeviceIdentity("device-1", "workstation-1", "Main-01");
+        var snapshot = new ClientPortalSnapshot(
+            "client-1",
+            "PackageFox",
+            "+7 999 000-00-00",
+            1_000,
+            0,
+            40,
+            Array.Empty<ClientPortalBalanceOperation>(),
+            Array.Empty<ClientPortalSession>(),
+            Array.Empty<ClientPortalCharge>(),
+            Array.Empty<ClientPortalPurchase>(),
+            new[]
+            {
+                PortalEntitlement("active-1", "active", 1, "Дневной пакет", 20),
+                PortalEntitlement("queued-1", "queued", 2, "Ночной пакет", 60),
+                PortalEntitlement("exhausted-1", "exhausted", 3, "Старый пакет", 0),
+                PortalEntitlement("burned-1", "burned", 4, "Сожжённый пакет", 0),
+            },
+            Array.Empty<ClientPortalTariff>(),
+            Array.Empty<ClientPortalReservation>());
+        var setter = typeof(MainViewModel).GetMethod(
+            "SetPortalSnapshot",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        setter!.Invoke(viewModel, new object?[] { snapshot });
+
+        Assert.Equal(
+            new[]
+            {
+                "Дневной пакет · Активен · 20 из 60 мин",
+                "Ночной пакет · В очереди · 60 из 60 мин",
+            },
+            viewModel.PortalEntitlementQueue);
+        Assert.False(viewModel.CanActivatePortalEntitlement);
+        Assert.False(viewModel.IsPortalBalanceTimeVisible);
     }
 
     [Fact]
@@ -308,6 +384,32 @@ public sealed class MainViewModelVisibilityTests
 
     private static IBackendClient CreateBackend() =>
         DispatchProxy.Create<IBackendClient, UnconfiguredBackendProxy>();
+
+    private static ClientPortalEntitlement PortalEntitlement(
+        string id,
+        string status,
+        int queuePosition,
+        string tariffName,
+        int remainingMinutes) =>
+        new(
+            id,
+            $"tariff-{id}",
+            "main",
+            status,
+            60,
+            remainingMinutes,
+            1_000,
+            queuePosition,
+            tariffName,
+            "2026-01-01T12:00:00Z",
+            status == "active" ? "2026-01-01T12:01:00Z" : null,
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "all");
 
     private class UnconfiguredBackendProxy : DispatchProxy
     {

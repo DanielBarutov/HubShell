@@ -91,8 +91,8 @@ async def test_http_grpc_and_device_heartbeat_share_the_same_snapshot_fixture(
 @pytest.mark.asyncio
 async def test_session_snapshot_exposes_balance_time_for_current_zone_rate() -> None:
     """
-    Проверяет сценарий «test_session_snapshot_exposes_balance_time_for_current_zone_rate» и
-    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    Проверяет, что snapshot активной сессии отдаёт доступное поминутное время
+    по тарифу зоны и пересчитывает его после пополнения баланса.
     """
     workstations_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstations_repository)
@@ -147,6 +147,22 @@ async def test_session_snapshot_exposes_balance_time_for_current_zone_rate() -> 
     assert snapshot.balance_remaining_minutes == 40
     assert http_snapshot.balance_remaining_minutes == 40
     assert grpc_snapshot.balance_remaining_minutes == 40
+
+    await client_service.top_up(
+        client.id,
+        amount_cents=500,
+        bonus_amount=0,
+        reason="Top-up during active session",
+        actor_id="operator",
+        idempotency_key="balance-time-top-up-during-session",
+    )
+    updated_snapshot = await sessions.snapshot(
+        session.id,
+        now=datetime.datetime(2026, 9, 2, 12, 31, tzinfo=datetime.UTC),
+    )
+
+    assert updated_snapshot.balance_cents == 1_500
+    assert updated_snapshot.balance_remaining_minutes == 60
 
 
 @pytest.mark.asyncio

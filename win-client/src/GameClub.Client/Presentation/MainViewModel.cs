@@ -302,6 +302,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string PortalAvailableTimeSummary => _portalSnapshot is null
         ? string.Empty
         : $"Осталось примерно {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
+    public bool IsPortalBalanceTimeVisible => _portalSnapshot is not null
+        && _activeSession?.ActivePackage is null
+        && !_portalSnapshot.Entitlements.Any(item =>
+            item.Status.Equals("active", StringComparison.OrdinalIgnoreCase));
     public IReadOnlyList<string> PortalBalanceHistory => _portalSnapshot is null
         ? Array.Empty<string>()
         : ClientPortalHistoryFormatter.FormatBalanceOperations(_portalSnapshot);
@@ -315,9 +319,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         ? Array.Empty<string>()
         : ClientPortalHistoryFormatter.FormatSessions(_portalSnapshot);
     public IReadOnlyList<string> PortalEntitlementQueue => _portalSnapshot?.Entitlements
+        .Where(item => item.Status.Equals("active", StringComparison.OrdinalIgnoreCase)
+            || item.Status.Equals("queued", StringComparison.OrdinalIgnoreCase))
         .OrderBy(item => item.QueuePosition)
         .Select(item =>
-            $"{item.TariffName ?? "Пакет"} · {item.Status} · {item.RemainingMinutes} из {item.DurationMinutes} мин")
+            $"{item.TariffName ?? "Пакет"} · {FormatEntitlementStatus(item.Status)} · {item.RemainingMinutes} из {item.DurationMinutes} мин")
         .ToArray() ?? Array.Empty<string>();
     public IReadOnlyList<ClientPortalTariff> PortalTariffs => _portalSnapshot?.Tariffs
         ?? Array.Empty<ClientPortalTariff>();
@@ -337,7 +343,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : "Перенести сессию на другой ПК";
     public bool IsTransferWaiting => _isTransferWaiting;
     public bool CanActivatePortalEntitlement => _portalSnapshot?.Entitlements
-        .Any(item => item.Status == "queued") == true
+        .Any(item => item.Status.Equals("queued", StringComparison.OrdinalIgnoreCase)) == true
+        && _portalSnapshot?.Entitlements.Any(item => item.Status.Equals("active", StringComparison.OrdinalIgnoreCase)) != true
         && !string.IsNullOrWhiteSpace(DeviceId)
         && !_portalPasswordResetRequired;
     public string DeviceStatus => string.IsNullOrWhiteSpace(DeviceId)
@@ -1618,6 +1625,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalBonusSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeValue));
+        OnPropertyChanged(nameof(IsPortalBalanceTimeVisible));
         OnPropertyChanged(nameof(PortalBalanceHistory));
         OnPropertyChanged(nameof(PortalPurchaseHistory));
         OnPropertyChanged(nameof(PortalChargeHistory));
@@ -1644,6 +1652,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             ? $"Пакет «{name}» · {package.RemainingMinutes} мин{price}"
             : $"Пакет «{name}» завершён";
     }
+
+    private static string FormatEntitlementStatus(string status) =>
+        status.Trim().ToLowerInvariant() switch
+        {
+            "active" => "Активен",
+            "queued" => "В очереди",
+            _ => "Статус не определён",
+        };
 
     private static string FormatPerMinuteTariffSummary(SessionTariffSnapshot tariff)
     {
@@ -1690,6 +1706,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(ActiveTimeSummary));
         OnPropertyChanged(nameof(CurrentSessionModeSummary));
         OnPropertyChanged(nameof(CurrentSessionTariffSummary));
+        OnPropertyChanged(nameof(IsPortalBalanceTimeVisible));
         OnPropertyChanged(nameof(CanCreateTransferOffer));
         OnPropertyChanged(nameof(CanConfirmTransfer));
         OnPropertyChanged(nameof(IsTransferWaiting));

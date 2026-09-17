@@ -160,7 +160,8 @@ native smoke для access-gate, restart и power/session failure.
    равна order total, каждая часть имеет свой метод и audit reference, повторная
    отправка идемпотентна. Отдельно описать отмену и reconciliation; provider
    integration остаётся за границами плана.
-10. [ ] **F-06.** После top-up публиковать/получать новый server snapshot и
+10. [ ] **F-06.** [partial: backend snapshot и Win Core projection покрыты]
+    После top-up публиковать/получать новый server snapshot и
     пересчитывать доступное per-minute время по актуальному zone tariff.
     Пакетный источник времени не должен заменяться балансом до его исчерпания.
 11. [ ] **F-07.** [partial: PanelHost → DepositPanel и component test реализованы]
@@ -192,7 +193,8 @@ PostgreSQL ledger/concurrency tests, settings/client UI tests и обновлё�
 
 ### Фаза 4 — P2: Win Client UI и уведомления
 
-16. [ ] **F-11.** На основании server snapshot показывать локализованные
+16. [ ] **F-11.** [partial: Core/ViewModel фильтрация, приоритет active package и скрытие balance-time блока покрыты]
+    На основании server snapshot показывать локализованные
     `Активный`/`В очереди`, остаток и длительность; скрывать `EXHAUSTED`/
     `BURNED`, поле balance-derived time во время active package и отдельную
     кнопку завершения тарифа.
