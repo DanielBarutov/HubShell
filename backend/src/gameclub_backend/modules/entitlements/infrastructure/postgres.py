@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
 
 
@@ -36,9 +37,13 @@ class EntitlementModel(EntitlementBase):
         DateTime(timezone=True), nullable=True
     )
     burn_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
-    window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    time_restricted: Mapped[bool] = mapped_column(default=False)
+    sale_window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    sale_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    usage_window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    usage_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     window_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audience: Mapped[str] = mapped_column(String(16), default=TariffAudience.ALL.value)
 
     def to_domain(self) -> Entitlement:
         return Entitlement(
@@ -56,9 +61,13 @@ class EntitlementModel(EntitlementBase):
             activated_at=self.activated_at,
             ended_at=self.ended_at,
             burn_reason=self.burn_reason,
-            window_start_minute=self.window_start_minute,
-            window_end_minute=self.window_end_minute,
+            time_restricted=self.time_restricted,
+            sale_window_start_minute=self.sale_window_start_minute,
+            sale_window_end_minute=self.sale_window_end_minute,
+            usage_window_start_minute=self.usage_window_start_minute,
+            usage_window_end_minute=self.usage_window_end_minute,
             window_timezone=self.window_timezone,
+            audience=TariffAudience(self.audience),
         )
 
     @classmethod
@@ -78,9 +87,13 @@ class EntitlementModel(EntitlementBase):
             activated_at=item.activated_at,
             ended_at=item.ended_at,
             burn_reason=item.burn_reason,
-            window_start_minute=item.window_start_minute,
-            window_end_minute=item.window_end_minute,
+            time_restricted=item.time_restricted,
+            sale_window_start_minute=item.sale_window_start_minute,
+            sale_window_end_minute=item.sale_window_end_minute,
+            usage_window_start_minute=item.usage_window_start_minute,
+            usage_window_end_minute=item.usage_window_end_minute,
             window_timezone=item.window_timezone,
+            audience=item.audience.value,
         )
 
 

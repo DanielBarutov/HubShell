@@ -7,7 +7,12 @@ import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.domain import SessionCharge
-from gameclub_backend.modules.catalog.domain import BillingMode, Tariff, TariffLifecycle
+from gameclub_backend.modules.catalog.domain import (
+    BillingMode,
+    Tariff,
+    TariffAudience,
+    TariffLifecycle,
+)
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
 from gameclub_backend.modules.entitlements.domain import Entitlement
@@ -104,6 +109,11 @@ class ReservationReader(typing.Protocol):
         """Return future confirmed reservations for one client."""
 
 
+class UtcClock:
+    def now(self) -> datetime.datetime:
+        return datetime.datetime.now(datetime.UTC)
+
+
 @dataclasses.dataclass(frozen=True)
 class ClientPortalSnapshot:
     client: Client
@@ -133,6 +143,7 @@ class ClientPortalService:
         workstations: WorkstationReader | None = None,
         payment_methods: PaymentMethodReader | None = None,
         reservations: ReservationReader | None = None,
+        clock: UtcClock | None = None,
     ) -> None:
         self._clients = clients
         self._sessions = sessions
@@ -143,6 +154,7 @@ class ClientPortalService:
         self._workstations = workstations
         self._payment_methods = payment_methods
         self._reservations = reservations
+        self._clock = clock or UtcClock()
 
     async def register(self, nickname: str, phone: str, password: str) -> Client:
         return await self._clients.register_portal(nickname, phone, password)
@@ -176,6 +188,7 @@ class ClientPortalService:
             else []
         )
         normalized_group_id = group_id.strip().lower() if group_id else None
+        now = self._clock.now()
         available_tariffs = tuple(
             tariff
             for tariff in tariffs
@@ -187,6 +200,7 @@ class ClientPortalService:
                 or tariff.group_id is None
                 or tariff.group_id.strip().lower() == normalized_group_id
             )
+            and tariff.is_visible_to(now, TariffAudience.REGISTERED)
         )
         upcoming_reservations = (
             await self._reservations.list_for_client(

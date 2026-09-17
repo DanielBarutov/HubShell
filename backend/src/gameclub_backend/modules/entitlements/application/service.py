@@ -5,6 +5,7 @@ import datetime
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.entitlements.application.ports import (
     ActiveSessionLookup,
     ClientEntitlementDebit,
@@ -95,6 +96,11 @@ class EntitlementService:
         if not tariff.active:
             raise ApplicationError(ErrorCode.CONFLICT, "Tariff is inactive")
         now = self._clock.now()
+        if not tariff.is_visible_to(now, TariffAudience.REGISTERED):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Tariff is not available for registered clients at this time",
+            )
         try:
             queued = await self._repository.list_for_client(client_id)
             position = max((item.queue_position for item in queued), default=0) + 1
@@ -110,9 +116,13 @@ class EntitlementService:
                 status=EntitlementStatus.QUEUED,
                 idempotency_key=key,
                 purchased_at=now,
-                window_start_minute=tariff.window_start_minute,
-                window_end_minute=tariff.window_end_minute,
+                time_restricted=tariff.time_restricted,
+                sale_window_start_minute=tariff.sale_window_start_minute,
+                sale_window_end_minute=tariff.sale_window_end_minute,
+                usage_window_start_minute=tariff.usage_window_start_minute,
+                usage_window_end_minute=tariff.usage_window_end_minute,
                 window_timezone=tariff.window_timezone,
+                audience=tariff.audience,
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error

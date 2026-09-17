@@ -15,6 +15,7 @@ from gameclub_backend.modules.catalog.domain import (
     ProductCategory,
     Quote,
     Tariff,
+    TariffAudience,
     TariffLifecycle,
 )
 from gameclub_backend.presentation.http.auth import require_permissions
@@ -60,9 +61,13 @@ class TariffRequest(BaseModel):
     billing_mode: BillingMode = BillingMode.BLOCK
     price_per_minute_cents: int = Field(default=0, ge=0)
     free_minutes: int = Field(default=0, ge=0)
-    window_start_minute: int | None = Field(default=None, ge=0, lt=1440)
-    window_end_minute: int | None = Field(default=None, ge=0, lt=1440)
+    time_restricted: bool = False
+    sale_window_start_minute: int | None = Field(default=None, ge=0, lt=1440)
+    sale_window_end_minute: int | None = Field(default=None, ge=0, lt=1440)
+    usage_window_start_minute: int | None = Field(default=None, ge=0, lt=1440)
+    usage_window_end_minute: int | None = Field(default=None, ge=0, lt=1440)
     window_timezone: str | None = Field(default=None, min_length=1, max_length=64)
+    audience: TariffAudience = TariffAudience.ALL
 
 
 class DiscountRuleRequest(BaseModel):
@@ -78,6 +83,7 @@ class QuoteRequest(BaseModel):
     group_id: str | None = None
     moment: datetime.datetime
     discount_category: str | None = Field(default=None, max_length=64)
+    audience: TariffAudience = TariffAudience.ALL
 
 
 class ProductResponse(BaseModel):
@@ -109,9 +115,13 @@ class TariffResponse(BaseModel):
     billing_mode: BillingMode
     price_per_minute_cents: int
     free_minutes: int
-    window_start_minute: int | None
-    window_end_minute: int | None
+    time_restricted: bool
+    sale_window_start_minute: int | None
+    sale_window_end_minute: int | None
+    usage_window_start_minute: int | None
+    usage_window_end_minute: int | None
     window_timezone: str | None
+    audience: TariffAudience
 
     @classmethod
     def from_domain(cls, tariff: Tariff) -> "TariffResponse":
@@ -248,6 +258,17 @@ def create_router(service: CatalogService) -> APIRouter:
             if group_id is None
             else await service.list_tariffs_for_group(group_id or None)
         )
+        return [TariffResponse.from_domain(item) for item in tariffs]
+
+    @router.get("/available-tariffs", response_model=list[TariffResponse])
+    async def list_available_tariffs(
+        principal: Operator,
+        group_id: str | None = Query(default=None),
+        audience: typing.Annotated[TariffAudience | None, Query()] = None,
+    ) -> list[TariffResponse]:
+        del principal
+        audience = audience or TariffAudience.ALL
+        tariffs = await service.list_available_tariffs(group_id, audience)
         return [TariffResponse.from_domain(item) for item in tariffs]
 
     @router.post("/tariffs/{tariff_id}/publish", response_model=TariffResponse)

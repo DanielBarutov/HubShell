@@ -530,6 +530,15 @@ export class GameClubApi {
     return this.request<BackendTariff[]>(`/catalog/tariffs${query}`);
   }
 
+  async listAvailableTariffs(
+    groupId: string | null,
+    audience: "all" | "guest" | "registered",
+  ): Promise<BackendTariff[]> {
+    const params = new URLSearchParams({ audience });
+    if (groupId) params.set("group_id", groupId);
+    return this.request<BackendTariff[]>(`/catalog/available-tariffs?${params.toString()}`);
+  }
+
   async createTariff(payload: {
     name: string;
     group_id: string | null;
@@ -540,9 +549,13 @@ export class GameClubApi {
     billing_mode?: "block" | "per_minute";
     price_per_minute_cents?: number;
     free_minutes?: number;
-    window_start_minute?: number;
-    window_end_minute?: number;
+    time_restricted?: boolean;
+    sale_window_start_minute?: number;
+    sale_window_end_minute?: number;
+    usage_window_start_minute?: number;
+    usage_window_end_minute?: number;
     window_timezone?: string;
+    audience?: "all" | "guest" | "registered";
   }): Promise<BackendTariff> {
     return this.request<BackendTariff>("/catalog/tariffs", {
       method: "POST",
@@ -730,6 +743,7 @@ export class GameClubApi {
     groupId: string | null,
     moment: string,
     discountCategory: string | null = null,
+    audience: "all" | "guest" | "registered" = "all",
   ): Promise<BackendQuote> {
     return this.request<BackendQuote>("/catalog/quote", {
       method: "POST",
@@ -738,6 +752,7 @@ export class GameClubApi {
         group_id: groupId,
         moment,
         discount_category: discountCategory,
+        audience,
       }),
     });
   }

@@ -57,6 +57,7 @@ from gameclub_backend.modules.catalog.domain import (
     DiscountRule,
     Product,
     Tariff,
+    TariffAudience,
     TariffLifecycle,
 )
 from gameclub_backend.modules.clients.application.guests import GuestService
@@ -917,6 +918,13 @@ def to_portal_snapshot_proto(
                 price_cents=item.price_cents,
                 queue_position=item.queue_position,
                 status=item.status.value,
+                time_restricted=item.time_restricted,
+                sale_window_start_minute=item.sale_window_start_minute or 0,
+                sale_window_end_minute=item.sale_window_end_minute or 0,
+                usage_window_start_minute=item.usage_window_start_minute or 0,
+                usage_window_end_minute=item.usage_window_end_minute or 0,
+                window_timezone=item.window_timezone or "",
+                audience=item.audience.value,
                 tariff_name=snapshot.tariff_names.get(item.tariff_id, ""),
                 purchased_at=to_timestamp(item.purchased_at),
                 activated_at=to_timestamp(item.activated_at),
@@ -930,6 +938,13 @@ def to_portal_snapshot_proto(
                 zone_id=tariff.group_id or "",
                 duration_minutes=tariff.duration_minutes,
                 price_cents=tariff.price_cents,
+                time_restricted=tariff.time_restricted,
+                sale_window_start_minute=tariff.sale_window_start_minute or 0,
+                sale_window_end_minute=tariff.sale_window_end_minute or 0,
+                usage_window_start_minute=tariff.usage_window_start_minute or 0,
+                usage_window_end_minute=tariff.usage_window_end_minute or 0,
+                window_timezone=tariff.window_timezone or "",
+                audience=tariff.audience.value,
             )
             for tariff in snapshot.tariffs
         ],
@@ -1386,13 +1401,18 @@ def to_tariff_proto(tariff: Tariff) -> catalog_pb2.Tariff:
         }[tariff.billing_mode],
         price_per_minute_cents=tariff.price_per_minute_cents,
         free_minutes=tariff.free_minutes,
+        time_restricted=tariff.time_restricted,
+        window_timezone=tariff.window_timezone or "",
+        audience=tariff.audience.value,
     )
-    if tariff.window_start_minute is not None:
-        response.window_start_minute = tariff.window_start_minute
-    if tariff.window_end_minute is not None:
-        response.window_end_minute = tariff.window_end_minute
-    if tariff.window_timezone is not None:
-        response.window_timezone = tariff.window_timezone
+    if tariff.sale_window_start_minute is not None:
+        response.sale_window_start_minute = tariff.sale_window_start_minute
+    if tariff.sale_window_end_minute is not None:
+        response.sale_window_end_minute = tariff.sale_window_end_minute
+    if tariff.usage_window_start_minute is not None:
+        response.usage_window_start_minute = tariff.usage_window_start_minute
+    if tariff.usage_window_end_minute is not None:
+        response.usage_window_end_minute = tariff.usage_window_end_minute
     valid_from = to_timestamp(tariff.valid_from)
     valid_to = to_timestamp(tariff.valid_to)
     if valid_from is not None:
@@ -1491,13 +1511,29 @@ class CatalogGrpcService(catalog_pb2_grpc.CatalogServiceServicer):
                 }.get(request.billing_mode, BillingMode.BLOCK),
                 price_per_minute_cents=request.price_per_minute_cents,
                 free_minutes=request.free_minutes,
-                window_start_minute=(
-                    request.window_start_minute if request.HasField("window_start_minute") else None
+                time_restricted=request.time_restricted,
+                sale_window_start_minute=(
+                    request.sale_window_start_minute
+                    if request.HasField("sale_window_start_minute")
+                    else None
                 ),
-                window_end_minute=(
-                    request.window_end_minute if request.HasField("window_end_minute") else None
+                sale_window_end_minute=(
+                    request.sale_window_end_minute
+                    if request.HasField("sale_window_end_minute")
+                    else None
+                ),
+                usage_window_start_minute=(
+                    request.usage_window_start_minute
+                    if request.HasField("usage_window_start_minute")
+                    else None
+                ),
+                usage_window_end_minute=(
+                    request.usage_window_end_minute
+                    if request.HasField("usage_window_end_minute")
+                    else None
                 ),
                 window_timezone=request.window_timezone or None,
+                audience=TariffAudience(request.audience or TariffAudience.ALL.value),
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1609,6 +1645,7 @@ class CatalogGrpcService(catalog_pb2_grpc.CatalogServiceServicer):
                 group_id=request.group_id or None,
                 moment=moment,
                 discount_category=request.discount_category or None,
+                audience=TariffAudience(request.audience or TariffAudience.ALL.value),
             )
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
@@ -1920,9 +1957,11 @@ def to_package_snapshot_proto(item) -> sessions_pb2.PackageSnapshot:
         remaining_minutes=item.remaining_minutes,
         queue_position=item.queue_position,
         status=item.status.value,
-        window_start_minute=item.window_start_minute or 0,
-        window_end_minute=item.window_end_minute or 0,
+        time_restricted=item.time_restricted,
+        usage_window_start_minute=item.usage_window_start_minute or 0,
+        usage_window_end_minute=item.usage_window_end_minute or 0,
         window_timezone=item.window_timezone or "",
+        audience=item.audience.value,
     )
 
 

@@ -77,9 +77,12 @@ message PackageSnapshot {
   int32 remaining_minutes = 5;
   int32 queue_position = 6;
   string status = 7;
-  int32 window_start_minute = 8;
-  int32 window_end_minute = 9;
-  string window_timezone = 10;
+  reserved 8, 9, 10;
+  bool time_restricted = 11;
+  int32 usage_window_start_minute = 12;
+  int32 usage_window_end_minute = 13;
+  string window_timezone = 14;
+  string audience = 15;
 }
 
 message SessionMeterSnapshot {

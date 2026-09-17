@@ -24,7 +24,7 @@ from gameclub_backend.modules.billing.domain import (
     SessionCharge,
     SessionMeter,
 )
-from gameclub_backend.modules.catalog.domain import BillingMode
+from gameclub_backend.modules.catalog.domain import BillingMode, TariffAudience
 from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.sessions.domain import SessionStatus
 from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
@@ -246,6 +246,7 @@ class BillingService:
             group_id=effective_workstation_group_id(workstation.group_id),
             moment=quote_moment,
             discount_category=client.discount_category,
+            audience=TariffAudience.REGISTERED,
             duration_minutes=max(
                 1,
                 elapsed_minutes - session.login_grant_minutes - package_minutes,
@@ -296,7 +297,7 @@ class BillingService:
         if end_at <= start_at:
             return 0
         total_minutes = int((end_at - start_at).total_seconds() // 60)
-        if entitlement is None or entitlement.window_start_minute is None:
+        if entitlement is None or not entitlement.time_restricted:
             return max(0, total_minutes)
         return sum(
             entitlement.is_available_at(start_at + datetime.timedelta(minutes=offset))
@@ -309,7 +310,7 @@ class BillingService:
         start_at: datetime.datetime,
         end_at: datetime.datetime,
     ) -> datetime.datetime | None:
-        if entitlement is None or entitlement.window_start_minute is None:
+        if entitlement is None or not entitlement.time_restricted:
             return end_at
         total_minutes = int((end_at - start_at).total_seconds() // 60)
         for offset in range(total_minutes - 1, -1, -1):
@@ -502,6 +503,7 @@ class BillingService:
                 discount_category=client.discount_category,
                 duration_minutes=duration_minutes,
                 quantity=session.tariff_quantity,
+                audience=TariffAudience.REGISTERED,
             )
         else:
             quote = await self._catalog.quote(

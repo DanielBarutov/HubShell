@@ -76,14 +76,28 @@ public sealed record ClientPortalEntitlement(
     int QueuePosition,
     string? TariffName,
     string PurchasedAt,
-    string? ActivatedAt);
+    string? ActivatedAt,
+    bool TimeRestricted,
+    int? SaleWindowStartMinute,
+    int? SaleWindowEndMinute,
+    int? UsageWindowStartMinute,
+    int? UsageWindowEndMinute,
+    string? WindowTimezone,
+    string Audience);
 
 public sealed record ClientPortalTariff(
     string Id,
     string Name,
     string? ZoneId,
     int DurationMinutes,
-    long PriceCents)
+    long PriceCents,
+    bool TimeRestricted,
+    int? SaleWindowStartMinute,
+    int? SaleWindowEndMinute,
+    int? UsageWindowStartMinute,
+    int? UsageWindowEndMinute,
+    string? WindowTimezone,
+    string Audience)
 {
     public string DurationSummary => $"{DurationMinutes} мин";
     public string PriceSummary => $"{(PriceCents / 100m):N0} ₽";

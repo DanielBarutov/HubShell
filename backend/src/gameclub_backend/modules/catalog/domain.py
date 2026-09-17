@@ -47,6 +47,12 @@ class BillingMode(enum.StrEnum):
     PER_MINUTE = "per_minute"
 
 
+class TariffAudience(enum.StrEnum):
+    ALL = "all"
+    GUEST = "guest"
+    REGISTERED = "registered"
+
+
 @dataclasses.dataclass(frozen=True)
 class Tariff:
     id: uuid.UUID
@@ -63,9 +69,13 @@ class Tariff:
     billing_mode: BillingMode = BillingMode.BLOCK
     price_per_minute_cents: int = 0
     free_minutes: int = 0
-    window_start_minute: int | None = None
-    window_end_minute: int | None = None
+    time_restricted: bool = False
+    sale_window_start_minute: int | None = None
+    sale_window_end_minute: int | None = None
+    usage_window_start_minute: int | None = None
+    usage_window_end_minute: int | None = None
     window_timezone: str | None = None
+    audience: TariffAudience = TariffAudience.ALL
 
     def __post_init__(self) -> None:
         if self.duration_minutes <= 0:
@@ -76,20 +86,41 @@ class Tariff:
             BillingMode(self.billing_mode)
         except ValueError as error:
             raise ValueError("Invalid tariff billing mode") from error
-        if (self.window_start_minute is None) != (self.window_end_minute is None):
-            raise ValueError("Tariff time window requires both start and end")
-        if self.window_start_minute is not None:
-            window_end_minute = self.window_end_minute
-            assert window_end_minute is not None
-            if not (
-                0 <= self.window_start_minute < 24 * 60
-                and 0 <= window_end_minute < 24 * 60
-                and self.window_start_minute != window_end_minute
-            ):
-                raise ValueError("Tariff time window minutes are invalid")
+        try:
+            normalized_audience = TariffAudience(self.audience)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Invalid tariff audience") from error
+        object.__setattr__(self, "audience", normalized_audience)
+        object.__setattr__(
+            self,
+            "window_timezone",
+            self.window_timezone.strip() if self.window_timezone else None,
+        )
+        sale_window_set = (
+            self.sale_window_start_minute is not None or self.sale_window_end_minute is not None
+        )
+        usage_window_set = (
+            self.usage_window_start_minute is not None or self.usage_window_end_minute is not None
+        )
+        if not self.time_restricted and (
+            sale_window_set or usage_window_set or self.window_timezone
+        ):
+            raise ValueError("Unrestricted tariff cannot have time windows")
+        if self.time_restricted and not (sale_window_set and usage_window_set):
+            raise ValueError("Restricted tariff requires sale and usage windows")
+        self._validate_window(
+            self.sale_window_start_minute,
+            self.sale_window_end_minute,
+            "sale",
+        )
+        self._validate_window(
+            self.usage_window_start_minute,
+            self.usage_window_end_minute,
+            "usage",
+        )
         if self.window_timezone is not None and not self.window_timezone.strip():
             raise ValueError("Tariff time window timezone cannot be empty")
-        if self.window_start_minute is not None and self.window_timezone is None:
+        if self.time_restricted and self.window_timezone is None:
             raise ValueError("Tariff time window timezone is required")
         if self.window_timezone:
             try:
@@ -97,7 +128,65 @@ class Tariff:
             except ZoneInfoNotFoundError as error:
                 raise ValueError("Tariff time window timezone is invalid") from error
 
-    def applies_at(self, moment: datetime.datetime, group_id: str | None) -> bool:
+    @staticmethod
+    def _validate_window(
+        start_minute: int | None,
+        end_minute: int | None,
+        name: str,
+    ) -> None:
+        if (start_minute is None) != (end_minute is None):
+            raise ValueError(f"Tariff {name} window requires both start and end")
+        if start_minute is not None:
+            assert end_minute is not None
+            if not (
+                0 <= start_minute < 24 * 60
+                and 0 <= end_minute < 24 * 60
+                and start_minute != end_minute
+            ):
+                raise ValueError(f"Tariff {name} window minutes are invalid")
+
+    def is_visible_to(self, moment: datetime.datetime, audience: TariffAudience) -> bool:
+        if self.audience not in {TariffAudience.ALL, TariffAudience(audience)}:
+            return False
+        if not self.time_restricted:
+            return True
+        return self._is_in_window(
+            moment,
+            self.sale_window_start_minute,
+            self.sale_window_end_minute,
+        )
+
+    def is_usable_at(self, moment: datetime.datetime) -> bool:
+        if not self.time_restricted:
+            return True
+        return self._is_in_window(
+            moment,
+            self.usage_window_start_minute,
+            self.usage_window_end_minute,
+        )
+
+    def _is_in_window(
+        self,
+        moment: datetime.datetime,
+        start_minute: int | None,
+        end_minute: int | None,
+    ) -> bool:
+        if moment.tzinfo is None:
+            raise ValueError("Tariff window time must include timezone")
+        if start_minute is None or end_minute is None:
+            return True
+        local = moment.astimezone(ZoneInfo(self.window_timezone or "UTC"))
+        minute = local.hour * 60 + local.minute
+        if start_minute < end_minute:
+            return start_minute <= minute < end_minute
+        return minute >= start_minute or minute < end_minute
+
+    def applies_at(
+        self,
+        moment: datetime.datetime,
+        group_id: str | None,
+        audience: TariffAudience = TariffAudience.ALL,
+    ) -> bool:
         normalized_group_id = group_id.strip().lower() if group_id else None
         return (
             self.active
@@ -105,6 +194,7 @@ class Tariff:
             and (self.group_id is None or self.group_id.strip().lower() == normalized_group_id)
             and self.valid_from <= moment
             and (self.valid_to is None or moment < self.valid_to)
+            and self.is_visible_to(moment, audience)
         )
 
     def publish(self) -> "Tariff":

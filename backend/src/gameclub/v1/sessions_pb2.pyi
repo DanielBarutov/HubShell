@@ -100,7 +100,7 @@ class GetSessionSnapshotRequest(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
 class PackageSnapshot(_message.Message):
-    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "queue_position", "status", "window_start_minute", "window_end_minute", "window_timezone")
+    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "queue_position", "status", "time_restricted", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "audience")
     ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -108,9 +108,11 @@ class PackageSnapshot(_message.Message):
     REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
     QUEUE_POSITION_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
-    WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    TIME_RESTRICTED_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
     WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     id: str
     tariff_id: str
     zone_id: str
@@ -118,10 +120,12 @@ class PackageSnapshot(_message.Message):
     remaining_minutes: int
     queue_position: int
     status: str
-    window_start_minute: int
-    window_end_minute: int
+    time_restricted: bool
+    usage_window_start_minute: int
+    usage_window_end_minute: int
     window_timezone: str
-    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., window_start_minute: _Optional[int] = ..., window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ...) -> None: ...
+    audience: str
+    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., time_restricted: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class SessionMeterSnapshot(_message.Message):
     __slots__ = ("session_id", "billed_minutes", "billed_cents", "package_minutes", "active_entitlement_id", "status", "updated_at")

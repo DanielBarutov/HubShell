@@ -84,9 +84,13 @@ class SnapshotEntitlementResponse(BaseModel):
     remaining_minutes: int
     status: str
     queue_position: int
-    window_start_minute: int | None
-    window_end_minute: int | None
+    time_restricted: bool
+    sale_window_start_minute: int | None
+    sale_window_end_minute: int | None
+    usage_window_start_minute: int | None
+    usage_window_end_minute: int | None
     window_timezone: str | None
+    audience: str
 
     @classmethod
     def from_domain(cls, item) -> "SnapshotEntitlementResponse":
@@ -98,9 +102,13 @@ class SnapshotEntitlementResponse(BaseModel):
             remaining_minutes=item.remaining_minutes,
             status=item.status.value,
             queue_position=item.queue_position,
-            window_start_minute=item.window_start_minute,
-            window_end_minute=item.window_end_minute,
+            time_restricted=item.time_restricted,
+            sale_window_start_minute=item.sale_window_start_minute,
+            sale_window_end_minute=item.sale_window_end_minute,
+            usage_window_start_minute=item.usage_window_start_minute,
+            usage_window_end_minute=item.usage_window_end_minute,
             window_timezone=item.window_timezone,
+            audience=item.audience.value,
         )
 
 

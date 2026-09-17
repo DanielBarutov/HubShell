@@ -13,6 +13,7 @@ from gameclub_backend.modules.catalog.domain import (
     Product,
     ProductCategory,
     Tariff,
+    TariffAudience,
     TariffLifecycle,
 )
 
@@ -92,9 +93,13 @@ class TariffModel(CatalogBase):
     billing_mode: Mapped[str] = mapped_column(String(16), default=BillingMode.BLOCK.value)
     price_per_minute_cents: Mapped[int] = mapped_column(default=0)
     free_minutes: Mapped[int] = mapped_column(default=0)
-    window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
-    window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    time_restricted: Mapped[bool] = mapped_column(default=False)
+    sale_window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    sale_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    usage_window_start_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    usage_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     window_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audience: Mapped[str] = mapped_column(String(16), default=TariffAudience.ALL.value)
 
     def to_domain(self) -> Tariff:
         return Tariff(
@@ -112,9 +117,13 @@ class TariffModel(CatalogBase):
             billing_mode=BillingMode(self.billing_mode),
             price_per_minute_cents=self.price_per_minute_cents,
             free_minutes=self.free_minutes,
-            window_start_minute=self.window_start_minute,
-            window_end_minute=self.window_end_minute,
+            time_restricted=self.time_restricted,
+            sale_window_start_minute=self.sale_window_start_minute,
+            sale_window_end_minute=self.sale_window_end_minute,
+            usage_window_start_minute=self.usage_window_start_minute,
+            usage_window_end_minute=self.usage_window_end_minute,
             window_timezone=self.window_timezone,
+            audience=TariffAudience(self.audience),
         )
 
     @classmethod
@@ -134,9 +143,13 @@ class TariffModel(CatalogBase):
             billing_mode=tariff.billing_mode.value,
             price_per_minute_cents=tariff.price_per_minute_cents,
             free_minutes=tariff.free_minutes,
-            window_start_minute=tariff.window_start_minute,
-            window_end_minute=tariff.window_end_minute,
+            time_restricted=tariff.time_restricted,
+            sale_window_start_minute=tariff.sale_window_start_minute,
+            sale_window_end_minute=tariff.sale_window_end_minute,
+            usage_window_start_minute=tariff.usage_window_start_minute,
+            usage_window_end_minute=tariff.usage_window_end_minute,
             window_timezone=tariff.window_timezone,
+            audience=tariff.audience.value,
         )
 
 
@@ -288,6 +301,7 @@ class PostgresCatalogRepository:
         self,
         group_id: str | None,
         moment: datetime.datetime,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> list[Tariff]:
         async with open_session(self._engine_provider) as session:
             result = await session.scalars(
@@ -299,7 +313,11 @@ class PostgresCatalogRepository:
                     TariffModel.lifecycle == TariffLifecycle.PUBLISHED.value,
                 )
             )
-            return [model.to_domain() for model in result]
+            return [
+                tariff
+                for tariff in (model.to_domain() for model in result)
+                if tariff.applies_at(moment, group_id, audience)
+            ]
 
     @staticmethod
     def _copy_tariff_values(model: TariffModel, tariff: Tariff) -> None:

@@ -223,6 +223,13 @@ message PortalTariff {
   string zone_id = 3;
   int32 duration_minutes = 4;
   int64 price_cents = 5;
+  bool time_restricted = 6;
+  int32 sale_window_start_minute = 7;
+  int32 sale_window_end_minute = 8;
+  int32 usage_window_start_minute = 9;
+  int32 usage_window_end_minute = 10;
+  string window_timezone = 11;
+  string audience = 12;
 }
 
 message PortalReservation {
@@ -246,6 +253,13 @@ message PortalEntitlement {
   string tariff_name = 9;
   google.protobuf.Timestamp purchased_at = 10;
   google.protobuf.Timestamp activated_at = 11;
+  bool time_restricted = 12;
+  int32 sale_window_start_minute = 13;
+  int32 sale_window_end_minute = 14;
+  int32 usage_window_start_minute = 15;
+  int32 usage_window_end_minute = 16;
+  string window_timezone = 17;
+  string audience = 18;
 }
 
 message PortalBalanceOperation {

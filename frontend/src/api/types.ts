@@ -97,9 +97,13 @@ export type BackendEntitlement = {
   activated_at: string | null;
   ended_at: string | null;
   burn_reason: string | null;
-  window_start_minute?: number | null;
-  window_end_minute?: number | null;
+  time_restricted?: boolean;
+  sale_window_start_minute?: number | null;
+  sale_window_end_minute?: number | null;
+  usage_window_start_minute?: number | null;
+  usage_window_end_minute?: number | null;
   window_timezone?: string | null;
+  audience?: "all" | "guest" | "registered";
 };
 
 export type BackendGuestSessionPayment = {
@@ -159,9 +163,13 @@ export type BackendTariff = {
   billing_mode: "block" | "per_minute";
   price_per_minute_cents: number;
   free_minutes: number;
-  window_start_minute?: number | null;
-  window_end_minute?: number | null;
+  time_restricted?: boolean;
+  sale_window_start_minute?: number | null;
+  sale_window_end_minute?: number | null;
+  usage_window_start_minute?: number | null;
+  usage_window_end_minute?: number | null;
   window_timezone?: string | null;
+  audience?: "all" | "guest" | "registered";
 };
 
 export type BackendDiscountRule = {
@@ -446,9 +454,13 @@ export type BackendSnapshotEntitlement = {
   remaining_minutes: number;
   status: "queued" | "active" | "exhausted" | "burned";
   queue_position: number;
-  window_start_minute: number | null;
-  window_end_minute: number | null;
+  time_restricted?: boolean;
+  sale_window_start_minute: number | null;
+  sale_window_end_minute: number | null;
+  usage_window_start_minute: number | null;
+  usage_window_end_minute: number | null;
   window_timezone: string | null;
+  audience?: "all" | "guest" | "registered";
 };
 
 export type BackendSessionMeter = {
@@ -580,4 +592,3 @@ export type BackendEntryDecision = {
   starts_at: string | null;
   ends_at: string | null;
 };
-

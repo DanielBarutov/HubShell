@@ -12,8 +12,14 @@ from gameclub_backend.modules.catalog.domain import (
     ProductCategory,
     Quote,
     Tariff,
+    TariffAudience,
     TariffLifecycle,
 )
+
+
+class UtcClock:
+    def now(self) -> datetime.datetime:
+        return datetime.datetime.now(datetime.UTC)
 
 
 class CatalogService:
@@ -21,9 +27,11 @@ class CatalogService:
         self,
         repository: CatalogRepository,
         zones: ZoneRateLookup | None = None,
+        clock: UtcClock | None = None,
     ) -> None:
         self._repository = repository
         self._zones = zones
+        self._clock = clock or UtcClock()
 
     @staticmethod
     def _zone_per_minute_tariff_key(group_id: str) -> str:
@@ -156,9 +164,13 @@ class CatalogService:
         billing_mode: BillingMode = BillingMode.BLOCK,
         price_per_minute_cents: int = 0,
         free_minutes: int = 0,
-        window_start_minute: int | None = None,
-        window_end_minute: int | None = None,
+        time_restricted: bool = False,
+        sale_window_start_minute: int | None = None,
+        sale_window_end_minute: int | None = None,
+        usage_window_start_minute: int | None = None,
+        usage_window_end_minute: int | None = None,
         window_timezone: str | None = None,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> Tariff:
         try:
             lifecycle = TariffLifecycle(lifecycle)
@@ -173,6 +185,10 @@ class CatalogService:
                 ErrorCode.INVALID_ARGUMENT,
                 "Invalid tariff billing mode",
             ) from error
+        try:
+            audience = TariffAudience(audience)
+        except (TypeError, ValueError) as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff audience") from error
         if (
             not name.strip()
             or duration_minutes <= 0
@@ -206,9 +222,13 @@ class CatalogService:
             billing_mode=billing_mode,
             price_per_minute_cents=price_per_minute_cents,
             free_minutes=free_minutes,
-            window_start_minute=window_start_minute,
-            window_end_minute=window_end_minute,
+            time_restricted=time_restricted,
+            sale_window_start_minute=sale_window_start_minute,
+            sale_window_end_minute=sale_window_end_minute,
+            usage_window_start_minute=usage_window_start_minute,
+            usage_window_end_minute=usage_window_end_minute,
             window_timezone=window_timezone.strip() if window_timezone else None,
+            audience=audience,
         )
         return await self._repository.create_tariff(tariff)
 
@@ -221,6 +241,30 @@ class CatalogService:
             tariff
             for tariff in await self._repository.list_tariffs()
             if tariff.group_id is None or tariff.group_id.strip().lower() == normalized_group_id
+        ]
+
+    async def list_available_tariffs(
+        self,
+        group_id: str | None,
+        audience: TariffAudience,
+        moment: datetime.datetime | None = None,
+    ) -> list[Tariff]:
+        now = moment or self._clock.now()
+        try:
+            buyer_audience = TariffAudience(audience)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff audience") from error
+        normalized_group_id = group_id.strip().lower() if group_id else None
+        return [
+            tariff
+            for tariff in await self._repository.list_tariffs()
+            if tariff.billing_mode is BillingMode.BLOCK
+            and tariff.active
+            and tariff.lifecycle is TariffLifecycle.PUBLISHED
+            and tariff.valid_from <= now
+            and (tariff.valid_to is None or now < tariff.valid_to)
+            and (tariff.group_id is None or tariff.group_id.strip().lower() == normalized_group_id)
+            and tariff.is_visible_to(now, buyer_audience)
         ]
 
     async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:
@@ -374,13 +418,19 @@ class CatalogService:
         group_id: str | None,
         moment: datetime.datetime,
         discount_category: str | None = None,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> Quote:
         if duration_minutes <= 0 or moment.tzinfo is None:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid quote input")
-        tariffs = await self._repository.find_tariffs(group_id, moment)
+        try:
+            buyer_audience = TariffAudience(audience)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff audience") from error
+        tariffs = await self._repository.find_tariffs(group_id, moment, buyer_audience)
         matching = [
             tariff
             for tariff in tariffs
+            if tariff.is_visible_to(moment, buyer_audience)
             if tariff.billing_mode is BillingMode.PER_MINUTE
             or tariff.duration_minutes >= duration_minutes
         ]
@@ -422,11 +472,16 @@ class CatalogService:
         discount_category: str | None = None,
         duration_minutes: int | None = None,
         quantity: int = 1,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> Quote:
         if moment.tzinfo is None:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid quote input")
         tariff = await self._repository.get_tariff(tariff_id)
-        if tariff is None or not tariff.applies_at(moment, group_id):
+        try:
+            buyer_audience = TariffAudience(audience)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff audience") from error
+        if tariff is None or not tariff.applies_at(moment, group_id, buyer_audience):
             raise ApplicationError(ErrorCode.NOT_FOUND, "Selected tariff is not applicable")
         if quantity <= 0 or duration_minutes is not None and duration_minutes <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff quote quantity")

@@ -4,6 +4,8 @@ import enum
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from gameclub_backend.modules.catalog.domain import TariffAudience
+
 
 class EntitlementStatus(enum.StrEnum):
     QUEUED = "queued"
@@ -28,9 +30,13 @@ class Entitlement:
     activated_at: datetime.datetime | None = None
     ended_at: datetime.datetime | None = None
     burn_reason: str | None = None
-    window_start_minute: int | None = None
-    window_end_minute: int | None = None
+    time_restricted: bool = False
+    sale_window_start_minute: int | None = None
+    sale_window_end_minute: int | None = None
+    usage_window_start_minute: int | None = None
+    usage_window_end_minute: int | None = None
     window_timezone: str | None = None
+    audience: TariffAudience = TariffAudience.ALL
 
     def __post_init__(self) -> None:
         if self.duration_minutes <= 0:
@@ -45,18 +51,34 @@ class Entitlement:
             raise ValueError("Entitlement idempotency key is required")
         if self.purchased_at.tzinfo is None:
             raise ValueError("Entitlement purchase time must include timezone")
-        if (self.window_start_minute is None) != (self.window_end_minute is None):
-            raise ValueError("Entitlement time window requires both start and end")
-        if self.window_start_minute is not None:
-            window_end_minute = self.window_end_minute
-            assert window_end_minute is not None
-            if not (
-                0 <= self.window_start_minute < 24 * 60
-                and 0 <= window_end_minute < 24 * 60
-                and self.window_start_minute != window_end_minute
-            ):
-                raise ValueError("Entitlement time window minutes are invalid")
-        if self.window_start_minute is not None and not self.window_timezone:
+        try:
+            normalized_audience = TariffAudience(self.audience)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Invalid entitlement audience") from error
+        object.__setattr__(self, "audience", normalized_audience)
+        sale_window_set = (
+            self.sale_window_start_minute is not None or self.sale_window_end_minute is not None
+        )
+        usage_window_set = (
+            self.usage_window_start_minute is not None or self.usage_window_end_minute is not None
+        )
+        if not self.time_restricted and (
+            sale_window_set or usage_window_set or self.window_timezone
+        ):
+            raise ValueError("Unrestricted entitlement cannot have time windows")
+        if self.time_restricted and not (sale_window_set and usage_window_set):
+            raise ValueError("Restricted entitlement requires sale and usage windows")
+        self._validate_window(
+            self.sale_window_start_minute,
+            self.sale_window_end_minute,
+            "sale",
+        )
+        self._validate_window(
+            self.usage_window_start_minute,
+            self.usage_window_end_minute,
+            "usage",
+        )
+        if self.time_restricted and not self.window_timezone:
             raise ValueError("Entitlement time window timezone is required")
         if self.window_timezone:
             try:
@@ -69,18 +91,35 @@ class Entitlement:
             object.__setattr__(self, "zone_id", zone_id or None)
         object.__setattr__(self, "idempotency_key", self.idempotency_key.strip())
 
+    @staticmethod
+    def _validate_window(
+        start_minute: int | None,
+        end_minute: int | None,
+        name: str,
+    ) -> None:
+        if (start_minute is None) != (end_minute is None):
+            raise ValueError(f"Entitlement {name} window requires both start and end")
+        if start_minute is not None:
+            assert end_minute is not None
+            if not (
+                0 <= start_minute < 24 * 60
+                and 0 <= end_minute < 24 * 60
+                and start_minute != end_minute
+            ):
+                raise ValueError(f"Entitlement {name} window minutes are invalid")
+
     def is_compatible(self, zone_id: str | None) -> bool:
         return self.zone_id is None or self.zone_id == (zone_id.strip() if zone_id else None)
 
     def is_available_at(self, now: datetime.datetime) -> bool:
         if now.tzinfo is None:
             raise ValueError("Entitlement availability time must include timezone")
-        if self.window_start_minute is None:
+        if not self.time_restricted:
             return True
         local = now.astimezone(ZoneInfo(self.window_timezone or "UTC"))
         minute = local.hour * 60 + local.minute
-        start = self.window_start_minute
-        end = self.window_end_minute
+        start = self.usage_window_start_minute
+        end = self.usage_window_end_minute
         assert start is not None and end is not None
         if start < end:
             return start <= minute < end

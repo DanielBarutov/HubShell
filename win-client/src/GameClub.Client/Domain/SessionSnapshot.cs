@@ -36,8 +36,8 @@ public sealed record SessionPackageSnapshot(
     int RemainingMinutes,
     int QueuePosition,
     string Status,
-    int WindowStartMinute,
-    int WindowEndMinute,
+    int UsageWindowStartMinute,
+    int UsageWindowEndMinute,
     string? WindowTimezone);
 
 public sealed record SessionMeterSnapshot(

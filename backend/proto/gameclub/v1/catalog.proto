@@ -59,9 +59,14 @@ message Tariff {
   BillingMode billing_mode = 12;
   int64 price_per_minute_cents = 13;
   int32 free_minutes = 14;
-  optional int32 window_start_minute = 15;
-  optional int32 window_end_minute = 16;
-  string window_timezone = 17;
+  reserved 15, 16, 17;
+  bool time_restricted = 18;
+  optional int32 sale_window_start_minute = 19;
+  optional int32 sale_window_end_minute = 20;
+  optional int32 usage_window_start_minute = 21;
+  optional int32 usage_window_end_minute = 22;
+  string window_timezone = 23;
+  string audience = 24;
 }
 
 enum BillingMode {
@@ -89,9 +94,14 @@ message CreateTariffRequest {
   BillingMode billing_mode = 9;
   int64 price_per_minute_cents = 10;
   int32 free_minutes = 11;
-  optional int32 window_start_minute = 12;
-  optional int32 window_end_minute = 13;
-  string window_timezone = 14;
+  reserved 12, 13, 14;
+  bool time_restricted = 15;
+  optional int32 sale_window_start_minute = 16;
+  optional int32 sale_window_end_minute = 17;
+  optional int32 usage_window_start_minute = 18;
+  optional int32 usage_window_end_minute = 19;
+  string window_timezone = 20;
+  string audience = 21;
 }
 
 message ListTariffsRequest {}
@@ -144,6 +154,7 @@ message QuoteRequest {
   string group_id = 2;
   google.protobuf.Timestamp moment = 3;
   string discount_category = 4;
+  string audience = 5;
 }
 
 message QuoteResponse {

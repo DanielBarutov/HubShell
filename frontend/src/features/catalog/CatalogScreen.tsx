@@ -104,6 +104,13 @@ export function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubAp
   const [groupId, setGroupId] = useState("main");
   const [duration, setDuration] = useState("60");
   const [price, setPrice] = useState("300");
+  const [timeRestricted, setTimeRestricted] = useState(false);
+  const [saleFrom, setSaleFrom] = useState("22:00");
+  const [saleTo, setSaleTo] = useState("06:00");
+  const [usageFrom, setUsageFrom] = useState("22:00");
+  const [usageTo, setUsageTo] = useState("06:00");
+  const [timezone, setTimezone] = useState("Europe/Moscow");
+  const [audience, setAudience] = useState<NonNullable<BackendTariff["audience"]>>("all");
   const [validFrom, setValidFrom] = useState(() => {
     const date = new Date();
     date.setSeconds(0, 0);
@@ -125,6 +132,18 @@ export function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubAp
       setError("Укажите дату начала действия тарифа");
       return;
     }
+    const toMinute = (value: string) => {
+      const [hours, minutes] = value.split(":").map(Number);
+      return Number.isInteger(hours) && Number.isInteger(minutes) ? hours * 60 + minutes : null;
+    };
+    const saleStart = toMinute(saleFrom);
+    const saleEnd = toMinute(saleTo);
+    const usageStart = toMinute(usageFrom);
+    const usageEnd = toMinute(usageTo);
+    if (timeRestricted && (saleStart === null || saleEnd === null || usageStart === null || usageEnd === null || saleStart === saleEnd || usageStart === usageEnd || !timezone.trim())) {
+      setError("Для временного тарифа укажите два непустых окна и часовой пояс");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -136,6 +155,13 @@ export function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubAp
         billing_mode: "block",
         valid_from: parsedDate.toISOString(),
         lifecycle: "draft",
+        time_restricted: timeRestricted,
+        sale_window_start_minute: timeRestricted ? saleStart ?? undefined : undefined,
+        sale_window_end_minute: timeRestricted ? saleEnd ?? undefined : undefined,
+        usage_window_start_minute: timeRestricted ? usageStart ?? undefined : undefined,
+        usage_window_end_minute: timeRestricted ? usageEnd ?? undefined : undefined,
+        window_timezone: timeRestricted ? timezone.trim() : undefined,
+        audience,
       });
       onSaved();
     } catch (requestError) {
@@ -146,7 +172,7 @@ export function TariffPanel({ api, groups, onClose, onSaved }: { api: GameClubAp
   };
 
   const tariffGroups = groups.length ? groups : [{ id: "main", name: "Обычный зал" }, { id: "vip", name: "VIP-зона" }];
-  return <div className="panel-inner"><div className="panel-header"><div><p>Настройки клуба</p><h2>Новый пакет времени</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Пакет 1 час" autoFocus /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{tariffGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><label>Длительность, минут<input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label><label>Цена пакета, ₽<input type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} /></label><label>Начало действия<DateTimePicker value={validFrom} onChange={setValidFrom} mode="datetime" label="Начало действия тарифа" /></label>{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Создать draft-тариф"}</button><p className="subheading">Поминутная ставка и бесплатные минуты настраиваются в карточке зоны, а здесь создаются только пакеты времени.</p></form></div>;
+  return <div className="panel-inner"><div className="panel-header"><div><p>Настройки клуба</p><h2>Новый пакет времени</h2></div><button className="icon-button" aria-label="Закрыть панель" onClick={onClose}><X size={18} /></button></div><form className="booking-form" onSubmit={submit}><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Пакет 1 час" autoFocus /></label><label>Зона<select value={groupId} onChange={(event) => setGroupId(event.target.value)}>{tariffGroups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label><div className="form-grid-two"><label>Длительность, минут<input type="number" min="1" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label><label>Цена пакета, ₽<input type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} /></label></div><label>Для кого доступен тариф<select value={audience} onChange={(event) => setAudience(event.target.value as NonNullable<BackendTariff["audience"]>)}><option value="all">Гости и зарегистрированные</option><option value="guest">Только гости</option><option value="registered">Только зарегистрированные</option></select></label><label>Начало действия<DateTimePicker value={validFrom} onChange={setValidFrom} mode="datetime" label="Начало действия тарифа" /></label><label className="checkbox-field"><input type="checkbox" checked={timeRestricted} onChange={(event) => setTimeRestricted(event.target.checked)} /> Ограничить тариф ежедневными окнами</label>{timeRestricted && <><div className="form-grid-two"><label>Показывать и продавать с<input type="time" value={saleFrom} onChange={(event) => setSaleFrom(event.target.value)} /></label><label>до<input type="time" value={saleTo} onChange={(event) => setSaleTo(event.target.value)} /></label></div><div className="form-grid-two"><label>Расходовать время с<input type="time" value={usageFrom} onChange={(event) => setUsageFrom(event.target.value)} /></label><label>до<input type="time" value={usageTo} onChange={(event) => setUsageTo(event.target.value)} /></label></div><label>Часовой пояс<input value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Europe/Moscow" /></label><p className="subheading">Окна повторяются каждый день; переход через полночь разрешён.</p></>}{error && <div className="form-error" role="alert">{error}</div>}<button className="primary-button wide" disabled={submitting}>{submitting ? "Сохраняем..." : "Создать draft-тариф"}</button><p className="subheading">Поминутная ставка и бесплатные минуты настраиваются в карточке зоны, а здесь создаются только пакеты времени.</p></form></div>;
 }
 
 export function ProductPanel({ api, product, categories, onClose, onSaved }: { api: GameClubApi; product?: BackendProduct; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {

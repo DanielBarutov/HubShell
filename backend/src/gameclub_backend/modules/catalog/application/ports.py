@@ -2,7 +2,13 @@ import datetime
 import typing
 import uuid
 
-from gameclub_backend.modules.catalog.domain import DiscountRule, Product, ProductCategory, Tariff
+from gameclub_backend.modules.catalog.domain import (
+    DiscountRule,
+    Product,
+    ProductCategory,
+    Tariff,
+    TariffAudience,
+)
 
 
 class CatalogRepository(typing.Protocol):
@@ -46,6 +52,7 @@ class CatalogRepository(typing.Protocol):
         self,
         group_id: str | None,
         moment: datetime.datetime,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> list[Tariff]:
         """Return tariffs applicable at a moment."""
 
