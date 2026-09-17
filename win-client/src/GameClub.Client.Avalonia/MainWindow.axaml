@@ -658,6 +658,7 @@
                                     Foreground="{DynamicResource SecondaryTextBrush}"
                                     FontSize="10"
                                 /></StackPanel><StackPanel
+                                IsVisible="{Binding IsPortalBalanceTimeVisible}"
                                 Grid.Column="1"
                                 Spacing="4"
                             ><TextBlock
