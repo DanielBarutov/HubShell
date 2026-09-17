@@ -8,6 +8,7 @@ from gameclub_backend.modules.cash_shifts.infrastructure.memory import (
     InMemoryCashShiftRepository,
 )
 from gameclub_backend.modules.catalog.application.service import CatalogService
+from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.service import ClientService
@@ -302,6 +303,76 @@ async def test_guest_tariff_requires_confirmed_direct_payment_before_session_sta
 
     assert session.guest_payment_id == payment.id
     assert (await cash_shifts.get(shift.id)).expected_close_cents == 250
+
+
+async def test_guest_tariff_is_rejected_on_workstation_with_registered_session() -> None:
+    """
+    Проверяет, что подтверждённый гостевой тариф не может открыть вторую сессию на ПК,
+    где уже идёт сессия зарегистрированного клиента.
+    """
+    workstation_repository = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstation_repository).register(
+        "guest-busy-device",
+        "Busy guest PC",
+        group_id="main",
+    )
+    clients = InMemoryClientRepository()
+    client = await ClientService(clients).create("RegisteredFox")
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Guest-only hour",
+        group_id="main",
+        duration_minutes=60,
+        price_cents=250,
+        valid_from=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        valid_to=None,
+        tariff_key="guest-only-hour",
+        audience=TariffAudience.GUEST,
+    )
+    cash_shifts = CashShiftService(InMemoryCashShiftRepository())
+    shift = await cash_shifts.open("guest-busy-register", 0, "operator", "guest-busy-payment-shift")
+    guest_payments = GuestSessionPaymentService(
+        InMemoryGuestSessionPaymentRepository(),
+        tariffs=catalog,
+        cash=CashShiftGuestPaymentSettlement(cash_shifts),
+    )
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstation_repository,
+        clients=clients,
+        guest_payments=guest_payments,
+        tariffs=catalog,
+    )
+
+    await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="registered-busy-session",
+    )
+    payment = await guest_payments.confirm(
+        workstation_id=workstation.id,
+        tariff_id=tariff.id,
+        tariff_quantity=1,
+        guest_name="Гость",
+        actor_id="operator",
+        idempotency_key="guest-busy-payment",
+        cash_shift_id=shift.id,
+        payment_parts=[{"method": "cash", "amount_cents": 250}],
+    )
+
+    with pytest.raises(ApplicationError) as error:
+        await sessions.start(
+            workstation.id,
+            created_by="operator",
+            guest_name="Гость",
+            tariff_id=tariff.id,
+            guest_payment_id=payment.id,
+            idempotency_key="guest-busy-session",
+        )
+
+    assert error.value.code is ErrorCode.CONFLICT
+    assert error.value.message == "Workstation already has an active session"
 
 
 async def test_tariffs_are_scoped_to_workstation_group_on_listing_and_session_start() -> None:

@@ -44,6 +44,35 @@ function renderSale() {
 }
 
 describe("Окно продажи", () => {
+  it("блокирует гостя на занятом ПК с зарегистрированным клиентом", async () => {
+    const activePc: Workstation = { ...pc, status: "busy", clientId: "client-1", client: "NightFox" };
+    const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 0, category: "Обычная" };
+    const listAvailableTariffs = vi.fn().mockResolvedValue(tariffs);
+    const activeApi = { listAvailableTariffs } as unknown as GameClubApi;
+
+    render(
+      <SaleWorkspace
+        api={activeApi}
+        pc={activePc}
+        initialClient={client}
+        initialProduct={null}
+        clients={[client]}
+        cashShifts={[]}
+        tariffs={tariffs}
+        products={products}
+        categories={categories}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /NightFox/ })).toBeEnabled());
+    expect(listAvailableTariffs).toHaveBeenCalledWith("main", "registered");
+    expect(screen.getByRole("button", { name: /Гость/ })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Клиент для продажи" })).toBeDisabled();
+    expect(screen.getByText("На занятом месте продажа времени доступна только текущему зарегистрированному клиенту.")).toBeVisible();
+  });
+
   it("показывает только глобальный и зональный тарифы и требует позицию до подтверждения", () => {
     renderSale();
 

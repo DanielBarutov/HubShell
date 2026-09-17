@@ -1107,7 +1107,8 @@ nav {
 .danger-button {
     justify-content: flex-start;
     margin-top: auto;
-    padding: 18px 0 0;
+
+    padding: 12px 0;
     color: #c47973;
     background: transparent;
     font-size: 10px;
@@ -1778,14 +1779,14 @@ nav {
     font-size: 9px;
 }
 .schedule-fields input {
+    color: #f7f7f7;
     min-height: 36px;
-    padding: 0 9px;
-    color: #4b5565;
-    border: 1px solid #e0e7ef;
+    font: inherit;
+    background: #172822;
+    border: 1px solid #172822;
     border-radius: 9px;
     outline: none;
-    background: #fff;
-    font: inherit;
+    padding: 0 9px;
     font-size: 10px;
 }
 .schedule-fields input:focus {

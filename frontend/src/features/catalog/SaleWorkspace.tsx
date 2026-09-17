@@ -38,7 +38,9 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
   const [lines, setLines] = useState<SaleLine[]>([]);
-  const [buyerMode, setBuyerMode] = useState<"guest" | "client">("guest");
+  const [buyerMode, setBuyerMode] = useState<"guest" | "client">(() => (
+    initialClient || (pc?.status === "busy" && pc.clientId) ? "client" : "guest"
+  ));
   const [clientQuery, setClientQuery] = useState("");
   const [client, setClient] = useState<Client | null>(null);
   const [availableTariffs, setAvailableTariffs] = useState<BackendTariff[] | null>(null);
@@ -64,6 +66,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   ];
   const products = (api ? catalogProducts : demoSaleProducts).filter((item) => item.active && item.stock_quantity > 0);
   const workstationGroupId = pc?.groupId?.trim().toLowerCase();
+  const registeredSession = Boolean(pc?.status === "busy" && pc.clientId);
   const sourceTariffs = availableTariffs ?? (api ? catalogTariffs : demoSaleTariffs);
   const tariffs = sourceTariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
 
@@ -92,6 +95,10 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
     setClientQuery(initialClient.nickname);
     setSearchResults([]);
   }, [initialClient?.id]);
+
+  useEffect(() => {
+    if (registeredSession && !initialClient) setBuyerMode("client");
+  }, [initialClient, registeredSession]);
 
   useEffect(() => {
     if (!initialProduct || seededProduct.current || !products.length) return;
@@ -141,9 +148,8 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const totalMinutes = timeLines.reduce((sum, line) => sum + (line.durationMinutes ?? 0) * line.quantity, 0);
   const mixedTariffs = new Set(timeLines.map((line) => line.sourceId)).size > 1;
   const activeClientSession = Boolean(
-    pc?.status === "busy"
-    && pc.clientId
-    && client?.id === pc.clientId,
+    registeredSession
+    && client?.id === pc?.clientId,
   );
   const lineCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const visibleTariffs = tariffCategory === "all" ? tariffs : tariffs.filter((tariff) => tariff.billing_mode === "block");
@@ -179,6 +185,10 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   }));
   const removeLine = (key: string) => setLines((current) => current.filter((line) => line.key !== key));
   const selectClient = (value: Client) => {
+    if (registeredSession && value.id !== pc?.clientId) {
+      setError("Для занятого места доступен только текущий зарегистрированный клиент");
+      return;
+    }
     setClient(value);
     setBuyerMode("client");
     setClientQuery(value.nickname);
@@ -186,6 +196,10 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
     setError(null);
   };
   const selectGuest = () => {
+    if (registeredSession) {
+      setError("На занятом месте нельзя оформить гостевой тариф поверх сессии клиента");
+      return;
+    }
     setBuyerMode("guest");
     setClient(null);
     setClientQuery("");
@@ -355,8 +369,9 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
         <div className="sale-workspace-main">
           <section className="sale-buyer-card">
             <div className="sale-section-heading"><div><span className="sale-step">01</span><div><h2>Покупатель</h2><p>Кому оформить время и товары</p></div></div>{buyerMode === "guest" && <span className="sale-auto-note"><Sparkles size={14} /> Гость включён автоматически</span>}</div>
-            <div className="sale-buyer-choices"><button type="button" className={`sale-buyer-choice ${buyerMode === "guest" ? "selected" : ""}`} onClick={selectGuest}><span className="sale-choice-icon guest"><UserX size={17} /></span><span><strong>Гость</strong><small>Без регистрации и баланса</small></span>{buyerMode === "guest" && <Check size={16} />}</button><button type="button" className={`sale-buyer-choice ${buyerMode === "client" ? "selected" : ""}`} onClick={() => setBuyerMode("client")}><span className="sale-choice-icon client"><UserRound size={17} /></span><span><strong>{client?.nickname ?? "Зарегистрированный клиент"}</strong><small>{client ? `Баланс ${client.balance.toLocaleString("ru-RU")} ₽ · ${client.category}` : "Поиск по нику или телефону"}</small></span>{buyerMode === "client" && <Check size={16} />}</button></div>
-            {buyerMode === "client" && <div className="sale-client-search"><Search size={17} /><input aria-label="Клиент для продажи" autoFocus value={clientQuery} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Введите от 3 букв ника или 4 цифр телефона" />{client && <button type="button" className="sale-clear-client" aria-label="Сбросить клиента" onClick={() => { setClient(null); setClientQuery(""); }}>×</button>}</div>}
+            <div className="sale-buyer-choices"><button type="button" className={`sale-buyer-choice ${buyerMode === "guest" ? "selected" : ""}`} onClick={selectGuest} disabled={registeredSession} aria-describedby={registeredSession ? "sale-registered-session-hint" : undefined}><span className="sale-choice-icon guest"><UserX size={17} /></span><span><strong>Гость</strong><small>Без регистрации и баланса</small></span>{buyerMode === "guest" && <Check size={16} />}</button><button type="button" className={`sale-buyer-choice ${buyerMode === "client" ? "selected" : ""}`} onClick={() => setBuyerMode("client")}><span className="sale-choice-icon client"><UserRound size={17} /></span><span><strong>{client?.nickname ?? "Зарегистрированный клиент"}</strong><small>{client ? `Баланс ${client.balance.toLocaleString("ru-RU")} ₽ · ${client.category}` : "Поиск по нику или телефону"}</small></span>{buyerMode === "client" && <Check size={16} />}</button></div>
+            {registeredSession && <p id="sale-registered-session-hint" className="sale-payment-hint">На занятом месте продажа времени доступна только текущему зарегистрированному клиенту.</p>}
+            {buyerMode === "client" && <div className="sale-client-search"><Search size={17} /><input aria-label="Клиент для продажи" autoFocus={!registeredSession} value={clientQuery} disabled={activeClientSession} onChange={(event) => { setClientQuery(event.target.value); setClient(null); }} placeholder="Введите от 3 букв ника или 4 цифр телефона" />{client && !activeClientSession && <button type="button" className="sale-clear-client" aria-label="Сбросить клиента" onClick={() => { setClient(null); setClientQuery(""); }}>×</button>}</div>}
             {buyerMode === "client" && searchResults.length > 0 && !client && <div className="sale-client-results">{searchResults.map((item) => <button type="button" className="sale-client-result" key={item.id} onClick={() => selectClient(item)}><span className="client-avatar">{item.nickname.slice(0, 2).toUpperCase()}</span><span><strong>{item.nickname}</strong><small>{formatRussianPhone(item.phone)} · баланс {item.balance.toLocaleString("ru-RU")} ₽</small></span><ChevronRight size={16} /></button>)}</div>}
           </section>
           <section className="sale-catalog-card">
