@@ -85,7 +85,7 @@
 - миграция применяется на чистую и текущую PostgreSQL базу;
 - разрыв между debit и сохранением charge оставляет retryable record и
   восстанавливается повторным запуском worker;
-- unit и integration checks проходят, а клиентский WinUI build помечен отдельно,
+- unit и integration checks проходят, а клиентский Avalonia build помечен отдельно,
   если платформа Linux не позволяет его выполнить.
 
 ## Отложенный backlog

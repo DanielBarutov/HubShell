@@ -638,6 +638,43 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         PublishAccessState();
     }
 
+    public bool TryOpenManagerLoginShortcut(
+        bool controlPressed,
+        bool altPressed,
+        bool pPressed)
+    {
+        if (!controlPressed
+            || !altPressed
+            || !pPressed
+            || !IsAccessLocked
+            || IsWaitingForAssignment)
+        {
+            return false;
+        }
+
+        if (_isManagerLoginRequested)
+        {
+            return true;
+        }
+
+        ShowManagerLogin();
+        return true;
+    }
+
+    public bool TrySuppressLockedSystemShortcut(
+        bool altPressed,
+        bool tabPressed,
+        bool windowsPressed,
+        bool rPressed)
+    {
+        if (!IsAccessLocked)
+        {
+            return false;
+        }
+
+        return (altPressed && tabPressed) || (windowsPressed && rPressed);
+    }
+
     public void ShowPortalRegistration()
     {
         _isPortalRegistrationRequested = true;

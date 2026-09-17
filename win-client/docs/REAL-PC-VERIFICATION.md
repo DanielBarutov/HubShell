@@ -93,9 +93,32 @@ MAC можно посмотреть штатными средствами Window
 - [ ] logout очищает snapshot и возвращает Locked;
 - [ ] истёкший или отозванный client token возвращает Locked без показа чужих
   данных;
+- [ ] на сфокусированном Locked access-gate комбинация `Ctrl+Alt+P` открывает
+  форму manager password;
+- [ ] комбинация не открывает manager route на waiting screen, в пользовательском
+  режиме или когда окно клиента не имеет фокуса;
+- [ ] неверный manager password оставляет клиент в Locked и сохраняет throttling;
+- [ ] корректный manager password переводит клиент в Maintenance без user session;
+- [ ] в Locked access-gate `Alt+Tab` и `Win+R` не выводят пользователя из shell;
+- [ ] после успешного пользовательского входа и покупки тарифа `Win+R` снова
+  открывает Run;
+- [ ] после logout/возврата в Locked `Win+R` снова подавляется;
+- [ ] после `Ctrl+Alt+Del` запуск Task Manager не поднимает его поверх access-gate;
+- [ ] при запуске без сервера работает fallback manager password `password`, а
+  уже загруженный server verifier продолжает работать до перезапуска;
 - [ ] явный пункт менеджера открывает отдельный maintenance;
+- [ ] в Maintenance кнопка «Перейти к рабочему столу» скрывает клиент в tray,
+  а восстановление из tray возвращает окно без обхода проверки пароля;
 - [ ] закрытие maintenance снова возвращает Locked;
 - [ ] manager credential не появляется в пользовательском экране или логах.
+
+Не применяйте `configure-windows-user-policy.ps1` в этом базовом smoke:
+`NoRun=1` действует на всю учётную запись и нарушит проверку доступности
+`Win+R` после пользовательского входа.
+
+
+Скрипт предназначен только для отдельного полного kiosk-профиля, где `Win+R`
+должен оставаться запрещённым после входа.
 
 ## 5. Сессии, тарифы и повторные действия
 
@@ -148,6 +171,7 @@ MAC можно посмотреть штатными средствами Window
 Для локального Compose backend на машине с backend можно использовать:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 docker compose stop backend-grpc
 # проверить offline/reconnecting на игровом ПК
 docker compose start backend-grpc
@@ -166,8 +190,8 @@ Shell Launcher; Assigned Access через него не настраивает�
 Сначала сформируйте preview без изменения политики:
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\configure-windows-kiosk.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\configure-windows-kiosk.ps1 `
   -KioskUser "GameClubUser" `
   -ExecutablePath "C:\GameClub\Client\GameClub.Client.Windows.exe"
 ```
@@ -177,6 +201,7 @@ SYSTEM-контекста. Обычный elevated PowerShell недостато
 проверяет SID SYSTEM. Выполните из elevated PowerShell:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 $taskName = "GameClub.ConfigureShellLauncher"
 $action = New-ScheduledTaskAction `
   -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
@@ -210,7 +235,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 
 Зафиксируйте:
 
-- commit: `git -C C:\Git\HubShell rev-parse --short HEAD`;
+- commit: после `Set-Location "C:\Git\HubShell"` выполнить `git rev-parse --short HEAD`;
 - Windows edition/build;
 - архитектуру ПК и EXE;
 - тип артефакта: folder-publish или single-file;

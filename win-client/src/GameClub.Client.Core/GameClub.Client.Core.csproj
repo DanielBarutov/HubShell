@@ -7,11 +7,9 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
-  <!--
-    The first migration step compiles the existing portable source from its
-    legacy location. Files move only after the Avalonia host is proven on Linux;
-    this keeps the WinUI source available for later Windows comparison.
-  -->
+  <!-- Shared portable source remains grouped by domain/application/infrastructure
+       until a separate file-layout refactor is approved. It is consumed by the
+       Avalonia hosts and is not a second UI implementation. -->
   <ItemGroup>
     <!-- MainViewModel converts transport failures to portable UI state. -->
     <PackageReference Include="Grpc.Core.Api" Version="2.66.0" />

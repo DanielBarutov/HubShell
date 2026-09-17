@@ -20,6 +20,7 @@ PostgreSQL и Redis остаются на `5432` и `6379`, а backend — на 
 ## Запуск
 
 ```bash
+cd /home/daniel/HubShell
 cp .env.example .env
 docker compose up -d --build
 docker compose ps

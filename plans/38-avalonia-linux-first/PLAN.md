@@ -1,26 +1,27 @@
 # План 38 — Avalonia migration и Linux-first developer host
 
-Статус: `in_progress`  
+Статус: `complete`
 Владелец: `win-client/`  
 Зависимости: [`win-client/PLAN.md`](../../win-client/PLAN.md),
-[`36-winui-contract-consumers`](../36-winui-contract-consumers/PLAN.md)
+[`36-windows-client-contract-consumers`](../36-windows-client-contract-consumers/PLAN.md)
 
 ## Цель
 
-Заменить WinUI 3 UI-host Windows-клиента на Avalonia так, чтобы обычный цикл
+Зафиксировать завершённую замену UI-host Windows-клиента на Avalonia так, чтобы обычный цикл
 разработки выполнялся в текущем Linux checkout: restore, compile, unit tests и
 ручной запуск реального developer UI. Windows остаётся единственной
 производственной платформой игрового ПК и отдельной обязательной проверкой
 platform-specific поведения.
 
-Эта первая версия плана заканчивается после первой успешной Linux-сборки,
-тестового прогона, запуска Avalonia каркаса и Windows-target compile artifact,
-собранного из Linux. Она не обещает функционально эквивалентный access-gate,
-Windows runtime или готовый Windows release.
+Эта первая версия плана завершена после успешной Linux-сборки, тестового
+прогона, запуска Avalonia UI и Windows-target compile artifact. Полный
+Avalonia product flow закрывается планом 40; Windows runtime и kiosk policy
+по-прежнему требуют отдельного native evidence.
 
 ## Контекст и решение
 
-Текущий проект на `net8.0-windows` использует WinUI 3 / Windows App SDK.
+Исторический UI project на `net8.0-windows` больше не является частью
+production build graph.
 Поэтому Linux не может исполнить WindowsAppSDK XAML compiler и проверить окно.
 При этом Domain/Application, gRPC contracts, enrollment, reconnect и большая
 часть presentation state уже не зависят от Windows. Целевой UI-host — Avalonia.
@@ -31,7 +32,7 @@ kiosk-клиентом, использовать как доказательст
 
 ## Входит в первую остановку
 
-- документировать замену WinUI на Avalonia и границы Linux/Windows evidence;
+- документировать завершённую замену UI-host на Avalonia и границы Linux/Windows evidence;
 - инвентаризировать зависимости текущего `GameClub.Client` и разделить
   platform-neutral code от Windows adapters;
 - создать shared `net8.0` core, Avalonia `net8.0` host и cross-platform test
@@ -73,13 +74,13 @@ GameClub.Client.Tests      net8.0
 
 Это целевая зависимостная граница, а не требование создать все четыре проекта
 до первой сборки. Допускается начать с Core + Avalonia + Tests, если Windows
-adapters пока остаются в legacy source. Новые UI или Core-проекты не должны
+adapters уже находятся в Avalonia production source. Новые UI или Core-проекты не должны
 ссылаться на `Microsoft.WindowsAppSDK`, `Microsoft.UI.*`, `user32.dll` или
 `shell32.dll`.
 
 ## Порядок задач
 
-1. [x] Зафиксировать inventory текущих зависимостей: WinUI `AppWindow`,
+1. [x] Зафиксировать исторический inventory зависимостей: Windows `AppWindow`,
    `DisplayArea`, `DispatcherQueue`; `NativeTrayIcon` P/Invoke; DPAPI journal;
    Windows restart/autostart. Для каждой указан будущий port и Linux behaviour
    в [`INVENTORY.md`](INVENTORY.md).
@@ -87,10 +88,10 @@ adapters пока остаются в legacy source. Новые UI или Core-�
    `net8.0`, Avalonia host на `net8.0`, tests на `net8.0`; выбрать совместимую
    стабильную версию Avalonia и записать её в project file. Выбрана Avalonia
    `11.3.2`: она собирается SDK `8.0.425` без analyzer warnings.
-3. [x] Вынести из shared presentation state WinUI-specific `Visibility` и
+3. [x] Вынести из shared presentation state UI-specific `Visibility` и
    другие `Microsoft.UI.*` types; `MainViewModel` emitted only from
    `GameClub.Client.Core` and exposes 16 positive `bool Is*Visible` states.
-   Legacy WinUI maps these values through a UI-only converter; public
+   Avalonia maps these values through its own UI bindings; public
    domain/application contracts and their behaviour remain unchanged.
 4. [x] Добавить пустой Avalonia App/MainWindow с application composition root,
    безопасным developer settings source и visible diagnostic state. Не подключать
@@ -101,6 +102,7 @@ adapters пока остаются в legacy source. Новые UI или Core-�
 6. [x] В Linux выполнить и записать точные команды:
 
    ```bash
+   cd /home/daniel/HubShell
    dotnet restore win-client/GameClub.Client.sln
    dotnet build win-client/GameClub.Client.sln --configuration Debug
    dotnet test win-client/GameClub.Client.sln --configuration Debug
@@ -112,6 +114,7 @@ adapters пока остаются в legacy source. Новые UI или Core-�
 7. [x] В Linux собрать Windows-target compile artifact Avalonia host:
 
    ```bash
+   cd /home/daniel/HubShell
    dotnet publish win-client/src/GameClub.Client.Avalonia \
      --configuration Debug --runtime win-x64 --self-contained false
    ```

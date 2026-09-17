@@ -19,7 +19,7 @@
 ## Не входит
 
 - реализация всех модулей в одном изменении;
-- frontend и WinUI implementation;
+- frontend и Avalonia client implementation;
 - production deployment до отдельного deployment-плана;
 - автоматическое выделение модулей в микросервисы без подтверждённой причины.
 
@@ -39,7 +39,7 @@
 12. `../plans/11-analytics` — клиентская и клубная read-only аналитика.
 13. `../plans/13-payment-methods` — настройки способов оплаты клуба.
 14. `../plans/29-contract-alignment` — сквозное выравнивание обязательных
-    backend/frontend/WinUI контрактов и закрытие подтверждённых разрывов.
+    backend/frontend/Avalonia-клиента и закрытие подтверждённых разрывов.
     Декомпозиция реализации: планы [`30`](../plans/30-entitlements-meter/PLAN.md),
     [`31`](../plans/31-settlement-reconciliation/PLAN.md),
     [`32`](../plans/32-session-snapshot-entry/PLAN.md),
@@ -119,7 +119,7 @@ auto-next, snapshot, transfer owner transaction, offline replay и
 one-active-client guard. Account-portal login не выдаёт игровой grant без
 device session start. Общий cross-owner settlement UoW,
 PostgreSQL concurrency и transport/native evidence остаются открытыми. Эти
-возможности не следует добавлять локальными обходами в BFF или WinUI; порядок
+возможности не следует добавлять локальными обходами в BFF или Avalonia-клиенте; порядок
 реализации и transport boundaries описаны в планах 29–37.
 Дополнительно Clients получил защищённые operator-команды редактирования,
 мягкой деактивации и выдачи временного пароля с сохранением только хеша; Catalog

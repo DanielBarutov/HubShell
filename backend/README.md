@@ -13,24 +13,26 @@ HTTP, gRPC, worker, scheduler и frontend) используйте [`DOCKER.md`](
 Compose в этой папке оставлен как infra-only вариант для backend-разработки.
 
 ```text
+cd /home/daniel/HubShell
 cp .env.example .env
 export GAMECLUB_DB_PASSWORD='set-a-local-password'
 docker compose up -d
-uv sync
-uv run python scripts/generate_proto.py
-uv run alembic upgrade head
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
+uv sync --project ./backend
+uv run --directory ./backend python scripts/generate_proto.py
+uv run --directory ./backend alembic upgrade head
+uv run --directory ./backend pytest
+uv run --directory ./backend ruff check .
+uv run --directory ./backend ruff format --check .
 ```
 
 Быстрые проверки без внешней инфраструктуры и отдельный integration gate:
 
 ```text
-uv run pytest -m "not integration and not slow"
-uv run pytest -m "api or contract"
-uv run pytest --cov=src/gameclub_backend --cov-report=term-missing
-GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run pytest -m integration
+cd /home/daniel/HubShell
+uv run --directory ./backend pytest -m "not integration and not slow"
+uv run --directory ./backend pytest -m "api or contract"
+uv run --directory ./backend pytest --cov=src/gameclub_backend --cov-report=term-missing
+GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run --directory ./backend pytest -m integration
 ```
 
 Тесты с PostgreSQL и Redis намеренно требуют явных DSN и не считаются пройденными

@@ -9,7 +9,7 @@ startup diagnostics находятся в
 | --- | --- | --- |
 | Runtime | .NET 8 / SDK `8.0.425` | Linux build/test completed |
 | Current production UI | Avalonia `11.3.2` | Linux developer host compiled and started; Windows host source-build/cross-publish completed |
-| Legacy UI source | WinUI 3 / Windows App SDK 1.6 | retained only for comparison until native Windows smoke |
+| UI host | Avalonia `11.3.2` | production source; native Windows smoke remains required |
 | Target shared framework | `net8.0` for core, tests and Avalonia host | Core/Avalonia/Tests compile in Linux |
 | Windows adapter framework | `net8.0` host published only for `win-*`; DPAPI/tray/restart isolated in Windows project | source build and `win-x64` publish completed |
 | Минимальная ОС | Windows 10 build 17763 | project config |
@@ -18,7 +18,7 @@ startup diagnostics находятся в
 | Device auth | MAC enrollment → device-scoped JWT | source-level |
 | User auth | server-backed register/login → client-scoped JWT | source-level |
 | Режим окна | borderless fullscreen Locked shell | source-level; native smoke не выполнен |
-| Manager access | явный пункт менеджера, отдельный manager password | source-level; native smoke не выполнен |
+| Manager access | локальный `Ctrl+Alt+P` на сфокусированном Locked gate или явный внутренний пункт, отдельный manager password | source-level; native smoke не выполнен |
 | Kiosk boundary | Assigned Access/Shell Launcher | не проверено |
 | Delivery | self-contained `GameClub.Client.Windows.exe` for Windows | Linux `win-x64` folder-publish completed; Windows runtime smoke remains required |
 

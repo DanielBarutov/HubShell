@@ -32,7 +32,7 @@
 - [x] Добавить истории ledger, session charges и product sales через публичные
   read-порты модулей.
 - [x] Добавить расчёт доступного времени по действующему тарифу и балансу.
-- [x] Добавить WinUI register/login/profile/history screens.
+- [x] Добавить Avalonia register/login/profile/history screens.
 - [x] Добавить logout, expiry, relock и очистку пользовательского состояния.
 - [x] Ограничить portal snapshot client subject + device claim.
 - [x] Добавить in-process gRPC ownership check для device/client scope.

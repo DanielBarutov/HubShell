@@ -11,7 +11,7 @@
 
 Сделать единый server-backed результат перед входом и после входа: backend
 возвращает `EntryDecision` и `SessionSnapshot`, а HTTP, gRPC, heartbeat,
-frontend и WinUI используют одни и те же DTO без локального вычисления
+frontend и Avalonia используют одни и те же DTO без локального вычисления
 доступности, 30-минутного lock или остатка времени.
 
 ## Контрактная граница
@@ -20,8 +20,8 @@ frontend и WinUI используют одни и те же DTO без лока
 
 - Перед входом проверяются workstation state, reservation interval, named
   client match, guest semantics и 30-minute protection window.
-- WinUI не принимает решение самостоятельно.
-- При входе WinUI получает balance, active package и queue.
+- Avalonia не принимает решение самостоятельно.
+- При входе Avalonia получает balance, active package и queue.
 - Operator map сохраняет последний client, session state, queue summary и
   last-seen для offline/stale ПК, не раскрывая лишнюю PII.
 
@@ -39,7 +39,7 @@ snapshot с balance, active entitlement, guest `active_tariff`, queue, meter,
 login grant, server time и allowed actions. Для block-тарифа backend считает
 elapsed/remaining time по `server_time`; frontend запрашивает snapshot при
 открытой карточке ПК, а
-WinUI обновляет snapshot через gateway/heartbeat callback. Workstation response
+Avalonia обновляет snapshot через gateway/heartbeat callback. Workstation response
 теперь различает `online/stale/offline`, а transport fixture сравнивает HTTP,
 gRPC и heartbeat outputs; добавлены проверки entry refusal в frontend и
 backend unit/API slice.
@@ -66,7 +66,7 @@ backend unit/API slice.
 1. [x] Зафиксировать DTO fields, enum reasons, versioning и mapping ошибок;
    отдельно определить `allowed`, `reservation`, `workstation` и `stale`.
 2. [x] Перенести все session-start entry points на один application port;
-   исключить обход decision через legacy handler.
+   исключить обход decision через UI handler.
 3. [x] Собрать `SessionSnapshot`: identity, zone, tariff/package, meter,
    login grant, balance, queue, server timestamp и allowed actions.
 4. [x] Расширить heartbeat response и workstation read model; snapshot не должен
@@ -74,7 +74,7 @@ backend unit/API slice.
 5. [x] Добавить HTTP endpoints/BFF и gRPC RPC с auth/device/actor scope.
 6. [x] Добавить contract tests, которые сравнивают HTTP/gRPC/device outputs на
    одинаковом fixture и проверяют stale/offline semantics.
-7. [x] Подготовить consumer fixtures для frontend и WinUI без UI-правил.
+7. [x] Подготовить consumer fixtures для frontend и Avalonia без UI-правил.
 
 ## Критерии готовности
 

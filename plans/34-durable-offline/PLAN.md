@@ -10,13 +10,13 @@
 ## Цель
 
 Переживать временный offline во время уже начатой сессии без ложного успеха и
-без повторного списания. WinUI хранит постоянный журнал допустимых операций,
+без повторного списания. Avalonia хранит постоянный журнал допустимых операций,
 после reconnect отправляет batch, backend идемпотентно фиксирует факты и
 возвращает reconciliation result.
 
 ## Контрактная граница
 
-Источник: backend и WinUI product contracts.
+Источник: backend и Avalonia product contracts.
 
 - До входа offline новая сессия запрещена.
 - Во время active session используется последний server snapshot.
@@ -39,7 +39,7 @@
 
 Добавлен backend offline module с allowlist операций, protocol version, batch
 validation, sequence/idempotency/checksum, per-operation result и memory/Postgres
-repositories. WinUI получил DPAPI-protected JSONL journal, durable sidecar для
+repositories. Avalonia получил DPAPI-protected JSONL journal, durable sidecar для
 sequence, recovery/ACK cleanup, gateway replay и coordinator snapshot/replay
 связку. Backend unit tests покрывают duplicate, checksum conflict, stop, gap,
 server-clock при skewed device time и неизвестную session; PostgreSQL DSN test
@@ -64,7 +64,7 @@ server-clock при skewed device time и неизвестную session; Postgr
    сессия была online-authorized до потери сети.
 5. [x] Реализовать reconnect batch, partial result, retry/backoff и manual
    review; journal очищать только по подтверждённым sequence.
-6. [x] Подключить operator stale read model и WinUI offline/reconnecting UI.
+6. [x] Подключить operator stale read model и Avalonia offline/reconnecting UI.
 7. [x] Добавить contract-level crash/restart boundary и tests для clock-skew,
    duplicate и out-of-order; journal использует WriteThrough/atomic sidecar,
    backend отклоняет неизвестную session, а native power-loss/disk-full smoke

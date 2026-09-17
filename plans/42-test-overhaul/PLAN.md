@@ -13,7 +13,8 @@
 
 ## Baseline на 2026-09-16
 
-- Backend: `146 passed, 18 skipped, 6 failed` командой `cd backend && uv run pytest -q`.
+- Backend: `146 passed, 18 skipped, 6 failed` командой
+  `uv run --directory ./backend pytest -q` из корня checkout.
   Шесть падений относятся к устаревшим source-level ожиданиям после миграции
   frontend API и Windows UI на Avalonia.
 - Frontend: `typecheck`, `lint` и `build` проходят; test runner отсутствует.
@@ -83,10 +84,13 @@
 ## Проверки каждой итерации
 
 ```bash
-cd backend && uv run pytest -q
-cd backend && uv run ruff check .
-cd frontend && npm run typecheck && npm run lint && npm run test
-cd win-client && dotnet test GameClub.Client.sln --configuration Debug -p:Platform=x64
+cd /home/daniel/HubShell
+uv run --directory ./backend pytest -q
+uv run --directory ./backend ruff check .
+npm --prefix ./frontend run typecheck
+npm --prefix ./frontend run lint
+npm --prefix ./frontend run test
+dotnet test win-client/GameClub.Client.sln --configuration Debug -p:Platform=x64
 ```
 
 При инфраструктурном ограничении результат фиксируется отдельно для unit/API,

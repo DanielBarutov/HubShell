@@ -45,7 +45,7 @@ MAC используется для назначения в клубной се�
 - Адрес backend не вводится на игровом ПК. Для production EXE собирается с
   заранее известным HTTPS/DNS endpoint клуба; dev loopback остаётся только для
   разработки и тестов.
-- Полноэкранное окно WinUI до входа и app-level lock не заменяют Windows Assigned
+- Полноэкранное окно Avalonia до входа и app-level lock не заменяют Windows Assigned
   Access/Shell Launcher. Запрет выхода из Windows desktop проверяется отдельным
   native smoke-чеком по плану 22.
 
@@ -114,6 +114,6 @@ decision, transfer и durable offline replay выполняется по
 ## Не считать выполненным
 
 - Наличие protobuf-файла без generated Python и native Windows build.
-- Запуск полноэкранного WinUI окна как доказательство kiosk security.
+- Запуск полноэкранного Avalonia окна не является доказательством kiosk security.
 - Выдачу device token только по MAC без installation binding.
 - Отображение demo-истории или локального баланса вместо server DTO.

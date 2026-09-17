@@ -16,6 +16,9 @@
 C:\Git\HubShell
 ```
 
+Каждый независимый блок ниже начинается из `C:\Git\HubShell`; не выполняйте
+`Set-Location` в `win-client` и не запускайте команды из другого каталога.
+
 Основные пути:
 
 ```text
@@ -53,6 +56,7 @@ folder-publish и ожидать, что он будет переносимым.
 снять Mark-of-the-Web:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 Unblock-File -Path "C:\Git\HubShell\win-client\scripts\*.ps1"
 ```
 
@@ -102,8 +106,8 @@ GrpcAddress = http://192.168.0.47:51051
 Это проверяет solution, но не запускает опубликованный EXE.
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 ```
 
 Скрипт выполняет `dotnet --info`, restore, build и test с платформой `x64`.
@@ -113,6 +117,7 @@ Set-Location "C:\Git\HubShell\win-client"
 Если нужен ручной эквивалент:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 dotnet restore "C:\Git\HubShell\win-client\GameClub.Client.Windows.sln"
 dotnet build "C:\Git\HubShell\win-client\GameClub.Client.Windows.sln" `
   --configuration Debug -p:Platform=x64 --no-restore
@@ -129,8 +134,8 @@ Folder-publish — первый вариант для разбора пробл�
 Для локального dev backend на этой же машине:
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\publish-windows.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\publish-windows.ps1 `
   -Architecture x64 `
   -Configuration Debug `
   -EnvironmentName dev `
@@ -186,8 +191,8 @@ Windows из следующего раздела.
 кода завершения и записей Application Event Log используйте:
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\diagnose-startup.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\diagnose-startup.ps1 `
   -ExecutablePath "C:\GameClub\debug-publish\GameClub.Client.Windows.exe" `
   -TimeoutSeconds 30
 ```
@@ -284,13 +289,14 @@ Single-file Release не должен быть первым объектом о�
 примера и не записывайте в команды секреты:
 
 ```powershell
+Set-Location "C:\Git\HubShell"
 $authAddress = Read-Host "Production AuthAddress (http://private-LAN или https://external)"
 $grpcAddress = Read-Host "Production GrpcAddress (http://private-LAN или https://external)"
 ```
 
 ```powershell
-Set-Location "C:\Git\HubShell\win-client"
-.\scripts\build-portable-exe.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\build-portable-exe.ps1 `
   -Architecture x64 `
   -Configuration Release `
   -EnvironmentName production `
@@ -317,7 +323,8 @@ C:\GameClub\Client\GameClub.Client.Windows.exe
 Если нужен автозапуск, это отдельный необязательный шаг:
 
 ```powershell
-.\scripts\install-windows.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\install-windows.ps1 `
   -PublishPath "C:\Git\HubShell\win-client\artifacts\publish\win-x64\Release" `
   -InstallPath "C:\Users\Public\GameClub\Client"
 ```
@@ -328,7 +335,8 @@ C:\GameClub\Client\GameClub.Client.Windows.exe
 Если нужен recovery-task вместо HKCU Run, используйте только один механизм:
 
 ```powershell
-.\scripts\install-windows.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\install-windows.ps1 `
   -PublishPath "C:\GameClub\debug-publish" `
   -InstallPath "C:\Users\Public\GameClub\Client" `
   -NoStartup `
@@ -343,7 +351,8 @@ C:\GameClub\Client\GameClub.Client.Windows.exe
 ожидающие reconciliation операции и диагностику:
 
 ```powershell
-.\scripts\uninstall-windows.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\uninstall-windows.ps1 `
   -InstallPath "C:\Users\Public\GameClub\Client" `
   -ConfirmRemoval
 ```
@@ -352,7 +361,8 @@ C:\GameClub\Client\GameClub.Client.Windows.exe
 после проверки backend и состояния финансовых операций:
 
 ```powershell
-.\scripts\uninstall-windows.ps1 `
+Set-Location "C:\Git\HubShell"
+.\win-client\scripts\uninstall-windows.ps1 `
   -InstallPath "C:\Users\Public\GameClub\Client" `
   -ConfirmRemoval `
   -RemoveRuntimeData

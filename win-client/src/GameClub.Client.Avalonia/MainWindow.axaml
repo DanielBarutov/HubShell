@@ -444,6 +444,14 @@
                                                 Text="Закрыть обслуживание"
                                                 FontWeight="SemiBold"
                                             /></Button>
+                  <Button
+                                            Name="OpenDesktopButton"
+                                            Click="OpenDesktop"
+                                            Background="Transparent"
+                                            Foreground="{DynamicResource SecondaryTextBrush}"
+                                        ><TextBlock
+                                                Text="Перейти к рабочему столу"
+                                            /></Button>
                 </StackPanel>
                 <Border
                                         Name="AccessFeedbackPanel"

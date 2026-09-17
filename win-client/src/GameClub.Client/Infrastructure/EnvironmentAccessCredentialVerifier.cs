@@ -4,8 +4,9 @@ namespace GameClub.Client.Infrastructure;
 
 public sealed class EnvironmentAccessCredentialVerifier : IAccessCredentialVerifier
 {
-    // Development-only fallback. This is a PBKDF2 hash, not the plaintext password.
-    private const string DevManagerPasswordHash =
+    // Offline/bootstrap fallback for every environment. This is a PBKDF2 hash,
+    // not the plaintext password; a valid server verifier replaces it in memory.
+    private const string DefaultManagerPasswordHash =
         "pbkdf2-sha256$210000$Z2FtZXNoZWxsLWRldi1tYW5hZ2VyLXNhbHQ=$gAOXzB5w2LpyQ+gSNlpVEHQ3YoeYycTTHbWVqzthfAk=";
     private readonly string? _userAccessHash;
     private string? _managerPasswordHash;
@@ -14,10 +15,9 @@ public sealed class EnvironmentAccessCredentialVerifier : IAccessCredentialVerif
     {
         _userAccessHash = Environment.GetEnvironmentVariable("GAMECLUB_CLIENT_ACCESS_PIN_HASH");
         var configuredManagerHash = Environment.GetEnvironmentVariable("GAMECLUB_MANAGER_PASSWORD_HASH");
-        _managerPasswordHash = string.IsNullOrWhiteSpace(configuredManagerHash)
-            && string.Equals(environment, "dev", StringComparison.OrdinalIgnoreCase)
-            ? DevManagerPasswordHash
-            : configuredManagerHash;
+        _managerPasswordHash = PasswordHashVerifier.IsValidVerifier(configuredManagerHash)
+            ? configuredManagerHash!.Trim()
+            : DefaultManagerPasswordHash;
 
         // Hashes are read from the deployment environment only. Plaintext values
         // are intentionally not supported, including in dev.
@@ -38,7 +38,7 @@ public sealed class EnvironmentAccessCredentialVerifier : IAccessCredentialVerif
 
     public void UpdateManagerPasswordVerifier(string verifier)
     {
-        if (!string.IsNullOrWhiteSpace(verifier))
+        if (PasswordHashVerifier.IsValidVerifier(verifier))
         {
             _managerPasswordHash = verifier.Trim();
         }
