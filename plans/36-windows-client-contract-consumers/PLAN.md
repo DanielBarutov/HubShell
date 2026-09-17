@@ -1,4 +1,4 @@
-# План 36 — WinUI snapshot, transfer и offline consumers
+# План 36 — Windows client snapshot, transfer и offline consumers
 
 Статус: `in_progress`
 Приоритет: `P0`
@@ -9,7 +9,7 @@
 
 ## Цель
 
-Подключить WinUI к server snapshot, entry decision, package lifecycle,
+Подключить Avalonia-клиент к server snapshot, entry decision, package lifecycle,
 transfer и durable offline protocol. Клиент остаётся thin consumer: не считает
 цену, совместимость, 30 минут, остаток или settlement.
 
@@ -55,7 +55,7 @@ host.
 - Windows shell replacement в приложении;
 - произвольные process/shell commands;
 - локальный balance/tariff/zone calculation;
-- Assigned Access implementation внутри WinUI.
+- Assigned Access implementation внутри Windows policy boundary.
 
 ## Порядок задач
 
