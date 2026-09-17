@@ -59,6 +59,12 @@ decision с 30-минутным lock, transfer flow и offline PC evidence. Type
 основные server-backed consumers подключены на source-level. Остались headed
 browser/accessibility evidence и интеграционные проверки после текущих миграций.
 
+Backlog фиксов и UI-правок из `fixes.md` ведётся в
+[`../plans/44-fixes-features/PLAN.md`](../plans/44-fixes-features/PLAN.md).
+Frontend-фаза 0 фиксирует active-client context, независимые operator payment
+methods, guest selector guard, client groups/settings и server-backed map
+tooltip; расчёты денег и времени остаются на backend.
+
 ## Не входит
 
 - прямой доступ к PostgreSQL/Redis;

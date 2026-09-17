@@ -201,10 +201,11 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и внешняя TLS-конфигурация |
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
 | Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, password reset with one-time passwordless login and forced change, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
-| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive, daily sale/usage windows, `time_restricted`, audience filtering and entitlement snapshot with unit/API/gRPC/PostgreSQL regression coverage | next-compatible auto-start and broader production/browser evidence |
+| Client groups | contract boundary для группы клиента, default group и allow-negative/negative-limit policy | backend/frontend settings, migrations и debit-scope decision по плану 44 |
+| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive, daily sale/usage windows, `time_restricted`, audience filtering and entitlement snapshot with unit/API/gRPC/PostgreSQL regression coverage | next-compatible auto-start and broader production/browser evidence; F-10 operator-only guest sale policy in [`plans/44-fixes-features`](44-fixes-features/PLAN.md) |
 | Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | Avalonia/operator decision consumer and PostgreSQL concurrency matrix |
-| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot с server-backed `active_tariff`/remaining time | PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
-| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing with login-grant subtraction | entitlement-aware billing, guest direct settlement reconciliation; bonus/refund/reserve/external finance — отдельный backlog |
+| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot с server-backed `active_tariff`/remaining time | plan 44 P0 package fallback, stop acknowledgement/access-gate/restart sequence, PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
+| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing with login-grant subtraction | plan 44 group debt policy and entitlement mixed-payment scope; guest direct settlement reconciliation; bonus/refund/reserve/external finance — отдельный backlog |
 | Reports/Dashboard | read-only current revenue/dashboard data and audit-backed activity | расширенные reports/read models по нагрузке |
 | Cash Shifts | open/close, cash ledger, movements, references, approvals, schedules, provider-neutral producer boundary | реальные provider/webhook producers и отдельные finance integrations |
 | Product Sales | client/guest sale, stock reservation, price/cost/category snapshots, balance/cash settlement boundary, mixed payment parts, idempotency, HTTP API | atomic cross-part reconciliation, basket/order, returns, bonuses, external acquirer |
@@ -533,6 +534,12 @@ coverage guardrail установлен на измеренном старте.
 
 ### Product backlog
 
+- Сводный backlog из [`fixes.md`](../fixes.md) вынесен в
+  [`plans/44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md): P0 — переход
+  package→per-minute, плавный таймер и stop/access-gate/restart; P1 — платежи,
+  группы, отрицательный баланс и guest policy; P2 — Windows UI, уведомления и
+  tooltip карты. Последняя строка `fixes.md` оборвана и требует решения до
+  реализации формулы времени по разрешённому кредиту.
 - внешние payment provider/webhook integrations;
 - basket/returns и order-семантика сверх entitlement queue из P0-плана;
 - bonus spending, reservations of funds, refunds и guest cashier flow;

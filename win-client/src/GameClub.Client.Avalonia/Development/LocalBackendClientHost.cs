@@ -46,6 +46,7 @@ public sealed class LocalBackendClientHost : IClientHost
         await ViewModel.RefreshConnectionAsync();
         ViewModel.TrackBackgroundTask(ViewModel.RunHeartbeatLoopAsync());
         ViewModel.TrackBackgroundTask(ViewModel.RunAccessLockLoopAsync());
+        ViewModel.TrackBackgroundTask(ViewModel.RunSessionCountdownLoopAsync());
         ViewModel.TrackBackgroundTask(ActivateEnrollmentAsync());
     }
 

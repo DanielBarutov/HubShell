@@ -666,6 +666,66 @@ async def test_auto_next_accepts_exhausted_session_package_baseline() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exhausted_package_falls_back_to_per_minute_with_positive_balance() -> None:
+    """
+    Проверяет переход с исчерпанного пакета на поминутную тарификацию при
+    положительном балансе клиента и списание только следующей минуты.
+    """
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+        entitlements,
+    ) = await build_package_metered_services(clock, duration_minutes=1)
+    minute_tariff = await billing._catalog.create_tariff(
+        "VIP fallback minute",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+        free_minutes=0,
+    )
+    package = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "fallback-package",
+    )
+    await entitlements.activate(package.id, client.id)
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        tariff_id=package_tariff.id,
+        idempotency_key="fallback-session",
+    )
+
+    clock.current += datetime.timedelta(minutes=1)
+    package_tick = await billing.meter_session(session.id)
+    assert package_tick is not None
+    assert package_tick.package_minutes == 1
+    assert (await entitlements.get(package.id)).status is EntitlementStatus.EXHAUSTED
+
+    clock.current += datetime.timedelta(minutes=1)
+    fallback_tick = await billing.meter_session(session.id)
+
+    assert fallback_tick is not None
+    assert fallback_tick.tariff_id == minute_tariff.id
+    assert fallback_tick.billed_minutes == 1
+    assert fallback_tick.billed_cents == 10
+    assert (await clients.get(client.id)).balance_cents == 890
+    assert (await meters.get(session.id)).status is MeterStatus.RUNNING
+
+
+@pytest.mark.asyncio
 async def test_windowed_package_consumes_only_minutes_inside_local_window() -> None:
     """
     Проверяет сценарий «test_windowed_package_consumes_only_minutes_inside_local_window» и

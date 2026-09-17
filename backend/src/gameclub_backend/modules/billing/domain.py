@@ -59,6 +59,7 @@ class SessionMeter:
         status: MeterStatus | None = None,
         package_minutes: int | None = None,
         active_entitlement_id: uuid.UUID | None = None,
+        tariff_id: uuid.UUID | None = None,
     ) -> "SessionMeter":
         if billed_minutes < self.billed_minutes or billed_cents < self.billed_cents:
             raise ValueError("Session meter cannot move backwards")
@@ -69,6 +70,7 @@ class SessionMeter:
             raise ValueError("Session package minutes cannot move backwards")
         return dataclasses.replace(
             self,
+            tariff_id=tariff_id or self.tariff_id,
             billed_minutes=billed_minutes,
             billed_cents=billed_cents,
             last_operation_id=operation_id or self.last_operation_id,

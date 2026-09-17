@@ -47,6 +47,13 @@
     [`34`](../plans/34-durable-offline/PLAN.md) и
     [`37`](../plans/37-platform-integration-evidence/PLAN.md).
 
+Текущий cross-cutting backlog из `fixes.md` ведётся в
+[`../plans/44-fixes-features/PLAN.md`](../plans/44-fixes-features/PLAN.md).
+Фаза 0 фиксирует client groups/debt policy, payment-method independence,
+package fallback, stop acknowledgement и notification boundaries; реализация
+новых debit-правил начинается только после закрытия отмеченных контрактных
+решений.
+
 Frontend и Windows-клиент начинают интеграцию после фиксации нужных контрактов,
 но их UI-каркас может разрабатываться параллельно. Сквозные обязательные
 разрывы зафиксированы в

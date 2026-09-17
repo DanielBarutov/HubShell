@@ -15,6 +15,12 @@
 
 Детальный менеджерский route и реализация `Ctrl+Alt+P`: [`plans/43-manager-maintenance-hotkey/PLAN.md`](../plans/43-manager-maintenance-hotkey/PLAN.md).
 
+Сводный backlog `fixes.md` и порядок закрытия P0/P1/P2 зафиксированы в
+[`plans/44-fixes-features/PLAN.md`](../plans/44-fixes-features/PLAN.md).
+Фаза 0 для клиента фиксирует server-anchored countdown, package status
+presentation, stop/access-gate/restart state machine и deduplicated notification
+rules; native Windows evidence остаётся отдельной границей.
+
 ## Цель
 
 Создать Windows-клиент на C#/.NET с Avalonia UI, который после запуска сам

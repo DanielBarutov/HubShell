@@ -75,6 +75,7 @@ Windows сохраняют свои короткие owner-level входы в `
 | 38 | [`38-avalonia-linux-first/PLAN.md`](38-avalonia-linux-first/PLAN.md) | Avalonia migration: Linux-first developer host и Windows-target compile artifact | `done` |
 | 40 | [`40-avalonia-product-flows/PLAN.md`](40-avalonia-product-flows/PLAN.md) | portable transport и перенос access-gate/portal flows на Avalonia | `in_progress` |
 | 43 | [`43-manager-maintenance-hotkey/PLAN.md`](43-manager-maintenance-hotkey/PLAN.md) | менеджерский maintenance route и `Ctrl+Alt+P` | `in_progress` |
+| 44 | [`44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md) | сводный backlog фиксов, фич и UI-правок из `fixes.md` | `in_progress` |
 
 Статусы:
 
@@ -119,6 +120,11 @@ backend/PLAN.md
 │   ├── plans/36-windows-client-contract-consumers
 │   ├── plans/38-avalonia-linux-first
 │   └── plans/37-platform-integration-evidence
+├── plans/44-fixes-features
+│   ├── plans/30-entitlements-meter
+│   ├── plans/31-settlement-reconciliation
+│   ├── plans/35-frontend-contract-consumers
+│   └── plans/36-windows-client-contract-consumers
 ├── frontend/PLAN.md
 └── win-client/PLAN.md
 ```
