@@ -444,6 +444,23 @@ class ClientService:
         )
         return applied_client, applied_operation
 
+    async def can_debit(
+        self,
+        client_id: uuid.UUID,
+        amount_cents: int,
+        allow_negative_balance: bool = False,
+    ) -> bool:
+        """Return whether a future debit is permitted without changing the ledger."""
+        if amount_cents < 0:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Debit amount must not be negative")
+        client = await self.get(client_id)
+        minimum_balance_cents = 0
+        if allow_negative_balance and self._groups is not None and client.client_group_id:
+            group = await self._groups.get(client.client_group_id)
+            if group is not None and group.active:
+                minimum_balance_cents = group.minimum_balance_cents
+        return client.balance_cents - amount_cents >= minimum_balance_cents
+
     @staticmethod
     def _required_idempotency_key(value: str) -> str:
         normalized = value.strip()

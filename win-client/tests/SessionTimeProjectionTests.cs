@@ -30,6 +30,46 @@ public sealed class SessionTimeProjectionTests
 
     [Fact]
     /// <summary>
+    /// Проверяет, что частые одинаковые ответы сервера не перезапускают
+    /// локальный отсчёт трёхминутного пакета между списаниями сервера.
+    /// </summary>
+    public void RepeatedHeartbeatSnapshotsDoNotRestartPackageCountdown()
+    {
+        var projection = new SessionTimeProjection();
+        var startedAt = new DateTimeOffset(2026, 1, 1, 12, 5, 0, TimeSpan.Zero);
+
+        projection.Apply(Snapshot(3, balanceCents: 0, packageId: "package-1"), startedAt);
+
+        projection.Apply(
+            Snapshot(3, balanceCents: 0, packageId: "package-1"),
+            startedAt.AddSeconds(5));
+        Assert.Equal(3, projection.GetRemainingMinutes(startedAt.AddSeconds(5)));
+
+        projection.Apply(
+            Snapshot(3, balanceCents: 0, packageId: "package-1"),
+            startedAt.AddMinutes(1));
+        Assert.Equal(2, projection.GetRemainingMinutes(startedAt.AddMinutes(1)));
+
+        projection.Apply(
+            Snapshot(3, balanceCents: 0, packageId: "package-1"),
+            startedAt.AddMinutes(1).AddSeconds(5));
+        Assert.Equal(2, projection.GetRemainingMinutes(startedAt.AddMinutes(1).AddSeconds(5)));
+
+        projection.Apply(
+            Snapshot(3, balanceCents: 0, packageId: "package-1"),
+            startedAt.AddMinutes(2));
+        Assert.Equal(1, projection.GetRemainingMinutes(startedAt.AddMinutes(2)));
+
+        projection.Apply(
+            Snapshot(2, balanceCents: 0, packageId: "package-1"),
+            startedAt.AddMinutes(2).AddSeconds(5));
+        Assert.Equal(1, projection.GetRemainingMinutes(startedAt.AddMinutes(2).AddSeconds(5)));
+
+        Assert.Equal(0, projection.GetRemainingMinutes(startedAt.AddMinutes(3)));
+    }
+
+    [Fact]
+    /// <summary>
     /// Проверяет, что подтверждённое изменение баланса разрешает обновить
     /// доступное поминутное время после пополнения депозита.
     /// </summary>

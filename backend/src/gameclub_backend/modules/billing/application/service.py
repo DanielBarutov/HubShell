@@ -218,14 +218,14 @@ class BillingService:
                 if session.status is SessionStatus.ACTIVE:
                     session = await self._sessions.save(session.stop(package_window_end))
         package_progressed = package_minutes > current.package_minutes
-        package_finished = (
-            active_entitlement_id is None
-            and (
-                package_progressed
-                or (current.package_minutes > 0 and active_entitlement is None)
-            )
+        package_finished = active_entitlement_id is None and (
+            package_progressed or (current.package_minutes > 0 and active_entitlement is None)
         )
-        if tariff.billing_mode is not BillingMode.PER_MINUTE and package_finished:
+        if (
+            tariff.billing_mode is not BillingMode.PER_MINUTE
+            and package_finished
+            and session.status is SessionStatus.ACTIVE
+        ):
             fallback_tariff = await self._catalog.find_per_minute_tariff(
                 effective_workstation_group_id(workstation.group_id),
                 moment,
@@ -234,6 +234,14 @@ class BillingService:
                 tariff_id = fallback_tariff.id
                 quote_moment = moment
                 tariff = fallback_tariff
+            else:
+                await self._exhaust_meter(
+                    current,
+                    now=moment,
+                    package_minutes=package_minutes,
+                    active_entitlement_id=active_entitlement_id,
+                )
+                raise ApplicationError(ErrorCode.CONFLICT, "Session time exhausted")
         if tariff.billing_mode is not BillingMode.PER_MINUTE:
             if not package_progressed:
                 if (
@@ -284,6 +292,23 @@ class BillingService:
             ),
         )
         target_cents = quote.price_cents if billable_minutes > 0 else 0
+        if (
+            package_finished
+            and active_entitlement_id is None
+            and not await self._clients.can_debit(
+                session.client_id,
+                quote.price_cents,
+                allow_negative_balance=True,
+            )
+        ):
+            await self._exhaust_meter(
+                current,
+                now=moment,
+                package_minutes=package_minutes,
+                active_entitlement_id=active_entitlement_id,
+                tariff_id=tariff.id,
+            )
+            raise ApplicationError(ErrorCode.CONFLICT, "Insufficient balance")
         operation_id: uuid.UUID | None = current.last_operation_id
         if target_cents > current.billed_cents:
             client, operation = await self._debit_meter_delta(
@@ -310,6 +335,34 @@ class BillingService:
                 package_minutes=package_minutes,
                 active_entitlement_id=active_entitlement_id,
                 tariff_id=tariff.id,
+            )
+        )
+
+    async def _exhaust_meter(
+        self,
+        meter: SessionMeter,
+        *,
+        now: datetime.datetime,
+        package_minutes: int,
+        active_entitlement_id: uuid.UUID | None,
+        tariff_id: uuid.UUID | None = None,
+    ) -> SessionMeter:
+        """Persist final package progress before the worker stops the session."""
+        if self._meter_repository is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Meter repository is not configured",
+            )
+        return await self._meter_repository.save(
+            meter.advance(
+                billed_minutes=meter.billed_minutes,
+                billed_cents=meter.billed_cents,
+                operation_id=meter.last_operation_id,
+                now=now,
+                status=MeterStatus.EXHAUSTED,
+                package_minutes=package_minutes,
+                active_entitlement_id=active_entitlement_id,
+                tariff_id=tariff_id,
             )
         )
 

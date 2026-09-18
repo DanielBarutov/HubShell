@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Check, Clock3, Computer, Edit3, PanelRightClose, Plus, Receipt, Settings, ShoppingCart, Wifi, X } from "lucide-react";
 import { ApiError } from "../../api";
 import { Segmented } from "../../shared/components/Segmented";
 import { statusMeta } from "../../shared/constants";
 import type { Workstation } from "../../types";
 import { SessionHoverCard } from "./SessionHoverCard";
+import { getSessionTooltipDetails, SessionEndingProjection } from "./sessionTooltip";
 
 export function MapView({ onPc, onSalePc, onSellProduct, onBookPc, onEditPc, pcs, group, setGroup, zoneOptions, onNewWorkstation, onPositionsChange }: {
   onPc: (pc: Workstation) => void;
@@ -24,8 +25,28 @@ export function MapView({ onPc, onSalePc, onSellProduct, onBookPc, onEditPc, pcs
   const [positionError, setPositionError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [contextPcId, setContextPcId] = useState<string | null>(null);
-  const [sessionTooltip, setSessionTooltip] = useState<{ pc: Workstation; left: number; top: number } | null>(null);
+  const [sessionTooltip, setSessionTooltip] = useState<{ workstationId: string; left: number; top: number } | null>(null);
   const justDraggedRef = useRef(false);
+  const endingProjectionsRef = useRef(new Map<string, SessionEndingProjection>());
+  const endingProjectionFor = (workstationId: string) => {
+    const existing = endingProjectionsRef.current.get(workstationId);
+    if (existing) return existing;
+    const created = new SessionEndingProjection();
+    endingProjectionsRef.current.set(workstationId, created);
+    return created;
+  };
+
+  useEffect(() => {
+    const activeWorkstationIds = new Set<string>();
+    for (const pc of pcs) {
+      if (!pc.sessionSnapshot || pc.status !== "busy") continue;
+      activeWorkstationIds.add(pc.id);
+      getSessionTooltipDetails(pc, endingProjectionFor(pc.id));
+    }
+    for (const workstationId of endingProjectionsRef.current.keys()) {
+      if (!activeWorkstationIds.has(workstationId)) endingProjectionsRef.current.delete(workstationId);
+    }
+  }, [pcs]);
   const sortedPcs = [...pcs].sort((left, right) => (left.position ?? 999) - (right.position ?? 999));
   const occupiedSlots = new Set<number>();
   const positionedPcs = sortedPcs.map((pc, index) => {
@@ -69,7 +90,7 @@ export function MapView({ onPc, onSalePc, onSellProduct, onBookPc, onEditPc, pcs
     const tooltipHeight = 360;
     const left = rect.right + tooltipWidth + 12 <= window.innerWidth ? rect.right + 12 : Math.max(12, rect.left - tooltipWidth - 12);
     const top = Math.max(12, Math.min(rect.top, window.innerHeight - tooltipHeight - 12));
-    setSessionTooltip({ pc, left, top });
+    setSessionTooltip({ workstationId: pc.id, left, top });
   };
 
   return <>
@@ -97,6 +118,11 @@ export function MapView({ onPc, onSalePc, onSellProduct, onBookPc, onEditPc, pcs
         }) : <div className="map-empty">Зарегистрированных мест пока нет</div>}
       </div>
     </div>
-    {sessionTooltip && <SessionHoverCard pc={sessionTooltip.pc} id={`session-tooltip-${sessionTooltip.pc.id}`} style={{ left: sessionTooltip.left, top: sessionTooltip.top }} />}
+    {sessionTooltip && (() => {
+      const tooltipPc = pcs.find((pc) => pc.id === sessionTooltip.workstationId);
+      return tooltipPc
+        ? <SessionHoverCard pc={tooltipPc} id={`session-tooltip-${tooltipPc.id}`} style={{ left: sessionTooltip.left, top: sessionTooltip.top }} endingProjection={endingProjectionFor(tooltipPc.id)} />
+        : null;
+    })()}
   </>;
 }

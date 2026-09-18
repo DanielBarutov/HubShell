@@ -366,6 +366,44 @@ public sealed class MainViewModelVisibilityTests
 
     [Fact]
     /// <summary>
+    /// Проверяет, что после пяти бесплатных минут Windows-клиент локально
+    /// уменьшает трёхминутный пакет, даже когда heartbeat ещё передаёт старый остаток.
+    /// </summary>
+    public async Task LocalTimerCountsThreeMinutePackageAfterFreeGrantBetweenHeartbeats()
+    {
+        var clock = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials(),
+            clock: () => clock);
+
+        var freeGrant = SnapshotWithPackage(loginGrantMinutes: 5, packageMinutes: 3);
+        viewModel.RegisterSessionStarted(freeGrant);
+        Assert.Equal("Осталось 5 мин", viewModel.ActiveTimeSummary);
+
+        clock = clock.AddMinutes(5);
+        viewModel.ApplySessionSnapshotFromHeartbeat(
+            SnapshotWithPackage(loginGrantMinutes: 0, packageMinutes: 3));
+        Assert.Equal("Осталось 3 мин", viewModel.ActiveTimeSummary);
+
+        clock = clock.AddMinutes(1);
+        viewModel.ApplySessionSnapshotFromHeartbeat(
+            SnapshotWithPackage(loginGrantMinutes: 0, packageMinutes: 3));
+        Assert.Equal("Осталось 2 мин", viewModel.ActiveTimeSummary);
+
+        clock = clock.AddMinutes(1);
+        viewModel.ApplySessionSnapshotFromHeartbeat(
+            SnapshotWithPackage(loginGrantMinutes: 0, packageMinutes: 3));
+        Assert.Equal("Осталось 1 мин", viewModel.ActiveTimeSummary);
+
+        clock = clock.AddMinutes(1);
+        viewModel.ApplySessionSnapshotFromHeartbeat(
+            SnapshotWithPackage(loginGrantMinutes: 0, packageMinutes: 2));
+        Assert.Equal("Осталось 0 мин", viewModel.ActiveTimeSummary);
+    }
+
+    [Fact]
+    /// <summary>
     /// Проверяет, что клиент показывает только активные и queued-пакеты,
     /// локализует их статусы и не предлагает ручную активацию при активном пакете.
     /// </summary>
@@ -521,6 +559,30 @@ public sealed class MainViewModelVisibilityTests
 
     private static IBackendClient CreateBackend() =>
         DispatchProxy.Create<IBackendClient, UnconfiguredBackendProxy>();
+
+    private static SessionSnapshot SnapshotWithPackage(int loginGrantMinutes, int packageMinutes) =>
+        new(
+            "session-countdown",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            LoginGrantRemainingMinutes: loginGrantMinutes,
+            ActivePackage: new SessionPackageSnapshot(
+                "package-three-minutes",
+                "tariff-three-minutes",
+                null,
+                3,
+                packageMinutes,
+                1,
+                "active",
+                0,
+                0,
+                null));
 
     private static ClientPortalEntitlement PortalEntitlement(
         string id,

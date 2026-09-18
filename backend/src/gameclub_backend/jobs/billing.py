@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import typing
 
 import dramatiq
 
@@ -37,6 +38,7 @@ from gameclub_backend.modules.sales.application.service import ProductSaleServic
 from gameclub_backend.modules.sales.infrastructure.cash import CashShiftSaleSettlement
 from gameclub_backend.modules.sales.infrastructure.postgres import PostgresProductSaleRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.domain import Session
 from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.infrastructure.commands_memory import (
@@ -55,6 +57,71 @@ from gameclub_backend.modules.workstations.infrastructure.postgres import (
 
 logger = logging.getLogger(__name__)
 dramatiq.set_broker(shared_broker)
+
+
+class ActiveSessionReader(typing.Protocol):
+    async def list(self, active_only: bool = False) -> list[Session]:
+        """Return active sessions for one metering run."""
+
+
+class SessionStopper(typing.Protocol):
+    async def stop(self, session_id: typing.Any) -> Session:
+        """Stop a server session after its paid time is exhausted."""
+
+
+class WorkstationCommandDispatcher(typing.Protocol):
+    async def dispatch(
+        self,
+        workstation_id: typing.Any,
+        command_type: str,
+        payload_json: str,
+        idempotency_key: str,
+    ) -> typing.Any:
+        """Queue one durable command for the workstation client."""
+
+
+async def meter_sessions_once(
+    billing: BillingService,
+    session_reader: ActiveSessionReader,
+    sessions: SessionStopper,
+    commands: WorkstationCommandDispatcher,
+) -> int:
+    """Meter active sessions and queue stop commands when their paid time ends."""
+    stopped = 0
+    for session in await session_reader.list(active_only=True):
+        try:
+            await billing.meter_session(session.id)
+        except ApplicationError as error:
+            if error.message not in {"Insufficient balance", "Session time exhausted"}:
+                logger.warning(
+                    "session_meter_failed session_id=%s code=%s message=%s",
+                    session.id,
+                    error.code.value,
+                    error.message,
+                )
+                continue
+            await sessions.stop(session.id)
+            reason = (
+                "balance_exhausted" if error.message == "Insufficient balance" else "time_exhausted"
+            )
+            payload = json.dumps({"session_id": str(session.id), "reason": reason})
+            for command_type in ("session.stop", "display.lock"):
+                try:
+                    await commands.dispatch(
+                        session.workstation_id,
+                        command_type,
+                        payload,
+                        f"auto-meter:{session.id}:{command_type}",
+                    )
+                except ApplicationError as command_error:
+                    logger.warning(
+                        "session_meter_command_failed session_id=%s command=%s code=%s",
+                        session.id,
+                        command_type,
+                        command_error.code.value,
+                    )
+            stopped += 1
+    return stopped
 
 
 def _parse_sweep_time(value: str | None) -> datetime.datetime:
@@ -198,37 +265,12 @@ async def meter_active_sessions() -> None:
             meter_repository=PostgresMeterRepository(engine_provider),
             entitlements=entitlements,
         )
-        stopped = 0
-        for session in await session_repository.list(active_only=True):
-            try:
-                await billing.meter_session(session.id)
-            except ApplicationError as error:
-                if error.message != "Insufficient balance":
-                    logger.warning(
-                        "session_meter_failed session_id=%s code=%s message=%s",
-                        session.id,
-                        error.code.value,
-                        error.message,
-                    )
-                    continue
-                await sessions.stop(session.id)
-                payload = json.dumps({"session_id": str(session.id), "reason": "balance_exhausted"})
-                for command_type in ("session.stop", "display.lock"):
-                    try:
-                        await commands.dispatch(
-                            session.workstation_id,
-                            command_type,
-                            payload,
-                            f"auto-meter:{session.id}:{command_type}",
-                        )
-                    except ApplicationError as command_error:
-                        logger.warning(
-                            "session_meter_command_failed session_id=%s command=%s code=%s",
-                            session.id,
-                            command_type,
-                            command_error.code.value,
-                        )
-                stopped += 1
+        stopped = await meter_sessions_once(
+            billing,
+            session_repository,
+            sessions,
+            commands,
+        )
         logger.info("session_meter_completed stopped_count=%s", stopped)
     finally:
         await resources.close()

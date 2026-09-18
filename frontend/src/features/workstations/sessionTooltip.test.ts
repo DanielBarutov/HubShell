@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSessionTooltipDetails, sessionTooltip } from "./sessionTooltip";
+import { getSessionTooltipDetails, sessionTooltip, SessionEndingProjection } from "./sessionTooltip";
 import type { Workstation } from "../../types";
 
 describe("sessionTooltip", () => {
@@ -88,6 +88,80 @@ describe("sessionTooltip", () => {
     expect(details?.packageMinutes).toBe(60);
     expect(details?.totalMinutes).toBe(60);
     expect(details?.ending?.toISOString()).toBe("2026-09-17T13:00:00.000Z");
+  });
+
+  it("не сдвигает окончание при каждом расходе бесплатной и пакетной минуты", () => {
+    const steps = [
+      { elapsed: 0, grant: 5, packageMinutes: 3 },
+      { elapsed: 1, grant: 4, packageMinutes: 3 },
+      { elapsed: 2, grant: 3, packageMinutes: 3 },
+      { elapsed: 3, grant: 2, packageMinutes: 3 },
+      { elapsed: 4, grant: 1, packageMinutes: 3 },
+      { elapsed: 5, grant: 0, packageMinutes: 3 },
+      { elapsed: 6, grant: 0, packageMinutes: 2 },
+      { elapsed: 7, grant: 0, packageMinutes: 1 },
+    ];
+
+    for (const step of steps) {
+      const pc: Workstation = {
+        id: "pc-minute-by-minute",
+        name: "VIP-05",
+        group: "VIP-зона",
+        status: "busy",
+        client: "MinuteFox",
+        sessionSnapshot: {
+          server_time: `2026-09-17T12:${String(step.elapsed).padStart(2, "0")}:00Z`,
+          balance_cents: 15_000,
+          balance_remaining_minutes: 9,
+          login_grant_remaining_minutes: step.grant,
+          active_entitlement: { id: "three-minutes", duration_minutes: 3, remaining_minutes: step.packageMinutes, status: "active" } as never,
+          active_tariff: null,
+          entitlements: [{ id: "three-minutes", duration_minutes: 3, remaining_minutes: step.packageMinutes, status: "active" } as never],
+        } as never,
+      };
+
+      expect(getSessionTooltipDetails(pc)?.ending?.toISOString()).toBe("2026-09-17T12:17:00.000Z");
+    }
+
+    const stopped: Workstation = {
+      id: "pc-minute-by-minute",
+      name: "VIP-05",
+      group: "VIP-зона",
+      status: "online",
+    };
+    expect(getSessionTooltipDetails(stopped)).toBeNull();
+  });
+
+  it("не переносит окончание вперёд из-за запоздалого снимка сервера", () => {
+    const endingProjection = new SessionEndingProjection();
+    const steps = [
+      { minute: 5, packageMinutes: 3 },
+      { minute: 6, packageMinutes: 3 },
+      { minute: 7, packageMinutes: 3 },
+      { minute: 8, packageMinutes: 2 },
+      { minute: 9, packageMinutes: 1 },
+    ];
+
+    for (const step of steps) {
+      const pc: Workstation = {
+        id: "pc-server-delay",
+        name: "VIP-06",
+        group: "VIP-зона",
+        status: "busy",
+        sessionSnapshot: {
+          server_time: `2026-09-17T12:${String(step.minute).padStart(2, "0")}:00Z`,
+          session: { id: "session-server-delay" },
+          balance_cents: 15_000,
+          balance_remaining_minutes: 9,
+          login_grant_remaining_minutes: 0,
+          active_entitlement: { id: "three-minutes", duration_minutes: 3, remaining_minutes: step.packageMinutes, status: "active" } as never,
+          active_tariff: null,
+          entitlements: [{ id: "three-minutes", duration_minutes: 3, remaining_minutes: step.packageMinutes, status: "active" } as never],
+        } as never,
+      };
+
+      expect(getSessionTooltipDetails(pc, endingProjection)?.ending?.toISOString()).toBe("2026-09-17T12:17:00.000Z");
+    }
   });
 
   it("ограничивает ночную сессию закрытием окна в восемь утра", () => {

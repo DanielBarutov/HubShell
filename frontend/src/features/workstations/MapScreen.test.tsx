@@ -126,4 +126,58 @@ describe("Карта игровых мест", () => {
     fireEvent.mouseLeave(workstation);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
+
+  it("не отодвигает окончание, когда задержавшийся снимок приходит до списания пакета", () => {
+    const pcAtMinuteFive = busyWorkstationSnapshot("2026-09-17T12:05:00Z", 3);
+    const { rerender } = render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        pcs={[pcAtMinuteFive]}
+        group="Все зоны"
+        setGroup={vi.fn()}
+        zoneOptions={["Все зоны"]}
+      />,
+    );
+
+    rerender(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        pcs={[busyWorkstationSnapshot("2026-09-17T12:06:00Z", 3)]}
+        group="Все зоны"
+        setGroup={vi.fn()}
+        zoneOptions={["Все зоны"]}
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "VIP-06: Занят" }));
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Окончание15:17");
+  });
 });
+
+function busyWorkstationSnapshot(serverTime: string, packageMinutes: number): Workstation {
+  return {
+    id: "pc-server-delay",
+    name: "VIP-06",
+    group: "VIP",
+    groupId: "vip",
+    status: "busy",
+    client: "MinuteFox",
+    sessionSnapshot: {
+      server_time: serverTime,
+      session: { id: "session-server-delay" },
+      balance_cents: 15_000,
+      balance_remaining_minutes: 9,
+      login_grant_remaining_minutes: 0,
+      active_entitlement: { id: "three-minutes", duration_minutes: 3, remaining_minutes: packageMinutes, status: "active" },
+      entitlements: [{ id: "three-minutes", duration_minutes: 3, remaining_minutes: packageMinutes, status: "active" }],
+      active_tariff: null,
+    } as never,
+  };
+}
