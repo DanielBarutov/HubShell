@@ -16,7 +16,7 @@ from gameclub_backend.modules.catalog.domain import (
 )
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
-from gameclub_backend.modules.entitlements.domain import Entitlement
+from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementSettlementStatus
 from gameclub_backend.modules.payment_methods.domain import PaymentMethod
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 from gameclub_backend.modules.sales.domain import ProductSale
@@ -192,7 +192,11 @@ class ClientPortalService:
             await self._payment_methods.list() if self._payment_methods is not None else []
         )
         package_queue = (
-            await self._entitlements.list_for_client(client_id)
+            [
+                item
+                for item in await self._entitlements.list_for_client(client_id)
+                if item.settlement_status is EntitlementSettlementStatus.SETTLED
+            ]
             if self._entitlements is not None
             else []
         )
@@ -231,6 +235,7 @@ class ClientPortalService:
                 client.balance_cents,
                 tariffs,
                 group_id,
+                now,
             ),
             tariff_names={tariff.id: tariff.name for tariff in tariffs},
             workstation_names=await self._workstation_names(sessions),
@@ -392,24 +397,18 @@ class ClientPortalService:
         balance_cents: int,
         tariffs: list[Tariff],
         group_id: str | None,
+        now: datetime.datetime,
     ) -> int:
-        available = 0
-        normalized_group_id = group_id.strip().lower() if group_id else None
-        for tariff in tariffs:
-            if not tariff.active or tariff.lifecycle is not TariffLifecycle.PUBLISHED:
-                continue
-            if (
-                normalized_group_id is not None
-                and tariff.group_id is not None
-                and tariff.group_id.strip().lower() != normalized_group_id
-            ):
-                continue
-            if tariff.billing_mode is BillingMode.PER_MINUTE:
-                if tariff.price_per_minute_cents > 0:
-                    available = max(available, balance_cents // tariff.price_per_minute_cents)
-            elif tariff.price_cents > 0 and tariff.duration_minutes > 0:
-                available = max(
-                    available,
-                    (balance_cents // tariff.price_cents) * tariff.duration_minutes,
-                )
-        return available
+        """Return balance time using the currently applicable per-minute rate only."""
+        if balance_cents <= 0:
+            return 0
+        rates = [
+            tariff.price_per_minute_cents
+            for tariff in tariffs
+            if tariff.billing_mode is BillingMode.PER_MINUTE
+            and tariff.price_per_minute_cents > 0
+            and tariff.applies_at(now, group_id, TariffAudience.REGISTERED)
+        ]
+        if not rates:
+            return 0
+        return balance_cents // min(rates)

@@ -265,6 +265,107 @@ public sealed class MainViewModelVisibilityTests
 
     [Fact]
     /// <summary>
+    /// Проверяет, что ответ сервера на границе бесплатных минут показывает
+    /// полный активный пакет, а следующий ответ — первую израсходованную минуту.
+    /// </summary>
+    public async Task PackageSnapshotsAfterFreeGrantShowPackageTimeInsteadOfMeteredTariffTime()
+    {
+        var clock = new DateTimeOffset(2026, 1, 1, 12, 5, 0, TimeSpan.Zero);
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new StubCredentials(),
+            clock: () => clock);
+
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-1",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            LoginGrantRemainingMinutes: 0,
+            ActivePackage: new SessionPackageSnapshot(
+                "package-1",
+                "tariff-package",
+                "vip",
+                300,
+                300,
+                1,
+                "active",
+                0,
+                0,
+                null),
+            Meter: new SessionMeterSnapshot(
+                "session-1",
+                0,
+                0,
+                0,
+                "package-1",
+                "running",
+                "2026-01-01T12:05:00Z"),
+            ActiveTariff: new SessionTariffSnapshot(
+                "tariff-package",
+                "VIP package",
+                "block",
+                300,
+                1,
+                5,
+                295)));
+
+        Assert.Equal("Пакет времени", viewModel.CurrentSessionModeSummary);
+        Assert.Equal("Осталось 5 ч 0 мин", viewModel.ActiveTimeSummary);
+        Assert.Contains("300 мин", viewModel.CurrentSessionTariffSummary);
+
+        clock = clock.AddMinutes(1);
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-1",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            LoginGrantRemainingMinutes: 0,
+            ActivePackage: new SessionPackageSnapshot(
+                "package-1",
+                "tariff-package",
+                "vip",
+                300,
+                299,
+                1,
+                "active",
+                0,
+                0,
+                null),
+            Meter: new SessionMeterSnapshot(
+                "session-1",
+                0,
+                0,
+                1,
+                "package-1",
+                "running",
+                "2026-01-01T12:06:00Z"),
+            ActiveTariff: new SessionTariffSnapshot(
+                "tariff-package",
+                "VIP package",
+                "block",
+                300,
+                1,
+                6,
+                294)));
+
+        Assert.Equal("Пакет времени", viewModel.CurrentSessionModeSummary);
+        Assert.Equal("Осталось 4 ч 59 мин", viewModel.ActiveTimeSummary);
+        Assert.Contains("299 мин", viewModel.CurrentSessionTariffSummary);
+    }
+
+    [Fact]
+    /// <summary>
     /// Проверяет, что клиент показывает только активные и queued-пакеты,
     /// локализует их статусы и не предлагает ручную активацию при активном пакете.
     /// </summary>
