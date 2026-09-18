@@ -18,6 +18,7 @@ export type Workstation = {
   deviceId?: string;
   macAddress?: string | null;
   installationBound?: boolean;
+  sessionSnapshot?: import("./api/types").BackendSessionSnapshot | null;
 };
 
 export type Booking = {
@@ -36,4 +37,5 @@ export type Client = {
   balance: number;
   bonus: number;
   category: string;
+  clientGroupId?: string | null;
 };

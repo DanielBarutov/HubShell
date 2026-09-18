@@ -91,6 +91,9 @@ class SessionLookup(typing.Protocol):
     async def get(self, session_id: uuid.UUID) -> Session | None:
         """Return a session by ID."""
 
+    async def save(self, session: Session) -> Session:
+        """Persist a server-owned session state transition."""
+
 
 class WorkstationLookup(typing.Protocol):
     async def get(self, workstation_id: uuid.UUID) -> Workstation | None:
@@ -108,6 +111,7 @@ class ClientBilling(typing.Protocol):
         reason: str,
         actor_id: str,
         idempotency_key: str,
+        allow_negative_balance: bool = False,
     ) -> tuple[Client, BalanceOperation]:
         """Debit the client's spendable balance atomically."""
 

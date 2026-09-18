@@ -9,6 +9,7 @@ from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatal
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.domain import SessionTimeNotification
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
 from gameclub_backend.modules.workstations.application.service import WorkstationService
@@ -23,6 +24,22 @@ from gameclub_backend.presentation.grpc.services import (
 )
 
 pytestmark = pytest.mark.contract
+
+
+class SnapshotNotificationLookup:
+    async def due_events(self, session_id, remaining_minutes, source, now):
+        del session_id, remaining_minutes, source, now
+        return [
+            SessionTimeNotification(
+                id="notification-event-5",
+                threshold_minutes=5,
+                message="До окончания 5 минут",
+                play_sound=True,
+                sound="standard",
+                custom_sound_path=None,
+                show_system_notification=True,
+            )
+        ]
 
 
 @pytest.mark.asyncio
@@ -264,3 +281,42 @@ async def test_snapshot_exposes_guest_style_tariff_time_from_server() -> None:
     assert http_snapshot.active_tariff.remaining_minutes == 85
     assert grpc_snapshot.active_tariff.name == "Обычный зал · час"
     assert grpc_snapshot.active_tariff.remaining_minutes == 85
+
+
+@pytest.mark.asyncio
+async def test_snapshot_delivers_server_time_notification_to_http_and_grpc() -> None:
+    """
+    Проверяет, что server-backed notification event проходит одним полем через
+    HTTP и gRPC snapshot до потребителя клиента.
+    """
+    workstations_repository = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations_repository).register(
+        "notification-device", "Notification PC", group_id="main"
+    )
+    clients_repository = InMemoryClientRepository()
+    client = await ClientService(clients_repository).create("NotificationClient")
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations_repository,
+        clients=clients_repository,
+        notifications=SnapshotNotificationLookup(),
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        source="device",
+        device_id="notification-device",
+        idempotency_key="notification-session",
+    )
+
+    snapshot = await sessions.snapshot(
+        session.id,
+        now=datetime.datetime(2026, 9, 2, 12, 30, tzinfo=datetime.UTC),
+    )
+    http_snapshot = SessionSnapshotResponse.from_domain(snapshot).model_dump(mode="json")
+    grpc_snapshot = to_session_snapshot_proto(snapshot)
+
+    assert http_snapshot["time_notifications"][0]["id"] == "notification-event-5"
+    assert grpc_snapshot.time_notifications[0].id == "notification-event-5"
+    assert grpc_snapshot.time_notifications[0].show_system_notification is True

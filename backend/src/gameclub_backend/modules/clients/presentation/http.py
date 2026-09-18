@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Header, Query, status
 from pydantic import BaseModel, Field
 
 from gameclub_backend.modules.auth.domain import Principal
+from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.client_groups.domain import ClientGroup
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
@@ -18,6 +20,7 @@ class CreateClientRequest(BaseModel):
     nickname: str = Field(min_length=3, max_length=64)
     phone: str | None = Field(default=None, max_length=32)
     discount_category: str | None = Field(default=None, max_length=64)
+    client_group_id: str | None = Field(default=None, max_length=128)
 
 
 class UpdateClientRequest(CreateClientRequest):
@@ -62,6 +65,7 @@ class ClientResponse(BaseModel):
     discount_category: str | None
     balance_cents: int
     balance_bonus: int
+    client_group_id: str | None
     created_at: str
     updated_at: str
 
@@ -74,6 +78,7 @@ class ClientResponse(BaseModel):
             discount_category=client.discount_category,
             balance_cents=client.balance_cents,
             balance_bonus=client.balance_bonus,
+            client_group_id=client.client_group_id,
             created_at=client.created_at.isoformat(),
             updated_at=client.updated_at.isoformat(),
         )
@@ -228,6 +233,75 @@ def create_router(service: ClientService) -> APIRouter:
             operation_id=operation.id,
             idempotency_key=operation.idempotency_key,
         )
+
+    return router
+
+
+class ClientGroupRequest(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=128)
+    allow_negative_balance: bool = False
+    negative_balance_limit_cents: int = Field(default=0, ge=0)
+    active: bool = True
+    is_default: bool | None = None
+
+
+class ClientGroupResponse(BaseModel):
+    id: str
+    name: str
+    allow_negative_balance: bool
+    negative_balance_limit_cents: int
+    active: bool
+    is_default: bool
+    updated_at: str | None
+
+    @classmethod
+    def from_domain(cls, group: ClientGroup) -> "ClientGroupResponse":
+        return cls(
+            id=group.id,
+            name=group.name,
+            allow_negative_balance=group.allow_negative_balance,
+            negative_balance_limit_cents=group.negative_balance_limit_cents,
+            active=group.active,
+            is_default=group.is_default,
+            updated_at=group.updated_at.isoformat() if group.updated_at else None,
+        )
+
+
+def create_client_groups_router(service: ClientGroupService) -> APIRouter:
+    router = APIRouter(prefix="/api/v1/client-groups", tags=["client-groups"])
+
+    @router.get("", response_model=list[ClientGroupResponse])
+    async def list_client_groups(principal: Operator) -> list[ClientGroupResponse]:
+        del principal
+        return [ClientGroupResponse.from_domain(item) for item in await service.list()]
+
+    @router.post("", response_model=ClientGroupResponse, status_code=status.HTTP_201_CREATED)
+    async def create_client_group(
+        body: ClientGroupRequest,
+        principal: Operator,
+    ) -> ClientGroupResponse:
+        return ClientGroupResponse.from_domain(
+            await service.create(**body.model_dump(), actor_id=principal.subject_id)
+        )
+
+    @router.put("/{group_id}", response_model=ClientGroupResponse)
+    async def update_client_group(
+        group_id: str,
+        body: ClientGroupRequest,
+        principal: Operator,
+    ) -> ClientGroupResponse:
+        return ClientGroupResponse.from_domain(
+            await service.update(
+                group_id,
+                **body.model_dump(exclude={"id"}),
+                actor_id=principal.subject_id,
+            )
+        )
+
+    @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_client_group(group_id: str, principal: Operator) -> None:
+        await service.delete(group_id, actor_id=principal.subject_id)
 
     return router
 

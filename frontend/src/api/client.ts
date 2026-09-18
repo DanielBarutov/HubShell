@@ -21,6 +21,8 @@ import type {
   BackendClientAnalytics,
   BackendProductCategory,
   BackendPaymentMethod,
+  BackendClientGroup,
+  BackendNotificationRule,
   Reservation,
   ReservationWritePayload,
   ReservationAvailability,
@@ -395,6 +397,7 @@ export class GameClubApi {
     nickname: string;
     phone?: string;
     discount_category?: string;
+    client_group_id?: string;
   }): Promise<BackendClient> {
     return this.request<BackendClient>("/clients", {
       method: "POST",
@@ -404,7 +407,7 @@ export class GameClubApi {
 
   async updateClient(
     clientId: string,
-    payload: { nickname: string; phone?: string; discount_category?: string },
+    payload: { nickname: string; phone?: string; discount_category?: string; client_group_id?: string },
   ): Promise<BackendClient> {
     return this.request<BackendClient>(`/clients/${clientId}`, {
       method: "PUT",
@@ -483,17 +486,26 @@ export class GameClubApi {
     clientId: string,
     tariffId: string,
     idempotencyKey: string,
+    paymentParts: BackendPaymentPart[] = [],
+    cashShiftId?: string,
   ): Promise<BackendEntitlement> {
     return this.request<BackendEntitlement>(`/clients/${clientId}/entitlements`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ tariff_id: tariffId }),
+      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId }),
     });
   }
 
   async activateEntitlement(clientId: string, entitlementId: string): Promise<BackendEntitlement> {
     return this.request<BackendEntitlement>(
       `/clients/${clientId}/entitlements/${entitlementId}/activate`,
+      { method: "POST" },
+    );
+  }
+
+  async reconcileEntitlement(clientId: string, entitlementId: string): Promise<BackendEntitlement> {
+    return this.request<BackendEntitlement>(
+      `/clients/${clientId}/entitlements/${entitlementId}/reconcile`,
       { method: "POST" },
     );
   }
@@ -653,6 +665,38 @@ export class GameClubApi {
 
   async listPaymentMethods(): Promise<BackendPaymentMethod[]> {
     return this.request<BackendPaymentMethod[]>("/payment-methods");
+  }
+
+  async listClientGroups(): Promise<BackendClientGroup[]> {
+    return this.request<BackendClientGroup[]>("/client-groups");
+  }
+
+  async createClientGroup(payload: Omit<BackendClientGroup, "updated_at" | "is_default"> & { is_default?: boolean }): Promise<BackendClientGroup> {
+    return this.request<BackendClientGroup>("/client-groups", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  async updateClientGroup(groupId: string, payload: Omit<BackendClientGroup, "id" | "updated_at" | "is_default"> & { is_default?: boolean }): Promise<BackendClientGroup> {
+    return this.request<BackendClientGroup>(`/client-groups/${encodeURIComponent(groupId)}`, { method: "PUT", body: JSON.stringify({ id: groupId, ...payload }) });
+  }
+
+  async deleteClientGroup(groupId: string): Promise<void> {
+    await this.request<void>(`/client-groups/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+  }
+
+  async listNotificationRules(): Promise<BackendNotificationRule[]> {
+    return this.request<BackendNotificationRule[]>("/notification-rules");
+  }
+
+  async createNotificationRule(payload: Omit<BackendNotificationRule, "id" | "created_at" | "updated_at">): Promise<BackendNotificationRule> {
+    return this.request<BackendNotificationRule>("/notification-rules", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  async updateNotificationRule(ruleId: string, payload: Omit<BackendNotificationRule, "id" | "created_at" | "updated_at">): Promise<BackendNotificationRule> {
+    return this.request<BackendNotificationRule>(`/notification-rules/${encodeURIComponent(ruleId)}`, { method: "PUT", body: JSON.stringify(payload) });
+  }
+
+  async deleteNotificationRule(ruleId: string): Promise<void> {
+    await this.request<void>(`/notification-rules/${encodeURIComponent(ruleId)}`, { method: "DELETE" });
   }
 
   async createPaymentMethod(payload: {

@@ -51,6 +51,7 @@ class ClientRepository(typing.Protocol):
         self,
         client: Client,
         operation: BalanceOperation,
+        minimum_balance_cents: int = 0,
     ) -> tuple[Client, BalanceOperation]:
         """Apply a balance operation atomically with its ledger record."""
 

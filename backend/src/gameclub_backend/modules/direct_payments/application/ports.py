@@ -34,6 +34,11 @@ class WorkstationLookup(typing.Protocol):
         """Return the workstation receiving the guest session."""
 
 
+class ActiveSessionLookup(typing.Protocol):
+    async def get_active_for_workstation(self, workstation_id: uuid.UUID) -> object | None:
+        """Return the active server session for one workstation, if any."""
+
+
 class CashDirectSettlement(typing.Protocol):
     async def settle(
         self,

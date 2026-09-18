@@ -75,7 +75,7 @@ runtime Windows-клиента и не служит доказательство
 | [`backend/src/gameclub_backend/`](../backend/src/gameclub_backend/) | composition root, application, modules, jobs, HTTP/gRPC | реализация backend |
 | [`backend/src/gameclub_backend/modules/`](../backend/src/gameclub_backend/modules/) | bounded contexts | домен, use cases, repositories, handlers |
 | [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) | source-of-truth `.proto` | native gRPC-контракты |
-| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0048` | схема PostgreSQL; текущая голова `20260902_0048` |
+| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0060` | схема PostgreSQL; текущая голова `20260917_0060` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
 | [`frontend/src/app/`](../frontend/src/app/) | композиция App, shell, PanelHost, Redux store/hooks и API facade | UI orchestration и серверный state boundary |
@@ -201,22 +201,24 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Auth/Security | JWT access/refresh/logout, hash refresh storage, permissions, audit, gRPC auth/TLS policy, dev device bootstrap | production enrollment hardening, token/key rotation, secret storage и внешняя TLS-конфигурация |
 | Workstations | registration по device/MAC, heartbeat, stale/offline state, groups/zones, themes, commands, ACK, expiry, lockdown policy, manager verifier, management CRUD, installation binding | rebind policy/rate limit и native kiosk checks |
 | Clients/Guests | client CRUD/search, canonical phone, balance ledger/top-up, discount category/password flow, server portal registration/login, password reset with one-time passwordless login and forced change, client-scoped JWT и истории; guest profile без balance и guest links | production credential rotation |
-| Client groups | contract boundary для группы клиента, default group и allow-negative/negative-limit policy | backend/frontend settings, migrations и debit-scope decision по плану 44 |
-| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive, daily sale/usage windows, `time_restricted`, audience filtering and entitlement snapshot with unit/API/gRPC/PostgreSQL regression coverage | next-compatible auto-start and broader production/browser evidence; F-10 operator-only guest sale policy in [`plans/44-fixes-features`](44-fixes-features/PLAN.md) |
+| Client groups | contract boundary для группы клиента, default group, settings CRUD и allow-negative/negative-limit policy | implementation есть; DSN migration/live сценарий и production audit evidence остаются по плану 44 |
+| Catalog/Time/Tariffs | categories, products, stock/purchase cost, tariff lifecycle, `block`/`per_minute`, discounts, quote, snapshot, publish/archive, daily sale/usage windows, `time_restricted`, audience/channel filtering and entitlement snapshot | next-compatible auto-start и broader production/browser/native evidence; F-10 operator-only guest sale implementation есть в [`plans/44-fixes-features`](44-fixes-features/PLAN.md) |
 | Reservations | availability preflight, conflict protection, lifecycle, multi-resource create, client/guest, async no-show sweep, HTTP/gRPC/timeline support, server `CheckEntry` with 30-minute lock | Avalonia/operator decision consumer and PostgreSQL concurrency matrix |
-| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и session snapshot с server-backed `active_tariff`/remaining time | plan 44 P0 package fallback, stop acknowledgement/access-gate/restart sequence, PostgreSQL package/debit UoW, transfer concurrency и heartbeat evidence |
-| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, reconciliation record/retry, metered billing with login-grant subtraction | plan 44 group debt policy and entitlement mixed-payment scope; guest direct settlement reconciliation; bonus/refund/reserve/external finance — отдельный backlog |
+| Sessions | active/completed lifecycle, start/get/list/stop/interrupt, workstation lock, idempotency, device gateway, tariff quantity, meter integration with package fallback and insufficient-balance stop, entitlement consumption/auto-next, one active client guard, guest payment link, login grant и server-backed session snapshot с time notifications | stop acknowledgement/access-gate/restart sequence, PostgreSQL package/debit UoW, transfer concurrency и heartbeat/native evidence остаются отдельной границей |
+| Billing | completed-session charge, quote/financial snapshot, atomic balance debit, bounded group debt policy, reconciliation record/retry, metered billing with login-grant subtraction, entitlement mixed payment parts and durable settlement review/retry | automatic mixed-payment rollback, DSN concurrency и provider settlement остаются; bonus/refund/reserve/external finance — отдельный backlog |
 | Reports/Dashboard | read-only current revenue/dashboard data and audit-backed activity | расширенные reports/read models по нагрузке |
 | Cash Shifts | open/close, cash ledger, movements, references, approvals, schedules, provider-neutral producer boundary | реальные provider/webhook producers и отдельные finance integrations |
 | Product Sales | client/guest sale, stock reservation, price/cost/category snapshots, balance/cash settlement boundary, mixed payment parts, idempotency, HTTP API | atomic cross-part reconciliation, basket/order, returns, bonuses, external acquirer |
+| Notifications | notification rules CRUD, thresholds, stable event id, session snapshot/HTTP/gRPC transport, frontend settings editor, Win Core deduplication and Windows sound/balloon adapter | native Windows audio/toast smoke and folder-package permission checks остаются |
 | Analytics | read-only overview/client analytics, daily/hourly dynamics, occupancy, zones/PC/tariffs/payment methods, margin, segments, CSV и gRPC read contract | фоновые отчёты через Dramatiq; retention/cohorts, heavy projections, XLSX/PDF |
-| Payment Methods | CRUD `/api/v1/payment-methods`, validation, PostgreSQL repository, migration seeds `balance`/`cash`, settings UI | provider activation/settlement integrations добавляются отдельно |
+| Payment Methods | CRUD `/api/v1/payment-methods`, validation, PostgreSQL repository, migration seeds `balance`/`cash`/`transfer`, settings UI | provider activation/settlement integrations добавляются отдельно |
 
 ### HTTP BFF surface
 
 Основные prefixes: `/api/v1/auth`, `/workstations`, `/workstation-groups`,
 `/clients`, `/guests`, `/catalog`, `/reservations`, `/sessions`, `/billing`,
-`/cash-shifts`, `/sales`, `/analytics`, `/payment-methods`, `/audit`.
+`/cash-shifts`, `/sales`, `/analytics`, `/payment-methods`, `/client-groups`,
+`/notification-rules`, `/audit`.
 
 Для browser это единственная бизнес-точка входа. Защищённые use case повторно
 проверяют permissions независимо от видимости кнопок во frontend. В частности,
@@ -433,7 +435,7 @@ evidence — в
 
 | Чекап | Результат | Что именно доказывает |
 | --- | --- | --- |
-| `uv run --directory ./backend pytest -q` | `160 passed, 19 skipped` без `GAMECLUB_TEST_POSTGRES_DSN` на срезе 2026-09-17; PostgreSQL tariff regression пропускается без DSN | unit/API/contract/jobs, включая sale/usage windows, midnight crossing, audience filtering, purchase rejection and protobuf/gRPC tariff contracts |
+| `uv run --directory ./backend pytest -q` | `174 passed, 19 skipped` без `GAMECLUB_TEST_POSTGRES_DSN` на срезе 2026-09-17; PostgreSQL suites пропускаются без DSN | unit/API/contract/jobs, включая groups/debt, sale channel, mixed entitlement payment, durable entitlement reconciliation, notification snapshot transport, sale/usage windows and protobuf/gRPC contracts |
 | `uv run --directory ./backend pytest -q -m "not integration and not slow"` | `153 passed, 18 deselected` на срезе 2026-09-16 | явный offline/release-safe прогон без инфраструктурных suites |
 | `uv run --directory ./backend pytest -q -m "api or contract"` | `41 passed, 138 deselected` на срезе 2026-09-17 | отдельная проверка HTTP/gRPC/protobuf boundaries, включая tariff audience/window contracts |
 | `uv run --directory ./backend ruff check .` | успешно (повторено 2026-09-02) | lint backend |
@@ -441,7 +443,7 @@ evidence — в
 | `npm --prefix ./frontend run typecheck` | успешно (повторено 2026-09-15) | TypeScript compile/type boundary; Redux workspace snapshot и stale-response guards |
 | `npm --prefix ./frontend run lint` | успешно (2026-09-15) | noUnusedLocals/noUnusedParameters TypeScript boundary |
 | `npm --prefix ./frontend run build` | успешно на срезе 2026-09-15 | TypeScript build и production Vite build, включая zone-scoped tariff requests |
-| `npm --prefix ./frontend run test` | `19 passed` на срезе 2026-09-16 | Vitest API boundary плюс component/accessibility slice для login, map, sale, booking, offline-routing и confirmation; browser visual/realtime matrix ещё не закрыта |
+| `npm --prefix ./frontend run test` | `25 passed` на срезе 2026-09-17 | Vitest API boundary плюс component/accessibility slice для login, map/tooltip, sale/payment parts, deposit recipient confirmation, booking, offline-routing, confirmation и settings resources; browser visual/realtime matrix ещё не закрыта |
 | `npm --prefix ./frontend run test:coverage` | `19 passed`; line coverage `17.18%`, guardrail `17%` | первый измеренный frontend baseline; coverage не заменяет behavior/accessibility tests |
 | `uv run --directory ./backend pytest --cov=src/gameclub_backend --cov-report=term-missing` | `154 passed, 18 skipped`; line coverage `70.10%`, guardrail `70%` | первый измеренный backend baseline без DSN; integration coverage не доказана |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
@@ -538,8 +540,8 @@ coverage guardrail установлен на измеренном старте.
   [`plans/44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md): P0 — переход
   package→per-minute, плавный таймер и stop/access-gate/restart; P1 — платежи,
   группы, отрицательный баланс и guest policy; P2 — Windows UI, уведомления и
-  tooltip карты. Последняя строка `fixes.md` оборвана и требует решения до
-  реализации формулы времени по разрешённому кредиту.
+  tooltip карты. Для отрицательного баланса формула credit-времени не нужна:
+  UI показывает `0 минут`, а backend применяет политику группы.
 - внешние payment provider/webhook integrations;
 - basket/returns и order-семантика сверх entitlement queue из P0-плана;
 - bonus spending, reservations of funds, refunds и guest cashier flow;

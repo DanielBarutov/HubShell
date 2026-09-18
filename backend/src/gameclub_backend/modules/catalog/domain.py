@@ -53,6 +53,12 @@ class TariffAudience(enum.StrEnum):
     REGISTERED = "registered"
 
 
+class TariffSaleChannel(enum.StrEnum):
+    OPERATOR = "operator"
+    SELF_SERVICE = "self_service"
+    BOTH = "both"
+
+
 @dataclasses.dataclass(frozen=True)
 class Tariff:
     id: uuid.UUID
@@ -76,6 +82,7 @@ class Tariff:
     usage_window_end_minute: int | None = None
     window_timezone: str | None = None
     audience: TariffAudience = TariffAudience.ALL
+    sale_channel: TariffSaleChannel = TariffSaleChannel.BOTH
 
     def __post_init__(self) -> None:
         if self.duration_minutes <= 0:
@@ -91,6 +98,10 @@ class Tariff:
         except (TypeError, ValueError) as error:
             raise ValueError("Invalid tariff audience") from error
         object.__setattr__(self, "audience", normalized_audience)
+        try:
+            object.__setattr__(self, "sale_channel", TariffSaleChannel(self.sale_channel))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Invalid tariff sale channel") from error
         object.__setattr__(
             self,
             "window_timezone",
@@ -155,6 +166,9 @@ class Tariff:
             self.sale_window_start_minute,
             self.sale_window_end_minute,
         )
+
+    def is_sellable_through(self, channel: TariffSaleChannel) -> bool:
+        return self.sale_channel in {TariffSaleChannel.BOTH, TariffSaleChannel(channel)}
 
     def is_usable_at(self, moment: datetime.datetime) -> bool:
         if not self.time_restricted:

@@ -2,7 +2,11 @@ import asyncio
 import datetime
 import uuid
 
-from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    Entitlement,
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
 
 
 class InMemoryEntitlementRepository:
@@ -69,6 +73,7 @@ class InMemoryEntitlementRepository:
                 item
                 for item in await self.list_for_client(client_id)
                 if item.status in statuses
+                and item.settlement_status is EntitlementSettlementStatus.SETTLED
                 and item.is_compatible(zone_id)
                 and item.is_available_at(moment)
             ),
@@ -88,6 +93,8 @@ class InMemoryEntitlementRepository:
                 raise ValueError("Entitlement not found")
             if item.client_id != client_id:
                 raise ValueError("Entitlement belongs to another client")
+            if item.settlement_status is not EntitlementSettlementStatus.SETTLED:
+                raise ValueError("Entitlement settlement is not complete")
             if zone_id is not None and not item.is_compatible(zone_id):
                 raise ValueError("Package is incompatible with this workstation zone")
             if not item.is_available_at(now):
@@ -112,6 +119,8 @@ class InMemoryEntitlementRepository:
                 raise ValueError("Entitlement not found")
             if item.client_id != client_id:
                 raise ValueError("Entitlement belongs to another client")
+            if item.settlement_status is not EntitlementSettlementStatus.SETTLED:
+                raise ValueError("Entitlement settlement is not complete")
             if not item.is_available_at(now):
                 raise ValueError("Package is outside its time window")
             updated = item.consume(minutes, now)
@@ -134,3 +143,13 @@ class InMemoryEntitlementRepository:
             updated = item.burn(reason, now)
             self._items[entitlement_id] = updated
             return updated
+
+    async def list_recoverable_settlements(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[Entitlement]:
+        moment = now or datetime.datetime.now(datetime.UTC)
+        return [item for item in self._items.values() if item.is_settlement_due(moment)][
+            : max(1, min(limit, 500))
+        ]

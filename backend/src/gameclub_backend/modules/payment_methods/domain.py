@@ -66,6 +66,14 @@ def normalize_payment_parts(
     return normalized
 
 
+def validate_mixed_cash_transfer(parts: Sequence[PaymentPart]) -> None:
+    """Allow mixed settlement only as one cash part plus one transfer part."""
+    if len(parts) <= 1:
+        return
+    if len(parts) != 2 or {part.method for part in parts} != {"cash", "transfer"}:
+        raise ValueError("Mixed payment supports only cash and transfer")
+
+
 @dataclasses.dataclass(frozen=True)
 class PaymentMethod:
     id: uuid.UUID

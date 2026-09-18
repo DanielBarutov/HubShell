@@ -83,6 +83,7 @@ message PackageSnapshot {
   int32 usage_window_end_minute = 13;
   string window_timezone = 14;
   string audience = 15;
+  string tariff_name = 16;
 }
 
 message SessionMeterSnapshot {
@@ -107,6 +108,16 @@ message SessionTariffSnapshot {
   int32 free_minutes = 9;
 }
 
+message TimeNotification {
+  string id = 1;
+  int32 threshold_minutes = 2;
+  string message = 3;
+  bool play_sound = 4;
+  string sound = 5;
+  string custom_sound_path = 6;
+  bool show_system_notification = 7;
+}
+
 message SessionSnapshot {
   int32 schema_version = 1;
   google.protobuf.Timestamp server_time = 2;
@@ -124,6 +135,7 @@ message SessionSnapshot {
   SessionTariffSnapshot active_tariff = 14;
   int32 login_grant_remaining_minutes = 15;
   int64 balance_remaining_minutes = 16;
+  repeated TimeNotification time_notifications = 17;
 }
 
 message ListSessionsRequest {

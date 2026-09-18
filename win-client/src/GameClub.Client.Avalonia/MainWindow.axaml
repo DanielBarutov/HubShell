@@ -756,7 +756,7 @@
                                 Background="Transparent"
                                 Foreground="{DynamicResource AccentBrush}"
                             ><TextBlock
-                                    Text="Завершить"
+                                    Text="Выйти"
                                     FontSize="10"
                                 /></Button></StackPanel></Border>
         <Border

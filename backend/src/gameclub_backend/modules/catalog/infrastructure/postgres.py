@@ -15,6 +15,7 @@ from gameclub_backend.modules.catalog.domain import (
     Tariff,
     TariffAudience,
     TariffLifecycle,
+    TariffSaleChannel,
 )
 
 
@@ -100,6 +101,7 @@ class TariffModel(CatalogBase):
     usage_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     window_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     audience: Mapped[str] = mapped_column(String(16), default=TariffAudience.ALL.value)
+    sale_channel: Mapped[str] = mapped_column(String(16), default=TariffSaleChannel.BOTH.value)
 
     def to_domain(self) -> Tariff:
         return Tariff(
@@ -124,6 +126,7 @@ class TariffModel(CatalogBase):
             usage_window_end_minute=self.usage_window_end_minute,
             window_timezone=self.window_timezone,
             audience=TariffAudience(self.audience),
+            sale_channel=TariffSaleChannel(self.sale_channel),
         )
 
     @classmethod
@@ -150,6 +153,7 @@ class TariffModel(CatalogBase):
             usage_window_end_minute=tariff.usage_window_end_minute,
             window_timezone=tariff.window_timezone,
             audience=tariff.audience.value,
+            sale_channel=tariff.sale_channel.value,
         )
 
 

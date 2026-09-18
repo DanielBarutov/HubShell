@@ -100,7 +100,7 @@ class GetSessionSnapshotRequest(_message.Message):
     def __init__(self, session_id: _Optional[str] = ..., device_id: _Optional[str] = ...) -> None: ...
 
 class PackageSnapshot(_message.Message):
-    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "queue_position", "status", "time_restricted", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "audience")
+    __slots__ = ("id", "tariff_id", "zone_id", "duration_minutes", "remaining_minutes", "queue_position", "status", "time_restricted", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "audience", "tariff_name")
     ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -113,6 +113,7 @@ class PackageSnapshot(_message.Message):
     USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
     WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
     id: str
     tariff_id: str
     zone_id: str
@@ -125,7 +126,8 @@ class PackageSnapshot(_message.Message):
     usage_window_end_minute: int
     window_timezone: str
     audience: str
-    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., time_restricted: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
+    tariff_name: str
+    def __init__(self, id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., queue_position: _Optional[int] = ..., status: _Optional[str] = ..., time_restricted: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., audience: _Optional[str] = ..., tariff_name: _Optional[str] = ...) -> None: ...
 
 class SessionMeterSnapshot(_message.Message):
     __slots__ = ("session_id", "billed_minutes", "billed_cents", "package_minutes", "active_entitlement_id", "status", "updated_at")
@@ -167,8 +169,26 @@ class SessionTariffSnapshot(_message.Message):
     free_minutes: int
     def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., billing_mode: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., quantity: _Optional[int] = ..., elapsed_minutes: _Optional[int] = ..., remaining_minutes: _Optional[int] = ..., price_per_minute_cents: _Optional[int] = ..., free_minutes: _Optional[int] = ...) -> None: ...
 
+class TimeNotification(_message.Message):
+    __slots__ = ("id", "threshold_minutes", "message", "play_sound", "sound", "custom_sound_path", "show_system_notification")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    PLAY_SOUND_FIELD_NUMBER: _ClassVar[int]
+    SOUND_FIELD_NUMBER: _ClassVar[int]
+    CUSTOM_SOUND_PATH_FIELD_NUMBER: _ClassVar[int]
+    SHOW_SYSTEM_NOTIFICATION_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    threshold_minutes: int
+    message: str
+    play_sound: bool
+    sound: str
+    custom_sound_path: str
+    show_system_notification: bool
+    def __init__(self, id: _Optional[str] = ..., threshold_minutes: _Optional[int] = ..., message: _Optional[str] = ..., play_sound: _Optional[bool] = ..., sound: _Optional[str] = ..., custom_sound_path: _Optional[str] = ..., show_system_notification: _Optional[bool] = ...) -> None: ...
+
 class SessionSnapshot(_message.Message):
-    __slots__ = ("schema_version", "server_time", "session", "workstation_id", "zone_id", "client_id", "balance_cents", "balance_bonus", "active_package", "package_queue", "meter", "allowed_actions", "device_id", "active_tariff", "login_grant_remaining_minutes", "balance_remaining_minutes")
+    __slots__ = ("schema_version", "server_time", "session", "workstation_id", "zone_id", "client_id", "balance_cents", "balance_bonus", "active_package", "package_queue", "meter", "allowed_actions", "device_id", "active_tariff", "login_grant_remaining_minutes", "balance_remaining_minutes", "time_notifications")
     SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     SERVER_TIME_FIELD_NUMBER: _ClassVar[int]
     SESSION_FIELD_NUMBER: _ClassVar[int]
@@ -185,6 +205,7 @@ class SessionSnapshot(_message.Message):
     ACTIVE_TARIFF_FIELD_NUMBER: _ClassVar[int]
     LOGIN_GRANT_REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
     BALANCE_REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    TIME_NOTIFICATIONS_FIELD_NUMBER: _ClassVar[int]
     schema_version: int
     server_time: _timestamp_pb2.Timestamp
     session: Session
@@ -201,7 +222,8 @@ class SessionSnapshot(_message.Message):
     active_tariff: SessionTariffSnapshot
     login_grant_remaining_minutes: int
     balance_remaining_minutes: int
-    def __init__(self, schema_version: _Optional[int] = ..., server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session: _Optional[_Union[Session, _Mapping]] = ..., workstation_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., client_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., active_package: _Optional[_Union[PackageSnapshot, _Mapping]] = ..., package_queue: _Optional[_Iterable[_Union[PackageSnapshot, _Mapping]]] = ..., meter: _Optional[_Union[SessionMeterSnapshot, _Mapping]] = ..., allowed_actions: _Optional[_Iterable[str]] = ..., device_id: _Optional[str] = ..., active_tariff: _Optional[_Union[SessionTariffSnapshot, _Mapping]] = ..., login_grant_remaining_minutes: _Optional[int] = ..., balance_remaining_minutes: _Optional[int] = ...) -> None: ...
+    time_notifications: _containers.RepeatedCompositeFieldContainer[TimeNotification]
+    def __init__(self, schema_version: _Optional[int] = ..., server_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., session: _Optional[_Union[Session, _Mapping]] = ..., workstation_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., client_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., active_package: _Optional[_Union[PackageSnapshot, _Mapping]] = ..., package_queue: _Optional[_Iterable[_Union[PackageSnapshot, _Mapping]]] = ..., meter: _Optional[_Union[SessionMeterSnapshot, _Mapping]] = ..., allowed_actions: _Optional[_Iterable[str]] = ..., device_id: _Optional[str] = ..., active_tariff: _Optional[_Union[SessionTariffSnapshot, _Mapping]] = ..., login_grant_remaining_minutes: _Optional[int] = ..., balance_remaining_minutes: _Optional[int] = ..., time_notifications: _Optional[_Iterable[_Union[TimeNotification, _Mapping]]] = ...) -> None: ...
 
 class ListSessionsRequest(_message.Message):
     __slots__ = ("workstation_id", "active_only")

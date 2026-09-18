@@ -32,19 +32,19 @@ restart/access-gate или Windows sound/toast.
 | ID | Воспроизводимый сценарий | Ожидаемое поведение | Минимальное доказательство | Текущее состояние |
 | --- | --- | --- | --- | --- |
 | F-01 | Клиент с положительным балансом запускает пакет на 1 минуту; следующий server tick исчерпывает пакет; пакета в очереди нет | пакет получает `exhausted`, остаток `0`, начинается per-minute и списывается только новая delta | backend application + DSN transaction test, затем Compose session smoke | `test_exhausted_package_falls_back_to_per_minute_with_positive_balance` проходит; недостаточный баланс и group debt policy остаются |
-| F-01b | То же при недостаточном балансе и группе без долга | debit отклоняется, meter/session переходят в завершённое состояние без повторного списания | unit + PostgreSQL rollback/state test | `_debit_meter_delta` переводит meter в exhausted при ошибке; end-to-end session result не зафиксирован |
+| F-01b | То же при недостаточном балансе и группе без долга | debit отклоняется, meter/session переходят в завершённое состояние без повторного списания | unit + PostgreSQL rollback/state test | `_debit_meter_delta` переводит meter в exhausted и server session в completed; unit regression проходит, DSN state test остаётся |
 | F-02 | Server snapshot показывает 3 минуты, локальное время проходит; следующий snapshot приходит с корректировкой | local countdown уменьшается плавно; polling исправляет drift и не увеличивает остаток в рамках источника | deterministic Win Core test с injected clock; затем Windows visual smoke | `SessionTimeProjectionTests` проходят; projection подключён к `MainViewModel` и 1-секундному UI loop; native visual smoke ещё не выполнен |
 | F-03 | Пользователь нажимает «Выйти»; backend подтверждает stop; клиент должен открыть access-gate и отправить restart | порядок stop ack → lock/access-gate → allowlisted restart; ошибка этапа видима, повтор безопасен | Core state-machine test + Windows native x64 smoke | `LogoutWaitsForServerStopBeforeApplyingRestartPolicy` проходит на Core; native gate/restart ещё не доказаны |
-| F-04 | Активный зарегистрированный клиент, оператор выбирает карту/наличные/депозит/mixed | авторизация на ПК не сужает разрешённые operator methods | backend API + frontend checkout test | frontend сейчас принудительно оставляет balance для tariff при active session |
-| F-05 | Один tariff/order оплачивается несколькими parts | сумма частей равна order total, части сохранены, retry идемпотентен, partial failure не оставляет ложный success | payment domain/API/DSN tests | mixed parts есть у product sale/top-up; entitlement tariff path требует отдельного доказательства |
+| F-04 | Активный зарегистрированный клиент, оператор выбирает карту/наличные/депозит/mixed | авторизация на ПК не сужает разрешённые operator methods | backend API + frontend checkout test | API и active-session checkout принимают разрешённые payment parts; component regression проходит, live/native finance smoke ещё не доказан |
+| F-05 | Один tariff/order оплачивается несколькими parts | сумма частей равна order total, части сохранены, retry идемпотентен, partial failure не оставляет ложный success | payment domain/API/DSN tests | entitlement mixed parts и durable `needs_review`/reconcile regression проходят; automatic rollback и DSN ещё не доказаны |
 | F-06 | Во время session оператор пополняет депозит | следующий snapshot содержит новый balance/time; package source не заменяется преждевременно | API/portal polling test + Win Core test | backend snapshot после top-up и Win Core authoritative increase покрыты; live portal polling и package-source smoke ещё не выполнены |
-| F-07 | Deposit открыт из busy PC с registered client | клиент предвыбран, отображён, смена получателя явная и подтверждённая | frontend component/browser test | `DepositPanel` получил регрессионный component test на `initialClient`; полный headed/live путь ещё не выполнен |
-| F-08 | Клиент в группе с разрешённым долгом достигает лимита | backend позволяет только утверждённый долг; за пределом отказывает; UI не является security boundary | domain/API/DSN debit tests | client group и policy ещё не реализованы в коде |
-| F-09 | Создаётся новый registered client после выбора default group | assignment происходит транзакционно; существующие клиенты не меняются | repository/API migration test | настройки default group отсутствуют |
-| F-10 | Guest-only tariff продаётся на busy PC с active registered client | selector фиксирован на active client; backend отклоняет guest sale; Win self-service не показывает operator-only | backend API + frontend browser + Win catalog test | frontend selector и `audience=registered` покрыты component test; backend busy-workstation guard покрыт unit test; отдельный channel API и Win self-service ещё не доказаны |
+| F-07 | Deposit открыт из busy PC с registered client | клиент предвыбран, отображён, смена получателя явная и подтверждённая | frontend component/browser test | `DepositPanel` предвыбирает `initialClient`, блокирует неподтверждённую смену и покрыт двумя component tests; полный headed/live путь ещё не выполнен |
+| F-08 | Клиент в группе с разрешённым долгом достигает лимита | backend позволяет только утверждённый долг; за пределом отказывает; UI не является security boundary | domain/API/DSN debit tests | client groups, bounded metered debit, settings CRUD и unit slice реализованы; DSN/live ещё не доказаны |
+| F-09 | Создаётся новый registered client после выбора default group | assignment происходит транзакционно; существующие клиенты не меняются | repository/API migration test | default `regular`, backfill, assignment и settings CRUD реализованы; DSN migration/live smoke ещё не доказаны |
+| F-10 | Guest-only tariff продаётся на busy PC с active registered client | selector фиксирован на active client; кнопка «Гость» disabled; backend отклоняет guest sale до платежа; Win self-service не показывает operator-only | backend API + frontend browser + Win catalog test | selector/audience guard, pre-payment busy-session guard, `sale_channel` API и self-service filtering реализованы; headed browser и native Win catalog smoke ещё не доказаны |
 | F-11 | В очереди есть active/queued/exhausted/burned packages | Win Client показывает только active/queued, локализует статусы; balance-time скрыт при active package | Win Core/ViewModel test + visual smoke | Core/ViewModel покрывает фильтрацию, локализацию, запрет ручной активации при active package, приоритет active package и скрытие balance-time блока; Avalonia/Windows visual smoke ещё не выполнен |
-| F-12 | Настроены пороги 30/5 минут и reconnect | каждое событие один раз воспроизводит звук/toast по rule | backend rule/API + Win adapter test + Windows smoke | текущая notification infrastructure есть, admin rules/dedupe contract не реализованы |
-| F-13 | На карте active session с package и balance/credit | tooltip показывает server snapshot, stale marker и не показывает UUID; формулу кредита не считает frontend | frontend component/browser + live map smoke | карта polling есть, полного tooltip нет |
+| F-12 | Настроены пороги 30/5 минут и reconnect | каждое событие один раз воспроизводит звук/toast по rule | backend rule/API + Win adapter test + Windows smoke | backend rules/event id, settings UI, snapshot/gRPC transport, Win deduplicator и Windows adapter source реализованы; native smoke ещё не доказан |
+| F-13 | На карте active session с package и balance/credit | hover/focus-карточка показывает server snapshot, название каждого пакета, stale marker и не показывает UUID; формулу кредита не считает frontend | frontend component/browser + live map smoke | MapView hover/focus-карточка, названия пакетов, stale marker и component tests реализованы; live/browser smoke ещё не доказан |
 
 ## P0 reproduction protocol
 
@@ -89,10 +89,11 @@ integration test является opt-in и в baseline не запускалс�
 
 - F-01b/F-08: до Phase 1 нужно утвердить, какие debit types могут использовать
   отрицательный баланс; контракт пока фиксирует policy fields и server boundary.
-- F-04/F-05: нужно утвердить, как внешняя или mixed оплата привязывается к
-  entitlement order активного клиента; не расширять product sale path молча.
+- F-04/F-05: mixed payment в MVP ограничен наличными и переводом; проверять
+  отдельные payment parts и не расширять product sale path картами.
 - F-10: нужно утвердить transport field для operator/self-service channel.
-- F-12: нужны лимит, MIME allowlist, хранение и permission для mp3/wav.
-- F-13: нужна формула доступного времени и stale threshold для credit.
-- Последняя строка `fixes.md` оборвана на «разрешенный креди», поэтому F-13 не
-  закрывается до уточнения текста.
+- F-12: используется локальный путь к mp3/wav; остаётся проверить package
+  layout и разрешения на целевой Windows-клиент.
+- F-13: формула credit-времени не нужна; UI показывает `0 минут` при нулевом
+  или отрицательном балансе, а backend отдельно применяет политику группы для
+  решения, продолжать сессию или закрыть её.

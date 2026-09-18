@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.client_groups.application.ports import ClientGroupRepository
 from gameclub_backend.modules.clients.application.ports import ClientRepository, Clock
 from gameclub_backend.modules.clients.domain import (
     BalanceOperation,
@@ -15,7 +16,11 @@ from gameclub_backend.modules.clients.domain import (
     PhoneNumber,
     normalize_phone,
 )
-from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
+from gameclub_backend.modules.payment_methods.domain import (
+    PaymentPart,
+    normalize_payment_parts,
+    validate_mixed_cash_transfer,
+)
 
 
 class UtcClock:
@@ -24,15 +29,28 @@ class UtcClock:
 
 
 class ClientService:
-    def __init__(self, repository: ClientRepository, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        repository: ClientRepository,
+        clock: Clock | None = None,
+        groups: ClientGroupRepository | None = None,
+    ) -> None:
         self._repository = repository
         self._clock = clock or UtcClock()
+        self._groups = groups
+
+    async def _default_group_id(self) -> str | None:
+        if self._groups is None:
+            return None
+        group = await self._groups.get_default()
+        return group.id if group is not None else None
 
     async def create(
         self,
         nickname: str,
         phone: str | None = None,
         discount_category: str | None = None,
+        client_group_id: str | None = None,
     ) -> Client:
         try:
             normalized_nickname = Nickname(nickname).value
@@ -46,6 +64,7 @@ class ClientService:
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
 
+        selected_group_id = await self._resolve_group_id(client_group_id)
         now = self._clock.now()
         client = Client(
             id=uuid.uuid4(),
@@ -56,6 +75,7 @@ class ClientService:
             balance_bonus=0,
             created_at=now,
             updated_at=now,
+            client_group_id=selected_group_id,
         )
         try:
             return await self._repository.save(client)
@@ -92,6 +112,7 @@ class ClientService:
             created_at=now,
             updated_at=now,
             password_hash=self._hash_password(password),
+            client_group_id=await self._default_group_id(),
         )
         try:
             return await self._repository.save(client)
@@ -133,6 +154,7 @@ class ClientService:
         nickname: str,
         phone: str | None = None,
         discount_category: str | None = None,
+        client_group_id: str | None = None,
     ) -> Client:
         client = await self.get(client_id)
         try:
@@ -140,12 +162,16 @@ class ClientService:
             normalized_phone = PhoneNumber(phone).value if phone else None
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        selected_group_id = client.client_group_id
+        if client_group_id is not None:
+            selected_group_id = await self._resolve_group_id(client_group_id)
         return await self._repository.save(
             dataclasses.replace(
                 client,
                 nickname=normalized_nickname,
                 phone=normalized_phone or None,
                 discount_category=discount_category.strip() if discount_category else None,
+                client_group_id=selected_group_id,
                 updated_at=self._clock.now(),
             )
         )
@@ -250,6 +276,17 @@ class ClientService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Client not found")
         return client
 
+    async def _resolve_group_id(self, group_id: str | None) -> str | None:
+        selected = group_id.strip().lower() if group_id else await self._default_group_id()
+        if self._groups is None:
+            return selected
+        if selected is None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Default client group is not configured")
+        group = await self._groups.get(selected)
+        if group is None or not group.active:
+            raise ApplicationError(ErrorCode.CONFLICT, "Client group is not active")
+        return group.id
+
     async def list_operations(
         self,
         client_id: uuid.UUID,
@@ -274,6 +311,9 @@ class ClientService:
         normalized_actor = actor_id.strip()
         try:
             normalized_parts = normalize_payment_parts(payment_parts, amount_cents)
+            if any(part.method not in {"cash", "transfer"} for part in normalized_parts):
+                raise ValueError("Top-up payment supports cash or transfer")
+            validate_mixed_cash_transfer(normalized_parts)
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
         existing = await self._repository.get_operation_by_key(normalized_key)
@@ -336,6 +376,7 @@ class ClientService:
         reason: str,
         actor_id: str,
         idempotency_key: str,
+        allow_negative_balance: bool = False,
     ) -> tuple[Client, BalanceOperation]:
         normalized_key = self._required_idempotency_key(idempotency_key)
         normalized_reason = reason.strip()
@@ -354,8 +395,17 @@ class ClientService:
             )
             return await self.get(client_id), existing
         client = await self.get(client_id)
+        minimum_balance_cents = 0
+        if allow_negative_balance and self._groups is not None and client.client_group_id:
+            group = await self._groups.get(client.client_group_id)
+            if group is not None and group.active:
+                minimum_balance_cents = group.minimum_balance_cents
         try:
-            updated = client.debit(amount_cents, self._clock.now())
+            updated = client.debit(
+                amount_cents,
+                self._clock.now(),
+                minimum_balance_cents=minimum_balance_cents,
+            )
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
         try:
@@ -377,6 +427,7 @@ class ClientService:
             applied_client, applied_operation = await self._repository.apply_balance_operation(
                 updated,
                 operation,
+                minimum_balance_cents=minimum_balance_cents,
             )
         except ValueError as error:
             message = str(error)

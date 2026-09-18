@@ -37,6 +37,7 @@ export function toUiWorkstation(
     deviceId: workstation.device_id,
     macAddress: workstation.mac_address,
     installationBound: workstation.installation_bound,
+    sessionSnapshot: workstation.session_snapshot ?? null,
   };
 }
 
@@ -48,5 +49,6 @@ export function toUiClient(client: BackendClient): Client {
     balance: client.balance_cents / 100,
     bonus: client.balance_bonus,
     category: client.discount_category ?? "Без категории",
+    clientGroupId: client.client_group_id ?? null,
   };
 }

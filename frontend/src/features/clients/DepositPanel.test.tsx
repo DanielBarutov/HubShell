@@ -12,6 +12,12 @@ const client: Client = {
   category: "Обычная",
 };
 
+const otherClient: Client = {
+  ...client,
+  id: "client-2",
+  nickname: "OtherFox",
+};
+
 describe("Пополнение депозита", () => {
   it("предзаполняет текущего клиента из карточки игрового места", () => {
     /** Проверяет, что пополнение из занятого места сразу связано с текущим клиентом и доступно к подтверждению. */
@@ -24,5 +30,17 @@ describe("Пополнение депозита", () => {
 
     fireEvent.change(screen.getByRole("textbox", { name: "Ник или номер телефона" }), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Зачислить депозит" })).toBeDisabled();
+  });
+
+  it("требует явного подтверждения смены получателя", () => {
+    /** Не даёт случайно перенаправить пополнение с активного клиента на другого. */
+    render(<DepositPanel initialClient={client} onClose={vi.fn()} onCompleted={vi.fn()} clients={[client, otherClient]} />);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Ник или номер телефона" }), { target: { value: "OtherFox" } });
+
+    expect(screen.getByText(/Подтверждаю смену получателя/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Зачислить депозит" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "Зачислить депозит" })).toBeEnabled();
   });
 });

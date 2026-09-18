@@ -18,6 +18,7 @@ public sealed class WindowsClientHost : IClientHost
 {
     private readonly DeviceEnrollmentTokenProvider _enrollment;
     private readonly IWorkstationPowerController _powerController;
+    private readonly WindowsClientWindowAdapter _windowAdapter;
     private bool _started;
 
     public WindowsClientHost()
@@ -25,6 +26,7 @@ public sealed class WindowsClientHost : IClientHost
         var environment = DeploymentSettings.EnvironmentName;
         _enrollment = new DeviceEnrollmentTokenProvider(DeploymentSettings.AuthAddress, environment);
         _powerController = new WindowsWorkstationPowerController();
+        _windowAdapter = new WindowsClientWindowAdapter();
         ViewModel = new MainViewModel(
             new ClientSessionCoordinator(
                 new GrpcBackendClient(DeploymentSettings.GrpcAddress, _enrollment),
@@ -32,7 +34,8 @@ public sealed class WindowsClientHost : IClientHost
             new EnvironmentAccessCredentialVerifier(environment),
             clientVersion: "avalonia-windows",
             capabilities: ["commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1"],
-            powerController: _powerController);
+            powerController: _powerController,
+            timeNotificationPresenter: _windowAdapter);
     }
 
     public MainViewModel ViewModel { get; }
@@ -41,7 +44,7 @@ public sealed class WindowsClientHost : IClientHost
 
     public string HostDisclaimer => "Клиент подключается к назначенному серверу клуба.";
 
-    public IClientWindowAdapter? WindowAdapter { get; } = new WindowsClientWindowAdapter();
+    public IClientWindowAdapter? WindowAdapter => _windowAdapter;
 
     public async Task StartAsync()
     {

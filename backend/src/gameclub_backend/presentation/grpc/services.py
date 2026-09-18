@@ -1948,7 +1948,7 @@ def to_session_proto(session: Session) -> sessions_pb2.Session:
     return response
 
 
-def to_package_snapshot_proto(item) -> sessions_pb2.PackageSnapshot:
+def to_package_snapshot_proto(item, tariff_name: str = "") -> sessions_pb2.PackageSnapshot:
     return sessions_pb2.PackageSnapshot(
         id=str(item.id),
         tariff_id=str(item.tariff_id),
@@ -1962,6 +1962,7 @@ def to_package_snapshot_proto(item) -> sessions_pb2.PackageSnapshot:
         usage_window_end_minute=item.usage_window_end_minute or 0,
         window_timezone=item.window_timezone or "",
         audience=item.audience.value,
+        tariff_name=tariff_name,
     )
 
 
@@ -1977,14 +1978,34 @@ def to_session_snapshot_proto(snapshot: SessionSnapshot) -> sessions_pb2.Session
         balance_bonus=snapshot.balance_bonus or 0,
         login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
         balance_remaining_minutes=(snapshot.balance_remaining_minutes or 0),
-        package_queue=[to_package_snapshot_proto(item) for item in snapshot.entitlements],
+        time_notifications=[
+            sessions_pb2.TimeNotification(
+                id=item.id,
+                threshold_minutes=item.threshold_minutes,
+                message=item.message,
+                play_sound=item.play_sound,
+                sound=item.sound,
+                custom_sound_path=item.custom_sound_path or "",
+                show_system_notification=item.show_system_notification,
+            )
+            for item in snapshot.time_notifications
+        ],
+        package_queue=[
+            to_package_snapshot_proto(item, snapshot.tariff_names.get(item.tariff_id, ""))
+            for item in snapshot.entitlements
+        ],
         allowed_actions=list(snapshot.allowed_actions),
     )
     server_time = to_timestamp(snapshot.server_time)
     if server_time is not None:
         response.server_time.CopyFrom(server_time)
     if snapshot.active_entitlement is not None:
-        response.active_package.CopyFrom(to_package_snapshot_proto(snapshot.active_entitlement))
+        response.active_package.CopyFrom(
+            to_package_snapshot_proto(
+                snapshot.active_entitlement,
+                snapshot.tariff_names.get(snapshot.active_entitlement.tariff_id, ""),
+            )
+        )
     if snapshot.meter is not None:
         meter = snapshot.meter
         response.meter.CopyFrom(

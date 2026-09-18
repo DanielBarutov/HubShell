@@ -14,6 +14,10 @@ from gameclub_backend.modules.billing.infrastructure.memory import (
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
+from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.client_groups.infrastructure.memory import (
+    InMemoryClientGroupRepository,
+)
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
@@ -21,16 +25,21 @@ from gameclub_backend.modules.direct_payments.infrastructure.memory import (
     InMemoryGuestSessionPaymentRepository,
 )
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
-from gameclub_backend.modules.entitlements.domain import EntitlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
     InMemoryEntitlementRepository,
 )
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
+from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
 from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
+from gameclub_backend.presentation.grpc.services import to_session_snapshot_proto
 
 pytestmark = [pytest.mark.unit, pytest.mark.concurrency]
 
@@ -54,17 +63,41 @@ class NoopCashSettlement:
         del shift_id, amount_cents, payment_idempotency_key, actor_id
 
 
-async def build_metered_services(clock: FixedClock, tariff_free_minutes: int = 5):
+class ReviewCashSettlement(NoopCashSettlement):
+    def __init__(self) -> None:
+        self.fail = True
+        self.calls: list[str] = []
+
+    async def settle(
+        self,
+        shift_id: uuid.UUID,
+        amount_cents: int,
+        payment_idempotency_key: str,
+        actor_id: str,
+    ) -> None:
+        del shift_id, amount_cents, actor_id
+        self.calls.append(payment_idempotency_key)
+        if self.fail:
+            raise RuntimeError("cash acceptance is unknown")
+
+
+async def build_metered_services(
+    clock: FixedClock,
+    tariff_free_minutes: int = 5,
+    price_per_minute_cents: int = 10,
+    initial_balance_cents: int = 1_000,
+    client_groups=None,
+):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
         "meter-device", "Meter PC", group_id="vip"
     )
     client_repository = InMemoryClientRepository()
-    clients = ClientService(client_repository, clock=clock)
+    clients = ClientService(client_repository, clock=clock, groups=client_groups)
     client = await clients.create("MeterFox")
     await clients.top_up(
         client.id,
-        amount_cents=1_000,
+        amount_cents=initial_balance_cents,
         bonus_amount=0,
         reason="Meter test",
         actor_id="operator",
@@ -79,7 +112,7 @@ async def build_metered_services(clock: FixedClock, tariff_free_minutes: int = 5
         valid_from=clock.current,
         valid_to=None,
         billing_mode=BillingMode.PER_MINUTE,
-        price_per_minute_cents=10,
+        price_per_minute_cents=price_per_minute_cents,
         free_minutes=tariff_free_minutes,
     )
     session_repository = InMemorySessionRepository()
@@ -112,6 +145,7 @@ async def build_package_metered_services(
     usage_window_start_minute: int | None = None,
     usage_window_end_minute: int | None = None,
     window_timezone: str | None = None,
+    cash_settlement=None,
 ):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
@@ -154,6 +188,7 @@ async def build_package_metered_services(
         clock=clock,
         active_sessions=session_repository,
         workstations=workstation_repository,
+        cash=cash_settlement,
     )
     sessions = SessionService(
         session_repository,
@@ -162,6 +197,7 @@ async def build_package_metered_services(
         clock=clock,
         entitlements=entitlements,
         meters=meter_repository,
+        tariffs=catalog,
     )
     billing = BillingService(
         InMemoryChargeRepository(),
@@ -409,6 +445,8 @@ async def test_metered_session_becomes_exhausted_without_overdraft() -> None:
     clock.current += datetime.timedelta(minutes=1)
     with pytest.raises(ApplicationError, match="Insufficient balance"):
         await billing.meter_session(session.id)
+    stopped = await sessions.get(session.id)
+    assert stopped.status.value == "completed"
     meter = await meters.get(session.id)
     assert meter is not None and meter.status is MeterStatus.EXHAUSTED
     assert (await clients.get(client.id)).balance_cents == 0
@@ -726,6 +764,65 @@ async def test_exhausted_package_falls_back_to_per_minute_with_positive_balance(
 
 
 @pytest.mark.asyncio
+async def test_debtor_group_stops_session_after_reaching_600_ruble_debt_limit() -> None:
+    """
+    Проверяет, что клиент группы «Должники» может досидеть ровно до долга 600 ₽,
+    а следующая поминутная минута не увеличивает долг и завершает сессию.
+    """
+    clock = FixedClock()
+    groups = InMemoryClientGroupRepository()
+    group_service = ClientGroupService(groups, clock=clock)
+    await group_service.create(
+        "debtors",
+        "Должники",
+        allow_negative_balance=True,
+        negative_balance_limit_cents=60_000,
+    )
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+    ) = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        price_per_minute_cents=10_000,
+        initial_balance_cents=10_000,
+        client_groups=groups,
+    )
+    await clients.update(client.id, "MeterFox", client_group_id="debtors")
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        tariff_id=tariff.id,
+        idempotency_key="debtor-limit-session",
+    )
+
+    clock.current += datetime.timedelta(minutes=7)
+    limit_tick = await billing.meter_session(session.id)
+
+    assert limit_tick is not None
+    assert limit_tick.billed_minutes == 7
+    assert limit_tick.billed_cents == 70_000
+    assert (await clients.get(client.id)).balance_cents == -60_000
+    assert (await meters.get(session.id)).status is MeterStatus.RUNNING
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await sessions.snapshot(session.id)).balance_remaining_minutes == 0
+
+    clock.current += datetime.timedelta(minutes=1)
+    with pytest.raises(ApplicationError, match="Insufficient balance"):
+        await billing.meter_session(session.id)
+
+    assert (await clients.get(client.id)).balance_cents == -60_000
+    assert (await meters.get(session.id)).status is MeterStatus.EXHAUSTED
+    assert (await sessions.get(session.id)).status.value == "completed"
+
+
+@pytest.mark.asyncio
 async def test_windowed_package_consumes_only_minutes_inside_local_window() -> None:
     """
     Проверяет сценарий «test_windowed_package_consumes_only_minutes_inside_local_window» и
@@ -878,6 +975,11 @@ async def test_session_snapshot_exposes_server_time_package_queue_and_meter() ->
     assert snapshot.balance_cents == 900
     assert snapshot.active_entitlement is not None
     assert snapshot.active_entitlement.id == package.id
+    assert snapshot.tariff_names[tariff.id] == "VIP package"
+    http_snapshot = SessionSnapshotResponse.from_domain(snapshot).model_dump(mode="json")
+    grpc_snapshot = to_session_snapshot_proto(snapshot)
+    assert http_snapshot["entitlements"][0]["tariff_name"] == "VIP package"
+    assert grpc_snapshot.active_package.tariff_name == "VIP package"
     assert snapshot.meter is not None
     assert snapshot.meter.package_minutes == 1
     assert snapshot.allowed_actions == ("stop",)
@@ -928,3 +1030,92 @@ async def test_package_time_window_uses_configured_timezone() -> None:
     clock.current = datetime.datetime(2026, 8, 29, 19, tzinfo=datetime.UTC)
     assert (await entitlements.next_compatible(client.id, "vip", now=clock.current)).id == item.id
     assert (await entitlements.activate(item.id, client.id)).status is EntitlementStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_package_purchase_persists_cash_transfer_mixed_payment_parts() -> None:
+    """
+    Проверяет смешанную оплату пакета наличными и переводом, а состав оплаты
+    сохраняется в выданном праве на время.
+    """
+    clock = FixedClock()
+    _, client, tariff, _, _, _, clients, entitlements = await build_package_metered_services(
+        clock,
+        cash_settlement=NoopCashSettlement(),
+    )
+
+    purchased = await entitlements.purchase(
+        client.id,
+        tariff.id,
+        "operator",
+        "mixed-package-1",
+        payment_parts=[
+            {"method": "cash", "amount_cents": 40},
+            {"method": "transfer", "amount_cents": 60, "reference": "bank-42"},
+        ],
+        cash_shift_id=uuid.uuid4(),
+    )
+
+    assert [(part.method, part.amount_cents) for part in purchased.payment_parts] == [
+        ("cash", 40),
+        ("transfer", 60),
+    ]
+    assert purchased.payment_parts[1].reference == "bank-42"
+    assert (await clients.get(client.id)).balance_cents == 1_000
+
+
+@pytest.mark.asyncio
+async def test_package_cash_failure_is_persisted_for_explicit_reconciliation() -> None:
+    """
+    Проверяет, что сбой после создания package не теряет факт settlement и
+    повторяет наличную часть по тому же идемпотентному ключу.
+    """
+    clock = FixedClock()
+    repository = InMemoryEntitlementRepository()
+    cash = ReviewCashSettlement()
+    catalog = CatalogService(InMemoryCatalogRepository())
+    stored_tariff = await catalog.create_tariff(
+        "Cash review package",
+        "vip",
+        duration_minutes=60,
+        price_cents=100,
+        valid_from=clock.current,
+        valid_to=None,
+        tariff_key="cash-review-package",
+    )
+    clients = ClientService(InMemoryClientRepository(), clock=clock)
+    review_client = await clients.create("CashReview")
+    await clients.top_up(
+        review_client.id,
+        500,
+        0,
+        "seed",
+        "operator",
+        "cash-review-seed",
+    )
+    service = EntitlementService(
+        repository,
+        tariffs=catalog,
+        clients=clients,
+        cash=cash,
+        clock=clock,
+    )
+
+    with pytest.raises(RuntimeError, match="unknown"):
+        await service.purchase(
+            review_client.id,
+            stored_tariff.id,
+            "operator",
+            "cash-review-package-1",
+            payment_parts=[{"method": "cash", "amount_cents": 100}],
+            cash_shift_id=uuid.uuid4(),
+        )
+
+    pending = await repository.get_by_idempotency_key("cash-review-package-1")
+    assert pending is not None
+    assert pending.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW
+    assert pending.status is EntitlementStatus.QUEUED
+    cash.fail = False
+    reconciled = await service.retry_settlement_review(pending.id, "supervisor")
+    assert reconciled.settlement_status is EntitlementSettlementStatus.SETTLED
+    assert cash.calls == ["cash-review-package-1:0", "cash-review-package-1:0"]

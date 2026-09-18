@@ -8,8 +8,10 @@ internal sealed class NativeTrayIcon : IDisposable
     private const int GwlWndProc = -4;
     private const uint NifIcon = 0x00000002;
     private const uint NifMessage = 0x00000001;
+    private const uint NifInfo = 0x00000010;
     private const uint NifTip = 0x00000004;
     private const uint NimAdd = 0x00000000;
+    private const uint NimModify = 0x00000001;
     private const uint NimDelete = 0x00000002;
     private const uint WmApp = 0x00008000;
     private const uint WmLButtonDoubleClick = 0x00000203;
@@ -78,6 +80,23 @@ internal sealed class NativeTrayIcon : IDisposable
         RestoreWindowProcedure();
         _disposed = true;
         GC.KeepAlive(_windowProc);
+    }
+
+    public void ShowBalloon(string title, string message)
+    {
+        if (_disposed || string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        var data = CreateNotifyIconData();
+        data.Flags |= NifInfo;
+        var normalizedTitle = title.Trim();
+        var normalizedMessage = message.Trim();
+        data.InfoTitle = normalizedTitle[..Math.Min(63, normalizedTitle.Length)];
+        data.Info = normalizedMessage[..Math.Min(255, normalizedMessage.Length)];
+        data.InfoFlags = 0;
+        Shell_NotifyIcon(NimModify, ref data);
     }
 
     private IntPtr HandleWindowMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)

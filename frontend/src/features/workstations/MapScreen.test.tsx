@@ -56,4 +56,52 @@ describe("Карта игровых мест", () => {
 
     expect(onSalePc).toHaveBeenCalledWith(workstations[0]);
   });
+
+  it("показывает hover-карточку server snapshot для занятого места", () => {
+    const busyPc: Workstation = {
+      id: "pc-busy",
+      name: "VIP-02",
+      group: "VIP",
+      groupId: "vip",
+      status: "busy",
+      client: "NightFox",
+      sessionSnapshot: {
+        server_time: "2026-09-17T20:00:00Z",
+        balance_cents: 35000,
+        balance_remaining_minutes: 150,
+        entitlements: [{ status: "active", tariff_name: "Ночной VIP", remaining_minutes: 48, duration_minutes: 120 }],
+        active_entitlement: null,
+        active_tariff: null,
+      } as never,
+    };
+
+    render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        pcs={[busyPc]}
+        group="Все зоны"
+        setGroup={vi.fn()}
+        zoneOptions={["Все зоны"]}
+      />,
+    );
+
+    const workstation = screen.getByRole("button", { name: "VIP-02: Занят" });
+    fireEvent.mouseEnter(workstation);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("NightFox");
+    expect(tooltip).toHaveTextContent("Ночной VIP · 2 ч");
+    expect(tooltip).toHaveTextContent("осталось 48 мин");
+    expect(tooltip).toHaveTextContent("350");
+    expect(tooltip).toHaveTextContent("Всего по пакетам");
+    expect(tooltip).toHaveTextContent("Общее время");
+    expect(tooltip).toHaveTextContent("3 ч 18 мин");
+    expect(tooltip).not.toHaveTextContent("pc-busy");
+
+    fireEvent.mouseLeave(workstation);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
 });

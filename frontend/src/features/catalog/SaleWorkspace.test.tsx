@@ -48,7 +48,7 @@ describe("Окно продажи", () => {
     const activePc: Workstation = { ...pc, status: "busy", clientId: "client-1", client: "NightFox" };
     const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 0, category: "Обычная" };
     const listAvailableTariffs = vi.fn().mockResolvedValue(tariffs);
-    const activeApi = { listAvailableTariffs } as unknown as GameClubApi;
+    const activeApi = { listAvailableTariffs, searchClients: vi.fn().mockResolvedValue([]) } as unknown as GameClubApi;
 
     render(
       <SaleWorkspace
@@ -194,5 +194,107 @@ describe("Окно продажи", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("требует ручной сверки");
     expect(startSession).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("разрешает оператору оплатить пакет активного клиента наличными", async () => {
+    const activePc: Workstation = { ...pc, status: "busy", clientId: "client-1", client: "NightFox" };
+    const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 0, category: "Обычная" };
+    const listAvailableTariffs = vi.fn().mockResolvedValue(tariffs);
+    const purchaseEntitlement = vi.fn().mockResolvedValue({ id: "entitlement-1" });
+    const api = { listAvailableTariffs, searchClients: vi.fn().mockResolvedValue([]), purchaseEntitlement } as unknown as GameClubApi;
+    const onSaved = vi.fn();
+
+    render(
+      <SaleWorkspace
+        api={api}
+        pc={activePc}
+        initialClient={client}
+        initialProduct={null}
+        clients={[client]}
+        cashShifts={[{
+          id: "shift-1",
+          register_id: "cash-1",
+          opened_by: "operator-1",
+          opened_at: "2026-09-16T08:00:00Z",
+          opening_balance_cents: 0,
+          expected_close_cents: 0,
+          status: "open",
+          closed_by: null,
+          closed_at: null,
+          actual_close_cents: null,
+          difference_cents: null,
+        }]}
+        tariffs={tariffs}
+        products={products}
+        categories={categories}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Час в основном зале/ })).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: /Час в основном зале/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Наличные/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(purchaseEntitlement).toHaveBeenCalledWith(
+      client.id,
+      "main-hour",
+      expect.any(String),
+      [{ method: "cash", amount_cents: 400 }],
+      "shift-1",
+    );
+  });
+
+  it("проводит смешанную оплату только наличными и переводом", async () => {
+    const sellProduct = vi.fn().mockResolvedValue({ status: "completed" });
+    const api = { sellProduct } as unknown as GameClubApi;
+    const onSaved = vi.fn();
+
+    render(
+      <SaleWorkspace
+        api={api}
+        pc={pc}
+        initialClient={null}
+        initialProduct={null}
+        clients={[]}
+        cashShifts={[{
+          id: "shift-1",
+          register_id: "cash-1",
+          opened_by: "operator-1",
+          opened_at: "2026-09-16T08:00:00Z",
+          opening_balance_cents: 0,
+          expected_close_cents: 0,
+          status: "open",
+          closed_by: null,
+          closed_at: null,
+          actual_close_cents: null,
+          difference_cents: null,
+        }]}
+        tariffs={tariffs}
+        products={products}
+        categories={categories}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /Товары и напитки/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Вода/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Смешанная/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Сумма наличными" }), { target: { value: "0.40" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Сумма переводом" }), { target: { value: "0.60" } });
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(sellProduct).toHaveBeenCalledWith(expect.objectContaining({
+      payment_method: "mixed",
+      cash_shift_id: "shift-1",
+      payment_parts: [
+        { method: "cash", amount_cents: 40 },
+        { method: "transfer", amount_cents: 60 },
+      ],
+    }), expect.any(String));
   });
 });

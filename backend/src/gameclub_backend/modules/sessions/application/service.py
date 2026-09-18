@@ -19,6 +19,7 @@ from gameclub_backend.modules.sessions.application.ports import (
     ReservationLookup,
     SessionRepository,
     TariffLookup,
+    TimeNotificationLookup,
     WorkstationLookup,
 )
 from gameclub_backend.modules.sessions.domain import (
@@ -26,6 +27,7 @@ from gameclub_backend.modules.sessions.domain import (
     SessionSnapshot,
     SessionStatus,
     SessionTariffSnapshot,
+    SessionTimeNotification,
 )
 from gameclub_backend.modules.workstations.domain import (
     WorkstationStatus,
@@ -53,6 +55,7 @@ class SessionService:
         entitlements: EntitlementLookup | None = None,
         meters: MeterLookup | None = None,
         tariffs: TariffLookup | None = None,
+        notifications: TimeNotificationLookup | None = None,
     ) -> None:
         self._repository = repository
         self._workstations = workstations
@@ -63,6 +66,7 @@ class SessionService:
         self._entitlements = entitlements
         self._meters = meters
         self._tariffs = tariffs
+        self._notifications = notifications
         self._clock = clock or UtcClock()
 
     async def start(
@@ -360,6 +364,12 @@ class SessionService:
         if session.client_id is not None and self._entitlements is not None:
             active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
             entitlements = tuple(await self._entitlements.list_for_client(session.client_id))
+        tariff_names: dict[uuid.UUID, str] = {}
+        if self._tariffs is not None:
+            for tariff_id in {item.tariff_id for item in entitlements}:
+                tariff = await self._tariffs.get_tariff(tariff_id)
+                if tariff is not None:
+                    tariff_names[tariff.id] = tariff.name
         meter = await self._meters.get(session.id) if self._meters is not None else None
         server_time = now or self._clock.now()
         if server_time.tzinfo is None:
@@ -408,6 +418,35 @@ class SessionService:
                     0,
                     client.balance_cents // per_minute_tariff.price_per_minute_cents,
                 )
+        time_notifications: tuple[SessionTimeNotification, ...] = ()
+        if self._notifications is not None and session.status is SessionStatus.ACTIVE:
+            if active_entitlement is not None:
+                notification_remaining_minutes = active_entitlement.remaining_minutes
+                notification_source = f"package:{active_entitlement.id}"
+            elif active_tariff is not None and active_tariff.billing_mode == "block":
+                notification_remaining_minutes = active_tariff.remaining_minutes
+                notification_source = f"tariff:{active_tariff.id}"
+            elif balance_remaining_minutes is not None:
+                notification_remaining_minutes = balance_remaining_minutes
+                notification_source = "balance"
+            elif session.login_grant_minutes:
+                notification_remaining_minutes = max(
+                    0,
+                    session.login_grant_minutes - elapsed_minutes,
+                )
+                notification_source = "login_grant"
+            else:
+                notification_remaining_minutes = None
+                notification_source = ""
+            if notification_remaining_minutes is not None:
+                time_notifications = tuple(
+                    await self._notifications.due_events(
+                        session.id,
+                        notification_remaining_minutes,
+                        notification_source,
+                        server_time,
+                    )
+                )
         return SessionSnapshot(
             schema_version=1,
             server_time=server_time,
@@ -427,7 +466,9 @@ class SessionService:
                 session.login_grant_minutes - elapsed_minutes,
             ),
             allowed_actions=("stop",) if session.status is SessionStatus.ACTIVE else (),
+            tariff_names=tariff_names,
             balance_remaining_minutes=balance_remaining_minutes,
+            time_notifications=time_notifications,
         )
 
     @staticmethod

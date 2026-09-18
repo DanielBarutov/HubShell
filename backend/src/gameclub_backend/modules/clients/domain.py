@@ -114,10 +114,17 @@ class Client:
     password_hash: str | None = None
     password_reset_required: bool = False
     password_reset_login_used: bool = False
+    client_group_id: str | None = None
 
     def __post_init__(self) -> None:
-        Money(self.balance_cents)
+        if isinstance(self.balance_cents, bool) or not isinstance(self.balance_cents, int):
+            raise ValueError("Client balance must be an integer")
         Bonus(self.balance_bonus)
+        if self.client_group_id is not None:
+            normalized_group_id = self.client_group_id.strip().lower()
+            if not normalized_group_id:
+                raise ValueError("Client group id cannot be empty")
+            object.__setattr__(self, "client_group_id", normalized_group_id)
 
     def top_up(
         self,
@@ -138,13 +145,22 @@ class Client:
             updated_at=now,
         )
 
-    def debit(self, amount_cents: int, now: datetime.datetime) -> "Client":
+    def debit(
+        self,
+        amount_cents: int,
+        now: datetime.datetime,
+        minimum_balance_cents: int = 0,
+    ) -> "Client":
         if amount_cents <= 0:
             raise ValueError("Debit amount must be positive")
-        balance = Money(self.balance_cents).subtract(Money(amount_cents))
+        if minimum_balance_cents > 0:
+            raise ValueError("Minimum balance cannot be positive")
+        next_balance = self.balance_cents - amount_cents
+        if next_balance < minimum_balance_cents:
+            raise ValueError("Insufficient balance")
         return dataclasses.replace(
             self,
-            balance_cents=balance.cents,
+            balance_cents=next_balance,
             updated_at=now,
         )
 

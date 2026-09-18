@@ -12,6 +12,7 @@ from gameclub_backend.modules.catalog.domain import (
     Tariff,
     TariffAudience,
     TariffLifecycle,
+    TariffSaleChannel,
 )
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
@@ -201,6 +202,7 @@ class ClientPortalService:
                 or tariff.group_id.strip().lower() == normalized_group_id
             )
             and tariff.is_visible_to(now, TariffAudience.REGISTERED)
+            and tariff.is_sellable_through(TariffSaleChannel.SELF_SERVICE)
         )
         upcoming_reservations = (
             await self._reservations.list_for_client(

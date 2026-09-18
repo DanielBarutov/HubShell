@@ -46,7 +46,8 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const [availableTariffs, setAvailableTariffs] = useState<BackendTariff[] | null>(null);
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"balance" | "cash" | "transfer" | "mixed">("cash");
-  const [balancePartAmount, setBalancePartAmount] = useState("");
+  const [cashPartAmount, setCashPartAmount] = useState("");
+  const [transferPartAmount, setTransferPartAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -155,6 +156,8 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
   const visibleTariffs = tariffCategory === "all" ? tariffs : tariffs.filter((tariff) => tariff.billing_mode === "block");
   const productCategoryOptions = ["all", ...Array.from(new Set(products.map((product) => product.category)))];
   const visibleProducts = productCategory === "all" ? products : products.filter((product) => product.category === productCategory);
+  const mixedSaleSupported = (timeLines.length === 0 && productLines.length === 1)
+    || (timeLines.length === 1 && productLines.length === 0 && (buyerMode === "guest" || activeClientSession));
 
   const addTariff = (tariff: BackendTariff) => {
     setError(null);
@@ -231,26 +234,26 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
       setError("Новую сессию нельзя открыть: игровое место не в сети");
       return;
     }
-    if ((paymentMethod === "balance" || paymentMethod === "mixed") && !client) {
+    if (paymentMethod === "balance" && !client) {
       setError("Для оплаты с баланса выберите зарегистрированного клиента");
-      return;
-    }
-    if (activeClientSession && timeLines.length && paymentMethod !== "balance") {
-      setError("Тариф для активной поминутной сессии покупается с депозита клиента. Пополните депозит или выберите оплату «Баланс».");
       return;
     }
     if (api && (paymentMethod === "cash" || paymentMethod === "mixed") && !activeShift) {
       setError("Нет актуальной открытой кассовой смены");
       return;
     }
-    const balancePartCents = Math.round(Number(balancePartAmount.replace(",", ".")) * 100);
+    const cashPartCents = Math.round(Number(cashPartAmount.replace(",", ".")) * 100);
+    const transferPartCents = Math.round(Number(transferPartAmount.replace(",", ".")) * 100);
+    const mixedTotalCents = timeLines.length ? timeTotalCents : productTotalCents;
     if (paymentMethod === "mixed" && (
-      productLines.length !== 1
-      || !Number.isInteger(balancePartCents)
-      || balancePartCents <= 0
-      || balancePartCents >= productTotalCents
+      !mixedSaleSupported
+      || !Number.isInteger(cashPartCents)
+      || !Number.isInteger(transferPartCents)
+      || cashPartCents <= 0
+      || transferPartCents <= 0
+      || cashPartCents + transferPartCents !== mixedTotalCents
     )) {
-      setError("Для смешанной оплаты выберите один товар и укажите часть с баланса меньше его суммы");
+      setError("Для смешанной оплаты укажите положительные части наличными и переводом, равные сумме заказа");
       return;
     }
     if (api && buyerMode === "guest" && timeLines.length) {
@@ -282,8 +285,13 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
             tariff_id: timeLines[0].sourceId,
             tariff_quantity: timeLines[0].quantity,
             guest_name: "Гость",
-            cash_shift_id: paymentMethod === "cash" ? activeShift?.id : undefined,
-            payment_parts: [{ method: paymentMethod, amount_cents: timeTotalCents }],
+            cash_shift_id: paymentMethod === "cash" || paymentMethod === "mixed" ? activeShift?.id : undefined,
+            payment_parts: paymentMethod === "mixed"
+              ? [
+                { method: "cash", amount_cents: cashPartCents },
+                { method: "transfer", amount_cents: transferPartCents },
+              ]
+              : [{ method: paymentMethod, amount_cents: timeTotalCents }],
           },
           `guest-payment-${sessionIdempotencyKey.current}`,
         );
@@ -305,8 +313,30 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
             purchaseKeys.push(`sale-tariff-${crypto.randomUUID()}`);
           }
           tariffIdempotencyKeys.current.set(tariffLine.key, purchaseKeys);
+          let remainingCashPartCents = paymentMethod === "mixed" ? cashPartCents : 0;
+          let remainingTransferPartCents = paymentMethod === "mixed" ? transferPartCents : 0;
           for (const purchaseKey of purchaseKeys.slice(0, tariffLine.quantity)) {
-            await api.purchaseEntitlement(client!.id, tariffLine.sourceId, purchaseKey);
+            const unitCashPartCents = paymentMethod === "mixed"
+              ? Math.min(tariffLine.priceCents, remainingCashPartCents)
+              : paymentMethod === "cash" ? tariffLine.priceCents : 0;
+            const unitTransferPartCents = paymentMethod === "mixed"
+              ? tariffLine.priceCents - unitCashPartCents
+              : paymentMethod === "transfer" ? tariffLine.priceCents : 0;
+            remainingCashPartCents -= unitCashPartCents;
+            remainingTransferPartCents -= unitTransferPartCents;
+            const paymentParts = paymentMethod === "mixed"
+              ? [
+                ...(unitCashPartCents > 0 ? [{ method: "cash", amount_cents: unitCashPartCents }] : []),
+                ...(unitTransferPartCents > 0 ? [{ method: "transfer", amount_cents: unitTransferPartCents }] : []),
+              ]
+              : [{ method: paymentMethod, amount_cents: tariffLine.priceCents }];
+            await api.purchaseEntitlement(
+              client!.id,
+              tariffLine.sourceId,
+              purchaseKey,
+              paymentParts,
+              paymentMethod === "cash" || paymentMethod === "mixed" ? activeShift?.id : undefined,
+            );
           }
         } else {
           const session = await api.startSession({
@@ -325,11 +355,12 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
         const operationKey = productIdempotencyKeys.current.get(line.key) ?? `sale-product-${crypto.randomUUID()}`;
         productIdempotencyKeys.current.set(line.key, operationKey);
           const lineTotalCents = line.priceCents * line.quantity;
-          const lineBalanceCents = paymentMethod === "mixed" ? balancePartCents : 0;
+          const lineCashCents = paymentMethod === "mixed" ? cashPartCents : 0;
+          const lineTransferCents = paymentMethod === "mixed" ? transferPartCents : 0;
           const linePaymentParts = paymentMethod === "mixed"
             ? [
-              { method: "balance", amount_cents: lineBalanceCents },
-              { method: "cash", amount_cents: lineTotalCents - lineBalanceCents },
+              { method: "cash", amount_cents: lineCashCents },
+              { method: "transfer", amount_cents: lineTransferCents },
             ]
             : paymentMethod === "transfer"
               ? [{ method: "transfer", amount_cents: lineTotalCents }]
@@ -388,7 +419,7 @@ export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients:
           </div><div className="sale-line-info"><strong>{line.name}</strong><small>{line.detail}</small><b>{money(line.priceCents * line.quantity)}</b></div><div className="sale-quantity"><button type="button" aria-label={`Уменьшить ${line.name}`} onClick={() => changeQuantity(line.key, -1)}><Minus size={13} /></button><span>{line.quantity}</span><button type="button" aria-label={`Увеличить ${line.name}`} onClick={() => changeQuantity(line.key, 1)}><Plus size={13} /></button></div><button type="button" className="sale-remove-line" aria-label={`Удалить ${line.name}`} onClick={() => removeLine(line.key)}><X size={14} /></button></div>) : <div className="sale-empty-order"><Receipt size={24} /><strong>Заказ пока пуст</strong><span>Нажимайте на карточки слева, чтобы добавить время или товары</span></div>}</div>
           <div className="sale-order-summary"><div><span>Игровое время</span><strong>{totalMinutes ? formatDuration(totalMinutes) : "—"}</strong></div><div><span>Товары</span><strong>{productLines.length ? `${productLines.reduce((sum, line) => sum + line.quantity, 0)} шт.` : "—"}</strong></div><div className="sale-total-row"><span>Итого к оплате</span><strong>{money(totalCents)}</strong></div></div>
           {mixedTariffs && <div className="sale-inline-warning"><Tags size={16} /><span>В корзине разные пакеты времени. Оформите их отдельными покупками.</span></div>}
-          <div className="sale-payment"><div className="sale-payment-heading"><span>{activeClientSession && timeLines.length ? "Оплата тарифа с депозита клиента" : "Способ оплаты товаров и гостевого времени"}</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")} disabled={Boolean(activeClientSession && timeLines.length)}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")} disabled={Boolean(activeClientSession && timeLines.length)}><ArrowRightLeft size={15} /> Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!client || productLines.length !== 1 || Boolean(activeClientSession && timeLines.length)} onClick={() => { setPaymentMethod("mixed"); if (!balancePartAmount) setBalancePartAmount((productTotalCents / 200).toFixed(2)); }}><Tags size={15} /> Смешанная</button></div>{activeClientSession && timeLines.length && <p className="sale-payment-hint">Пакет будет сразу подключён к текущей сессии и начнёт действовать после покупки.</p>}{paymentMethod === "mixed" && <label className="amount-field">С баланса<input inputMode="decimal" value={balancePartAmount} onChange={(event) => setBalancePartAmount(event.target.value)} /> <span>₽</span></label>}</div>
+          <div className="sale-payment"><div className="sale-payment-heading"><span>{activeClientSession && timeLines.length ? "Способ оплаты тарифа для активного клиента" : "Способ оплаты товаров и гостевого времени"}</span></div><div className="sale-payment-tabs"><button type="button" className={paymentMethod === "cash" ? "selected" : ""} onClick={() => setPaymentMethod("cash")}><Receipt size={15} /> Наличные</button><button type="button" className={paymentMethod === "transfer" ? "selected" : ""} onClick={() => setPaymentMethod("transfer")}><ArrowRightLeft size={15} /> Перевод</button><button type="button" className={paymentMethod === "balance" ? "selected" : ""} disabled={!client} onClick={() => setPaymentMethod("balance")}><WalletCards size={15} /> Баланс</button><button type="button" className={paymentMethod === "mixed" ? "selected" : ""} disabled={!mixedSaleSupported} onClick={() => { const half = ((timeLines.length ? timeTotalCents : productTotalCents) / 200).toFixed(2); setPaymentMethod("mixed"); if (!cashPartAmount) setCashPartAmount(half); if (!transferPartAmount) setTransferPartAmount(half); }}><Tags size={15} /> Смешанная</button></div>{activeClientSession && timeLines.length && <p className="sale-payment-hint">Пакет будет сразу подключён к текущей сессии выбранным способом оплаты.</p>}{paymentMethod === "mixed" && <div className="sale-payment-parts"><label className="amount-field">Наличными<input aria-label="Сумма наличными" inputMode="decimal" value={cashPartAmount} onChange={(event) => setCashPartAmount(event.target.value)} /> <span>₽</span></label><label className="amount-field">Переводом<input aria-label="Сумма переводом" inputMode="decimal" value={transferPartAmount} onChange={(event) => setTransferPartAmount(event.target.value)} /> <span>₽</span></label></div>}</div>
           {error && <div className="sale-form-error" role="alert">{error}</div>}
           {success && <div className="sale-form-success" role="status">{success}</div>}
           <button className="sale-submit-button" disabled={submitting || !lines.length || mixedTariffs}>{submitting ? "Проводим заказ…" : `Оформить продажу · ${money(totalCents)}`}<ChevronRight size={17} /></button>
