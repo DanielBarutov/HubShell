@@ -5,7 +5,9 @@ import { localDateInputValue } from "../formatters";
 export type PickerMode = "date" | "datetime" | "time";
 
 function pickerTimeValue(value: string): { hour: number; minute: number } {
-  const [, timePart = "00:00"] = value.split("T");
+  const timePart = value.includes("T")
+    ? value.split("T")[1] ?? "00:00"
+    : value || "00:00";
   const [hour, minute] = timePart.split(":").map(Number);
   return { hour: Number.isFinite(hour) ? hour : 0, minute: Number.isFinite(minute) ? minute : 0 };
 }

@@ -242,28 +242,38 @@ public partial class MainWindow : Window
         var dialog = new Window
         {
             Title = "Пересесть на другой ПК?",
-            Width = 440,
-            Height = 250,
+            Width = 430,
+            Height = 224,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#0F1719")),
+            Background = new SolidColorBrush(Color.Parse("#182527")),
         };
-        var cancel = new Button { Content = "Отмена", MinWidth = 100 };
+        var cancel = new Button
+        {
+            Content = "Отмена",
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-secondary" },
+        };
         var confirm = new Button
         {
             Content = "Пересесть",
-            MinWidth = 100,
-            Background = new SolidColorBrush(Color.Parse("#B6F35A")),
-            Foreground = new SolidColorBrush(Color.Parse("#11180C")),
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-primary" },
         };
         cancel.Click += (_, _) => dialog.Close(false);
         confirm.Click += (_, _) => dialog.Close(true);
         dialog.Content = new Border
         {
-            Padding = new Thickness(22),
+            Background = new SolidColorBrush(Color.Parse("#182527")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20),
             Child = new StackPanel
             {
-                Spacing = 12,
+                Spacing = 10,
                 Children =
                 {
                     new TextBlock
@@ -283,7 +293,8 @@ public partial class MainWindow : Window
                     {
                         Orientation = Orientation.Horizontal,
                         HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 8,
+                        Spacing = 10,
+                        Margin = new Thickness(0, 2, 0, 0),
                         Children = { cancel, confirm },
                     },
                 },
@@ -335,28 +346,38 @@ public partial class MainWindow : Window
         var dialog = new Window
         {
             Title = "Подтвердите покупку",
-            Width = 410,
-            Height = 220,
+            Width = 390,
+            Height = 184,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#0F1719")),
+            Background = new SolidColorBrush(Color.Parse("#182527")),
         };
-        var cancel = new Button { Content = "Отмена", MinWidth = 100 };
+        var cancel = new Button
+        {
+            Content = "Отмена",
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-secondary" },
+        };
         var confirm = new Button
         {
             Content = "Купить",
-            MinWidth = 100,
-            Background = new SolidColorBrush(Color.Parse("#B6F35A")),
-            Foreground = new SolidColorBrush(Color.Parse("#11180C")),
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-primary" },
         };
         cancel.Click += (_, _) => dialog.Close(false);
         confirm.Click += (_, _) => dialog.Close(true);
         dialog.Content = new Border
         {
-            Padding = new Thickness(22),
+            Background = new SolidColorBrush(Color.Parse("#182527")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20),
             Child = new StackPanel
             {
-                Spacing = 12,
+                Spacing = 10,
                 Children =
                 {
                     new TextBlock
@@ -376,7 +397,8 @@ public partial class MainWindow : Window
                     {
                         Orientation = Orientation.Horizontal,
                         HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 8,
+                        Spacing = 10,
+                        Margin = new Thickness(0, 2, 0, 0),
                         Children = { cancel, confirm },
                     },
                 },

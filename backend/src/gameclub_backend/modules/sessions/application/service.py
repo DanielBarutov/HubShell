@@ -409,9 +409,14 @@ class SessionService:
         )
         balance_remaining_minutes = None
         if client is not None and self._tariffs is not None:
-            per_minute_tariff = await self._tariffs.find_per_minute_tariff(
-                effective_workstation_group_id(workstation.group_id),
-                server_time,
+            per_minute_tariff = (
+                await self._tariffs.get_tariff(snapshot_tariff_id)
+                if snapshot_tariff_id is not None and active_tariff is not None
+                and active_tariff.billing_mode == "per_minute"
+                else await self._tariffs.find_per_minute_tariff(
+                    effective_workstation_group_id(workstation.group_id),
+                    server_time,
+                )
             )
             if per_minute_tariff is not None and per_minute_tariff.price_per_minute_cents > 0:
                 balance_remaining_minutes = max(

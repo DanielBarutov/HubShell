@@ -159,6 +159,26 @@ class Entitlement:
             return start <= minute < end
         return minute >= start or minute < end
 
+    def usage_window_ends_at(self, now: datetime.datetime) -> datetime.datetime | None:
+        """Return the next closing moment of the active local usage window."""
+        if not self.time_restricted or not self.is_available_at(now):
+            return None
+        timezone = ZoneInfo(self.window_timezone or "UTC")
+        local = now.astimezone(timezone)
+        start = self.usage_window_start_minute
+        end = self.usage_window_end_minute
+        assert start is not None and end is not None
+        local_end_date = local.date()
+        minute = local.hour * 60 + local.minute
+        if start > end and minute >= start:
+            local_end_date += datetime.timedelta(days=1)
+        local_end = datetime.datetime.combine(
+            local_end_date,
+            datetime.time(hour=end // 60, minute=end % 60),
+            tzinfo=timezone,
+        )
+        return local_end.astimezone(datetime.UTC)
+
     def activate(self, now: datetime.datetime) -> "Entitlement":
         if now.tzinfo is None:
             raise ValueError("Entitlement activation time must include timezone")

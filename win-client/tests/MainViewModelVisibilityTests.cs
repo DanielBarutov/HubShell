@@ -228,11 +228,13 @@ public sealed class MainViewModelVisibilityTests
                 0,
                 0,
                 150,
-                5)));
+                5),
+            BalanceRemainingMinutes: 150));
 
         Assert.Equal("Поминутная игра", viewModel.CurrentSessionModeSummary);
         Assert.Contains("1,50 ₽/мин", viewModel.CurrentSessionTariffSummary);
         Assert.Contains("первые 5 мин бесплатно", viewModel.CurrentSessionTariffSummary);
+        Assert.Equal("Осталось 2 ч 30 мин", viewModel.ActiveTimeSummary);
 
         viewModel.RegisterSessionStarted(new SessionSnapshot(
             "session-3",

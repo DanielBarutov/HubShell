@@ -204,13 +204,17 @@ class EntitlementService:
         actor_id: str,
     ) -> Entitlement:
         now = self._clock.now()
+        tariff = await self._tariffs.get_tariff(entitlement.tariff_id)
+        purchase_reason = (
+            f"Покупка тарифа «{tariff.name}»" if tariff is not None else "Покупка тарифа"
+        )
         try:
             for index, part in enumerate(entitlement.payment_parts):
                 if part.method == "balance":
                     await self._clients.debit(
                         client_id=entitlement.client_id,
                         amount_cents=part.amount_cents,
-                        reason=f"Package purchase {entitlement.id}",
+                        reason=purchase_reason,
                         actor_id=actor_id,
                         idempotency_key=f"entitlement-purchase:{entitlement.idempotency_key}:{index}",
                     )
@@ -244,29 +248,30 @@ class EntitlementService:
         created: Entitlement,
         now: datetime.datetime,
     ) -> Entitlement:
-        queued = await self._repository.list_for_client(created.client_id)
         if (
             self._active_sessions is not None
             and self._workstations is not None
-            and not any(
-                item.id != created.id
-                and item.status in {EntitlementStatus.QUEUED, EntitlementStatus.ACTIVE}
-                and item.settlement_status is EntitlementSettlementStatus.SETTLED
-                for item in queued
-            )
         ):
             active_session = await self._active_sessions.get_active_for_client(created.client_id)
             if active_session is not None:
                 workstation = await self._workstations.get(active_session.workstation_id)
-                if workstation is not None and created.is_compatible(workstation.group_id):
+                if workstation is not None:
+                    if await self._repository.get_active_for_client(created.client_id) is not None:
+                        return created
+                    next_item = await self.next_compatible(
+                        created.client_id,
+                        workstation.group_id,
+                        now,
+                    )
+                    if next_item is None:
+                        return created
                     try:
-                        if created.is_available_at(now):
-                            return await self._repository.activate_for_client(
-                                created.id,
-                                created.client_id,
-                                now,
-                                workstation.group_id,
-                            )
+                        return await self._repository.activate_for_client(
+                            next_item.id,
+                            created.client_id,
+                            now,
+                            workstation.group_id,
+                        )
                     except ValueError as error:
                         raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
         return created

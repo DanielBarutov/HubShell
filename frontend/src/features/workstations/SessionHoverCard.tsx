@@ -35,7 +35,7 @@ export function SessionHoverCard({ pc, id, style }: { pc: Workstation; id: strin
       <span>Пакеты</span>
       {details.packages.map((item, index) => <div className="session-hover-package" key={`${item.status}-${index}`}>
         <b>{item.tariffName ? `${item.tariffName} · ${formatMinutes(item.durationMinutes)}` : formatMinutes(item.durationMinutes)}</b>
-        <span>{item.status === "active" ? "Активный" : "В очереди"} · осталось {formatMinutes(item.remainingMinutes)}</span>
+        <span>{item.status === "active" ? "Активный" : item.availableNow ? "В очереди" : "В очереди · недоступен до окна"} · осталось {formatMinutes(item.remainingMinutes)}</span>
       </div>)}
     </div>}
     {details.snapshotTime && <small>Снимок сервера: {formatTime(details.snapshotTime)}</small>}

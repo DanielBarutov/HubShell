@@ -33,8 +33,8 @@ const demoSaleProducts: BackendProduct[] = [
   { id: "demo-headset", name: "Игровые наушники", category: "accessories", price_cents: 45000, active: true, cost_price_cents: 29000, stock_quantity: 3 },
 ];
 
-export function SaleWorkspace({ api, pc, initialClient, initialProduct, clients: clientList, cashShifts, tariffs: catalogTariffs, products: catalogProducts, categories: catalogCategories, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialClient: Client | null; initialProduct: BackendProduct | null; clients: Client[]; cashShifts: BackendCashShift[]; tariffs: BackendTariff[]; products: BackendProduct[]; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
-  const [activeTab, setActiveTab] = useState<"time" | "products">("time");
+export function SaleWorkspace({ api, pc, initialClient, initialProduct, initialTab = "time", clients: clientList, cashShifts, tariffs: catalogTariffs, products: catalogProducts, categories: catalogCategories, onClose, onSaved }: { api?: GameClubApi; pc: Workstation | null; initialClient: Client | null; initialProduct: BackendProduct | null; initialTab?: "time" | "products"; clients: Client[]; cashShifts: BackendCashShift[]; tariffs: BackendTariff[]; products: BackendProduct[]; categories: BackendProductCategory[]; onClose: () => void; onSaved: () => void }) {
+  const [activeTab, setActiveTab] = useState<"time" | "products">(initialTab);
   const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
   const [lines, setLines] = useState<SaleLine[]>([]);

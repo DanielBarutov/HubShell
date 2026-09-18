@@ -145,16 +145,17 @@ export function CashScheduleEditor({
         </label>
       </div>
       <div className="schedule-rules">
-        <label className="schedule-toggle">
+        <div className="schedule-toggle">
           <input
+            id="cash-auto-open"
             type="checkbox"
             checked={autoOpen}
             onChange={(event) => setAutoOpen(event.target.checked)}
           />
-          <span>
+          <label htmlFor="cash-auto-open">
             <strong>Автооткрытие</strong>
             <small>Открыть смену в начале рабочего дня</small>
-          </span>
+          </label>
           <DateTimePicker
             value={autoOpenAt}
             onChange={setAutoOpenAt}
@@ -163,17 +164,18 @@ export function CashScheduleEditor({
             disabled={!autoOpen}
             className="schedule-time-picker"
           />
-        </label>
-        <label className="schedule-toggle">
+        </div>
+        <div className="schedule-toggle">
           <input
+            id="cash-auto-close"
             type="checkbox"
             checked={autoClose}
             onChange={(event) => setAutoClose(event.target.checked)}
           />
-          <span>
+          <label htmlFor="cash-auto-close">
             <strong>Автозакрытие</strong>
             <small>Закрыть смену в конце рабочего дня</small>
-          </span>
+          </label>
           <DateTimePicker
             value={autoCloseAt}
             onChange={setAutoCloseAt}
@@ -182,7 +184,7 @@ export function CashScheduleEditor({
             disabled={!autoClose}
             className="schedule-time-picker"
           />
-        </label>
+        </div>
       </div>
       {error && (
         <div className="form-error" role="alert">
