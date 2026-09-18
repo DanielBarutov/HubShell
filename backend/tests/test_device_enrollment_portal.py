@@ -8,11 +8,18 @@ from gameclub_backend.config import Settings
 from gameclub_backend.modules.billing.infrastructure.memory import InMemoryChargeRepository
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
+from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.client_groups.infrastructure.memory import (
+    InMemoryClientGroupRepository,
+)
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
-from gameclub_backend.modules.entitlements.domain import EntitlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
     InMemoryEntitlementRepository,
 )
@@ -219,6 +226,55 @@ async def test_client_portal_is_scoped_and_reports_balance_time_and_purchases() 
     assert error.value.code is ErrorCode.UNAUTHENTICATED
 
 
+async def test_portal_balance_time_ignores_block_tariff_price_and_duration() -> None:
+    """Проверяет, что остаток по балансу не переводится в минуты через пакетный тариф."""
+    clock = FixedClock()
+    clients = ClientService(InMemoryClientRepository(), clock=clock)
+    catalog = CatalogService(InMemoryCatalogRepository())
+    sessions = InMemorySessionRepository()
+    charges = InMemoryChargeRepository()
+    sales = InMemoryProductSaleRepository()
+    client = await clients.register_portal("BalanceFox", "+7 999 333-44-55", "1234")
+    await clients.top_up(
+        client.id,
+        15_000,
+        0,
+        "Пополнение",
+        "operator",
+        "portal-balance-time-top-up",
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        1,
+        100,
+        clock.current - datetime.timedelta(minutes=1),
+        None,
+        billing_mode="per_minute",
+        price_per_minute_cents=100,
+    )
+    await catalog.create_tariff(
+        "Тест",
+        "vip",
+        3,
+        5_000,
+        clock.current - datetime.timedelta(minutes=1),
+        None,
+    )
+    portal = ClientPortalService(
+        clients,
+        sessions,
+        ChargeHistoryReader(charges),
+        ProductSaleService(sales, products=catalog, clients=clients),
+        catalog,
+        clock=clock,
+    )
+
+    snapshot = await portal.snapshot(client.id, group_id="vip")
+
+    assert snapshot.available_time_minutes == 150
+
+
 async def test_portal_activates_first_usable_package_when_night_package_is_queued() -> None:
     """
     Проверяет, что ночной пакет вне окна не блокирует запуск следующего доступного пакета.
@@ -276,6 +332,63 @@ async def test_portal_activates_first_usable_package_when_night_package_is_queue
     available_snapshot = next(item for item in snapshot.entitlements if item.id == available.id)
     assert waiting_snapshot.status is EntitlementStatus.QUEUED
     assert available_snapshot.status is EntitlementStatus.ACTIVE
+
+
+async def test_debtor_cannot_see_package_that_exceeds_debt_limit() -> None:
+    """Проверяет, что пакет сверх лимита долга не создаёт видимую очередь времени."""
+    clock = FixedClock()
+    group_repository = InMemoryClientGroupRepository()
+    groups = ClientGroupService(group_repository, clock=clock)
+    await groups.create(
+        "debtors",
+        "Должники",
+        allow_negative_balance=True,
+        negative_balance_limit_cents=400,
+    )
+    clients = ClientService(InMemoryClientRepository(), groups=group_repository, clock=clock)
+    client = await clients.create("DebtorFox", client_group_id="debtors")
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariff = await catalog.create_tariff(
+        "Пять часов VIP",
+        "vip",
+        300,
+        500,
+        clock.current,
+        None,
+    )
+    entitlement_repository = InMemoryEntitlementRepository()
+    entitlements = EntitlementService(
+        entitlement_repository,
+        tariffs=catalog,
+        clients=clients,
+        clock=clock,
+    )
+    portal = ClientPortalService(
+        clients,
+        InMemorySessionRepository(),
+        ChargeHistoryReader(InMemoryChargeRepository()),
+        ProductSaleService(
+            InMemoryProductSaleRepository(),
+            products=catalog,
+            clients=clients,
+        ),
+        catalog,
+        entitlements=entitlements,
+        clock=clock,
+    )
+
+    with pytest.raises(ApplicationError, match="Insufficient balance") as error:
+        await portal.purchase_entitlement(client.id, tariff.id, "debtor-package-1")
+
+    assert error.value.code is ErrorCode.CONFLICT
+    failed = await entitlement_repository.get_by_idempotency_key("debtor-package-1")
+    assert failed is not None
+    assert failed.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW
+    assert (await portal.snapshot(client.id)).entitlements == ()
+
+    with pytest.raises(ApplicationError, match="Insufficient balance"):
+        await portal.purchase_entitlement(client.id, tariff.id, "debtor-package-1")
+
 
 async def test_password_reset_allows_one_passwordless_login_until_new_password_is_set() -> None:
     """

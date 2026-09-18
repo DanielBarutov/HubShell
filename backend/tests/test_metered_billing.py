@@ -147,28 +147,33 @@ async def build_package_metered_services(
     window_timezone: str | None = None,
     cash_settlement=None,
     return_catalog: bool = False,
+    client_groups=None,
+    client_group_id: str | None = None,
+    initial_balance_cents: int = 1_000,
+    tariff_price_cents: int = 100,
 ):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
         "package-device", "Package PC", group_id="vip"
     )
     client_repository = InMemoryClientRepository()
-    clients = ClientService(client_repository, clock=clock)
-    client = await clients.create("PackageFox")
-    await clients.top_up(
-        client.id,
-        amount_cents=1_000,
-        bonus_amount=0,
-        reason="Package meter test",
-        actor_id="operator",
-        idempotency_key="package-meter-deposit",
-    )
+    clients = ClientService(client_repository, clock=clock, groups=client_groups)
+    client = await clients.create("PackageFox", client_group_id=client_group_id)
+    if initial_balance_cents:
+        await clients.top_up(
+            client.id,
+            amount_cents=initial_balance_cents,
+            bonus_amount=0,
+            reason="Package meter test",
+            actor_id="operator",
+            idempotency_key="package-meter-deposit",
+        )
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
         "VIP package",
         "vip",
         duration_minutes=duration_minutes,
-        price_cents=100,
+        price_cents=tariff_price_cents,
         valid_from=clock.current,
         valid_to=None,
         billing_mode=BillingMode.BLOCK,
@@ -578,6 +583,121 @@ async def test_package_purchased_during_uncovered_active_session_activates_immed
     assert meter is not None
     assert meter.package_minutes == 1
     assert meter.billed_minutes == 0
+
+
+@pytest.mark.asyncio
+async def test_regular_package_starts_after_login_grant_and_returns_win_snapshot() -> None:
+    """Проверяет, что обычный клиент не тратит пакет первые пять минут и видит это в gRPC-снимке."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(clock, duration_minutes=300)
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="regular-package-session",
+    )
+
+    purchased = await entitlements.purchase(
+        client.id,
+        tariff.id,
+        "operator",
+        "regular-package-purchase",
+    )
+    just_purchased = to_session_snapshot_proto(await sessions.snapshot(session.id))
+
+    assert just_purchased.login_grant_remaining_minutes == 5
+    assert just_purchased.active_package.id == str(purchased.id)
+    assert just_purchased.active_package.tariff_name == "VIP package"
+    assert just_purchased.active_package.remaining_minutes == 300
+
+    clock.current += datetime.timedelta(minutes=5)
+    at_grant_boundary = await billing.meter_session(session.id)
+    boundary_snapshot = to_session_snapshot_proto(await sessions.snapshot(session.id))
+
+    assert at_grant_boundary is None
+    assert boundary_snapshot.login_grant_remaining_minutes == 0
+    assert boundary_snapshot.active_package.remaining_minutes == 300
+    assert boundary_snapshot.meter.package_minutes == 0
+    assert boundary_snapshot.meter.billed_cents == 0
+
+    clock.current += datetime.timedelta(minutes=1)
+    after_grant = await billing.meter_session(session.id)
+    after_grant_snapshot = to_session_snapshot_proto(await sessions.snapshot(session.id))
+
+    assert after_grant is not None
+    assert after_grant.package_minutes == 1
+    assert after_grant.billed_cents == 0
+    assert after_grant_snapshot.login_grant_remaining_minutes == 0
+    assert after_grant_snapshot.active_package.remaining_minutes == 299
+    assert after_grant_snapshot.meter.package_minutes == 1
+    assert after_grant_snapshot.meter.active_entitlement_id == str(purchased.id)
+
+
+@pytest.mark.asyncio
+async def test_debtor_package_starts_after_login_grant_when_price_is_within_debt_limit() -> None:
+    """Проверяет, что пакет в долг активируется и расходуется после пяти бесплатных минут."""
+    clock = FixedClock()
+    group_repository = InMemoryClientGroupRepository()
+    groups = ClientGroupService(group_repository, clock=clock)
+    await groups.create(
+        "debtors",
+        "Должники",
+        allow_negative_balance=True,
+        negative_balance_limit_cents=60_000,
+    )
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        billing,
+        _meters,
+        clients,
+        entitlements,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=300,
+        client_groups=group_repository,
+        client_group_id="debtors",
+        initial_balance_cents=0,
+        tariff_price_cents=50_000,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="debtor-package-session",
+    )
+
+    purchased = await entitlements.purchase(
+        client.id,
+        tariff.id,
+        "operator",
+        "debtor-package-purchase",
+    )
+
+    assert (await clients.get(client.id)).balance_cents == -50_000
+    assert (await entitlements.get_active_for_client(client.id)).id == purchased.id
+    assert (await sessions.snapshot(session.id)).login_grant_remaining_minutes == 5
+
+    clock.current += datetime.timedelta(minutes=6)
+    meter = await billing.meter_session(session.id)
+
+    assert meter is not None
+    assert meter.package_minutes == 1
+    assert meter.active_entitlement_id == purchased.id
+    assert meter.billed_cents == 0
 
 
 @pytest.mark.asyncio

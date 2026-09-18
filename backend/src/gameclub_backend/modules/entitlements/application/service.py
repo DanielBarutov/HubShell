@@ -113,6 +113,11 @@ class EntitlementService:
                     ErrorCode.CONFLICT,
                     "Idempotency key belongs to another package",
                 )
+            if existing.settlement_status is not EntitlementSettlementStatus.SETTLED:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    existing.settlement_error or "Package payment has not completed",
+                )
             return existing
         tariff = await self._tariffs.get_tariff(tariff_id)
         if tariff is None:
@@ -217,6 +222,7 @@ class EntitlementService:
                         reason=purchase_reason,
                         actor_id=actor_id,
                         idempotency_key=f"entitlement-purchase:{entitlement.idempotency_key}:{index}",
+                        allow_negative_balance=True,
                     )
                 elif part.method == "cash":
                     if self._cash is None or entitlement.cash_shift_id is None:
@@ -248,10 +254,7 @@ class EntitlementService:
         created: Entitlement,
         now: datetime.datetime,
     ) -> Entitlement:
-        if (
-            self._active_sessions is not None
-            and self._workstations is not None
-        ):
+        if self._active_sessions is not None and self._workstations is not None:
             active_session = await self._active_sessions.get_active_for_client(created.client_id)
             if active_session is not None:
                 workstation = await self._workstations.get(active_session.workstation_id)
