@@ -291,15 +291,15 @@ async def test_mixed_product_sale_persists_and_settles_each_payment_part() -> No
         sold_by="operator",
         idempotency_key="sale-mixed-001",
         payment_parts=[
-            {"method": "balance", "amount_cents": 200},
-            {"method": "cash", "amount_cents": 100, "reference": "cash-receipt-1"},
+            {"method": "cash", "amount_cents": 200, "reference": "cash-receipt-1"},
+            {"method": "transfer", "amount_cents": 100, "reference": "bank-transfer-1"},
         ],
     )
 
     assert sale.payment_method.value == "mixed"
     assert [part.amount_cents for part in sale.payment_parts] == [200, 100]
-    assert (await clients.get(client.id)).balance_cents == 0
-    assert (await cash_shifts.get(shift.id)).expected_close_cents == 100
+    assert (await clients.get(client.id)).balance_cents == 200
+    assert (await cash_shifts.get(shift.id)).expected_close_cents == 200
 
 
 async def test_analytics_service_rejects_naive_period() -> None:

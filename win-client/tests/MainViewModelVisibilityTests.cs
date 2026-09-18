@@ -360,6 +360,40 @@ public sealed class MainViewModelVisibilityTests
     }
 
     [Fact]
+    /// <summary>
+    /// Проверяет, что ошибка остановки сохраняет активную сессию и не запускает перезапуск ПК.
+    /// </summary>
+    public async Task StopFailureKeepsSessionAndDoesNotRestart()
+    {
+        var events = new List<string>();
+        var backend = DispatchProxy.Create<IBackendClient, FailingStopBackendProxy>();
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(backend),
+            new StubCredentials(),
+            deviceId: "device-1",
+            powerController: new RecordingPowerController(() => events.Add("restart")));
+
+        viewModel.UserAccessCode = "4826";
+        Assert.True(viewModel.TryUnlockUser());
+        viewModel.RegisterSessionStarted(new SessionSnapshot(
+            "session-1",
+            "workstation-1",
+            "client-1",
+            null,
+            "active",
+            "2026-01-01T12:00:00Z",
+            null,
+            "device",
+            string.Empty,
+            DeviceId: "device-1"));
+
+        Assert.False(await viewModel.StopActiveSessionAsync());
+        Assert.True(viewModel.IsActiveSessionVisible);
+        Assert.Equal("Не удалось завершить сессию. Проверьте связь и повторите выход.", viewModel.AccessMessage);
+        Assert.Empty(events);
+    }
+
+    [Fact]
     public async Task WorkstationLabelUsesServerProvidedNameInsteadOfTechnicalIdentifier()
     {
         await using var viewModel = new MainViewModel(
@@ -475,6 +509,29 @@ public sealed class MainViewModelVisibilityTests
                     "device",
                     string.Empty,
                     DeviceId: "device-1"));
+            }
+
+            if (targetMethod?.Name == nameof(IClientPortalGateway.Logout))
+            {
+                return null;
+            }
+
+            if (targetMethod?.ReturnType == typeof(ValueTask))
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            throw new NotSupportedException($"Unexpected backend call: {targetMethod?.Name}");
+        }
+    }
+
+    private class FailingStopBackendProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name == nameof(IWorkstationSessionGateway.StopSessionAsync))
+            {
+                return Task.FromException<SessionSnapshot>(new InvalidOperationException("backend unavailable"));
             }
 
             if (targetMethod?.Name == nameof(IClientPortalGateway.Logout))

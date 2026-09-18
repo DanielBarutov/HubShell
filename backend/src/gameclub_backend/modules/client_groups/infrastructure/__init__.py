@@ -1,0 +1,1 @@
+"""Client-group persistence adapters."""

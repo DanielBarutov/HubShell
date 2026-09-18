@@ -390,6 +390,14 @@ public sealed class GrpcBackendClient : IBackendClient
             ServerTime = ToIsoTimestamp(response.ServerTime),
             DeviceId = string.IsNullOrWhiteSpace(response.DeviceId) ? null : response.DeviceId,
             LoginGrantRemainingMinutes = response.LoginGrantRemainingMinutes,
+            TimeNotifications = response.TimeNotifications.Select(item => new TimeNotificationSnapshot(
+                item.Id,
+                item.ThresholdMinutes,
+                item.Message,
+                item.PlaySound,
+                item.Sound,
+                string.IsNullOrWhiteSpace(item.CustomSoundPath) ? null : item.CustomSoundPath,
+                item.ShowSystemNotification)).ToArray(),
         };
     }
 

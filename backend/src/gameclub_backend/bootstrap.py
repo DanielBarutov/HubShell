@@ -47,6 +47,14 @@ from gameclub_backend.modules.catalog.application.ports import CatalogRepository
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
+from gameclub_backend.modules.client_groups.application.ports import ClientGroupRepository
+from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.client_groups.infrastructure.memory import (
+    InMemoryClientGroupRepository,
+)
+from gameclub_backend.modules.client_groups.infrastructure.postgres import (
+    PostgresClientGroupRepository,
+)
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.ports import ClientRepository, GuestRepository
@@ -70,11 +78,23 @@ from gameclub_backend.modules.direct_payments.infrastructure.postgres import (
 )
 from gameclub_backend.modules.entitlements.application.ports import EntitlementRepository
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.cash import CashShiftEntitlementSettlement
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
     InMemoryEntitlementRepository,
 )
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
+)
+from gameclub_backend.modules.notifications.application.ports import NotificationRuleRepository
+from gameclub_backend.modules.notifications.application.service import NotificationRuleService
+from gameclub_backend.modules.notifications.infrastructure.memory import (
+    InMemoryNotificationRuleRepository,
+)
+from gameclub_backend.modules.notifications.infrastructure.postgres import (
+    PostgresNotificationRuleRepository,
+)
+from gameclub_backend.modules.notifications.infrastructure.session import (
+    SessionTimeNotificationLookup,
 )
 from gameclub_backend.modules.offline.application.ports import OfflineReplayRepository
 from gameclub_backend.modules.offline.application.service import OfflineReplayService
@@ -153,6 +173,8 @@ class ApplicationServices:
     workstations: WorkstationService
     workstation_groups: WorkstationGroupService
     clients: ClientService
+    client_groups: ClientGroupService
+    notifications: NotificationRuleService
     guests: GuestService
     catalog: CatalogService
     entitlements: EntitlementService
@@ -188,6 +210,12 @@ def build_application_services(
             PostgresWorkstationGroupRepository(postgres_engine_provider)
         )
         client_repository: ClientRepository = PostgresClientRepository(postgres_engine_provider)
+        client_group_repository: ClientGroupRepository = PostgresClientGroupRepository(
+            postgres_engine_provider
+        )
+        notification_repository: NotificationRuleRepository = PostgresNotificationRuleRepository(
+            postgres_engine_provider
+        )
         guest_repository: GuestRepository = PostgresGuestRepository(postgres_engine_provider)
         catalog_repository: CatalogRepository = PostgresCatalogRepository(postgres_engine_provider)
         reservation_repository: ReservationRepository = PostgresReservationRepository(
@@ -234,6 +262,8 @@ def build_application_services(
         workstation_repository = InMemoryWorkstationRepository()
         workstation_group_repository = InMemoryWorkstationGroupRepository()
         client_repository = InMemoryClientRepository()
+        client_group_repository = InMemoryClientGroupRepository()
+        notification_repository = InMemoryNotificationRuleRepository()
         guest_repository = InMemoryGuestRepository()
         catalog_repository = InMemoryCatalogRepository()
         reservation_repository = InMemoryReservationRepository()
@@ -271,9 +301,13 @@ def build_application_services(
         cache=workstation_cache,
         cache_ttl_seconds=20,
     )
-    clients = ClientService(client_repository)
+    client_groups = ClientGroupService(client_group_repository, audit=audit_repository)
+    notifications = NotificationRuleService(notification_repository)
+    session_notifications = SessionTimeNotificationLookup(notifications)
+    clients = ClientService(client_repository, groups=client_group_repository)
     guests = GuestService(guest_repository)
     catalog = CatalogService(catalog_repository, zones=workstation_group_repository)
+    cash_shifts = CashShiftService(cash_shift_repository, approvals=cash_approval_repository)
     workstation_groups = WorkstationGroupService(
         workstation_group_repository,
         zone_rate_synchronizer=catalog,
@@ -284,6 +318,7 @@ def build_application_services(
         clients=clients,
         active_sessions=session_repository,
         workstations=workstation_repository,
+        cash=CashShiftEntitlementSettlement(cash_shifts),
     )
     reservations = ReservationService(
         reservation_repository,
@@ -302,13 +337,13 @@ def build_application_services(
         meter_repository=meter_repository,
         entitlements=entitlements,
     )
-    cash_shifts = CashShiftService(cash_shift_repository, approvals=cash_approval_repository)
     guest_payments = GuestSessionPaymentService(
         guest_payment_repository,
         tariffs=catalog,
         cash=CashShiftGuestPaymentSettlement(cash_shifts),
         audit=audit_repository,
         workstations=workstation_repository,
+        active_sessions=session_repository,
     )
     sessions = SessionService(
         session_repository,
@@ -320,6 +355,7 @@ def build_application_services(
         entitlements=entitlements,
         meters=meter_repository,
         tariffs=catalog,
+        notifications=session_notifications,
     )
     offline = OfflineReplayService(
         offline_repository,
@@ -367,6 +403,8 @@ def build_application_services(
         workstations=workstations,
         workstation_groups=workstation_groups,
         clients=clients,
+        client_groups=client_groups,
+        notifications=notifications,
         guests=guests,
         catalog=catalog,
         entitlements=entitlements,

@@ -8,6 +8,62 @@ from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
 
+
+async def test_workstation_list_includes_snapshot_for_active_session_over_http() -> None:
+    """
+    Проверяет, что карта мест получает подробные данные активной сессии,
+    без которых нельзя показать карточку при наведении на занятое место.
+    """
+    application = create_app(
+        Settings(
+            jwt_secret="test-secret-with-at-least-32-bytes-long",
+            dev_operator_username="operator",
+            dev_operator_password="password",
+        )
+    )
+    async with application.router.lifespan_context(application):
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            token_response = await client.post(
+                "/api/v1/auth/token",
+                json={"username": "operator", "password": "password"},
+            )
+            headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
+            workstation_response = await client.post(
+                "/api/v1/workstations",
+                headers=headers,
+                json={"device_id": "map-hover-device", "name": "Map hover PC"},
+            )
+            client_response = await client.post(
+                "/api/v1/clients",
+                headers=headers,
+                json={"nickname": "MapHoverFox"},
+            )
+            session_response = await client.post(
+                "/api/v1/sessions",
+                headers={**headers, "Idempotency-Key": "map-hover-session"},
+                json={
+                    "workstation_id": workstation_response.json()["id"],
+                    "client_id": client_response.json()["id"],
+                },
+            )
+            list_response = await client.get("/api/v1/workstations", headers=headers)
+
+    assert token_response.status_code == 200
+    assert workstation_response.status_code == 201
+    assert client_response.status_code == 201
+    assert session_response.status_code == 201
+    assert list_response.status_code == 200
+    workstation = next(
+        item
+        for item in list_response.json()
+        if item["id"] == workstation_response.json()["id"]
+    )
+    assert workstation["active_session_id"] == session_response.json()["id"]
+    assert workstation["session_snapshot"]["session"]["id"] == session_response.json()["id"]
+    assert workstation["session_snapshot"]["server_time"]
+
+
 async def test_operator_can_move_reservation_through_lifecycle_over_http() -> None:
     """
     Проверяет поведение публичного API в заявленном сценарии.

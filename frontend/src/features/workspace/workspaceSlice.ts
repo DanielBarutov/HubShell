@@ -11,6 +11,8 @@ import type {
   BackendCashShiftSchedule,
   BackendDiscountRule,
   BackendPaymentMethod,
+  BackendClientGroup,
+  BackendNotificationRule,
   BackendProduct,
   BackendProductCategory,
   BackendProductSale,
@@ -38,6 +40,8 @@ export type WorkspaceState = {
   productCategories: BackendProductCategory[];
   discountRules: BackendDiscountRule[];
   paymentMethods: BackendPaymentMethod[];
+  clientGroups: BackendClientGroup[];
+  notificationRules: BackendNotificationRule[];
   bookingReservations: Reservation[];
   bookingLoading: boolean;
   bookingError: string | null;
@@ -67,6 +71,8 @@ const initialState: WorkspaceState = {
   productCategories: [],
   discountRules: [],
   paymentMethods: [],
+  clientGroups: [],
+  notificationRules: [],
   bookingReservations: [],
   bookingLoading: false,
   bookingError: null,
@@ -88,7 +94,7 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, groups, sales, tariffs, products, productCategories, discountRules, paymentMethods, cashShiftSchedules] = await Promise.all([
+      const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, groups, sales, tariffs, products, productCategories, discountRules, paymentMethods, cashShiftSchedules, clientGroups, notificationRules] = await Promise.all([
         api.listWorkstations(),
         api.listClients(),
         api.listSessions(true),
@@ -104,6 +110,8 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
         api.listDiscountRules(),
         api.listPaymentMethods(),
         api.listCashShiftSchedules(),
+        api.listClientGroups(),
+        api.listNotificationRules(),
       ]);
       const openShift = cashShifts.find((shift) => shift.status === "open");
       const cashMovements = openShift ? await api.listCashMovements(openShift.id) : [];
@@ -137,6 +145,8 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
         productCategories,
         discountRules,
         paymentMethods,
+        clientGroups,
+        notificationRules,
       } satisfies WorkspaceSnapshot;
     } catch (error) {
       return rejectWithValue(error instanceof ApiError ? error.message : "Не удалось обновить рабочие данные");
@@ -200,6 +210,8 @@ const workspaceSlice = createSlice({
       state.productCategories = [];
       state.discountRules = [];
       state.paymentMethods = [];
+      state.clientGroups = [];
+      state.notificationRules = [];
       state.bookingReservations = [];
       state.bookingLoading = false;
       state.bookingError = null;
@@ -240,6 +252,8 @@ const workspaceSlice = createSlice({
           state.productCategories = action.payload.productCategories;
           state.discountRules = action.payload.discountRules;
           state.paymentMethods = action.payload.paymentMethods;
+          state.clientGroups = action.payload.clientGroups;
+          state.notificationRules = action.payload.notificationRules;
           state.lastUpdatedAt = new Date().toISOString();
         }
         state.loading = false;

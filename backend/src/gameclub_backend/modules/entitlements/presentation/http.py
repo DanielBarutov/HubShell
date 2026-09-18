@@ -2,8 +2,9 @@ import typing
 import uuid
 
 from fastapi import APIRouter, Depends, Header, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
 from gameclub_backend.modules.entitlements.domain import Entitlement
@@ -14,6 +15,14 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("clients.mana
 
 class PurchaseEntitlementRequest(BaseModel):
     tariff_id: uuid.UUID
+    cash_shift_id: uuid.UUID | None = None
+    payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class PaymentPartRequest(BaseModel):
+    method: str
+    amount_cents: int
+    reference: str | None = None
 
 
 class EntitlementResponse(BaseModel):
@@ -38,6 +47,12 @@ class EntitlementResponse(BaseModel):
     activated_at: str | None
     ended_at: str | None
     burn_reason: str | None
+    payment_parts: list[dict[str, object]]
+    cash_shift_id: uuid.UUID | None
+    settlement_status: str
+    settlement_error: str | None
+    settlement_attempts: int
+    next_settlement_attempt_at: str | None
 
     @classmethod
     def from_domain(cls, item: Entitlement) -> "EntitlementResponse":
@@ -63,6 +78,16 @@ class EntitlementResponse(BaseModel):
             activated_at=item.activated_at.isoformat() if item.activated_at else None,
             ended_at=item.ended_at.isoformat() if item.ended_at else None,
             burn_reason=item.burn_reason,
+            payment_parts=[part.as_dict() for part in item.payment_parts],
+            cash_shift_id=item.cash_shift_id,
+            settlement_status=item.settlement_status.value,
+            settlement_error=item.settlement_error,
+            settlement_attempts=item.settlement_attempts,
+            next_settlement_attempt_at=(
+                item.next_settlement_attempt_at.isoformat()
+                if item.next_settlement_attempt_at
+                else None
+            ),
         )
 
 
@@ -93,6 +118,8 @@ def create_router(service: EntitlementService) -> APIRouter:
                 tariff_id=body.tariff_id,
                 actor_id=principal.subject_id,
                 idempotency_key=idempotency_key,
+                payment_parts=[part.model_dump() for part in body.payment_parts],
+                cash_shift_id=body.cash_shift_id,
             )
         )
 
@@ -104,5 +131,20 @@ def create_router(service: EntitlementService) -> APIRouter:
     ) -> EntitlementResponse:
         del principal
         return EntitlementResponse.from_domain(await service.activate(entitlement_id, client_id))
+
+    @router.post("/{entitlement_id}/reconcile", response_model=EntitlementResponse)
+    async def reconcile_entitlement(
+        client_id: uuid.UUID,
+        entitlement_id: uuid.UUID,
+        principal: Operator,
+    ) -> EntitlementResponse:
+        entitlement = await service.get(entitlement_id)
+        if entitlement.client_id != client_id:
+            raise ApplicationError(
+                ErrorCode.PERMISSION_DENIED, "Entitlement belongs to another client"
+            )
+        return EntitlementResponse.from_domain(
+            await service.retry_settlement_review(entitlement_id, principal.subject_id)
+        )
 
     return router

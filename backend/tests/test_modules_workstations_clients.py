@@ -261,8 +261,9 @@ async def test_guest_tariff_requires_confirmed_direct_payment_before_session_sta
     )
     cash_shifts = CashShiftService(InMemoryCashShiftRepository())
     shift = await cash_shifts.open("guest-register", 0, "operator", "guest-payment-shift")
+    payment_repository = InMemoryGuestSessionPaymentRepository()
     guest_payments = GuestSessionPaymentService(
-        InMemoryGuestSessionPaymentRepository(),
+        payment_repository,
         tariffs=catalog,
         cash=CashShiftGuestPaymentSettlement(cash_shifts),
     )
@@ -331,13 +332,16 @@ async def test_guest_tariff_is_rejected_on_workstation_with_registered_session()
     )
     cash_shifts = CashShiftService(InMemoryCashShiftRepository())
     shift = await cash_shifts.open("guest-busy-register", 0, "operator", "guest-busy-payment-shift")
+    session_repository = InMemorySessionRepository()
+    payment_repository = InMemoryGuestSessionPaymentRepository()
     guest_payments = GuestSessionPaymentService(
-        InMemoryGuestSessionPaymentRepository(),
+        payment_repository,
         tariffs=catalog,
         cash=CashShiftGuestPaymentSettlement(cash_shifts),
+        active_sessions=session_repository,
     )
     sessions = SessionService(
-        InMemorySessionRepository(),
+        session_repository,
         workstations=workstation_repository,
         clients=clients,
         guest_payments=guest_payments,
@@ -350,29 +354,24 @@ async def test_guest_tariff_is_rejected_on_workstation_with_registered_session()
         client_id=client.id,
         idempotency_key="registered-busy-session",
     )
-    payment = await guest_payments.confirm(
-        workstation_id=workstation.id,
-        tariff_id=tariff.id,
-        tariff_quantity=1,
-        guest_name="Гость",
-        actor_id="operator",
-        idempotency_key="guest-busy-payment",
-        cash_shift_id=shift.id,
-        payment_parts=[{"method": "cash", "amount_cents": 250}],
-    )
-
     with pytest.raises(ApplicationError) as error:
-        await sessions.start(
-            workstation.id,
-            created_by="operator",
-            guest_name="Гость",
+        await guest_payments.confirm(
+            workstation_id=workstation.id,
             tariff_id=tariff.id,
-            guest_payment_id=payment.id,
-            idempotency_key="guest-busy-session",
+            tariff_quantity=1,
+            guest_name="Гость",
+            actor_id="operator",
+            idempotency_key="guest-busy-payment",
+            cash_shift_id=shift.id,
+            payment_parts=[{"method": "cash", "amount_cents": 250}],
         )
 
     assert error.value.code is ErrorCode.CONFLICT
-    assert error.value.message == "Workstation already has an active session"
+    assert error.value.message == (
+        "Guest tariff cannot be sold while the workstation has an active session"
+    )
+    assert await payment_repository.get_by_idempotency_key("guest-busy-payment") is None
+    assert (await cash_shifts.get(shift.id)).expected_close_cents == 0
 
 
 async def test_tariffs_are_scoped_to_workstation_group_on_listing_and_session_start() -> None:

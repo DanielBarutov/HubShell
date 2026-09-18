@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Controls;
+using GameClub.Client.Application.Ports;
 using GameClub.Client.Avalonia.Hosting;
+using GameClub.Client.Domain;
 using GameClub.Client.Infrastructure;
 
 namespace GameClub.Client.Windows;
@@ -13,7 +15,7 @@ namespace GameClub.Client.Windows;
 /// modes and makes the compact widget recoverable through the Windows tray.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
+public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNotificationPresenter
 {
     private const double WidgetWidth = 390;
     private const double WidgetHeight = 700;
@@ -95,6 +97,30 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter
         }
 
         _window.Hide();
+    }
+
+    public void Present(TimeNotificationCandidate candidate)
+    {
+        if (candidate.PlaySound)
+        {
+            if (candidate.Sound.Equals("custom", StringComparison.OrdinalIgnoreCase)
+                && candidate.CustomSoundPath is not null
+                && (candidate.CustomSoundPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase)
+                    || candidate.CustomSoundPath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                && File.Exists(candidate.CustomSoundPath))
+            {
+                NativeSound.PlayCustom(candidate.CustomSoundPath);
+            }
+            else
+            {
+                NativeSound.PlayStandard();
+            }
+        }
+
+        if (candidate.ShowSystemNotification)
+        {
+            _trayIcon?.ShowBalloon("HubShell", candidate.Message);
+        }
     }
 
     public void Dispose()

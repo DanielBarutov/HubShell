@@ -351,6 +351,7 @@ class BillingService:
                 reason=f"Per-minute session {session_id}",
                 actor_id=charged_by or "system",
                 idempotency_key=f"session-meter:{session_id}:{billed_minutes}",
+                allow_negative_balance=True,
             )
         except ApplicationError as error:
             if error.message == "Insufficient balance":
@@ -372,6 +373,14 @@ class BillingService:
                             active_entitlement_id=meter.active_entitlement_id,
                         )
                     )
+                session = await self._sessions.get(session_id)
+                if session is not None and session.status is SessionStatus.ACTIVE:
+                    try:
+                        await self._sessions.save(session.stop(self._clock.now()))
+                    except ValueError:
+                        # Meter exhaustion remains authoritative even if a concurrent
+                        # stop won the session state transition.
+                        pass
             raise
 
     async def get_by_session_id(self, session_id: uuid.UUID) -> SessionCharge:

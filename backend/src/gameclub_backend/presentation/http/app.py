@@ -33,7 +33,10 @@ from gameclub_backend.modules.cash_shifts.presentation.http import (
 from gameclub_backend.modules.catalog.presentation.http import (
     create_router as create_catalog_router,
 )
-from gameclub_backend.modules.clients.presentation.http import create_guest_router
+from gameclub_backend.modules.clients.presentation.http import (
+    create_client_groups_router,
+    create_guest_router,
+)
 from gameclub_backend.modules.clients.presentation.http import (
     create_router as create_clients_router,
 )
@@ -42,6 +45,9 @@ from gameclub_backend.modules.direct_payments.presentation.http import (
 )
 from gameclub_backend.modules.entitlements.presentation.http import (
     create_router as create_entitlements_router,
+)
+from gameclub_backend.modules.notifications.presentation.http import (
+    create_router as create_notification_rules_router,
 )
 from gameclub_backend.modules.offline.presentation.http import (
     create_router as create_offline_router,
@@ -115,6 +121,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.workstations = services.workstations
     application.state.workstation_groups = services.workstation_groups
     application.state.clients = services.clients
+    application.state.client_groups = services.client_groups
+    application.state.notifications = services.notifications
     application.state.guests = services.guests
     application.state.catalog = services.catalog
     application.state.entitlements = services.entitlements
@@ -143,6 +151,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(create_workstation_groups_router(services.workstation_groups))
     application.include_router(create_clients_router(services.clients))
+    application.include_router(create_client_groups_router(services.client_groups))
+    application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))
     application.include_router(create_offline_router(services.offline))
     application.include_router(create_guest_payment_router(services.guest_payments))
@@ -195,6 +205,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "/api/v1/workstation-groups",
             "/api/v1/clients",
             "/api/v1/clients/",
+            "/api/v1/client-groups",
+            "/api/v1/notification-rules",
             "/api/v1/guest-payments",
             "/api/v1/guests",
             "/api/v1/catalog",

@@ -3,13 +3,18 @@ import datetime
 import uuid
 
 from sqlalchemy import DateTime, Integer, String, select, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.catalog.domain import TariffAudience
-from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    Entitlement,
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 
 
 class EntitlementBase(DeclarativeBase):
@@ -44,6 +49,18 @@ class EntitlementModel(EntitlementBase):
     usage_window_end_minute: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     window_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     audience: Mapped[str] = mapped_column(String(16), default=TariffAudience.ALL.value)
+    payment_parts: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    cash_shift_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    settlement_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=EntitlementSettlementStatus.SETTLED.value
+    )
+    settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
+    settlement_attempts: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    next_settlement_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def to_domain(self) -> Entitlement:
         return Entitlement(
@@ -68,6 +85,12 @@ class EntitlementModel(EntitlementBase):
             usage_window_end_minute=self.usage_window_end_minute,
             window_timezone=self.window_timezone,
             audience=TariffAudience(self.audience),
+            payment_parts=tuple(PaymentPart.from_dict(part) for part in (self.payment_parts or [])),
+            cash_shift_id=self.cash_shift_id,
+            settlement_status=EntitlementSettlementStatus(self.settlement_status),
+            settlement_error=self.settlement_error,
+            settlement_attempts=self.settlement_attempts,
+            next_settlement_attempt_at=self.next_settlement_attempt_at,
         )
 
     @classmethod
@@ -94,6 +117,12 @@ class EntitlementModel(EntitlementBase):
             usage_window_end_minute=item.usage_window_end_minute,
             window_timezone=item.window_timezone,
             audience=item.audience.value,
+            payment_parts=[part.as_dict() for part in item.payment_parts],
+            cash_shift_id=item.cash_shift_id,
+            settlement_status=item.settlement_status.value,
+            settlement_error=item.settlement_error,
+            settlement_attempts=item.settlement_attempts,
+            next_settlement_attempt_at=item.next_settlement_attempt_at,
         )
 
 
@@ -194,6 +223,7 @@ class PostgresEntitlementRepository:
                 item
                 for item in items
                 if item.status in statuses
+                and item.settlement_status is EntitlementSettlementStatus.SETTLED
                 and item.is_compatible(zone_id)
                 and item.is_available_at(moment)
             ),
@@ -221,6 +251,8 @@ class PostgresEntitlementRepository:
                     if model is None:
                         raise ValueError("Entitlement not found")
                     item = model.to_domain()
+                    if item.settlement_status is not EntitlementSettlementStatus.SETTLED:
+                        raise ValueError("Entitlement settlement is not complete")
                     if zone_id is not None and not item.is_compatible(zone_id):
                         raise ValueError("Package is incompatible with this workstation zone")
                     if not item.is_available_at(now):
@@ -261,6 +293,8 @@ class PostgresEntitlementRepository:
                 if model is None:
                     raise ValueError("Entitlement not found")
                 item = model.to_domain()
+                if item.settlement_status is not EntitlementSettlementStatus.SETTLED:
+                    raise ValueError("Entitlement settlement is not complete")
                 if not item.is_available_at(now):
                     raise ValueError("Package is outside its time window")
                 updated = item.consume(minutes, now)
@@ -268,6 +302,25 @@ class PostgresEntitlementRepository:
                 model.status = updated.status.value
                 model.ended_at = updated.ended_at
                 return updated, item.remaining_minutes - updated.remaining_minutes
+
+    async def list_recoverable_settlements(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[Entitlement]:
+        moment = now or datetime.datetime.now(datetime.UTC)
+        async with open_session(self._engine_provider) as session:
+            result = await session.scalars(
+                select(EntitlementModel)
+                .where(
+                    EntitlementModel.settlement_status
+                    == EntitlementSettlementStatus.PENDING.value,
+                    EntitlementModel.next_settlement_attempt_at <= moment,
+                )
+                .order_by(EntitlementModel.next_settlement_attempt_at)
+                .limit(max(1, min(limit, 500)))
+            )
+            return [model.to_domain() for model in result]
 
     async def burn_for_client(
         self,

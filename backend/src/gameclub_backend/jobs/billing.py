@@ -29,6 +29,7 @@ from gameclub_backend.modules.direct_payments.infrastructure.postgres import (
     PostgresGuestSessionPaymentRepository,
 )
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.infrastructure.cash import CashShiftEntitlementSettlement
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
 )
@@ -261,14 +262,17 @@ async def reconcile_pending_settlements(
         )
         catalog = CatalogService(PostgresCatalogRepository(engine_provider))
         guest_repository = PostgresGuestSessionPaymentRepository(engine_provider)
+        session_repository = PostgresSessionRepository(engine_provider)
         guest_payments = GuestSessionPaymentService(
             guest_repository,
             tariffs=catalog,
             cash=CashShiftGuestPaymentSettlement(cash_shifts),
             audit=audit,
             workstations=PostgresWorkstationRepository(engine_provider),
+            active_sessions=session_repository,
         )
         clients = ClientService(PostgresClientRepository(engine_provider))
+        workstation_repository = PostgresWorkstationRepository(engine_provider)
         sales_repository = PostgresProductSaleRepository(engine_provider)
         sales = ProductSaleService(
             sales_repository,
@@ -276,6 +280,14 @@ async def reconcile_pending_settlements(
             clients=clients,
             cash=CashShiftSaleSettlement(cash_shifts),
             audit=audit,
+        )
+        entitlements = EntitlementService(
+            PostgresEntitlementRepository(engine_provider),
+            tariffs=catalog,
+            clients=clients,
+            cash=CashShiftEntitlementSettlement(cash_shifts),
+            active_sessions=session_repository,
+            workstations=workstation_repository,
         )
         sweep_now = _parse_sweep_time(now_iso)
         recovered_payments = 0
@@ -294,10 +306,22 @@ async def reconcile_pending_settlements(
                 logger.exception("product_sale_reconciliation_failed sale_id=%s", sale.id)
             else:
                 recovered_sales += 1
+        recovered_entitlements = 0
+        for entitlement in await entitlements.list_recoverable_settlements(limit, now=sweep_now):
+            try:
+                await entitlements.retry_pending_settlement(entitlement.id)
+            except Exception:
+                logger.exception(
+                    "entitlement_settlement_reconciliation_failed entitlement_id=%s",
+                    entitlement.id,
+                )
+            else:
+                recovered_entitlements += 1
         logger.info(
-            "pending_settlements_completed guest_payments=%s product_sales=%s",
+            "pending_settlements_completed guest_payments=%s product_sales=%s entitlements=%s",
             recovered_payments,
             recovered_sales,
+            recovered_entitlements,
         )
     finally:
         await resources.close()

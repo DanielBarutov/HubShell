@@ -26,7 +26,8 @@ public sealed record SessionSnapshot(
     string? ServerTime = null,
     string? DeviceId = null,
     int LoginGrantRemainingMinutes = 0,
-    long? BalanceRemainingMinutes = null);
+    long? BalanceRemainingMinutes = null,
+    IReadOnlyList<TimeNotificationSnapshot>? TimeNotifications = null);
 
 public sealed record SessionPackageSnapshot(
     string Id,
@@ -59,6 +60,15 @@ public sealed record SessionTariffSnapshot(
     int RemainingMinutes,
     long PricePerMinuteCents = 0,
     int FreeMinutes = 0);
+
+public sealed record TimeNotificationSnapshot(
+    string Id,
+    int ThresholdMinutes,
+    string Message,
+    bool PlaySound,
+    string Sound,
+    string? CustomSoundPath,
+    bool ShowSystemNotification);
 
 public sealed record SessionTransferOfferSnapshot(
     string Id,

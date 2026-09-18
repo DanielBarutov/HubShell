@@ -50,7 +50,7 @@ export function PcPanel({
 
   useEffect(() => {
     const workstationGroupId = pc.groupId?.trim().toLowerCase();
-    const availableTariffs = tariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
+    const availableTariffs = tariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.sale_channel ?? "both") !== "self_service" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
     setTariffId((current) => availableTariffs.some((item) => item.id === current) ? current : availableTariffs[0]?.id || "");
   }, [pc.groupId, tariffs]);
 

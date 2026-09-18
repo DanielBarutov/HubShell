@@ -1,20 +1,32 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import datetime
 import uuid
+from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.entitlements.application.ports import (
     ActiveSessionLookup,
+    CashEntitlementSettlement,
     ClientEntitlementDebit,
     Clock,
     EntitlementRepository,
     TariffLookup,
     WorkstationLookup,
 )
-from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    Entitlement,
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
+from gameclub_backend.modules.payment_methods.domain import (
+    PaymentPart,
+    normalize_payment_parts,
+    validate_mixed_cash_transfer,
+)
 
 
 class UtcClock:
@@ -39,6 +51,7 @@ class EntitlementService:
         clock: Clock | None = None,
         active_sessions: ActiveSessionLookup | None = None,
         workstations: WorkstationLookup | None = None,
+        cash: CashEntitlementSettlement | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -46,6 +59,8 @@ class EntitlementService:
         self._clock = clock or UtcClock()
         self._active_sessions = active_sessions
         self._workstations = workstations
+        self._cash = cash
+        self._reconciliation_lock = asyncio.Lock()
 
     async def list_for_client(self, client_id: uuid.UUID) -> list[Entitlement]:
         return await self._repository.list_for_client(client_id)
@@ -58,6 +73,13 @@ class EntitlementService:
 
     async def get_active_for_client(self, client_id: uuid.UUID) -> Entitlement | None:
         return await self._repository.get_active_for_client(client_id)
+
+    async def list_recoverable_settlements(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[Entitlement]:
+        return await self._repository.list_recoverable_settlements(limit=limit, now=now)
 
     async def burn_active_for_client(
         self,
@@ -75,6 +97,8 @@ class EntitlementService:
         tariff_id: uuid.UUID,
         actor_id: str,
         idempotency_key: str,
+        payment_parts: Sequence[PaymentPart | Mapping[str, object]] | None = None,
+        cash_shift_id: uuid.UUID | None = None,
     ) -> Entitlement:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -102,6 +126,12 @@ class EntitlementService:
                 "Tariff is not available for registered clients at this time",
             )
         try:
+            parts = normalize_payment_parts(payment_parts, tariff.price_cents)
+            validate_mixed_cash_transfer(parts)
+            if not parts:
+                parts = (PaymentPart("balance", tariff.price_cents),)
+            if any(part.method == "cash" for part in parts) and self._cash is None:
+                raise ValueError("Cash settlement is not configured")
             queued = await self._repository.list_for_client(client_id)
             position = max((item.queue_position for item in queued), default=0) + 1
             entitlement = Entitlement(
@@ -123,36 +153,109 @@ class EntitlementService:
                 usage_window_end_minute=tariff.usage_window_end_minute,
                 window_timezone=tariff.window_timezone,
                 audience=tariff.audience,
+                payment_parts=parts,
+                cash_shift_id=cash_shift_id,
+                settlement_status=EntitlementSettlementStatus.PENDING,
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
-        await self._clients.debit(
-            client_id=client_id,
-            amount_cents=tariff.price_cents,
-            reason=f"Package purchase {entitlement.id}",
-            actor_id=actor,
-            idempotency_key=f"entitlement-purchase:{key}",
-        )
         try:
             created = await self._repository.create(entitlement)
         except ValueError as error:
-            await self._compensate_purchase_debit(client_id, tariff.price_cents, key, error)
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-        except Exception as error:
-            await self._compensate_purchase_debit(client_id, tariff.price_cents, key, error)
+        if created.settlement_status is not EntitlementSettlementStatus.SETTLED:
+            return await self._settle_pending(created, actor)
+        return await self._activate_after_settlement(created, now)
+
+    async def retry_pending_settlement(self, entitlement_id: uuid.UUID) -> Entitlement:
+        entitlement = await self.get(entitlement_id)
+        if entitlement.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW:
             raise ApplicationError(
-                ErrorCode.INTERNAL,
-                "Package purchase failed; the balance debit was compensated",
-            ) from error
+                ErrorCode.CONFLICT,
+                "Entitlement settlement requires explicit supervisor review",
+            )
+        if entitlement.settlement_status is EntitlementSettlementStatus.SETTLED:
+            return entitlement
+        async with self._reconciliation_lock:
+            current = await self.get(entitlement_id)
+            if current.settlement_status is EntitlementSettlementStatus.SETTLED:
+                return current
+            return await self._settle_pending(current, current.idempotency_key)
+
+    async def retry_settlement_review(
+        self,
+        entitlement_id: uuid.UUID,
+        reviewed_by: str,
+    ) -> Entitlement:
+        if not reviewed_by.strip():
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Review author is required")
+        entitlement = await self.get(entitlement_id)
+        if entitlement.settlement_status is EntitlementSettlementStatus.SETTLED:
+            return entitlement
+        if entitlement.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW:
+            entitlement = await self._repository.save(
+                entitlement.reopen_settlement_for_review(self._clock.now())
+            )
+        return await self.retry_pending_settlement(entitlement.id)
+
+    async def _settle_pending(
+        self,
+        entitlement: Entitlement,
+        actor_id: str,
+    ) -> Entitlement:
+        now = self._clock.now()
+        try:
+            for index, part in enumerate(entitlement.payment_parts):
+                if part.method == "balance":
+                    await self._clients.debit(
+                        client_id=entitlement.client_id,
+                        amount_cents=part.amount_cents,
+                        reason=f"Package purchase {entitlement.id}",
+                        actor_id=actor_id,
+                        idempotency_key=f"entitlement-purchase:{entitlement.idempotency_key}:{index}",
+                    )
+                elif part.method == "cash":
+                    if self._cash is None or entitlement.cash_shift_id is None:
+                        raise ApplicationError(
+                            ErrorCode.DEPENDENCY_UNAVAILABLE,
+                            "Cash settlement is not configured",
+                        )
+                    await self._cash.settle(
+                        shift_id=entitlement.cash_shift_id,
+                        amount_cents=part.amount_cents,
+                        payment_idempotency_key=f"{entitlement.idempotency_key}:{index}",
+                        actor_id=actor_id,
+                    )
+            settled = await self._repository.save(entitlement.mark_settled(now))
+            return await self._activate_after_settlement(settled, now)
+        except Exception as error:
+            try:
+                if self._is_retryable(error):
+                    updated = entitlement.schedule_settlement_retry(str(error), now)
+                else:
+                    updated = entitlement.mark_needs_review(str(error), now)
+                await self._repository.save(updated)
+            except Exception:
+                pass
+            raise
+
+    async def _activate_after_settlement(
+        self,
+        created: Entitlement,
+        now: datetime.datetime,
+    ) -> Entitlement:
+        queued = await self._repository.list_for_client(created.client_id)
         if (
             self._active_sessions is not None
             and self._workstations is not None
             and not any(
-                item.status in {EntitlementStatus.QUEUED, EntitlementStatus.ACTIVE}
+                item.id != created.id
+                and item.status in {EntitlementStatus.QUEUED, EntitlementStatus.ACTIVE}
+                and item.settlement_status is EntitlementSettlementStatus.SETTLED
                 for item in queued
             )
         ):
-            active_session = await self._active_sessions.get_active_for_client(client_id)
+            active_session = await self._active_sessions.get_active_for_client(created.client_id)
             if active_session is not None:
                 workstation = await self._workstations.get(active_session.workstation_id)
                 if workstation is not None and created.is_compatible(workstation.group_id):
@@ -160,7 +263,7 @@ class EntitlementService:
                         if created.is_available_at(now):
                             return await self._repository.activate_for_client(
                                 created.id,
-                                client_id,
+                                created.client_id,
                                 now,
                                 workstation.group_id,
                             )
@@ -168,27 +271,12 @@ class EntitlementService:
                         raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
         return created
 
-    async def _compensate_purchase_debit(
-        self,
-        client_id: uuid.UUID,
-        amount_cents: int,
-        purchase_key: str,
-        original_error: Exception,
-    ) -> None:
-        try:
-            await self._clients.top_up(
-                client_id=client_id,
-                amount_cents=amount_cents,
-                bonus_amount=0,
-                reason=f"Compensation for failed package purchase {purchase_key}",
-                actor_id="system:entitlement-compensation",
-                idempotency_key=f"entitlement-compensation:{purchase_key}",
-            )
-        except Exception as compensation_error:
-            raise ApplicationError(
-                ErrorCode.INTERNAL,
-                "Package purchase failed after debit; manual balance reconciliation is required",
-            ) from compensation_error
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        return isinstance(error, ApplicationError) and error.code in {
+            ErrorCode.DEPENDENCY_UNAVAILABLE,
+            ErrorCode.INTERNAL,
+        }
 
     async def activate(self, entitlement_id: uuid.UUID, client_id: uuid.UUID) -> Entitlement:
         entitlement = await self.get(entitlement_id)

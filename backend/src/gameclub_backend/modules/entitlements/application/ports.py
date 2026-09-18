@@ -60,6 +60,13 @@ class EntitlementRepository(typing.Protocol):
     ) -> Entitlement:
         """Atomically burn an already started entitlement."""
 
+    async def list_recoverable_settlements(
+        self,
+        limit: int = 100,
+        now: datetime.datetime | None = None,
+    ) -> list[Entitlement]:
+        """Return pending entitlement settlements due for retry."""
+
 
 class ClientEntitlementDebit(typing.Protocol):
     async def debit(
@@ -82,6 +89,17 @@ class ClientEntitlementDebit(typing.Protocol):
         idempotency_key: str,
     ) -> tuple[object, object]:
         """Compensate a debit when package creation fails after settlement."""
+
+
+class CashEntitlementSettlement(typing.Protocol):
+    async def settle(
+        self,
+        shift_id: uuid.UUID,
+        amount_cents: int,
+        payment_idempotency_key: str,
+        actor_id: str,
+    ) -> None:
+        """Record confirmed cash for an entitlement purchase."""
 
 
 class TariffLookup(typing.Protocol):

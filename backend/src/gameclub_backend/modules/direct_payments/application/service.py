@@ -8,8 +8,9 @@ from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.catalog.domain import TariffAudience
+from gameclub_backend.modules.catalog.domain import TariffAudience, TariffSaleChannel
 from gameclub_backend.modules.direct_payments.application.ports import (
+    ActiveSessionLookup,
     CashDirectSettlement,
     Clock,
     GuestSessionPaymentRepository,
@@ -20,7 +21,11 @@ from gameclub_backend.modules.direct_payments.domain import (
     DirectPaymentStatus,
     GuestSessionPayment,
 )
-from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
+from gameclub_backend.modules.payment_methods.domain import (
+    PaymentPart,
+    normalize_payment_parts,
+    validate_mixed_cash_transfer,
+)
 from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
 
 
@@ -38,6 +43,7 @@ class GuestSessionPaymentService:
         clock: Clock | None = None,
         audit: AuditRepository | None = None,
         workstations: WorkstationLookup | None = None,
+        active_sessions: ActiveSessionLookup | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -45,6 +51,7 @@ class GuestSessionPaymentService:
         self._clock = clock or UtcClock()
         self._audit = audit
         self._workstations = workstations
+        self._active_sessions = active_sessions
         self._reconciliation_lock = asyncio.Lock()
 
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment:
@@ -113,9 +120,19 @@ class GuestSessionPaymentService:
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone",
                 )
+        if (
+            self._active_sessions is not None
+            and await self._active_sessions.get_active_for_workstation(workstation_id) is not None
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Guest tariff cannot be sold while the workstation has an active session",
+            )
         now = self._clock.now()
         if not tariff.active or tariff.price_cents <= 0:
             raise ApplicationError(ErrorCode.CONFLICT, "Tariff is not payable as a guest package")
+        if not tariff.is_sellable_through(TariffSaleChannel.OPERATOR):
+            raise ApplicationError(ErrorCode.CONFLICT, "Tariff is not available for operator sale")
         if not tariff.is_visible_to(now, TariffAudience.GUEST):
             raise ApplicationError(
                 ErrorCode.CONFLICT,
@@ -126,6 +143,7 @@ class GuestSessionPaymentService:
                 payment_parts,
                 tariff.price_cents * tariff_quantity,
             )
+            validate_mixed_cash_transfer(parts)
             payment = GuestSessionPayment(
                 id=uuid.uuid4(),
                 workstation_id=workstation_id,

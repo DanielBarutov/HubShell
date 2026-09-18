@@ -149,7 +149,20 @@ def create_router(
 
     @router.get("", response_model=list[WorkstationResponse], dependencies=[operator])
     async def list_workstations() -> list[WorkstationResponse]:
-        return [WorkstationResponse.from_domain(item) for item in await service.list()]
+        workstations = await service.list()
+        snapshots_by_workstation_id: dict[uuid.UUID, SessionSnapshot] = {}
+        if session_service is not None:
+            for active_session in await session_service.list(active_only=True):
+                snapshots_by_workstation_id[active_session.workstation_id] = (
+                    await session_service.snapshot(active_session.id)
+                )
+        return [
+            WorkstationResponse.from_domain(
+                item,
+                snapshots_by_workstation_id.get(item.id),
+            )
+            for item in workstations
+        ]
 
     @router.post("", response_model=WorkstationResponse, status_code=status.HTTP_201_CREATED)
     async def register_workstation(

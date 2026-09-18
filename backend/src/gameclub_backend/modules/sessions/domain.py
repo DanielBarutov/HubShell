@@ -99,6 +99,25 @@ class SessionTariffSnapshot:
 
 
 @dataclasses.dataclass(frozen=True)
+class SessionTimeNotification:
+    """Server-owned notification candidate delivered with a session snapshot."""
+
+    id: str
+    threshold_minutes: int
+    message: str
+    play_sound: bool
+    sound: str
+    custom_sound_path: str | None
+    show_system_notification: bool
+
+    def __post_init__(self) -> None:
+        if not self.id.strip() or self.threshold_minutes <= 0:
+            raise ValueError("Session notification identity and threshold are required")
+        if not self.message.strip():
+            raise ValueError("Session notification message is required")
+
+
+@dataclasses.dataclass(frozen=True)
 class SessionSnapshot:
     """Server-owned, versioned state sent to operator and device consumers."""
 
@@ -117,7 +136,9 @@ class SessionSnapshot:
     active_tariff: SessionTariffSnapshot | None
     login_grant_remaining_minutes: int
     allowed_actions: tuple[str, ...]
+    tariff_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
     balance_remaining_minutes: int | None = None
+    time_notifications: tuple[SessionTimeNotification, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version < 1:

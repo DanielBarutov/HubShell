@@ -10,7 +10,11 @@ from gameclub_backend.modules.clients.domain import Client, Guest
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
 from gameclub_backend.modules.entitlements.domain import Entitlement
 from gameclub_backend.modules.reservations.domain import Reservation
-from gameclub_backend.modules.sessions.domain import Session, SessionTransferOffer
+from gameclub_backend.modules.sessions.domain import (
+    Session,
+    SessionTimeNotification,
+    SessionTransferOffer,
+)
 from gameclub_backend.modules.workstations.domain import Workstation
 
 
@@ -114,3 +118,14 @@ class ReservationLookup(typing.Protocol):
 class Clock(typing.Protocol):
     def now(self) -> datetime.datetime:
         """Return an aware UTC datetime."""
+
+
+class TimeNotificationLookup(typing.Protocol):
+    async def due_events(
+        self,
+        session_id: uuid.UUID,
+        remaining_minutes: int,
+        source: str,
+        now: datetime.datetime,
+    ) -> list[SessionTimeNotification]:
+        """Return server-backed time notifications for a current snapshot."""

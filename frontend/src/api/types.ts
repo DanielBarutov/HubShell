@@ -52,6 +52,7 @@ export type BackendClient = {
   balance_bonus: number;
   created_at: string;
   updated_at: string;
+  client_group_id?: string | null;
 };
 
 export type BackendGuest = {
@@ -97,6 +98,12 @@ export type BackendEntitlement = {
   activated_at: string | null;
   ended_at: string | null;
   burn_reason: string | null;
+  payment_parts: BackendPaymentPart[];
+  cash_shift_id: string | null;
+  settlement_status?: "pending" | "settled" | "needs_review";
+  settlement_error?: string | null;
+  settlement_attempts?: number;
+  next_settlement_attempt_at?: string | null;
   time_restricted?: boolean;
   sale_window_start_minute?: number | null;
   sale_window_end_minute?: number | null;
@@ -170,6 +177,7 @@ export type BackendTariff = {
   usage_window_end_minute?: number | null;
   window_timezone?: string | null;
   audience?: "all" | "guest" | "registered";
+  sale_channel?: "operator" | "self_service" | "both";
 };
 
 export type BackendDiscountRule = {
@@ -362,6 +370,29 @@ export type BackendPaymentMethod = {
   updated_at: string;
 };
 
+export type BackendClientGroup = {
+  id: string;
+  name: string;
+  allow_negative_balance: boolean;
+  negative_balance_limit_cents: number;
+  active: boolean;
+  is_default: boolean;
+  updated_at: string | null;
+};
+
+export type BackendNotificationRule = {
+  id: string;
+  threshold_minutes: number;
+  enabled: boolean;
+  play_sound: boolean;
+  sound: "standard" | "custom";
+  custom_sound_path: string | null;
+  show_system_notification: boolean;
+  message: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TokenResponse = {
   access_token: string;
   token_type: string;
@@ -433,7 +464,19 @@ export type BackendSessionSnapshot = {
   active_tariff: BackendSessionTariff | null;
   login_grant_remaining_minutes: number;
   allowed_actions: string[];
+  balance_remaining_minutes?: number | null;
+  time_notifications?: BackendTimeNotification[];
   device_id?: string;
+};
+
+export type BackendTimeNotification = {
+  id: string;
+  threshold_minutes: number;
+  message: string;
+  play_sound: boolean;
+  sound: "standard" | "custom";
+  custom_sound_path: string | null;
+  show_system_notification: boolean;
 };
 
 export type BackendSessionTariff = {
@@ -449,6 +492,7 @@ export type BackendSessionTariff = {
 export type BackendSnapshotEntitlement = {
   id: string;
   tariff_id: string;
+  tariff_name?: string | null;
   zone_id: string | null;
   duration_minutes: number;
   remaining_minutes: number;
@@ -461,6 +505,7 @@ export type BackendSnapshotEntitlement = {
   usage_window_end_minute: number | null;
   window_timezone: string | null;
   audience?: "all" | "guest" | "registered";
+  sale_channel?: "operator" | "self_service" | "both";
 };
 
 export type BackendSessionMeter = {

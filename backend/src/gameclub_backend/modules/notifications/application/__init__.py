@@ -1,0 +1,1 @@
+"""Notification rule application layer."""

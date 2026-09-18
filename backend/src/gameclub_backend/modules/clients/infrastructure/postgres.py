@@ -38,6 +38,7 @@ class ClientModel(ClientBase):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     password_reset_required: Mapped[bool] = mapped_column(default=False, server_default="false")
     password_reset_login_used: Mapped[bool] = mapped_column(default=False, server_default="false")
+    client_group_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
     def to_domain(self) -> Client:
         return Client(
@@ -53,6 +54,7 @@ class ClientModel(ClientBase):
             password_hash=self.password_hash,
             password_reset_required=self.password_reset_required,
             password_reset_login_used=self.password_reset_login_used,
+            client_group_id=self.client_group_id,
         )
 
     @classmethod
@@ -70,6 +72,7 @@ class ClientModel(ClientBase):
             password_hash=client.password_hash,
             password_reset_required=client.password_reset_required,
             password_reset_login_used=client.password_reset_login_used,
+            client_group_id=client.client_group_id,
         )
 
 
@@ -270,6 +273,7 @@ class PostgresClientRepository:
         self,
         client: Client,
         operation: BalanceOperation,
+        minimum_balance_cents: int = 0,
     ) -> tuple[Client, BalanceOperation]:
         async with open_session(self._engine_provider) as session:
             async with session.begin():
@@ -293,7 +297,7 @@ class PostgresClientRepository:
                     return client_model.to_domain(), existing_model.to_domain()
 
                 next_balance = client_model.balance_cents + operation.amount_cents
-                if next_balance < 0:
+                if next_balance < minimum_balance_cents:
                     raise ValueError("Insufficient balance")
                 client_model.balance_cents = next_balance
                 client_model.balance_bonus += operation.bonus_amount

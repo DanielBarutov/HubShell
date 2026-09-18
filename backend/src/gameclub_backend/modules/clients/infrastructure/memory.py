@@ -87,6 +87,7 @@ class InMemoryClientRepository:
         self,
         client: Client,
         operation: BalanceOperation,
+        minimum_balance_cents: int = 0,
     ) -> tuple[Client, BalanceOperation]:
         async with self._balance_lock:
             existing = self._operations.get(operation.idempotency_key)
@@ -96,7 +97,7 @@ class InMemoryClientRepository:
             if current is None:
                 raise ValueError("Client not found")
             next_balance = current.balance_cents + operation.amount_cents
-            if next_balance < 0:
+            if next_balance < minimum_balance_cents:
                 raise ValueError("Insufficient balance")
             updated = dataclasses.replace(
                 current,

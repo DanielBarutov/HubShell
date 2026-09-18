@@ -83,4 +83,20 @@ describe("GameClubApi", () => {
       message: "Недостаточно прав",
     });
   });
+
+  it("передаёт группу клиента при создании и изменении профиля", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ id: "client-1" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ id: "client-1" }));
+    const api = new GameClubApi("http://backend/api/v1");
+
+    await api.createClient({ nickname: "NewFox", client_group_id: "vip" });
+    await api.updateClient("client-1", { nickname: "NewFox", client_group_id: "regular" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://backend/api/v1/clients");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ body: JSON.stringify({ nickname: "NewFox", client_group_id: "vip" }) });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://backend/api/v1/clients/client-1");
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ body: JSON.stringify({ nickname: "NewFox", client_group_id: "regular" }) });
+  });
 });

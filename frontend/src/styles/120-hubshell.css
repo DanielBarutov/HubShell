@@ -817,3 +817,138 @@ nav {
     border-color: #a7df54;
     background: var(--lime);
 }
+
+/* Settings editors use the same field rhythm as side-panel forms. */
+.settings-resource-editors {
+    display: grid;
+    gap: 16px;
+    margin-top: 16px;
+}
+.settings-inline-form {
+    display: grid;
+    gap: 14px;
+    margin-top: 16px;
+}
+.settings-inline-form label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    color: #bdcdc6;
+    font-size: 11px;
+    font-weight: 650;
+}
+.settings-inline-form input:not([type="checkbox"]),
+.settings-inline-form select,
+.settings-inline-form textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 8px 10px;
+    color: #e7f0ea;
+    border: 1px solid #304542;
+    border-radius: 8px;
+    outline: none;
+    background: #0c1517;
+    font: inherit;
+}
+.settings-inline-form textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+.settings-inline-form input:focus,
+.settings-inline-form select:focus,
+.settings-inline-form textarea:focus {
+    border-color: #7caf55;
+    box-shadow: 0 0 0 3px rgba(182, 243, 90, .12);
+}
+.settings-inline-form .settings-checkbox {
+    justify-content: flex-end;
+    min-height: 38px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding-top: 23px;
+    font-weight: 600;
+}
+.settings-inline-form .settings-checkbox input[type="checkbox"],
+.settings-toggle-list input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #83d64d;
+}
+.settings-toggle-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 13px;
+}
+.settings-toggle-list label {
+    min-height: 28px;
+    font-size: 11px;
+}
+.settings-inline-form .primary-button {
+    width: fit-content;
+    min-width: 156px;
+}
+
+/* A server snapshot is rendered as a real tooltip, not a browser title. */
+.session-hover-card {
+    position: fixed;
+    z-index: 100;
+    width: min(320px, calc(100vw - 24px));
+    padding: 14px;
+    color: #c6d6ce;
+    border: 1px solid #4b6556;
+    border-radius: 12px;
+    background: #101c1d;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, .42);
+    pointer-events: none;
+}
+.session-hover-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #849c91;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.session-hover-card-head b {
+    color: #f0be76;
+    font-size: 9px;
+}
+.session-hover-client {
+    display: block;
+    margin: 5px 0 12px;
+    color: #f0f8f1;
+    font-size: 15px;
+}
+.session-hover-summary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 14px;
+    margin: 0;
+    font-size: 11px;
+}
+.session-hover-summary dt { color: #859a91; }
+.session-hover-summary dd { margin: 0; color: #e5f1e9; font-weight: 700; text-align: right; }
+.session-hover-packages {
+    display: grid;
+    gap: 7px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #263b37;
+}
+.session-hover-packages > span { color: #8fa69b; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.session-hover-package { display: grid; gap: 2px; }
+.session-hover-package b { color: #e8f4ec; font-size: 11px; }
+.session-hover-package span { color: #91a79d; font-size: 10px; }
+.session-hover-card > small { display: block; margin-top: 12px; padding-top: 10px; color: #778d83; border-top: 1px solid #263b37; font-size: 9px; }
+
+@media (max-width: 720px) {
+    .form-grid-two,
+    .settings-toggle-list { grid-template-columns: 1fr; }
+    .settings-inline-form .settings-checkbox { justify-content: flex-start; padding-top: 0; }
+}

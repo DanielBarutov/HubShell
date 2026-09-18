@@ -5,6 +5,7 @@ import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from gameclub_backend.modules.catalog.domain import TariffAudience
+from gameclub_backend.modules.payment_methods.domain import PaymentPart
 
 
 class EntitlementStatus(enum.StrEnum):
@@ -12,6 +13,12 @@ class EntitlementStatus(enum.StrEnum):
     ACTIVE = "active"
     EXHAUSTED = "exhausted"
     BURNED = "burned"
+
+
+class EntitlementSettlementStatus(enum.StrEnum):
+    PENDING = "pending"
+    SETTLED = "settled"
+    NEEDS_REVIEW = "needs_review"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -37,6 +44,12 @@ class Entitlement:
     usage_window_end_minute: int | None = None
     window_timezone: str | None = None
     audience: TariffAudience = TariffAudience.ALL
+    payment_parts: tuple[PaymentPart, ...] = ()
+    cash_shift_id: uuid.UUID | None = None
+    settlement_status: EntitlementSettlementStatus = EntitlementSettlementStatus.SETTLED
+    settlement_error: str | None = None
+    settlement_attempts: int = 0
+    next_settlement_attempt_at: datetime.datetime | None = None
 
     def __post_init__(self) -> None:
         if self.duration_minutes <= 0:
@@ -45,6 +58,27 @@ class Entitlement:
             raise ValueError("Entitlement remaining minutes are invalid")
         if self.price_cents < 0:
             raise ValueError("Entitlement price cannot be negative")
+        parts = tuple(self.payment_parts)
+        if parts and sum(part.amount_cents for part in parts) != self.price_cents:
+            raise ValueError("Payment parts total must match entitlement price")
+        if any(part.method not in {"balance", "cash", "transfer"} for part in parts):
+            raise ValueError("Unsupported entitlement payment method")
+        if any(part.method == "cash" for part in parts) and self.cash_shift_id is None:
+            raise ValueError("Cash entitlement payment requires a cash shift")
+        try:
+            settlement_status = EntitlementSettlementStatus(self.settlement_status)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Invalid entitlement settlement status") from error
+        if self.settlement_attempts < 0:
+            raise ValueError("Entitlement settlement attempts cannot be negative")
+        next_attempt_at = self.next_settlement_attempt_at or self.purchased_at
+        if next_attempt_at.tzinfo is None:
+            raise ValueError("Entitlement settlement retry timestamp must include timezone")
+        if self.settlement_error is not None and not self.settlement_error.strip():
+            raise ValueError("Entitlement settlement error cannot be empty")
+        object.__setattr__(self, "payment_parts", parts)
+        object.__setattr__(self, "settlement_status", settlement_status)
+        object.__setattr__(self, "next_settlement_attempt_at", next_attempt_at)
         if self.queue_position <= 0:
             raise ValueError("Entitlement queue position must be positive")
         if not self.idempotency_key.strip():
@@ -162,4 +196,74 @@ class Entitlement:
             status=EntitlementStatus.BURNED,
             ended_at=now,
             burn_reason=normalized_reason[:256],
+        )
+
+    def mark_settled(self, now: datetime.datetime) -> "Entitlement":
+        if now.tzinfo is None:
+            raise ValueError("Entitlement settlement time must include timezone")
+        if self.settlement_status is EntitlementSettlementStatus.SETTLED:
+            return self
+        return dataclasses.replace(
+            self,
+            settlement_status=EntitlementSettlementStatus.SETTLED,
+            settlement_error=None,
+            next_settlement_attempt_at=now,
+        )
+
+    def mark_needs_review(
+        self,
+        error: str,
+        now: datetime.datetime | None = None,
+    ) -> "Entitlement":
+        normalized_error = error.strip()
+        if not normalized_error:
+            raise ValueError("Entitlement settlement review reason is required")
+        return dataclasses.replace(
+            self,
+            settlement_status=EntitlementSettlementStatus.NEEDS_REVIEW,
+            settlement_error=normalized_error[:1_000],
+            settlement_attempts=self.settlement_attempts + 1,
+            next_settlement_attempt_at=now or self.next_settlement_attempt_at,
+        )
+
+    def schedule_settlement_retry(
+        self,
+        error: str,
+        now: datetime.datetime,
+    ) -> "Entitlement":
+        if now.tzinfo is None:
+            raise ValueError("Entitlement settlement retry time must include timezone")
+        normalized_error = error.strip()
+        if not normalized_error:
+            raise ValueError("Entitlement settlement retry reason is required")
+        attempt = self.settlement_attempts + 1
+        delay_seconds = min(300, 2 ** min(attempt, 8))
+        return dataclasses.replace(
+            self,
+            settlement_status=EntitlementSettlementStatus.PENDING,
+            settlement_error=normalized_error[:1_000],
+            settlement_attempts=attempt,
+            next_settlement_attempt_at=now + datetime.timedelta(seconds=delay_seconds),
+        )
+
+    def is_settlement_due(self, now: datetime.datetime) -> bool:
+        return (
+            self.settlement_status is EntitlementSettlementStatus.PENDING
+            and self.next_settlement_attempt_at is not None
+            and self.next_settlement_attempt_at <= now
+        )
+
+    def reopen_settlement_for_review(
+        self,
+        now: datetime.datetime | None = None,
+    ) -> "Entitlement":
+        if self.settlement_status is EntitlementSettlementStatus.SETTLED:
+            return self
+        if self.settlement_status is not EntitlementSettlementStatus.NEEDS_REVIEW:
+            return self
+        return dataclasses.replace(
+            self,
+            settlement_status=EntitlementSettlementStatus.PENDING,
+            settlement_error=None,
+            next_settlement_attempt_at=now or self.next_settlement_attempt_at,
         )

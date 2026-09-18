@@ -79,6 +79,7 @@ class SessionResponse(BaseModel):
 class SnapshotEntitlementResponse(BaseModel):
     id: uuid.UUID
     tariff_id: uuid.UUID
+    tariff_name: str | None
     zone_id: str | None
     duration_minutes: int
     remaining_minutes: int
@@ -93,10 +94,11 @@ class SnapshotEntitlementResponse(BaseModel):
     audience: str
 
     @classmethod
-    def from_domain(cls, item) -> "SnapshotEntitlementResponse":
+    def from_domain(cls, item, tariff_name: str | None = None) -> "SnapshotEntitlementResponse":
         return cls(
             id=item.id,
             tariff_id=item.tariff_id,
+            tariff_name=tariff_name,
             zone_id=item.zone_id,
             duration_minutes=item.duration_minutes,
             remaining_minutes=item.remaining_minutes,
@@ -156,6 +158,16 @@ class SnapshotTariffResponse(BaseModel):
         )
 
 
+class SessionTimeNotificationResponse(BaseModel):
+    id: str
+    threshold_minutes: int
+    message: str
+    play_sound: bool
+    sound: str
+    custom_sound_path: str | None
+    show_system_notification: bool
+
+
 class SessionSnapshotResponse(BaseModel):
     schema_version: int
     server_time: str
@@ -173,6 +185,7 @@ class SessionSnapshotResponse(BaseModel):
     login_grant_remaining_minutes: int
     allowed_actions: list[str]
     balance_remaining_minutes: int | None
+    time_notifications: list[SessionTimeNotificationResponse]
 
     @classmethod
     def from_domain(cls, snapshot: SessionSnapshot) -> "SessionSnapshotResponse":
@@ -187,12 +200,19 @@ class SessionSnapshotResponse(BaseModel):
             balance_cents=snapshot.balance_cents,
             balance_bonus=snapshot.balance_bonus,
             active_entitlement=(
-                SnapshotEntitlementResponse.from_domain(snapshot.active_entitlement)
+                SnapshotEntitlementResponse.from_domain(
+                    snapshot.active_entitlement,
+                    snapshot.tariff_names.get(snapshot.active_entitlement.tariff_id),
+                )
                 if snapshot.active_entitlement
                 else None
             ),
             entitlements=[
-                SnapshotEntitlementResponse.from_domain(item) for item in snapshot.entitlements
+                SnapshotEntitlementResponse.from_domain(
+                    item,
+                    snapshot.tariff_names.get(item.tariff_id),
+                )
+                for item in snapshot.entitlements
             ],
             meter=SnapshotMeterResponse.from_domain(snapshot.meter) if snapshot.meter else None,
             active_tariff=(
@@ -203,6 +223,18 @@ class SessionSnapshotResponse(BaseModel):
             login_grant_remaining_minutes=snapshot.login_grant_remaining_minutes,
             allowed_actions=list(snapshot.allowed_actions),
             balance_remaining_minutes=snapshot.balance_remaining_minutes,
+            time_notifications=[
+                SessionTimeNotificationResponse(
+                    id=item.id,
+                    threshold_minutes=item.threshold_minutes,
+                    message=item.message,
+                    play_sound=item.play_sound,
+                    sound=item.sound,
+                    custom_sound_path=item.custom_sound_path,
+                    show_system_notification=item.show_system_notification,
+                )
+                for item in snapshot.time_notifications
+            ],
         )
 
 

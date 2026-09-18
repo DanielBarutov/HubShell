@@ -16,6 +16,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly IWorkstationPowerController? _powerController;
     private readonly IClientPortalGateway _clientPortal;
     private readonly SessionTimeProjection _sessionTimeProjection = new();
+    private readonly TimeNotificationDispatcher _timeNotificationDispatcher;
     private readonly Func<DateTimeOffset> _clock;
     private readonly List<Task> _backgroundTasks = [];
     private CancellationTokenSource _lifetime = new();
@@ -63,7 +64,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         string clientVersion = "0.1.0",
         IReadOnlyCollection<string>? capabilities = null,
         IWorkstationPowerController? powerController = null,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        ITimeNotificationPresenter? timeNotificationPresenter = null)
     {
         _session = session;
         _accessCredentials = accessCredentials;
@@ -71,6 +73,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _clientPortal = session.ClientPortal;
         _powerController = powerController;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _timeNotificationDispatcher = new TimeNotificationDispatcher(timeNotificationPresenter);
         DeviceId = deviceId;
         ClientVersion = clientVersion;
         Capabilities = capabilities ?? Array.Empty<string>();
@@ -1170,10 +1173,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             return false;
         }
 
-        await _session.BackendClient.StopSessionAsync(
-            activeSession.Id,
-            DeviceId,
-            cancellationToken);
+        try
+        {
+            await _session.BackendClient.StopSessionAsync(
+                activeSession.Id,
+                DeviceId,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception)
+        {
+            _portalMessage = "Не удалось завершить сессию. Проверьте связь и повторите выход.";
+            OnPropertyChanged(nameof(AccessMessage));
+            return false;
+        }
         _activeSession = null;
         _portalSessionIdempotencyKey = null;
         PublishSessionState();
@@ -1718,6 +1734,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         var previous = _activeSession;
         _activeSession = snapshot;
         _sessionTimeProjection.Apply(snapshot, _clock());
+        foreach (var notification in _timeNotificationDispatcher.Dispatch(snapshot.TimeNotifications))
+        {
+            ShowSessionNotification(notification.Message);
+        }
         if (IsAccessLocked
             && !IsMaintenanceMode
             && snapshot.ClientId is null

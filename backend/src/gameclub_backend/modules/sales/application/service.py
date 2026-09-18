@@ -7,7 +7,11 @@ from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.payment_methods.domain import PaymentPart, normalize_payment_parts
+from gameclub_backend.modules.payment_methods.domain import (
+    PaymentPart,
+    normalize_payment_parts,
+    validate_mixed_cash_transfer,
+)
 from gameclub_backend.modules.sales.application.ports import (
     CashSaleSettlement,
     ClientSale,
@@ -97,6 +101,7 @@ class ProductSaleService:
                 payment_parts,
                 product.price_cents * quantity,
             )
+            validate_mixed_cash_transfer(normalized_parts)
             method = ProductPaymentMethod(payment_method.strip().lower())
             if normalized_parts:
                 if len(normalized_parts) > 1 and method is not ProductPaymentMethod.MIXED:

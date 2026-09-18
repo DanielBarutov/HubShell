@@ -14,6 +14,7 @@ from gameclub_backend.modules.catalog.domain import (
     Tariff,
     TariffAudience,
     TariffLifecycle,
+    TariffSaleChannel,
 )
 
 
@@ -171,6 +172,7 @@ class CatalogService:
         usage_window_end_minute: int | None = None,
         window_timezone: str | None = None,
         audience: TariffAudience = TariffAudience.ALL,
+        sale_channel: TariffSaleChannel = TariffSaleChannel.BOTH,
     ) -> Tariff:
         try:
             lifecycle = TariffLifecycle(lifecycle)
@@ -189,6 +191,13 @@ class CatalogService:
             audience = TariffAudience(audience)
         except (TypeError, ValueError) as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid tariff audience") from error
+        try:
+            sale_channel = TariffSaleChannel(sale_channel)
+        except (TypeError, ValueError) as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Invalid tariff sale channel",
+            ) from error
         if (
             not name.strip()
             or duration_minutes <= 0
@@ -229,6 +238,7 @@ class CatalogService:
             usage_window_end_minute=usage_window_end_minute,
             window_timezone=window_timezone.strip() if window_timezone else None,
             audience=audience,
+            sale_channel=sale_channel,
         )
         return await self._repository.create_tariff(tariff)
 
@@ -265,6 +275,7 @@ class CatalogService:
             and (tariff.valid_to is None or now < tariff.valid_to)
             and (tariff.group_id is None or tariff.group_id.strip().lower() == normalized_group_id)
             and tariff.is_visible_to(now, buyer_audience)
+            and tariff.is_sellable_through(TariffSaleChannel.SELF_SERVICE)
         ]
 
     async def get_tariff(self, tariff_id: uuid.UUID) -> Tariff | None:

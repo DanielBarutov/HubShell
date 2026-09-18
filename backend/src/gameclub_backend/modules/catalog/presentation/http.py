@@ -17,6 +17,7 @@ from gameclub_backend.modules.catalog.domain import (
     Tariff,
     TariffAudience,
     TariffLifecycle,
+    TariffSaleChannel,
 )
 from gameclub_backend.presentation.http.auth import require_permissions
 
@@ -68,6 +69,7 @@ class TariffRequest(BaseModel):
     usage_window_end_minute: int | None = Field(default=None, ge=0, lt=1440)
     window_timezone: str | None = Field(default=None, min_length=1, max_length=64)
     audience: TariffAudience = TariffAudience.ALL
+    sale_channel: TariffSaleChannel = TariffSaleChannel.BOTH
 
 
 class DiscountRuleRequest(BaseModel):
@@ -122,6 +124,7 @@ class TariffResponse(BaseModel):
     usage_window_end_minute: int | None
     window_timezone: str | None
     audience: TariffAudience
+    sale_channel: TariffSaleChannel
 
     @classmethod
     def from_domain(cls, tariff: Tariff) -> "TariffResponse":
