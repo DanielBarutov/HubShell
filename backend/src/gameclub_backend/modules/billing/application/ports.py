@@ -86,6 +86,9 @@ class EntitlementMeter(typing.Protocol):
     ) -> EntitlementConsumption:
         """Consume package minutes and auto-activate the next compatible item."""
 
+    async def burn_active_for_client(self, client_id: uuid.UUID, reason: str):
+        """Burn the currently active package when its usage window closes."""
+
 
 class SessionLookup(typing.Protocol):
     async def get(self, session_id: uuid.UUID) -> Session | None:

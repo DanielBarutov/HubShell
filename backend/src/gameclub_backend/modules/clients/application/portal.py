@@ -77,6 +77,14 @@ class EntitlementReader(typing.Protocol):
     async def activate(self, entitlement_id: uuid.UUID, client_id: uuid.UUID) -> Entitlement:
         """Activate one package after an explicit client action."""
 
+    async def next_compatible(
+        self,
+        client_id: uuid.UUID,
+        zone_id: str | None,
+        now: datetime.datetime | None = None,
+    ) -> Entitlement | None:
+        """Return the first queued package that can be consumed now."""
+
     async def purchase(
         self,
         client_id: uuid.UUID,
@@ -219,7 +227,11 @@ class ClientPortalService:
             sessions=tuple(sessions),
             charges=tuple(charges),
             purchases=tuple(purchases),
-            available_time_minutes=self._available_time_minutes(client.balance_cents, tariffs),
+            available_time_minutes=self._available_time_minutes(
+                client.balance_cents,
+                tariffs,
+                group_id,
+            ),
             tariff_names={tariff.id: tariff.name for tariff in tariffs},
             workstation_names=await self._workstation_names(sessions),
             session_duration_minutes={
@@ -345,11 +357,20 @@ class ClientPortalService:
             if workstation is None:
                 raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Device is not assigned")
             entitlement = await self._entitlements.get(entitlement_id)
-            if not entitlement.is_compatible(effective_workstation_group_id(workstation.group_id)):
-                raise ApplicationError(
-                    ErrorCode.CONFLICT,
-                    "Package is incompatible with this workstation zone",
+            group_id = effective_workstation_group_id(workstation.group_id)
+            now = self._clock.now()
+            if not entitlement.is_compatible(group_id) or not entitlement.is_available_at(now):
+                next_item = await self._entitlements.next_compatible(
+                    client_id,
+                    group_id,
+                    now,
                 )
+                if next_item is None:
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT,
+                        "No queued package is available for this workstation now",
+                    )
+                entitlement_id = next_item.id
         await self._entitlements.activate(entitlement_id, client_id)
         if device_id is not None:
             return await self.snapshot_for_device(client_id, device_id)
@@ -367,10 +388,21 @@ class ClientPortalService:
         return workstation
 
     @staticmethod
-    def _available_time_minutes(balance_cents: int, tariffs: list[Tariff]) -> int:
+    def _available_time_minutes(
+        balance_cents: int,
+        tariffs: list[Tariff],
+        group_id: str | None,
+    ) -> int:
         available = 0
+        normalized_group_id = group_id.strip().lower() if group_id else None
         for tariff in tariffs:
             if not tariff.active or tariff.lifecycle is not TariffLifecycle.PUBLISHED:
+                continue
+            if (
+                normalized_group_id is not None
+                and tariff.group_id is not None
+                and tariff.group_id.strip().lower() != normalized_group_id
+            ):
                 continue
             if tariff.billing_mode is BillingMode.PER_MINUTE:
                 if tariff.price_per_minute_cents > 0:

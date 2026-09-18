@@ -146,6 +146,7 @@ async def build_package_metered_services(
     usage_window_end_minute: int | None = None,
     window_timezone: str | None = None,
     cash_settlement=None,
+    return_catalog: bool = False,
 ):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
@@ -209,7 +210,7 @@ async def build_package_metered_services(
         meter_repository=meter_repository,
         entitlements=entitlements,
     )
-    return (
+    result = (
         workstation,
         client,
         tariff,
@@ -219,6 +220,7 @@ async def build_package_metered_services(
         clients,
         entitlements,
     )
+    return (*result, catalog) if return_catalog else result
 
 
 @pytest.mark.asyncio
@@ -823,10 +825,10 @@ async def test_debtor_group_stops_session_after_reaching_600_ruble_debt_limit() 
 
 
 @pytest.mark.asyncio
-async def test_windowed_package_consumes_only_minutes_inside_local_window() -> None:
+async def test_windowed_package_stops_session_and_burns_remainder_when_window_closes() -> None:
     """
-    Проверяет сценарий «test_windowed_package_consumes_only_minutes_inside_local_window» и
-    подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
+    Проверяет, что закрытие окна расходования завершает сессию и сжигает остаток
+    уже активного пакета.
     """
     clock = FixedClock()
     clock.current = datetime.datetime(2026, 8, 29, 18, tzinfo=datetime.UTC)
@@ -863,11 +865,64 @@ async def test_windowed_package_consumes_only_minutes_inside_local_window() -> N
     first_tick = await billing.meter_session(session.id)
     assert first_tick is not None
     assert first_tick.package_minutes == 30
+    assert first_tick.status is MeterStatus.SETTLED
+    assert (await entitlements.get(package.id)).status is EntitlementStatus.BURNED
+    assert (await entitlements.get(package.id)).remaining_minutes == 30
+    completed = await sessions.get(session.id)
+    assert completed.status.value == "completed"
+    assert completed.ended_at == datetime.datetime(2026, 8, 30, 3, tzinfo=datetime.UTC)
 
-    clock.current += datetime.timedelta(minutes=60)
-    outside = await billing.meter_session(session.id)
-    assert outside is None
     assert (await meters.get(session.id)).package_minutes == 30
+
+
+@pytest.mark.asyncio
+async def test_eleven_hour_night_package_started_at_one_ends_session_at_eight() -> None:
+    """
+    Проверяет, что ночной пакет с 21:00 до 08:00 завершает сессию в 08:00,
+    даже если у него остаются неиспользованные минуты.
+    """
+    clock = FixedClock()
+    clock.current = datetime.datetime(2026, 8, 29, 22, tzinfo=datetime.UTC)
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+        entitlements,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=11 * 60,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=23 * 60 + 59,
+        usage_window_start_minute=21 * 60,
+        usage_window_end_minute=8 * 60,
+        window_timezone="Europe/Moscow",
+    )
+    package = await entitlements.purchase(client.id, tariff.id, "operator", "eleven-hour-night")
+    await entitlements.activate(package.id, client.id)
+    session = await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="eleven-hour-night-session",
+    )
+
+    clock.current += datetime.timedelta(hours=7)
+    meter = await billing.meter_session(session.id)
+    completed = await sessions.get(session.id)
+    burned = await entitlements.get(package.id)
+
+    assert meter is not None
+    assert meter.package_minutes == 7 * 60
+    assert completed.status.value == "completed"
+    assert completed.ended_at == datetime.datetime(2026, 8, 30, 5, tzinfo=datetime.UTC)
+    assert burned.status is EntitlementStatus.BURNED
+    assert burned.remaining_minutes == 4 * 60
+    assert burned.burn_reason == "usage_window_ended"
 
 
 @pytest.mark.asyncio
@@ -1030,6 +1085,61 @@ async def test_package_time_window_uses_configured_timezone() -> None:
     clock.current = datetime.datetime(2026, 8, 29, 19, tzinfo=datetime.UTC)
     assert (await entitlements.next_compatible(client.id, "vip", now=clock.current)).id == item.id
     assert (await entitlements.activate(item.id, client.id)).status is EntitlementStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_available_package_starts_when_earlier_night_package_waits_for_window() -> None:
+    """
+    Проверяет, что ночной пакет вне окна расходования остаётся в очереди и не
+    мешает сразу запустить следующий доступный пакет активной сессии.
+    """
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        _package_tariff,
+        sessions,
+        _billing,
+        _meters,
+        _clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(clock, return_catalog=True)
+    night = await catalog.create_tariff(
+        "Ночной тест",
+        "vip",
+        duration_minutes=660,
+        price_cents=100,
+        valid_from=clock.current,
+        valid_to=None,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=1_439,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=8 * 60,
+        window_timezone="Europe/Moscow",
+    )
+    normal = await catalog.create_tariff(
+        "Тест",
+        "vip",
+        duration_minutes=3,
+        price_cents=100,
+        valid_from=clock.current,
+        valid_to=None,
+    )
+    await sessions.start(
+        workstation.id,
+        created_by="operator",
+        client_id=client.id,
+        idempotency_key="night-queue-session",
+    )
+
+    waiting = await entitlements.purchase(client.id, night.id, "operator", "night-queue")
+    started = await entitlements.purchase(client.id, normal.id, "operator", "normal-queue")
+
+    assert waiting.status is EntitlementStatus.QUEUED
+    assert started.status is EntitlementStatus.ACTIVE
+    assert (await entitlements.get_active_for_client(client.id)).id == started.id
 
 
 @pytest.mark.asyncio

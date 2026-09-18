@@ -235,6 +235,8 @@ async def test_entitlement_queue_requires_explicit_activation_and_preserves_orde
     assert exhausted.status.value == "exhausted"
     assert (await service.activate(second.id, client.id)).status.value == "active"
     assert (await clients.get(client.id)).balance_cents == 400
+    history = await clients.list_operations(client.id)
+    assert history[0].reason == "Покупка тарифа «Two hours»"
 
 
 async def test_guest_tariff_requires_confirmed_direct_payment_before_session_start() -> None:

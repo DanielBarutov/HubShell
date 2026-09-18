@@ -174,12 +174,15 @@ class BillingService:
             return current
         package_minutes = current.package_minutes
         active_entitlement_id = current.active_entitlement_id
+        package_window_end: datetime.datetime | None = None
         if self._entitlements is not None:
             package_anchor = session.started_at if meter_was_created else current.updated_at
             grant_end = session.started_at + datetime.timedelta(minutes=session.login_grant_minutes)
             package_anchor = max(package_anchor, grant_end)
             if active_entitlement is not None and active_entitlement.activated_at is not None:
                 package_anchor = max(package_anchor, active_entitlement.activated_at)
+            if active_entitlement is not None:
+                package_window_end = active_entitlement.usage_window_ends_at(package_anchor)
             package_delta = self._eligible_package_minutes(
                 active_entitlement,
                 package_anchor,
@@ -202,6 +205,18 @@ class BillingService:
                 )
                 package_minutes += package_result.consumed_minutes
                 active_entitlement_id = package_result.active_entitlement_id
+            if (
+                package_window_end is not None
+                and package_window_end <= end_at
+                and active_entitlement_id == getattr(active_entitlement, "id", None)
+            ):
+                await self._entitlements.burn_active_for_client(
+                    session.client_id,
+                    "usage_window_ended",
+                )
+                active_entitlement_id = None
+                if session.status is SessionStatus.ACTIVE:
+                    session = await self._sessions.save(session.stop(package_window_end))
         package_progressed = package_minutes > current.package_minutes
         package_finished = (
             active_entitlement_id is None

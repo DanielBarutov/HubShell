@@ -57,6 +57,28 @@ describe("Карта игровых мест", () => {
     expect(onSalePc).toHaveBeenCalledWith(workstations[0]);
   });
 
+  it("открывает продажу товара верхней кнопкой карты", () => {
+    const onSellProduct = vi.fn();
+
+    render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onSellProduct={onSellProduct}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        pcs={workstations}
+        group="Все зоны"
+        setGroup={vi.fn()}
+        zoneOptions={["Все зоны"]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Продать товар" }));
+
+    expect(onSellProduct).toHaveBeenCalledTimes(1);
+  });
+
   it("показывает hover-карточку server snapshot для занятого места", () => {
     const busyPc: Workstation = {
       id: "pc-busy",

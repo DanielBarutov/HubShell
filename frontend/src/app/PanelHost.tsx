@@ -53,6 +53,6 @@ export function PanelHost() {
       {ui.panel === "cash-movement" && LIVE_MODE && ui.selectedCashShift && <CashMovementPanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
       {ui.panel === "cash-close" && LIVE_MODE && ui.selectedCashShift && <CashClosePanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
     </aside>}
-    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialClient={selectedClient} initialProduct={ui.saleInitialProduct} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
+    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialClient={selectedClient} initialProduct={ui.saleInitialProduct} initialTab={ui.saleInitialTab} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
   </>;
 }

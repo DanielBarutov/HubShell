@@ -11,6 +11,11 @@ from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatal
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+from gameclub_backend.modules.entitlements.application.service import EntitlementService
+from gameclub_backend.modules.entitlements.domain import EntitlementStatus
+from gameclub_backend.modules.entitlements.infrastructure.memory import (
+    InMemoryEntitlementRepository,
+)
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
@@ -27,6 +32,14 @@ class ChargeHistoryReader:
 
     async def list_charges_for_client(self, client_id, limit):
         return await self._repository.list_for_client(client_id, limit)
+
+
+class FixedClock:
+    def __init__(self) -> None:
+        self.current = datetime.datetime(2026, 9, 18, 12, tzinfo=datetime.UTC)
+
+    def now(self) -> datetime.datetime:
+        return self.current
 
 
 async def test_workstation_enrollment_normalizes_mac_and_binds_installation() -> None:
@@ -205,6 +218,64 @@ async def test_client_portal_is_scoped_and_reports_balance_time_and_purchases() 
         await portal.snapshot(first.id)
     assert error.value.code is ErrorCode.UNAUTHENTICATED
 
+
+async def test_portal_activates_first_usable_package_when_night_package_is_queued() -> None:
+    """
+    Проверяет, что ночной пакет вне окна не блокирует запуск следующего доступного пакета.
+    """
+    clock = FixedClock()
+    clients = ClientService(InMemoryClientRepository(), clock=clock)
+    catalog = CatalogService(InMemoryCatalogRepository())
+    workstations = InMemoryWorkstationRepository()
+    await WorkstationService(workstations).register("portal-vip", "VIP-01", group_id="vip")
+    entitlements = EntitlementService(
+        InMemoryEntitlementRepository(),
+        tariffs=catalog,
+        clients=clients,
+        workstations=workstations,
+        clock=clock,
+    )
+    sales = ProductSaleService(
+        InMemoryProductSaleRepository(),
+        products=catalog,
+        clients=clients,
+    )
+    portal = ClientPortalService(
+        clients,
+        InMemorySessionRepository(),
+        ChargeHistoryReader(InMemoryChargeRepository()),
+        sales,
+        catalog,
+        entitlements=entitlements,
+        workstations=workstations,
+        clock=clock,
+    )
+    client = await clients.register_portal("NightFox", "+7 999 123-45-67", "1234")
+    await clients.top_up(client.id, 1_000, 0, "Пополнение", "operator", "night-top-up")
+    night = await catalog.create_tariff(
+        "Ночной пакет",
+        "vip",
+        660,
+        300,
+        clock.current,
+        None,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=1439,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=8 * 60,
+        window_timezone="Europe/Moscow",
+    )
+    normal = await catalog.create_tariff("Обычный пакет", "vip", 3, 50, clock.current, None)
+    waiting = await entitlements.purchase(client.id, night.id, "operator", "night-package")
+    available = await entitlements.purchase(client.id, normal.id, "operator", "normal-package")
+
+    snapshot = await portal.activate_entitlement(client.id, waiting.id, "portal-vip")
+
+    waiting_snapshot = next(item for item in snapshot.entitlements if item.id == waiting.id)
+    available_snapshot = next(item for item in snapshot.entitlements if item.id == available.id)
+    assert waiting_snapshot.status is EntitlementStatus.QUEUED
+    assert available_snapshot.status is EntitlementStatus.ACTIVE
 
 async def test_password_reset_allows_one_passwordless_login_until_new_password_is_set() -> None:
     """
