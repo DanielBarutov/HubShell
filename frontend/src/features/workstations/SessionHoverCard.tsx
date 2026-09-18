@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Workstation } from "../../types";
-import { getSessionTooltipDetails } from "./sessionTooltip";
+import { getSessionTooltipDetails, SessionEndingProjection } from "./sessionTooltip";
 
 function formatMinutes(value: number): string {
   const minutes = Math.max(0, value);
@@ -14,8 +14,13 @@ function formatTime(value: Date): string {
   return value.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
-export function SessionHoverCard({ pc, id, style }: { pc: Workstation; id: string; style?: CSSProperties }) {
-  const details = getSessionTooltipDetails(pc);
+export function SessionHoverCard({ pc, id, style, endingProjection }: {
+  pc: Workstation;
+  id: string;
+  style?: CSSProperties;
+  endingProjection: SessionEndingProjection;
+}) {
+  const details = getSessionTooltipDetails(pc, endingProjection);
   if (!details) return null;
 
   return <aside className="session-hover-card" id={id} role="tooltip" style={style}>

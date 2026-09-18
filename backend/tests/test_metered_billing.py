@@ -1,10 +1,12 @@
 import asyncio
 import datetime
+import json
 import uuid
 
 import pytest
 
 from gameclub_backend.application.errors import ApplicationError
+from gameclub_backend.jobs.billing import meter_sessions_once
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.domain import MeterStatus
 from gameclub_backend.modules.billing.infrastructure.memory import (
@@ -35,7 +37,13 @@ from gameclub_backend.modules.entitlements.infrastructure.memory import (
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
+from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.domain_commands import WorkstationCommandStatus
+from gameclub_backend.modules.workstations.infrastructure.commands_memory import (
+    InMemoryCommandNotifier,
+    InMemoryWorkstationCommandRepository,
+)
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
@@ -641,6 +649,98 @@ async def test_regular_package_starts_after_login_grant_and_returns_win_snapshot
     assert after_grant_snapshot.active_package.remaining_minutes == 299
     assert after_grant_snapshot.meter.package_minutes == 1
     assert after_grant_snapshot.meter.active_entitlement_id == str(purchased.id)
+
+
+@pytest.mark.asyncio
+async def test_three_minute_package_counts_each_minute_and_stops_device_at_zero_balance() -> None:
+    """Проверяет пять бесплатных минут, расход трёх пакетных минут и команду остановки ПК."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=3,
+        initial_balance_cents=100,
+        tariff_price_cents=100,
+        return_catalog=True,
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="three-minute-package-session",
+    )
+    package = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "three-minute-package-purchase",
+    )
+
+    assert (await clients.get(client.id)).balance_cents == 0
+    expected_minutes = (
+        (1, 4, 3),
+        (2, 3, 3),
+        (3, 2, 3),
+        (4, 1, 3),
+        (5, 0, 3),
+        (6, 0, 2),
+        (7, 0, 1),
+    )
+    for elapsed, expected_grant, expected_package in expected_minutes:
+        clock.current = session.started_at + datetime.timedelta(minutes=elapsed)
+        assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+        snapshot = await sessions.snapshot(session.id)
+        assert snapshot.login_grant_remaining_minutes == expected_grant
+        assert snapshot.active_entitlement is not None
+        assert snapshot.active_entitlement.remaining_minutes == expected_package
+        assert await commands.pending_for_device(workstation.device_id) == []
+
+    clock.current = session.started_at + datetime.timedelta(minutes=8)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 1
+
+    assert (await entitlements.get(package.id)).status is EntitlementStatus.EXHAUSTED
+    assert (await entitlements.get(package.id)).remaining_minutes == 0
+    assert (await meters.get(session.id)).package_minutes == 3
+    assert (await sessions.get(session.id)).status.value == "completed"
+    assert (await sessions.snapshot(session.id)).active_entitlement is None
+    pending = await commands.pending_for_device(workstation.device_id)
+    assert [command.command_type for command in pending] == ["session.stop", "display.lock"]
+    assert all(
+        json.loads(command.payload_json)["session_id"] == str(session.id) for command in pending
+    )
+    acknowledged = await commands.acknowledge(
+        pending[0].id,
+        workstation.device_id,
+        success=True,
+        message="access gate opened",
+    )
+    assert acknowledged.status is WorkstationCommandStatus.ACKNOWLEDGED
 
 
 @pytest.mark.asyncio

@@ -538,7 +538,8 @@ coverage guardrail установлен на измеренном старте.
 
 - Сводный backlog из [`fixes.md`](../fixes.md) вынесен в
   [`plans/44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md): P0 — переход
-  package→per-minute, плавный таймер и stop/access-gate/restart; P1 — платежи,
+  package→per-minute, локальный таймер без перезапуска от одинакового heartbeat
+  и stop/access-gate/restart; P1 — платежи,
   группы, отрицательный баланс и guest policy; P2 — Windows UI, уведомления и
   tooltip карты. Для отрицательного баланса формула credit-времени не нужна:
   UI показывает `0 минут`, а backend применяет политику группы.

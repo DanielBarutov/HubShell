@@ -19,6 +19,45 @@ export type SessionTooltipDetails = {
   stale: boolean;
 };
 
+export class SessionEndingProjection {
+  private sessionKey: string | null = null;
+  private ending: Date | null = null;
+  private reportedTotalMinutes = 0;
+  private balanceCents: number | null = null;
+
+  resolve(
+    sessionKey: string,
+    reportedTotalMinutes: number,
+    balanceCents: number | null,
+    candidate: Date | null,
+  ): Date | null {
+    if (this.sessionKey !== sessionKey) {
+      this.sessionKey = sessionKey;
+      this.ending = candidate;
+      this.reportedTotalMinutes = reportedTotalMinutes;
+      this.balanceCents = balanceCents;
+      return this.ending;
+    }
+
+    if (!candidate) {
+      this.ending = null;
+      this.reportedTotalMinutes = reportedTotalMinutes;
+      this.balanceCents = balanceCents;
+      return null;
+    }
+
+    const confirmedTimeAdded = reportedTotalMinutes > this.reportedTotalMinutes
+      || (balanceCents != null && this.balanceCents != null && balanceCents > this.balanceCents);
+    if (!this.ending || candidate.valueOf() <= this.ending.valueOf() || confirmedTimeAdded) {
+      this.ending = candidate;
+    }
+
+    this.reportedTotalMinutes = reportedTotalMinutes;
+    this.balanceCents = balanceCents;
+    return this.ending;
+  }
+}
+
 function minuteInTimezone(value: Date, timezone: string): number | null {
   try {
     const parts = new Intl.DateTimeFormat("en-GB", {
@@ -61,7 +100,10 @@ function minutesUntilUsageWindowCloses(
   return minute < end ? end - minute : null;
 }
 
-export function getSessionTooltipDetails(pc: Workstation): SessionTooltipDetails | null {
+export function getSessionTooltipDetails(
+  pc: Workstation,
+  endingProjection?: SessionEndingProjection,
+): SessionTooltipDetails | null {
   const snapshot = pc.sessionSnapshot;
   const stale = pc.status === "stale";
   if (!snapshot || pc.status !== "busy") return null;
@@ -107,6 +149,10 @@ export function getSessionTooltipDetails(pc: Workstation): SessionTooltipDetails
   const totalMinutes = sessionCutoffMinutes == null
     ? uncappedTotalMinutes
     : Math.min(uncappedTotalMinutes, sessionCutoffMinutes);
+  const candidateEnding = validSnapshotTime && totalMinutes > 0
+    ? new Date(validSnapshotTime.valueOf() + totalMinutes * 60_000)
+    : null;
+  const sessionKey = snapshot.session?.id ?? pc.sessionId ?? pc.id;
   return {
     clientName: pc.client ?? "Гость",
     balanceCents: snapshot.balance_cents ?? null,
@@ -114,9 +160,8 @@ export function getSessionTooltipDetails(pc: Workstation): SessionTooltipDetails
     packages,
     packageMinutes,
     totalMinutes,
-    ending: validSnapshotTime && totalMinutes > 0
-      ? new Date(validSnapshotTime.valueOf() + totalMinutes * 60_000)
-      : null,
+    ending: endingProjection?.resolve(sessionKey, totalMinutes, snapshot.balance_cents ?? null, candidateEnding)
+      ?? candidateEnding,
     snapshotTime: validSnapshotTime,
     stale,
   };

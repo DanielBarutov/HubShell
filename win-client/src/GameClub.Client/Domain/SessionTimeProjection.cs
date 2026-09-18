@@ -32,18 +32,31 @@ public sealed class SessionTimeProjection
 
         var sourceChanged = !_initialized
             || !string.Equals(_sourceKey, input.SourceKey, StringComparison.Ordinal);
-        var balanceChanged = input.SourceKey == "per-minute-balance"
-            && input.BalanceCents != _anchorBalanceCents;
+        var balanceIncreased = input.SourceKey == "per-minute-balance"
+            && input.BalanceCents is not null
+            && _anchorBalanceCents is not null
+            && input.BalanceCents > _anchorBalanceCents;
         var current = GetRemainingMinutes(receivedAt);
-        var nextMinutes = input.RemainingMinutes;
 
-        if (!sourceChanged && !balanceChanged && current is not null)
+        if (!sourceChanged && !balanceIncreased && current is not null)
         {
-            nextMinutes = Math.Min(nextMinutes, current.Value);
+            // Сервер отвечает каждые несколько секунд, а списанные минуты хранит
+            // целыми. Если заново закреплять одинаковый снимок, локальный отсчёт
+            // будет начинаться сначала после каждого ответа и зависнет. Меньший
+            // серверный остаток обязателен, равный или запоздалый больший не
+            // возвращает пользователю уже ушедшее время.
+            if (input.RemainingMinutes < current.Value)
+            {
+                _anchorMinutes = Math.Max(0, input.RemainingMinutes);
+                _anchorAt = receivedAt;
+            }
+
+            _anchorBalanceCents = input.BalanceCents;
+            return;
         }
 
         _sourceKey = input.SourceKey;
-        _anchorMinutes = Math.Max(0, nextMinutes);
+        _anchorMinutes = Math.Max(0, input.RemainingMinutes);
         _anchorAt = receivedAt;
         _anchorBalanceCents = input.BalanceCents;
         _initialized = true;

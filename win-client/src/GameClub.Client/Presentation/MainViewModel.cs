@@ -1151,6 +1151,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public void RegisterSessionStarted(SessionSnapshot session)
     {
         _activeSession = session;
+        _sessionTimeProjection.Apply(session, _clock());
         PublishSessionState();
     }
 

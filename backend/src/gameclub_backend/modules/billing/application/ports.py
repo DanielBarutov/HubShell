@@ -107,6 +107,14 @@ class ClientBilling(typing.Protocol):
     async def get(self, client_id: uuid.UUID) -> Client:
         """Return a client or raise a not-found application error."""
 
+    async def can_debit(
+        self,
+        client_id: uuid.UUID,
+        amount_cents: int,
+        allow_negative_balance: bool = False,
+    ) -> bool:
+        """Check whether a future debit is permitted without changing the ledger."""
+
     async def debit(
         self,
         client_id: uuid.UUID,
