@@ -20,6 +20,9 @@ from gameclub_backend.modules.cash_shifts.application.service import CashShiftSe
 from gameclub_backend.modules.cash_shifts.infrastructure.postgres import PostgresCashShiftRepository
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
+from gameclub_backend.modules.client_groups.infrastructure.postgres import (
+    PostgresClientGroupRepository,
+)
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.postgres import PostgresClientRepository
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
@@ -160,7 +163,10 @@ async def reconcile_billing_charges(
         sessions = PostgresSessionRepository(engine_provider)
         workstations = PostgresWorkstationRepository(engine_provider)
         workstation_groups = PostgresWorkstationGroupRepository(engine_provider)
-        clients = ClientService(PostgresClientRepository(engine_provider))
+        clients = ClientService(
+            PostgresClientRepository(engine_provider),
+            groups=PostgresClientGroupRepository(engine_provider),
+        )
         catalog = CatalogService(
             PostgresCatalogRepository(engine_provider),
             zones=workstation_groups,
@@ -227,7 +233,10 @@ async def meter_active_sessions() -> None:
         workstation_repository = PostgresWorkstationRepository(engine_provider)
         workstation_groups = PostgresWorkstationGroupRepository(engine_provider)
         client_repository = PostgresClientRepository(engine_provider)
-        clients = ClientService(client_repository)
+        clients = ClientService(
+            client_repository,
+            groups=PostgresClientGroupRepository(engine_provider),
+        )
         catalog = CatalogService(
             PostgresCatalogRepository(engine_provider),
             zones=workstation_groups,

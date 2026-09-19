@@ -371,6 +371,66 @@ async def test_regular_device_session_stops_exactly_after_five_free_minutes(
 
 
 @pytest.mark.asyncio
+async def test_debtor_starts_per_minute_billing_after_five_free_minutes() -> None:
+    """
+    Проверяет, что клиент группы с долгом не выходит на пятой бесплатной минуте,
+    а на шестой получает первое поминутное списание в пределах лимита долга.
+    """
+    clock = FixedClock()
+    groups = InMemoryClientGroupRepository()
+    await ClientGroupService(groups, clock=clock).create(
+        "debtors",
+        "Должники",
+        allow_negative_balance=True,
+        negative_balance_limit_cents=60_000,
+    )
+    (
+        workstation,
+        client,
+        _tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+    ) = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        price_per_minute_cents=1_000,
+        initial_balance_cents=0,
+        client_groups=groups,
+    )
+    await clients.update(client.id, "MeterFox", client_group_id="debtors")
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="debtor-five-free-minutes",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await clients.get(client.id)).balance_cents == 0
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+    clock.current += datetime.timedelta(minutes=1)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await clients.get(client.id)).balance_cents == -1_000
+    assert (await meters.get(session.id)).billed_minutes == 1
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
 async def test_device_login_selects_zone_per_minute_tariff_without_package() -> None:
     """
     Проверяет сценарий «test_device_login_selects_zone_per_minute_tariff_without_package» и
