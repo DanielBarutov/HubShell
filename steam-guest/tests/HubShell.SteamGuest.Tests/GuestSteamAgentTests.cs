@@ -6,21 +6,38 @@ namespace HubShell.SteamGuest.Tests;
 public sealed class GuestSteamAgentTests
 {
     [Fact]
-    public async Task Завершение_сессии_закрывает_Steam_и_освобождает_один_аккаунт()
+    public async Task Завершение_Steam_освобождает_один_аккаунт()
     {
         var accounts = new RecordingAccounts();
-        var steam = new RecordingSteamProcess();
+        var steam = new CompletedSteamProcess();
         var agent = new GuestSteamAgent(
             accounts,
             new RecordingLauncher(steam),
-            new CompletedStopSignal(),
             () => new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero));
 
         await agent.RunAsync("vip-03", "station-secret");
 
-        Assert.True(steam.Stopped);
         Assert.Equal(1, accounts.ReleaseCalls);
         Assert.Equal("vip-03", accounts.ReleasedStationId);
+    }
+
+    [Fact]
+    public async Task Работающий_Steam_регулярно_подтверждает_аренду_до_завершения_процесса()
+    {
+        var accounts = new RecordingAccounts();
+        var steam = new WaitingSteamProcess();
+        var agent = new GuestSteamAgent(
+            accounts,
+            new RecordingLauncher(steam),
+            confirmationInterval: TimeSpan.FromMilliseconds(1));
+
+        var running = agent.RunAsync("vip-03", "station-secret");
+        await accounts.Renewed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        steam.Exit();
+        await running;
+
+        Assert.True(accounts.RenewCalls >= 1);
+        Assert.Equal(1, accounts.ReleaseCalls);
     }
 
     [Fact]
@@ -29,8 +46,7 @@ public sealed class GuestSteamAgentTests
         var accounts = new RecordingAccounts();
         var agent = new GuestSteamAgent(
             accounts,
-            new FailingLauncher(),
-            new CompletedStopSignal());
+            new FailingLauncher());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => agent.RunAsync("vip-03", "station-secret"));
 
@@ -40,7 +56,9 @@ public sealed class GuestSteamAgentTests
     private sealed class RecordingAccounts : IGuestAccountStore
     {
         public int ReleaseCalls { get; private set; }
+        public int RenewCalls { get; private set; }
         public string? ReleasedStationId { get; private set; }
+        public TaskCompletionSource Renewed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task RegisterStationAsync(string stationId, string stationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<Guid> AddAccountAsync(SteamCredentials credentials, CancellationToken cancellationToken = default) => Task.FromResult(Guid.Empty);
@@ -56,6 +74,16 @@ public sealed class GuestSteamAgentTests
             ReleasedStationId = stationId;
             return Task.FromResult(true);
         }
+
+        public Task<bool> RenewAsync(string stationId, string stationKey, Guid leaseId, DateTimeOffset now, CancellationToken cancellationToken = default)
+        {
+            RenewCalls++;
+            Renewed.TrySetResult();
+            return Task.FromResult(true);
+        }
+
+        public Task<int> ReleaseExpiredAsync(DateTimeOffset now, TimeSpan maximumSilence, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 
     private sealed class RecordingLauncher : ISteamLauncher
@@ -71,19 +99,18 @@ public sealed class GuestSteamAgentTests
             throw new InvalidOperationException("Steam не запустилась");
     }
 
-    private sealed class RecordingSteamProcess : ISteamProcess
+    private sealed class CompletedSteamProcess : ISteamProcess
     {
-        public bool Stopped { get; private set; }
-        public Task StopAsync(CancellationToken cancellationToken = default)
-        {
-            Stopped = true;
-            return Task.CompletedTask;
-        }
-        public Task WaitForExitAsync(CancellationToken cancellationToken = default) => new TaskCompletionSource().Task;
+        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task WaitForExitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class CompletedStopSignal : ISessionStopSignal
+    private sealed class WaitingSteamProcess : ISteamProcess
     {
-        public Task WaitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        private readonly TaskCompletionSource _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task WaitForExitAsync(CancellationToken cancellationToken = default) => _exited.Task;
+        public void Exit() => _exited.TrySetResult();
     }
 }

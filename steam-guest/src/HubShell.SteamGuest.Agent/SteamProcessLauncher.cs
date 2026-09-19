@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.IO.Pipes;
 using HubShell.SteamGuest.Core;
 
 namespace HubShell.SteamGuest.Agent;
@@ -55,27 +54,5 @@ public sealed class SteamProcessLauncher : ISteamLauncher
 
         public Task WaitForExitAsync(CancellationToken cancellationToken = default) =>
             _process.WaitForExitAsync(cancellationToken);
-    }
-}
-
-public sealed class NamedPipeSessionStopSignal : ISessionStopSignal
-{
-    public const string PipeName = "HubShell.SteamGuest.SessionStopped";
-
-    public async Task WaitAsync(CancellationToken cancellationToken = default)
-    {
-        await using var pipe = new NamedPipeServerStream(
-            PipeName,
-            PipeDirection.In,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
-        await pipe.WaitForConnectionAsync(cancellationToken);
-        using var reader = new StreamReader(pipe, leaveOpen: true);
-        var message = await reader.ReadLineAsync(cancellationToken);
-        if (!string.Equals(message, "session-stopped", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("Получен недопустимый локальный сигнал завершения сессии.");
-        }
     }
 }

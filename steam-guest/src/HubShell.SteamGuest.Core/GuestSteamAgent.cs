@@ -1,26 +1,32 @@
 namespace HubShell.SteamGuest.Core;
 
 /// <summary>
-/// Выдаёт один аккаунт станции, запускает Steam и освобождает его только после
-/// завершения Steam либо локального подтверждённого сигнала завершения сессии.
+/// Выдаёт один аккаунт станции, запускает Steam и регулярно подтверждает
+/// серверу, что агент и Steam всё ещё работают на этой станции.
 /// </summary>
 public sealed class GuestSteamAgent
 {
+    public static readonly TimeSpan ConfirmationInterval = TimeSpan.FromSeconds(30);
+
     private readonly IGuestAccountStore _accounts;
     private readonly ISteamLauncher _launcher;
-    private readonly ISessionStopSignal _stopSignal;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly TimeSpan _confirmationInterval;
 
     public GuestSteamAgent(
         IGuestAccountStore accounts,
         ISteamLauncher launcher,
-        ISessionStopSignal stopSignal,
-        Func<DateTimeOffset>? clock = null)
+        Func<DateTimeOffset>? clock = null,
+        TimeSpan? confirmationInterval = null)
     {
         _accounts = accounts;
         _launcher = launcher;
-        _stopSignal = stopSignal;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _confirmationInterval = confirmationInterval ?? ConfirmationInterval;
+        if (_confirmationInterval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(confirmationInterval));
+        }
     }
 
     public async Task RunAsync(
@@ -33,13 +39,20 @@ public sealed class GuestSteamAgent
         try
         {
             steam = await _launcher.StartAsync(lease.Credentials, cancellationToken);
-            var stopTask = _stopSignal.WaitAsync(cancellationToken);
-            var exitTask = steam.WaitForExitAsync(cancellationToken);
-            var completed = await Task.WhenAny(stopTask, exitTask);
-            await completed;
-            if (completed == stopTask)
+            using var confirmationLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var confirmationTask = ConfirmWhileSteamRunsAsync(
+                stationId,
+                stationKey,
+                lease.LeaseId,
+                confirmationLifetime.Token);
+            try
             {
-                await steam.StopAsync(cancellationToken);
+                await steam.WaitForExitAsync(cancellationToken);
+            }
+            finally
+            {
+                confirmationLifetime.Cancel();
+                await IgnoreCancellationAsync(confirmationTask);
             }
 
             var released = await _accounts.ReleaseAsync(
@@ -58,6 +71,42 @@ public sealed class GuestSteamAgent
             // Не освобождаем аренду после ошибки запуска: иначе два ПК смогут
             // одновременно использовать один аккаунт, пока первый Steam ещё жив.
             throw;
+        }
+    }
+
+    private async Task ConfirmWhileSteamRunsAsync(
+        string stationId,
+        string stationKey,
+        Guid leaseId,
+        CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(_confirmationInterval);
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            try
+            {
+                await _accounts.RenewAsync(stationId, stationKey, leaseId, _clock(), cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // При временной потере сервера не останавливаем Steam. Если связь
+                // не вернётся за пять минут, сервер сам освободит аренду.
+            }
+        }
+    }
+
+    private static async Task IgnoreCancellationAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 }

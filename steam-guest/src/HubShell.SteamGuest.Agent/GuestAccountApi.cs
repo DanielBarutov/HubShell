@@ -51,6 +51,19 @@ public sealed class GuestAccountApi : IGuestAccountStore
         return response.StatusCode == HttpStatusCode.NoContent;
     }
 
+    public async Task<bool> RenewAsync(string stationId, string stationKey, Guid leaseId, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"v1/leases/{leaseId}/confirm", new { stationId }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new StationAccessDeniedException();
+        }
+        return response.StatusCode == HttpStatusCode.NoContent;
+    }
+
+    public Task<int> ReleaseExpiredAsync(DateTimeOffset now, TimeSpan maximumSilence, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Просроченные аренды освобождает сервер.");
+
     public Task<IReadOnlyCollection<GuestAccountSummary>> ListAsync(CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Список аккаунтов доступен только администратору.");
 

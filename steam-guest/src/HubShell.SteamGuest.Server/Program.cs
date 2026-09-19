@@ -12,13 +12,16 @@ var stationKeyPepper = Required(configuration, "STEAM_GUEST_STATION_KEY_PEPPER")
 builder.Services.AddSingleton(new SecretProtector(masterKey));
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddSingleton<IGuestAccountStore>(services => new PostgresGuestAccountStore(
+builder.Services.AddSingleton(services => new PostgresGuestAccountStore(
     postgresDsn,
     services.GetRequiredService<SecretProtector>(),
     stationKeyPepper));
+builder.Services.AddSingleton<IGuestAccountStore>(services =>
+    services.GetRequiredService<PostgresGuestAccountStore>());
+builder.Services.AddHostedService<ExpiredLeaseWorker>();
 
 var app = builder.Build();
-var store = (PostgresGuestAccountStore)app.Services.GetRequiredService<IGuestAccountStore>();
+var store = app.Services.GetRequiredService<PostgresGuestAccountStore>();
 await store.InitializeAsync();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
@@ -91,6 +94,24 @@ app.MapPost("/v1/leases/{leaseId:guid}/release", async (Guid leaseId, LeaseRelea
     }
 });
 
+app.MapPost("/v1/leases/{leaseId:guid}/confirm", async (Guid leaseId, LeaseConfirmationRequest request, HttpRequest http, IGuestAccountStore accounts, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var renewed = await accounts.RenewAsync(
+            request.StationId,
+            Header(http, "X-Steam-Guest-Station-Key"),
+            leaseId,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        return renewed ? Results.NoContent() : Results.Conflict(new { code = "lease_not_active" });
+    }
+    catch (StationAccessDeniedException)
+    {
+        return Results.Unauthorized();
+    }
+});
+
 app.Run();
 
 static string Required(IConfiguration configuration, string name) =>
@@ -107,4 +128,5 @@ public sealed record StationRequest(string StationId, string StationKey);
 public sealed record AccountRequest(string Login, string Password);
 public sealed record LeaseClaimRequest(string StationId);
 public sealed record LeaseReleaseRequest(string StationId);
+public sealed record LeaseConfirmationRequest(string StationId);
 public sealed record LeaseResponse(Guid LeaseId, string Login, string Password);

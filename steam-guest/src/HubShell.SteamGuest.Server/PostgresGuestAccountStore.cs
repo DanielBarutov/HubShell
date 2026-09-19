@@ -37,11 +37,14 @@ public sealed class PostgresGuestAccountStore : IGuestAccountStore
                 lease_id uuid NULL UNIQUE,
                 station_id text NULL,
                 leased_at timestamptz NULL,
+                last_seen_at timestamptz NULL,
                 released_at timestamptz NULL,
                 CHECK (state IN ('available', 'leased', 'blocked', 'needs_review'))
             );
             CREATE INDEX IF NOT EXISTS steam_guest_accounts_available_idx
                 ON steam_guest_accounts (state, account_id);
+            ALTER TABLE steam_guest_accounts
+                ADD COLUMN IF NOT EXISTS last_seen_at timestamptz NULL;
             """;
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -118,7 +121,7 @@ public sealed class PostgresGuestAccountStore : IGuestAccountStore
             )
             UPDATE steam_guest_accounts account
             SET state = 'leased', lease_id = @lease_id, station_id = @station_id,
-                leased_at = @leased_at, released_at = NULL
+                leased_at = @leased_at, last_seen_at = @leased_at, released_at = NULL
             FROM candidate
             WHERE account.account_id = candidate.account_id
             RETURNING account.account_id, account.login_ciphertext, account.password_ciphertext,
@@ -156,7 +159,8 @@ public sealed class PostgresGuestAccountStore : IGuestAccountStore
         await EnsureStationAsync(stationId, stationKey, cancellationToken);
         const string sql = """
             UPDATE steam_guest_accounts
-            SET state = 'available', lease_id = NULL, station_id = NULL, released_at = @released_at
+            SET state = 'available', lease_id = NULL, station_id = NULL,
+                last_seen_at = NULL, released_at = @released_at
             WHERE lease_id = @lease_id AND station_id = @station_id AND state = 'leased';
             """;
         await using var connection = new NpgsqlConnection(_connectionString);
@@ -166,6 +170,53 @@ public sealed class PostgresGuestAccountStore : IGuestAccountStore
         command.Parameters.AddWithValue("station_id", stationId.Trim());
         command.Parameters.AddWithValue("released_at", now.UtcDateTime);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> RenewAsync(
+        string stationId,
+        string stationKey,
+        Guid leaseId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureStationAsync(stationId, stationKey, cancellationToken);
+        const string sql = """
+            UPDATE steam_guest_accounts
+            SET last_seen_at = @last_seen_at
+            WHERE lease_id = @lease_id AND station_id = @station_id AND state = 'leased';
+            """;
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("lease_id", leaseId);
+        command.Parameters.AddWithValue("station_id", stationId.Trim());
+        command.Parameters.AddWithValue("last_seen_at", now.UtcDateTime);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<int> ReleaseExpiredAsync(
+        DateTimeOffset now,
+        TimeSpan maximumSilence,
+        CancellationToken cancellationToken = default)
+    {
+        if (maximumSilence <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumSilence));
+        }
+
+        const string sql = """
+            UPDATE steam_guest_accounts
+            SET state = 'available', lease_id = NULL, station_id = NULL,
+                last_seen_at = NULL, released_at = @released_at
+            WHERE state = 'leased'
+              AND (last_seen_at IS NULL OR last_seen_at <= @stale_before);
+            """;
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("released_at", now.UtcDateTime);
+        command.Parameters.AddWithValue("stale_before", now.Subtract(maximumSilence).UtcDateTime);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<GuestAccountSummary>> ListAsync(CancellationToken cancellationToken = default)
