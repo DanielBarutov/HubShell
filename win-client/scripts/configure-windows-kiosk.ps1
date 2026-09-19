@@ -1,6 +1,6 @@
 ﻿[CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$ExecutablePath = (Join-Path $PSScriptRoot "GameClub.Client.Windows.exe"),
+    [string]$ExecutablePath = (Join-Path $PSScriptRoot "HubShell.exe"),
     [string]$KioskUser,
     [string]$OutputPath = (Join-Path $PSScriptRoot "..\artifacts\kiosk\shell-launcher.xml"),
     [string]$BackupPath = (Join-Path $PSScriptRoot "..\artifacts\kiosk\shell-launcher.backup.xml"),
@@ -58,7 +58,7 @@ function Get-ShellLauncherXml([string]$path, [string]$user) {
     <DefaultProfile>
       <Shell Shell="%SystemRoot%\explorer.exe" />
     </DefaultProfile>
-    <Profile Id="$profileId" Name="GameClub Client">
+    <Profile Id="$profileId" Name="HubShell">
       <Shell Shell="$escapedPath" V2:AppType="Desktop" V2:AllAppsFullScreen="false">
         <ReturnCodeActions>
           <ReturnCodeAction ReturnCode="0" Action="RestartShell" />

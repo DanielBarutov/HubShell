@@ -143,7 +143,7 @@ native Windows не выдаются за локальные unit/source про�
 
 ### Фаза 1 — P0: источник истины сессии
 
-5. [x] **F-01.** [implementation complete: positive-balance fallback, bounded group debt и stop при исчерпании реализованы и покрыты; отдельный regression проходит пять бесплатных и три пакетные минуты по одной, затем проверяет команды `session.stop`/`display.lock`; DSN/live остаются]
+5. [x] **F-01.** [implementation complete: positive-balance fallback, bounded group debt и stop при исчерпании реализованы и покрыты; отдельные проверки проходят пять бесплатных и три пакетные минуты по одной, а также остановку обычного клиента ровно на пятой минуте без денег или ставки зоны; команды `session.stop`/`display.lock` проверены; DSN/live остаются]
    Сделать end-to-end сценарий `ACTIVE package → EXHAUSTED →
    next compatible package/per-minute`; остаток должен стать нулём, не
    расходоваться дважды и не перескакивать назад. При недостатке средств

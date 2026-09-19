@@ -18,4 +18,8 @@
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
     <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\HubShell.ico" />
+  </ItemGroup>
 </Project>

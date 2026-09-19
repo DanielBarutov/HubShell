@@ -15,9 +15,9 @@ if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
 }
 
 $resolvedPublishPath = (Resolve-Path -LiteralPath $PublishPath -ErrorAction Stop).Path
-$sourceExecutable = Join-Path $resolvedPublishPath "GameClub.Client.Windows.exe"
+$sourceExecutable = Join-Path $resolvedPublishPath "HubShell.exe"
 if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-    throw "В каталоге публикации не найден GameClub.Client.Windows.exe: $resolvedPublishPath"
+    throw "В каталоге публикации не найден HubShell.exe: $resolvedPublishPath"
 }
 
 if ($RegisterRecoveryTask -and -not $NoStartup) {
@@ -27,24 +27,26 @@ if ($RegisterRecoveryTask -and -not $NoStartup) {
 $resolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath)
 New-Item -ItemType Directory -Path $resolvedInstallPath -Force | Out-Null
 Copy-Item -Path (Join-Path $resolvedPublishPath "*") -Destination $resolvedInstallPath -Recurse -Force
-$installedExecutable = Join-Path $resolvedInstallPath "GameClub.Client.Windows.exe"
-Set-Content -LiteralPath (Join-Path $resolvedInstallPath ".gameclub-installation") -Value "GameClub.Client.Windows" -Encoding UTF8
+$installedExecutable = Join-Path $resolvedInstallPath "HubShell.exe"
+Set-Content -LiteralPath (Join-Path $resolvedInstallPath ".gameclub-installation") -Value "HubShell" -Encoding UTF8
 
 if (-not $NoStartup) {
     $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+    Remove-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -ErrorAction SilentlyContinue
     New-Item -Path $runKey -Force | Out-Null
-    Set-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -Value ('"{0}"' -f $installedExecutable)
+    Set-ItemProperty -Path $runKey -Name "HubShell" -Value ('"{0}"' -f $installedExecutable)
 }
 
 if ($RegisterRecoveryTask) {
-    $taskName = "GameClub.Client.Windows.Recovery"
+    Unregister-ScheduledTask -TaskName "GameClub.Client.Windows.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
+    $taskName = "HubShell.Recovery"
     $action = New-ScheduledTaskAction -Execute $installedExecutable
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 }
 
-Write-Host "GameClub Client установлен: $installedExecutable"
+Write-Host "HubShell установлен: $installedExecutable"
 if (-not $NoStartup) {
     Write-Host "Автозапуск зарегистрирован для текущего пользователя."
 }

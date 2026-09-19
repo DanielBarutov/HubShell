@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$ExecutablePath = "C:\Git\HubShell\win-client\artifacts\publish\win-x64\Debug\GameClub.Client.Windows.exe",
+    [string]$ExecutablePath = "C:\Git\HubShell\win-client\artifacts\publish\win-x64\Debug\HubShell.exe",
     [string]$OutputPath = (Join-Path $PSScriptRoot "..\artifacts\diagnostics"),
     [ValidateRange(1, 300)]
     [int]$TimeoutSeconds = 30
@@ -83,7 +83,7 @@ catch {
 }
 
 $lines = [System.Collections.Generic.List[string]]::new()
-$lines.Add("GameClub Client startup diagnostic")
+$lines.Add("HubShell startup diagnostic")
 $lines.Add("StartedAt: $($startedAt.ToString('o'))")
 $lines.Add("ExecutablePath: $resolvedExecutablePath")
 $lines.Add("ExecutableSHA256: $((Get-FileHash -LiteralPath $resolvedExecutablePath -Algorithm SHA256).Hash)")
