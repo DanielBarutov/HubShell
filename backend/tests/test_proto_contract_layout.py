@@ -13,7 +13,19 @@ from gameclub.v1 import (
     workstations_pb2,
 )
 
-PROJECT_ROOT = Path(__file__).parents[1].parent
+
+class Utf8ProjectPath(type(Path())):
+    """Читает исходные файлы проекта в UTF-8 независимо от кодировки Windows."""
+
+    def read_text(
+        self,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        return super().read_text(encoding=encoding or "utf-8", errors=errors)
+
+
+PROJECT_ROOT = Utf8ProjectPath(__file__).parents[1].parent
 
 
 pytestmark = pytest.mark.contract
@@ -54,6 +66,7 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
     assert "<UseWindowsForms>true</UseWindowsForms>" not in csproj
     assert "<UseWPF>true</UseWPF>" not in csproj
     assert "GameClub.Client.Windows.csproj" in publish_script
+    assert 'Join-Path $outputPath "HubShell.exe"' in publish_script
     assert "--runtime $runtime" in publish_script
     assert "-p:Platform=$Architecture" in publish_script
     assert "-p:GameClubEnvironment=$EnvironmentName" in publish_script
@@ -62,6 +75,16 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
     assert "<TargetFramework>net8.0</TargetFramework>" in windows_project
     assert "UseWPF" not in windows_project
     assert "UseWindowsForms" not in windows_project
+    assert "<AssemblyName>HubShell</AssemblyName>" in windows_project
+    assert "<ApplicationIcon>..\\GameClub.Client.Avalonia\\Assets\\HubShell.ico</ApplicationIcon>" in windows_project
+    assert (
+        PROJECT_ROOT
+        / "win-client"
+        / "src"
+        / "GameClub.Client.Avalonia"
+        / "Assets"
+        / "HubShell.ico"
+    ).exists()
     assert "NativeTrayIcon" in (
         PROJECT_ROOT
         / "win-client"
@@ -472,6 +495,8 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "PurchaseEntitlementAsync" in grpc_source
     assert "PortalPassword" in view_model_source
     assert "PortalPhoneChanged" in window_source
+    assert 'Icon="/Assets/HubShell.ico"' in xaml_source
+    assert "Title=\"HubShell\"" in xaml_source
     assert "Screens.ScreenFromWindow" in window_adapter_source
     assert 'Name="WindowContentSurface"' in xaml_source
     assert "ApplyWorkstationTheme" in app_source
