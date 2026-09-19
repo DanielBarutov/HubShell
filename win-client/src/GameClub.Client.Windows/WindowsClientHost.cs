@@ -35,7 +35,8 @@ public sealed class WindowsClientHost : IClientHost
             clientVersion: "avalonia-windows",
             capabilities: ["commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1"],
             powerController: _powerController,
-            timeNotificationPresenter: _windowAdapter);
+            timeNotificationPresenter: _windowAdapter,
+            sessionStoppedObserver: _ => PublishSteamGuestSessionStop());
     }
 
     public MainViewModel ViewModel { get; }
@@ -108,11 +109,12 @@ public sealed class WindowsClientHost : IClientHost
                     ViewModel.ApplyTheme,
                     _powerController,
                     ViewModel.RegisterSessionStarted,
-                    session =>
-                    {
-                        ViewModel.RegisterSessionStopped(session);
-                        _ = SteamGuestSessionStopSignalPublisher.PublishAsync();
-                    },
+                    ViewModel.RegisterSessionStopped,
                     () => ViewModel.LockClient())));
+    }
+
+    private static void PublishSteamGuestSessionStop()
+    {
+        _ = SteamGuestSessionStopSignalPublisher.PublishAsync();
     }
 }

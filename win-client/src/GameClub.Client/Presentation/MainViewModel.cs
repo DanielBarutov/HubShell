@@ -17,6 +17,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly IClientPortalGateway _clientPortal;
     private readonly SessionTimeProjection _sessionTimeProjection = new();
     private readonly TimeNotificationDispatcher _timeNotificationDispatcher;
+    private readonly Action<SessionSnapshot>? _sessionStoppedObserver;
     private readonly Func<DateTimeOffset> _clock;
     private readonly List<Task> _backgroundTasks = [];
     private CancellationTokenSource _lifetime = new();
@@ -65,7 +66,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         IReadOnlyCollection<string>? capabilities = null,
         IWorkstationPowerController? powerController = null,
         Func<DateTimeOffset>? clock = null,
-        ITimeNotificationPresenter? timeNotificationPresenter = null)
+        ITimeNotificationPresenter? timeNotificationPresenter = null,
+        Action<SessionSnapshot>? sessionStoppedObserver = null)
     {
         _session = session;
         _accessCredentials = accessCredentials;
@@ -74,6 +76,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _powerController = powerController;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _timeNotificationDispatcher = new TimeNotificationDispatcher(timeNotificationPresenter);
+        _sessionStoppedObserver = sessionStoppedObserver;
         DeviceId = deviceId;
         ClientVersion = clientVersion;
         Capabilities = capabilities ?? Array.Empty<string>();
@@ -1163,6 +1166,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             _portalSessionIdempotencyKey = null;
             PublishSessionState();
             ApplySessionStopPolicy();
+            _sessionStoppedObserver?.Invoke(session);
         }
     }
 
@@ -1176,10 +1180,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
         try
         {
-            await _session.BackendClient.StopSessionAsync(
+            var stopped = await _session.BackendClient.StopSessionAsync(
                 activeSession.Id,
                 DeviceId,
                 cancellationToken);
+            RegisterSessionStopped(stopped);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1191,10 +1196,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
-        _activeSession = null;
-        _portalSessionIdempotencyKey = null;
-        PublishSessionState();
-        ApplySessionStopPolicy();
         return true;
     }
 
