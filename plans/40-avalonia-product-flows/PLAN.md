@@ -71,7 +71,9 @@ fullscreen/window placement и kiosk policy.
    Avalonia host; DPAPI journal, restart/power, command stream, fullscreen
    access-gate, compact always-on-top widget с прозрачными скруглёнными
    внешними углами и native Windows tray перенесены в явные adapters. Linux
-   host намеренно скрывает действие tray. Реальная
+   host намеренно скрывает действие tray. В Windows adapter значок трея
+   извлекается из запущенного `HubShell.exe`, а подпись трея — `HubShell`.
+   Реальная
    Windows runtime-проверка остаётся открытым evidence в task 6.
 
 ## Критерии готовности этапа
@@ -102,5 +104,9 @@ fullscreen/window placement и kiosk policy.
   растягивает свои карточки на доступную колонку. История аккаунта вынесена в
   отдельное borderless-окно с явным закрытием, той же палитрой и локальным
   `dd.MM.yyyy HH:mm` форматом server-backed timestamps.
+- Выход из аккаунта и завершение активной сессии требуют отдельного
+  пользовательского подтверждения. Отмена не меняет сессию; подтверждение
+  предупреждает о сгорании остатка начатого пакета и вызывает прежнюю команду
+  остановки только после согласия пользователя.
 - Запуск в Linux проверяет normal developer window, а не Windows fullscreen,
   compact placement, tray, restart, DPAPI journal или kiosk policy.

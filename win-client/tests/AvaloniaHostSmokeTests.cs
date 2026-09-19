@@ -58,6 +58,8 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(window.FindControl<Button>("OpenAccountHistoryButton"));
         Assert.Null(window.FindControl<Expander>("PortalHistory"));
         Assert.NotNull(window.FindControl<Border>("WindowContentSurface"));
+        Assert.NotNull(window.FindControl<Button>("PortalLogoutButton"));
+        Assert.NotNull(window.FindControl<Button>("StopActiveSessionButton"));
         Assert.NotNull(window.FindControl<Button>("OpenDesktopButton"));
         Assert.False(window.FindControl<Button>("HideToTrayButton")!.IsVisible);
         Assert.False(window.FindControl<Button>("OpenDesktopButton")!.IsVisible);

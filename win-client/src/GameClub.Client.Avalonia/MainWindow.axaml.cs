@@ -209,14 +209,95 @@ public partial class MainWindow : Window
     private async void LockClient(object? sender, RoutedEventArgs args) =>
         await ViewModel.LogoutAsync();
 
-    private async void Logout(object? sender, RoutedEventArgs args) =>
+    private async void Logout(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmSessionExitAsync("Выйти из аккаунта?", "Выйти"))
+        {
+            return;
+        }
+
         await ViewModel.LogoutAsync();
+    }
 
     private void HideToTray(object? sender, RoutedEventArgs args) =>
         _clientHost.WindowAdapter?.HideToTray();
 
-    private async void StopCurrentSession(object? sender, RoutedEventArgs args) =>
+    private async void StopCurrentSession(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmSessionExitAsync("Завершить игровую сессию?", "Завершить"))
+        {
+            return;
+        }
+
         await ViewModel.StopActiveSessionAsync();
+    }
+
+    private async Task<bool> ConfirmSessionExitAsync(string title, string confirmationText)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 410,
+            Height = 208,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = new SolidColorBrush(Color.Parse("#182527")),
+        };
+        var cancel = new Button
+        {
+            Content = "Отмена",
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-secondary" },
+        };
+        var confirm = new Button
+        {
+            Content = confirmationText,
+            MinWidth = 120,
+            MinHeight = 38,
+            Classes = { "access-primary" },
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        confirm.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#182527")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20),
+            Child = new StackPanel
+            {
+                Spacing = 10,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = title,
+                        FontSize = 18,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
+                    },
+                    new TextBlock
+                    {
+                        Text = "Активная игровая сессия будет завершена. Неиспользованные минуты текущего пакета сгорят.",
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Spacing = 10,
+                        Margin = new Thickness(0, 2, 0, 0),
+                        Children = { cancel, confirm },
+                    },
+                },
+            },
+        };
+
+        return await dialog.ShowDialog<bool>(this);
+    }
 
     private async void ActivateFirstPortalEntitlement(object? sender, RoutedEventArgs args) =>
         await ViewModel.ActivateFirstPortalEntitlementAsync();

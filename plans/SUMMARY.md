@@ -42,7 +42,7 @@ GameClub / HUBSHELL — операторская система игрового
 | Потребитель | Транспорт | Назначение |
 | --- | --- | --- |
 | Browser/operator UI | HTTP JSON через FastAPI BFF | dashboard, карта, CRM, каталог, продажи, касса, настройки, аналитика |
-| Windows client | gRPC + Protobuf | MAC enrollment, device auth, heartbeat, команды, user portal и session gateway |
+| Windows client | gRPC + Protobuf | MAC enrollment, device auth, heartbeat, команды, user portal, подтверждённый выход и session gateway |
 | Background workers | Dramatiq/Redis | billing reconciliation, reservation no-show, кассовое расписание |
 | PostgreSQL/Redis | infrastructure adapters | долговременные факты/настройки и технический кэш/брокер |
 

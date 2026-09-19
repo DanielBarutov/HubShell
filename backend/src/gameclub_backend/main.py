@@ -11,6 +11,7 @@ async def serve() -> None:
     settings = get_settings()
     resources = create_resources(settings)
     services = build_application_services(settings, resources)
+    await services.workstation_groups.restore_per_minute_tariffs()
     server = create_server(settings, resources, services)
     await server.start()
     shutdown_event = asyncio.Event()

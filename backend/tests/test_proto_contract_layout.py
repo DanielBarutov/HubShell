@@ -83,24 +83,28 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
     assert "UseWPF" not in windows_project
     assert "UseWindowsForms" not in windows_project
     assert "<AssemblyName>HubShell</AssemblyName>" in windows_project
-    assert "<ApplicationIcon>..\\GameClub.Client.Avalonia\\Assets\\HubShell.ico</ApplicationIcon>" in windows_project
+    assert (
+        "<ApplicationIcon>..\\GameClub.Client.Avalonia\\Assets\\HubShell.ico</ApplicationIcon>"
+        in windows_project
+    )
     assert '<AvaloniaResource Include="Assets\\HubShell.ico" />' in avalonia_project
     assert (
-        PROJECT_ROOT
-        / "win-client"
-        / "src"
-        / "GameClub.Client.Avalonia"
-        / "Assets"
-        / "HubShell.ico"
+        PROJECT_ROOT / "win-client" / "src" / "GameClub.Client.Avalonia" / "Assets" / "HubShell.ico"
     ).exists()
-    assert "NativeTrayIcon" in (
-        PROJECT_ROOT
-        / "win-client"
-        / "src"
-        / "GameClub.Client.Windows"
-        / "WindowsClientWindowAdapter.cs"
-    ).read_text()
+    assert (
+        "NativeTrayIcon"
+        in (
+            PROJECT_ROOT
+            / "win-client"
+            / "src"
+            / "GameClub.Client.Windows"
+            / "WindowsClientWindowAdapter.cs"
+        ).read_text()
+    )
     assert "Shell_NotifyIcon" in tray_source
+    assert "ExtractIconEx(executablePath" in tray_source
+    assert 'Tip = "HubShell"' in tray_source
+    assert "IconHandle = _iconHandle" in tray_source
 
     for proto_path in proto_root.glob("*.proto"):
         assert (generated_root / f"{proto_path.stem}_pb2.py").exists()
@@ -422,22 +426,12 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     ).read_text()
     view_model_source = (project_root / "Presentation" / "MainViewModel.cs").read_text()
     host_source = (
-        PROJECT_ROOT
-        / "win-client"
-        / "src"
-        / "GameClub.Client.Windows"
-        / "WindowsClientHost.cs"
+        PROJECT_ROOT / "win-client" / "src" / "GameClub.Client.Windows" / "WindowsClientHost.cs"
     ).read_text()
     app_source = (
-        PROJECT_ROOT
-        / "win-client"
-        / "src"
-        / "GameClub.Client.Avalonia"
-        / "App.axaml.cs"
+        PROJECT_ROOT / "win-client" / "src" / "GameClub.Client.Avalonia" / "App.axaml.cs"
     ).read_text()
-    deployment_source = (
-        project_root / "Infrastructure" / "DeploymentSettings.cs"
-    ).read_text()
+    deployment_source = (project_root / "Infrastructure" / "DeploymentSettings.cs").read_text()
     endpoint_policy_source = (project_root / "Infrastructure" / "EndpointPolicy.cs").read_text()
     token_provider_source = (
         project_root / "Infrastructure" / "DeviceBootstrapTokenProvider.cs"
@@ -501,10 +495,12 @@ def test_windows_session_executor_uses_structured_backend_contract() -> None:
     assert "PurchasePortalTariffAsync" in view_model_source
     assert "NextBooking" not in view_model_source
     assert "PurchaseEntitlementAsync" in grpc_source
+    assert "ConfirmSessionExitAsync" in window_source
+    assert "Неиспользованные минуты текущего пакета сгорят." in window_source
     assert "PortalPassword" in view_model_source
     assert "PortalPhoneChanged" in window_source
     assert 'Icon="/Assets/HubShell.ico"' in xaml_source
-    assert "Title=\"HubShell\"" in xaml_source
+    assert 'Title="HubShell"' in xaml_source
     assert "Screens.ScreenFromWindow" in window_adapter_source
     assert 'Name="WindowContentSurface"' in xaml_source
     assert "ApplyWorkstationTheme" in app_source

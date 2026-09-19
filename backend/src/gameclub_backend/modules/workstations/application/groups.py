@@ -34,6 +34,18 @@ class WorkstationGroupService:
     async def list(self) -> list[WorkstationGroup]:
         return await self._repository.list()
 
+    async def restore_per_minute_tariffs(self) -> None:
+        """Restore internal metered tariffs for groups saved before tariff synchronization."""
+        if self._zone_rate_synchronizer is None:
+            return
+        for group in await self._repository.list():
+            await self._zone_rate_synchronizer.sync_per_minute_tariff(
+                group.id,
+                group.name,
+                group.per_minute_price_cents,
+                group.updated_at or self._clock.now(),
+            )
+
     async def save(
         self,
         group_id: str,

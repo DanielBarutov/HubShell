@@ -550,6 +550,7 @@
                             Click="Logout"
                             Background="Transparent"
                             Foreground="{DynamicResource SecondaryTextBrush}"
+                        Name="PortalLogoutButton"
                         ><TextBlock Text="Выйти" /></Button></Grid>
         <Border
                         Background="{DynamicResource CardBackgroundBrush}"
@@ -756,6 +757,7 @@
                                 IsEnabled="{Binding CanStopActiveSession}"
                                 Background="Transparent"
                                 Foreground="{DynamicResource AccentBrush}"
+                            Name="StopActiveSessionButton"
                             ><TextBlock
                                     Text="Выйти"
                                     FontSize="10"
