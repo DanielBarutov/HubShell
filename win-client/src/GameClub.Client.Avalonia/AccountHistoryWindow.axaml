@@ -9,6 +9,7 @@
     CanResize="False"
     SystemDecorations="None"
     Title="История аккаунта"
+    Icon="/Assets/HubShell.ico"
     Background="{DynamicResource PageBackgroundBrush}"
 >
   <Border

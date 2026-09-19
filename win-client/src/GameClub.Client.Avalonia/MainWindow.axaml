@@ -6,7 +6,8 @@
     Height="680"
     MinWidth="390"
     MinHeight="520"
-    Title="HubShell client"
+    Title="HubShell"
+    Icon="/Assets/HubShell.ico"
     WindowStartupLocation="CenterScreen"
     Background="{DynamicResource PageBackgroundBrush}"
 >

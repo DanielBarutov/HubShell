@@ -40,7 +40,7 @@ public sealed class WindowsClientHost : IClientHost
 
     public MainViewModel ViewModel { get; }
 
-    public string WindowTitle => "HubShell client";
+    public string WindowTitle => "HubShell";
 
     public string HostDisclaimer => "Клиент подключается к назначенному серверу клуба.";
 

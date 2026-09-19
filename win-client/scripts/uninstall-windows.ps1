@@ -39,9 +39,11 @@ if ([string]::Equals(
 
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $removed = $false
-if ($PSCmdlet.ShouldProcess($resolvedInstallPath, "удалить установку GameClub Client")) {
+if ($PSCmdlet.ShouldProcess($resolvedInstallPath, "удалить установку HubShell")) {
     Remove-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName "GameClub.Client.Windows.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $runKey -Name "HubShell" -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName "HubShell.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
 
     if (Test-Path -LiteralPath $resolvedInstallPath) {
         Remove-Item -LiteralPath $resolvedInstallPath -Recurse -Force
@@ -67,7 +69,7 @@ if (-not $removed) {
     exit 0
 }
 
-Write-Host "GameClub Client удален из $resolvedInstallPath"
+Write-Host "HubShell удален из $resolvedInstallPath"
 if ($RemoveRuntimeData) {
     Write-Host "Runtime offline data и startup.log удалены явно по параметру -RemoveRuntimeData."
 }

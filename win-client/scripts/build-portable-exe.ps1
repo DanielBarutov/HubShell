@@ -29,7 +29,7 @@ $clientRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $publishScript = Join-Path $clientRoot "win-client\scripts\publish-windows.ps1"
 $runtime = "win-$($Architecture.ToLowerInvariant())"
 $distributionPath = Join-Path $clientRoot "win-client\artifacts\portable\$runtime\$Configuration"
-$temporaryPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gameclub-client-publish-" + [Guid]::NewGuid().ToString("N"))
+$temporaryPath = Join-Path ([System.IO.Path]::GetTempPath()) ("hubshell-publish-" + [Guid]::NewGuid().ToString("N"))
 
 if (-not (Test-Path -LiteralPath $distributionPath)) {
     New-Item -ItemType Directory -Path $distributionPath -Force | Out-Null
@@ -42,14 +42,14 @@ try {
         throw "Публикация portable EXE завершилась с кодом $LASTEXITCODE."
     }
 
-    $sourceExecutable = Join-Path $temporaryPath "GameClub.Client.Windows.exe"
+    $sourceExecutable = Join-Path $temporaryPath "HubShell.exe"
     if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-        throw "В результате publish не найден GameClub.Client.Windows.exe: $temporaryPath"
+        throw "В результате publish не найден HubShell.exe: $temporaryPath"
     }
 
-    $targetExecutable = Join-Path $distributionPath "GameClub.Client.Windows.exe"
+    $targetExecutable = Join-Path $distributionPath "HubShell.exe"
     $stagedExecutable = Join-Path $distributionPath (
-        ".GameClub.Client.Windows.exe." + [Guid]::NewGuid().ToString("N") + ".new")
+        ".HubShell.exe." + [Guid]::NewGuid().ToString("N") + ".new")
     Copy-Item -LiteralPath $sourceExecutable -Destination $stagedExecutable -Force
     $hash = (Get-FileHash -LiteralPath $stagedExecutable -Algorithm SHA256).Hash
     Move-Item -LiteralPath $stagedExecutable -Destination $targetExecutable -Force

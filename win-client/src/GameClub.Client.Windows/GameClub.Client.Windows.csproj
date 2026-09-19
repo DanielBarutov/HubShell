@@ -6,6 +6,9 @@
          is restricted to win-x86/win-x64/win-arm64 below. -->
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>GameClub.Client.Windows</RootNamespace>
+    <AssemblyName>HubShell</AssemblyName>
+    <Product>HubShell</Product>
+    <ApplicationIcon>..\GameClub.Client.Avalonia\Assets\HubShell.ico</ApplicationIcon>
     <Platforms>x86;x64;ARM64</Platforms>
     <!-- Specify one Windows RID at publish time. Restoring every Windows
          runtime pack is unnecessary for Linux source verification. -->

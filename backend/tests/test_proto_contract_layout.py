@@ -54,6 +54,13 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
         / "GameClub.Client.Windows"
         / "GameClub.Client.Windows.csproj"
     ).read_text()
+    avalonia_project = (
+        PROJECT_ROOT
+        / "win-client"
+        / "src"
+        / "GameClub.Client.Avalonia"
+        / "GameClub.Client.Avalonia.csproj"
+    ).read_text()
     tray_source = (
         PROJECT_ROOT
         / "win-client"
@@ -77,6 +84,7 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
     assert "UseWindowsForms" not in windows_project
     assert "<AssemblyName>HubShell</AssemblyName>" in windows_project
     assert "<ApplicationIcon>..\\GameClub.Client.Avalonia\\Assets\\HubShell.ico</ApplicationIcon>" in windows_project
+    assert '<AvaloniaResource Include="Assets\\HubShell.ico" />' in avalonia_project
     assert (
         PROJECT_ROOT
         / "win-client"

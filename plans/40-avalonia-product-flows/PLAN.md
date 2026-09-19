@@ -65,6 +65,8 @@ fullscreen/window placement и kiosk policy.
    journal, restart/power, command stream, native window/tray adapters и baked
    production endpoints. Не оставлять второй UI-host как production path;
    native Windows execution остаётся обязательным evidence.
+   Имя опубликованного процесса и файла — `HubShell.exe`; знак приложения
+   добавлен в Windows-ресурсы и назначен главному и вспомогательному окнам.
    Реализовано source-level: `GameClub.Client.Windows.sln` ведёт на новый
    Avalonia host; DPAPI journal, restart/power, command stream, fullscreen
    access-gate, compact always-on-top widget с прозрачными скруглёнными

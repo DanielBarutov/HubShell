@@ -97,7 +97,7 @@ if ($CleanOutput) {
         Remove-Item -Recurse -Force
 }
 
-Write-Host "Публикация GameClub Client: $runtime / $Configuration"
+Write-Host "Публикация HubShell: $runtime / $Configuration"
 Write-Host "Каталог результата: $outputPath"
 
 & $dotnetCommand.Source publish $projectPath --configuration $Configuration --runtime $runtime --self-contained true --output $outputPath -p:Platform=$Architecture -p:SelfContained=true -p:GameClubEnvironment=$EnvironmentName -p:GameClubAuthAddress=$AuthAddress -p:GameClubGrpcAddress=$GrpcAddress -p:IncludeAllContentForSelfExtract=$singleFileValue -p:IncludeNativeLibrariesForSelfExtract=$singleFileValue -p:EnableCompressionInSingleFile=$singleFileValue -p:PublishTrimmed=false `
@@ -106,7 +106,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish завершился с кодом $LASTEXITCODE."
 }
 
-$executablePath = Join-Path $outputPath "GameClub.Client.Windows.exe"
+$executablePath = Join-Path $outputPath "HubShell.exe"
 if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
     throw "Публикация завершилась без ожидаемого файла $executablePath."
 }
