@@ -32,4 +32,3 @@ backend/logs/
 .playwright-mcp/
 output/
 steam-guest/.runtime/
-steam-guest/artifacts/
