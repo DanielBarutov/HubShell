@@ -19,6 +19,18 @@ public interface IGuestAccountStore
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
+    Task<bool> RenewAsync(
+        string stationId,
+        string stationKey,
+        Guid leaseId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task<int> ReleaseExpiredAsync(
+        DateTimeOffset now,
+        TimeSpan maximumSilence,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyCollection<GuestAccountSummary>> ListAsync(CancellationToken cancellationToken = default);
 }
 
@@ -32,9 +44,4 @@ public interface ISteamProcess
 public interface ISteamLauncher
 {
     Task<ISteamProcess> StartAsync(SteamCredentials credentials, CancellationToken cancellationToken = default);
-}
-
-public interface ISessionStopSignal
-{
-    Task WaitAsync(CancellationToken cancellationToken = default);
 }

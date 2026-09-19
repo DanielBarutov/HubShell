@@ -11,8 +11,7 @@ try
         ?? @"C:\Program Files (x86)\Steam\steam.exe";
     var agent = new GuestSteamAgent(
         new GuestAccountApi(serverUrl, stationKey),
-        new SteamProcessLauncher(steamPath),
-        new NamedPipeSessionStopSignal());
+        new SteamProcessLauncher(steamPath));
     await agent.RunAsync(stationId, stationKey);
 }
 catch (GuestAccountUnavailableException)
