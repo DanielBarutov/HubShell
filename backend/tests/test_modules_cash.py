@@ -20,6 +20,19 @@ from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClien
 
 pytestmark = pytest.mark.unit
 
+
+class AdvancingClock:
+    """Выдаёт следующий момент времени для детерминированного порядка операций."""
+
+    def __init__(self) -> None:
+        self.current = datetime.datetime(2026, 9, 18, 12, 0, tzinfo=datetime.UTC)
+
+    def now(self) -> datetime.datetime:
+        value = self.current
+        self.current += datetime.timedelta(microseconds=1)
+        return value
+
+
 async def test_cash_shift_schedule_opens_and_closes_idempotently() -> None:
     """
     Проверяет сценарий «test_cash_shift_schedule_opens_and_closes_idempotently» и подтверждает
@@ -65,7 +78,7 @@ async def test_client_operation_history_is_scoped_and_limited() -> None:
     ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
     repository = InMemoryClientRepository()
-    service = ClientService(repository)
+    service = ClientService(repository, clock=AdvancingClock())
     first_client = await service.create("HistoryFirstFox")
     second_client = await service.create("HistorySecondFox")
 

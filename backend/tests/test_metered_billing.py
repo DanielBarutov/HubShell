@@ -94,6 +94,7 @@ async def build_metered_services(
     tariff_free_minutes: int = 5,
     price_per_minute_cents: int = 10,
     initial_balance_cents: int = 1_000,
+    create_per_minute_tariff: bool = True,
     client_groups=None,
 ):
     workstation_repository = InMemoryWorkstationRepository()
@@ -103,26 +104,29 @@ async def build_metered_services(
     client_repository = InMemoryClientRepository()
     clients = ClientService(client_repository, clock=clock, groups=client_groups)
     client = await clients.create("MeterFox")
-    await clients.top_up(
-        client.id,
-        amount_cents=initial_balance_cents,
-        bonus_amount=0,
-        reason="Meter test",
-        actor_id="operator",
-        idempotency_key="meter-deposit-" + uuid.uuid4().hex,
-    )
+    if initial_balance_cents:
+        await clients.top_up(
+            client.id,
+            amount_cents=initial_balance_cents,
+            bonus_amount=0,
+            reason="Meter test",
+            actor_id="operator",
+            idempotency_key="meter-deposit-" + uuid.uuid4().hex,
+        )
     catalog = CatalogService(InMemoryCatalogRepository())
-    tariff = await catalog.create_tariff(
-        "VIP minute",
-        "vip",
-        duration_minutes=1,
-        price_cents=0,
-        valid_from=clock.current,
-        valid_to=None,
-        billing_mode=BillingMode.PER_MINUTE,
-        price_per_minute_cents=price_per_minute_cents,
-        free_minutes=tariff_free_minutes,
-    )
+    tariff = None
+    if create_per_minute_tariff:
+        tariff = await catalog.create_tariff(
+            "VIP minute",
+            "vip",
+            duration_minutes=1,
+            price_cents=0,
+            valid_from=clock.current,
+            valid_to=None,
+            billing_mode=BillingMode.PER_MINUTE,
+            price_per_minute_cents=price_per_minute_cents,
+            free_minutes=tariff_free_minutes,
+        )
     session_repository = InMemorySessionRepository()
     meter_repository = InMemoryMeterRepository()
     sessions = SessionService(
@@ -308,6 +312,57 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
     assert meter is not None
     assert meter.billed_minutes == 0
     assert (await clients.get(client.id)).balance_cents == 1_000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("create_per_minute_tariff", "expected_reason"),
+    (
+        pytest.param(True, "balance_exhausted", id="ставка-есть-денег-нет"),
+        pytest.param(False, "time_exhausted", id="ставка-выключена"),
+    ),
+)
+async def test_regular_device_session_stops_exactly_after_five_free_minutes(
+    create_per_minute_tariff: bool,
+    expected_reason: str,
+) -> None:
+    """Проверяет остановку обычной сессии на пятой минуте без пакета и доступных денег."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        _tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+    ) = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        initial_balance_cents=0,
+        create_per_minute_tariff=create_per_minute_tariff,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key=f"free-session-stop-{expected_reason}",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 1
+    assert (await sessions.get(session.id)).status.value == "completed"
+    pending = await commands.pending_for_device(workstation.device_id)
+    assert [command.command_type for command in pending] == ["session.stop", "display.lock"]
+    assert {json.loads(command.payload_json)["reason"] for command in pending} == {expected_reason}
 
 
 @pytest.mark.asyncio

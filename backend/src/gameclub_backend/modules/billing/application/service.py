@@ -147,6 +147,9 @@ class BillingService:
                 tariff_id = fallback_tariff.id
                 quote_moment = moment
         if tariff_id is None:
+            elapsed_minutes = self._elapsed_minutes(session.started_at, moment)
+            if elapsed_minutes >= session.login_grant_minutes:
+                raise ApplicationError(ErrorCode.CONFLICT, "Session time exhausted")
             return None
         tariff = await self._catalog.get_tariff(tariff_id)
         if tariff is None:
@@ -292,8 +295,14 @@ class BillingService:
             ),
         )
         target_cents = quote.price_cents if billable_minutes > 0 else 0
+        login_grant_finished_without_package = (
+            session.login_grant_minutes > 0
+            and elapsed_minutes >= session.login_grant_minutes
+            and active_entitlement is None
+            and current.package_minutes == 0
+        )
         if (
-            package_finished
+            (package_finished or login_grant_finished_without_package)
             and active_entitlement_id is None
             and not await self._clients.can_debit(
                 session.client_id,

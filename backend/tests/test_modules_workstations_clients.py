@@ -200,7 +200,16 @@ async def test_entitlement_queue_requires_explicit_activation_and_preserves_orde
     Проверяет сценарий «test_entitlement_queue_requires_explicit_activation_and_preserves_order»
     и подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
-    clients = ClientService(InMemoryClientRepository())
+    class AdvancingClock:
+        def __init__(self) -> None:
+            self.current = datetime.datetime(2026, 9, 18, 12, 0, tzinfo=datetime.UTC)
+
+        def now(self) -> datetime.datetime:
+            value = self.current
+            self.current += datetime.timedelta(microseconds=1)
+            return value
+
+    clients = ClientService(InMemoryClientRepository(), clock=AdvancingClock())
     client = await clients.create("PackageQueueClient")
     await clients.top_up(client.id, 1_000, 0, "Deposit", "operator", "package-deposit")
     catalog = CatalogService(InMemoryCatalogRepository())
