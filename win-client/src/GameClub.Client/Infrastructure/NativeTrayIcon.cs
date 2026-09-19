@@ -28,6 +28,8 @@ internal sealed class NativeTrayIcon : IDisposable
 
     private readonly Action _onExit;
     private readonly Action _onRestore;
+    private readonly IntPtr _iconHandle;
+    private readonly bool _ownsIconHandle;
     private readonly IntPtr _windowHandle;
     private readonly WindowProc _windowProc;
     private readonly IntPtr _previousWindowProc;
@@ -43,6 +45,7 @@ internal sealed class NativeTrayIcon : IDisposable
         _windowHandle = windowHandle;
         _onRestore = onRestore;
         _onExit = onExit;
+        (_iconHandle, _ownsIconHandle) = LoadTrayIcon();
         _windowProc = HandleWindowMessage;
         _previousWindowProc = SetWindowLongPtr(
             _windowHandle,
@@ -50,6 +53,7 @@ internal sealed class NativeTrayIcon : IDisposable
             Marshal.GetFunctionPointerForDelegate(_windowProc));
         if (_previousWindowProc == IntPtr.Zero)
         {
+            ReleaseIcon();
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось подключить обработчик tray-сообщений.");
         }
 
@@ -58,12 +62,13 @@ internal sealed class NativeTrayIcon : IDisposable
             var data = CreateNotifyIconData();
             if (!Shell_NotifyIcon(NimAdd, ref data))
             {
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось создать иконку GameClub в tray.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось создать иконку HubShell в tray.");
             }
         }
         catch
         {
             RestoreWindowProcedure();
+            ReleaseIcon();
             throw;
         }
     }
@@ -78,6 +83,7 @@ internal sealed class NativeTrayIcon : IDisposable
         var data = CreateNotifyIconData();
         Shell_NotifyIcon(NimDelete, ref data);
         RestoreWindowProcedure();
+        ReleaseIcon();
         _disposed = true;
         GC.KeepAlive(_windowProc);
     }
@@ -171,8 +177,8 @@ internal sealed class NativeTrayIcon : IDisposable
         Id = 1,
         Flags = NifMessage | NifIcon | NifTip,
         CallbackMessage = WmTrayIcon,
-        IconHandle = LoadIcon(IntPtr.Zero, IdiApplication),
-        Tip = "GameClub",
+        IconHandle = _iconHandle,
+        Tip = "HubShell",
         Info = string.Empty,
         InfoTitle = string.Empty,
     };
@@ -183,6 +189,37 @@ internal sealed class NativeTrayIcon : IDisposable
         {
             SetWindowLongPtr(_windowHandle, GwlWndProc, _previousWindowProc);
         }
+    }
+
+    private void ReleaseIcon()
+    {
+        if (_ownsIconHandle && _iconHandle != IntPtr.Zero)
+        {
+            DestroyIcon(_iconHandle);
+        }
+    }
+
+    private static (IntPtr IconHandle, bool OwnsIconHandle) LoadTrayIcon()
+    {
+        var executablePath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(executablePath)
+            && ExtractIconEx(executablePath, 0, out var largeIcon, out var smallIcon, 1) > 0)
+        {
+            if (smallIcon != IntPtr.Zero)
+            {
+                if (largeIcon != IntPtr.Zero)
+                {
+                    DestroyIcon(largeIcon);
+                }
+                return (smallIcon, true);
+            }
+            if (largeIcon != IntPtr.Zero)
+            {
+                return (largeIcon, true);
+            }
+        }
+
+        return (LoadIcon(IntPtr.Zero, IdiApplication), false);
     }
 
     private delegate IntPtr WindowProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
@@ -229,6 +266,18 @@ internal sealed class NativeTrayIcon : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadIcon(IntPtr instance, IntPtr resource);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint ExtractIconEx(
+        string fileName,
+        int iconIndex,
+        out IntPtr largeIcon,
+        out IntPtr smallIcon,
+        uint iconCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr iconHandle);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreatePopupMenu();

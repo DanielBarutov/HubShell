@@ -104,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         application.state.resources = resources
         try:
+            await services.workstation_groups.restore_per_minute_tariffs()
             yield
         finally:
             await resources.close()

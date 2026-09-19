@@ -38,11 +38,16 @@ from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
+from gameclub_backend.modules.workstations.application.groups import WorkstationGroupService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.domain import WorkstationGroup
 from gameclub_backend.modules.workstations.domain_commands import WorkstationCommandStatus
 from gameclub_backend.modules.workstations.infrastructure.commands_memory import (
     InMemoryCommandNotifier,
     InMemoryWorkstationCommandRepository,
+)
+from gameclub_backend.modules.workstations.infrastructure.groups_memory import (
+    InMemoryWorkstationGroupRepository,
 )
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
@@ -399,6 +404,103 @@ async def test_device_login_selects_zone_per_minute_tariff_without_package() -> 
     assert meter.billed_cents == 10
     assert (await clients.get(client.id)).balance_cents == 990
     assert (await meters.get(session.id)).tariff_id == tariff.id
+
+
+@pytest.mark.asyncio
+async def test_existing_zone_rate_starts_metering_after_five_free_minutes() -> None:
+    """
+    Проверяет, что старая зона со ставкой 10 ₽/мин после запуска восстанавливает
+    внутренний тариф: баланс 100 ₽ показывает 10 минут, а на шестой минуте
+    списывается первые 10 ₽ без остановки ПК.
+    """
+    clock = FixedClock()
+    groups = InMemoryWorkstationGroupRepository()
+    await groups.save(
+        WorkstationGroup(
+            id="vip",
+            name="VIP-зона",
+            theme="vip",
+            per_minute_price_cents=1_000,
+            updated_at=clock.now(),
+        )
+    )
+    catalog = CatalogService(InMemoryCatalogRepository(), zones=groups)
+    group_service = WorkstationGroupService(
+        groups,
+        clock=clock,
+        zone_rate_synchronizer=catalog,
+    )
+    await group_service.restore_per_minute_tariffs()
+
+    tariff = await catalog.find_per_minute_tariff("vip", clock.now())
+    assert tariff is not None
+    assert tariff.price_per_minute_cents == 1_000
+
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations, groups=groups).register(
+        "restored-rate-device",
+        "VIP-01",
+        group_id="vip",
+    )
+    client_repository = InMemoryClientRepository()
+    clients = ClientService(client_repository, clock=clock)
+    client = await clients.create("RestoredRateFox")
+    await clients.top_up(
+        client.id,
+        amount_cents=10_000,
+        bonus_amount=0,
+        reason="Баланс для поминутной игры",
+        actor_id="operator",
+        idempotency_key="restored-rate-deposit",
+    )
+    session_repository = InMemorySessionRepository()
+    meters = InMemoryMeterRepository()
+    sessions = SessionService(
+        session_repository,
+        workstations=workstations,
+        clients=client_repository,
+        clock=clock,
+        tariffs=catalog,
+    )
+    billing = BillingService(
+        InMemoryChargeRepository(),
+        sessions=session_repository,
+        workstations=workstations,
+        clients=clients,
+        catalog=catalog,
+        clock=clock,
+        meter_repository=meters,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="restored-rate-session",
+    )
+
+    assert session.tariff_id == tariff.id
+    assert (await sessions.snapshot(session.id)).balance_remaining_minutes == 10
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+    assert await meter_sessions_once(billing, session_repository, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await clients.get(client.id)).balance_cents == 10_000
+
+    clock.current += datetime.timedelta(minutes=1)
+    meter = await billing.meter_session(session.id)
+
+    assert meter is not None
+    assert meter.billed_minutes == 1
+    assert meter.billed_cents == 1_000
+    assert (await clients.get(client.id)).balance_cents == 9_000
+    assert (await sessions.snapshot(session.id)).balance_remaining_minutes == 9
 
 
 @pytest.mark.asyncio
