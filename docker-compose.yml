@@ -28,6 +28,47 @@ x-backend-environment: &backend-environment
   GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS: ${GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS:-60}
 
 services:
+  steam-guest-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: steam_guest
+      POSTGRES_USER: steam_guest
+      POSTGRES_PASSWORD: ${STEAM_GUEST_DB_PASSWORD:-steam-guest-local-only}
+    ports:
+      - "127.0.0.1:${STEAM_GUEST_POSTGRES_PORT:-55433}:5432"
+    volumes:
+      - steam-guest-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U steam_guest -d steam_guest"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  steam-guest-server:
+    build:
+      context: ./steam-guest
+      dockerfile: ./src/HubShell.SteamGuest.Server/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8200
+      STEAM_GUEST_POSTGRES_DSN: Host=steam-guest-postgres;Port=5432;Database=steam_guest;Username=steam_guest;Password=${STEAM_GUEST_DB_PASSWORD:-steam-guest-local-only}
+      STEAM_GUEST_MASTER_KEY: ${STEAM_GUEST_MASTER_KEY:?Set STEAM_GUEST_MASTER_KEY to base64-encoded 32 random bytes}
+      STEAM_GUEST_ADMIN_KEY: ${STEAM_GUEST_ADMIN_KEY:?Set STEAM_GUEST_ADMIN_KEY}
+      STEAM_GUEST_STATION_KEY_PEPPER: ${STEAM_GUEST_STATION_KEY_PEPPER:?Set STEAM_GUEST_STATION_KEY_PEPPER}
+    ports:
+      - "${STEAM_GUEST_BIND_HOST:-0.0.0.0}:${STEAM_GUEST_HTTP_PORT:-8200}:8200"
+    depends_on:
+      steam-guest-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8200/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -192,3 +233,4 @@ services:
 volumes:
   gameclub-postgres-data:
   gameclub-redis-data:
+  steam-guest-postgres-data:

@@ -536,6 +536,13 @@ coverage guardrail установлен на измеренном старте.
 
 ### Product backlog
 
+- [`plans/45-steam-guest-launcher/PLAN.md`](45-steam-guest-launcher/PLAN.md) —
+  отдельный контур разрешённых гостевых Steam-аккаунтов: собственный
+  PostgreSQL-контейнер, HTTP-сервис на порту `8200`, Windows-агент
+  `HubShellSteam.exe` и локальный сигнал завершения от `HubShell.exe`.
+  Контур не использует таблицы, деньги или команды HubShell. Есть исходный код
+  и unit-тесты аренды/освобождения; ещё нужно вручную проверить запуск
+  контейнеров с настоящими секретами и работу Steam на реальном Windows-ПК.
 - Сводный backlog из [`fixes.md`](../fixes.md) вынесен в
   [`plans/44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md): P0 — переход
   package→per-minute, локальный таймер без перезапуска от одинакового heartbeat
