@@ -466,7 +466,8 @@ public sealed class MainViewModelVisibilityTests
             new ClientSessionCoordinator(backend),
             new StubCredentials(),
             deviceId: "device-1",
-            powerController: new RecordingPowerController(() => events.Add("restart")));
+            powerController: new RecordingPowerController(() => events.Add("restart")),
+            sessionStoppedObserver: _ => events.Add("steam.release"));
 
         viewModel.ApplyLockdownPolicy(new WorkstationLockdownPolicySnapshot(
             "app_gate",
@@ -496,8 +497,10 @@ public sealed class MainViewModelVisibilityTests
         Assert.True(await viewModel.LogoutAsync());
         Assert.Equal(1, backendProxy.StopCalls);
         Assert.Equal(1, events.Count(item => item == "restart"));
+        Assert.Equal(1, events.Count(item => item == "steam.release"));
         Assert.True(viewModel.IsAccessLocked);
         Assert.True(events.IndexOf("backend.stop") < events.IndexOf("restart"));
+        Assert.True(events.IndexOf("backend.stop") < events.IndexOf("steam.release"));
     }
 
     [Fact]

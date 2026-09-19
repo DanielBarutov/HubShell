@@ -32,7 +32,6 @@ public sealed class SteamProcessLauncher : ISteamLauncher
         startInfo.ArgumentList.Add(credentials.Login);
         startInfo.ArgumentList.Add(credentials.Password);
         startInfo.ArgumentList.Add("-rememberpassword");
-        startInfo.ArgumentList.Add("-silent");
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Windows не запустила Steam.");
         return Task.FromResult<ISteamProcess>(new ManagedSteamProcess(process));
