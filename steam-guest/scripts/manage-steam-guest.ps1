@@ -22,8 +22,15 @@ function ConvertFrom-SecureInput {
 }
 
 function New-RandomSecret {
-    $bytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
-    return [Convert]::ToBase64String($bytes)
+    $bytes = New-Object byte[] 32
+    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $generator.GetBytes($bytes)
+        return [Convert]::ToBase64String($bytes)
+    }
+    finally {
+        $generator.Dispose()
+    }
 }
 
 function Get-RequiredText {
