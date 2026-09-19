@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+from pathlib import Path
 
 import dramatiq
 import pytest
@@ -57,6 +58,19 @@ def test_background_actors_share_one_broker() -> None:
         "sweep_reservation_no_shows",
     }
     assert meter_active_sessions.queue_name == "metering"
+
+
+def test_metering_worker_loads_client_group_debt_policy() -> None:
+    """
+    Проверяет, что фоновое списание минут получает правила группы клиента,
+    поэтому не принимает должника за обычного клиента с лимитом 0 ₽.
+    """
+    worker_source = (
+        Path(__file__).parents[1] / "src" / "gameclub_backend" / "jobs" / "billing.py"
+    ).read_text(encoding="utf-8")
+
+    assert "PostgresClientGroupRepository" in worker_source
+    assert "groups=PostgresClientGroupRepository(engine_provider)" in worker_source
 
 
 def test_scheduler_requires_redis() -> None:
