@@ -1,5 +1,6 @@
 using HubShell.SteamGuest.Core;
 using HubShell.SteamGuest.Server;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -9,6 +10,8 @@ var adminKey = Required(configuration, "STEAM_GUEST_ADMIN_KEY");
 var stationKeyPepper = Required(configuration, "STEAM_GUEST_STATION_KEY_PEPPER");
 
 builder.Services.AddSingleton(new SecretProtector(masterKey));
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddSingleton<IGuestAccountStore>(services => new PostgresGuestAccountStore(
     postgresDsn,
     services.GetRequiredService<SecretProtector>(),

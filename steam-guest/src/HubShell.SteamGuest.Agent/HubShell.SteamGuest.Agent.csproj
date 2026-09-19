@@ -11,4 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HubShell.SteamGuest.Core\HubShell.SteamGuest.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Agent.env.template" CopyToPublishDirectory="Always" TargetPath=".env" />
+  </ItemGroup>
 </Project>
