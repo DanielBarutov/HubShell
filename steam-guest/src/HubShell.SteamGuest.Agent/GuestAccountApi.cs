@@ -10,9 +10,9 @@ public sealed class GuestAccountApi : IGuestAccountStore
 
     public GuestAccountApi(Uri serverUrl, string stationKey)
     {
-        if (serverUrl.Scheme != Uri.UriSchemeHttps && !IsDevelopment())
+        if (serverUrl.Scheme != Uri.UriSchemeHttps && !AllowsLocalHttp())
         {
-            throw new InvalidOperationException("В production сервер гостевых аккаунтов должен использовать HTTPS.");
+            throw new InvalidOperationException("HTTP нужно явно разрешить в .env только для локальной сети клуба.");
         }
         _http = new HttpClient { BaseAddress = serverUrl };
         _http.DefaultRequestHeaders.Add("X-Steam-Guest-Station-Key", stationKey);
@@ -54,9 +54,9 @@ public sealed class GuestAccountApi : IGuestAccountStore
     public Task<IReadOnlyCollection<GuestAccountSummary>> ListAsync(CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Список аккаунтов доступен только администратору.");
 
-    private static bool IsDevelopment() => string.Equals(
-        Environment.GetEnvironmentVariable("HUBSHELL_STEAM_ENVIRONMENT"),
-        "development",
+    private static bool AllowsLocalHttp() => string.Equals(
+        Environment.GetEnvironmentVariable("HUBSHELL_STEAM_ALLOW_HTTP"),
+        "true",
         StringComparison.OrdinalIgnoreCase);
 
     private sealed record LeaseResponse(Guid LeaseId, string Login, string Password);

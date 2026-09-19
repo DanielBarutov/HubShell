@@ -11,7 +11,22 @@
 - `STEAM_GUEST_ADMIN_KEY` — ключ администратора для добавления станций и
   аккаунтов.
 
-Агент получает `HUBSHELL_STEAM_SERVER_URL`, `HUBSHELL_STEAM_STATION_ID`,
-`HUBSHELL_STEAM_STATION_KEY` и путь к `steam.exe`. Секреты не добавляются в
-репозиторий и не передаются через аргументы командной строки.
+Агент читает `.env` из папки рядом с `HubShellSteam.exe`. В публикацию попадает
+шаблон `.env`: в нём нужно указать `HUBSHELL_STEAM_SERVER_URL`,
+`HUBSHELL_STEAM_STATION_ID`, `HUBSHELL_STEAM_STATION_KEY` и путь к `steam.exe`.
+Для локального HTTP указывается `HUBSHELL_STEAM_ALLOW_HTTP=true`. Секреты не
+добавляются в репозиторий и не передаются через аргументы командной строки.
 
+## Добавление ПК и Steam-аккаунтов на Windows
+
+На компьютере администратора откройте PowerShell и из корня проекта запустите:
+
+```powershell
+Set-Location "C:\Git\HubShell"
+.\steam-guest\scripts\manage-steam-guest.ps1 -ServerUrl "http://127.0.0.1:8200/"
+```
+
+Скрипт спрашивает ключ администратора скрыто и показывает меню: добавить ПК,
+добавить Steam-аккаунт, показать пул или проверить связь. При добавлении ПК он
+по умолчанию создаёт уникальный ключ и выводит две строки для `.env` рядом с
+`HubShellSteam.exe`. Пароль Steam также вводится скрыто.

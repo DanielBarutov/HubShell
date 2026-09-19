@@ -3,6 +3,7 @@ using HubShell.SteamGuest.Core;
 
 try
 {
+    EnvironmentFile.LoadUnsetValues(AppContext.BaseDirectory);
     var serverUrl = RequiredUri("HUBSHELL_STEAM_SERVER_URL");
     var stationId = Required("HUBSHELL_STEAM_STATION_ID");
     var stationKey = Required("HUBSHELL_STEAM_STATION_KEY");
