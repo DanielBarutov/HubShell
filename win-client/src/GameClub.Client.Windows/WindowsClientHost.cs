@@ -108,7 +108,11 @@ public sealed class WindowsClientHost : IClientHost
                     ViewModel.ApplyTheme,
                     _powerController,
                     ViewModel.RegisterSessionStarted,
-                    ViewModel.RegisterSessionStopped,
+                    session =>
+                    {
+                        ViewModel.RegisterSessionStopped(session);
+                        _ = SteamGuestSessionStopSignalPublisher.PublishAsync();
+                    },
                     () => ViewModel.LockClient())));
     }
 }

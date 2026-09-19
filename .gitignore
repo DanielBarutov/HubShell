@@ -31,3 +31,4 @@ backend/logs/
 .playwright-cli/
 .playwright-mcp/
 output/
+steam-guest/.runtime/
