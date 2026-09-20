@@ -92,6 +92,42 @@ async def test_group_policy_allows_bounded_debt_and_blocks_next_debit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_debtor_group_client_can_top_up_after_reaching_debt_limit() -> None:
+    """Проверяет, что пополнение выводит должника из минуса и не зависит от лимита долга."""
+    groups = InMemoryClientGroupRepository()
+    await ClientGroupService(groups, clock=FixedClock()).update(
+        "regular",
+        "Обычные клиенты",
+        allow_negative_balance=True,
+        negative_balance_limit_cents=600,
+        is_default=True,
+    )
+    clients = ClientService(InMemoryClientRepository(), clock=FixedClock(), groups=groups)
+    client = await clients.create("DebtTopUpFox")
+    debtor, _ = await clients.debit(
+        client.id,
+        600,
+        "meter",
+        "system",
+        "debt-limit",
+        allow_negative_balance=True,
+    )
+
+    updated, operation = await clients.top_up(
+        debtor.id,
+        100,
+        0,
+        "Пополнение",
+        "operator",
+        "debt-top-up",
+        payment_parts=[{"method": "cash", "amount_cents": 100}],
+    )
+
+    assert updated.balance_cents == -500
+    assert operation.amount_cents == 100
+
+
+@pytest.mark.asyncio
 async def test_inactive_or_default_group_cannot_be_deleted() -> None:
     """Проверяет безопасное удаление: default group не удаляется, inactive остаётся явным."""
     groups = InMemoryClientGroupRepository()

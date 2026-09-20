@@ -297,7 +297,7 @@ class PostgresClientRepository:
                     return client_model.to_domain(), existing_model.to_domain()
 
                 next_balance = client_model.balance_cents + operation.amount_cents
-                if next_balance < minimum_balance_cents:
+                if operation.amount_cents < 0 and next_balance < minimum_balance_cents:
                     raise ValueError("Insufficient balance")
                 client_model.balance_cents = next_balance
                 client_model.balance_bonus += operation.bonus_amount

@@ -363,6 +363,35 @@ class EntitlementService:
             now=now or self._clock.now(),
         )
 
+    async def activate_next_compatible(
+        self,
+        client_id: uuid.UUID,
+        zone_id: str | None,
+        now: datetime.datetime | None = None,
+    ) -> Entitlement | None:
+        """Activate the first usable queued package without consuming its time."""
+        moment = now or self._clock.now()
+        active = await self._repository.get_active_for_client(client_id)
+        if active is not None:
+            return active
+        next_item = await self.next_compatible(client_id, zone_id, moment)
+        if next_item is None:
+            return None
+        try:
+            return await self._repository.activate_for_client(
+                next_item.id,
+                client_id,
+                moment,
+                zone_id,
+            )
+        except ValueError as error:
+            # Another meter/portal request can activate the same client's
+            # package first. Its active result is the correct state here.
+            active = await self._repository.get_active_for_client(client_id)
+            if active is not None:
+                return active
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
     async def consume_for_session(
         self,
         client_id: uuid.UUID,

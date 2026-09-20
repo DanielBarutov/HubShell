@@ -63,6 +63,19 @@ async def test_postgres_debtor_group_allows_first_metered_minute_after_free_time
 
         assert updated.balance_cents == -1_000
         assert not await clients.can_debit(client.id, 1, allow_negative_balance=True)
+
+        replenished, operation = await clients.top_up(
+            client.id,
+            250,
+            0,
+            "Пополнение должника",
+            "integration-test",
+            f"pg-debt-top-up-{uuid.uuid4()}",
+            payment_parts=[{"method": "cash", "amount_cents": 250}],
+        )
+
+        assert replenished.balance_cents == -750
+        assert operation.amount_cents == 250
     finally:
         async with engine.begin() as connection:
             if client_id is not None:
