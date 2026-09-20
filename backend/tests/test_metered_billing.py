@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import json
+import logging
 import uuid
 
 import pytest
@@ -340,6 +341,7 @@ async def test_device_login_adds_separate_five_minute_grant() -> None:
 async def test_regular_device_session_stops_exactly_after_five_free_minutes(
     create_per_minute_tariff: bool,
     expected_reason: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Проверяет остановку обычной сессии на пятой минуте без пакета и доступных денег."""
     clock = FixedClock()
@@ -373,8 +375,17 @@ async def test_regular_device_session_stops_exactly_after_five_free_minutes(
 
     clock.current = session.started_at + datetime.timedelta(minutes=5)
 
-    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 1
+    with caplog.at_level(logging.WARNING, logger="gameclub_backend.jobs.billing"):
+        assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 1
     assert (await sessions.get(session.id)).status.value == "completed"
+    assert f"session_meter_stopped session_id={session.id}" in caplog.text
+    assert f"reason={expected_reason}" in caplog.text
+    expected_error = (
+        "Insufficient balance"
+        if expected_reason == "balance_exhausted"
+        else "Session time exhausted"
+    )
+    assert f"error={expected_error}" in caplog.text
     pending = await commands.pending_for_device(workstation.device_id)
     assert [command.command_type for command in pending] == ["session.stop", "display.lock"]
     assert {json.loads(command.payload_json)["reason"] for command in pending} == {expected_reason}
