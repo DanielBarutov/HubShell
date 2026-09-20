@@ -1054,14 +1054,14 @@ async def test_three_hour_package_stays_active_at_two_hours_fifty_nine_remaining
         package_tariff,
         sessions,
         billing,
-        _meters,
-        _clients,
+        meters,
+        clients,
         entitlements,
         catalog,
     ) = await build_package_metered_services(
         clock,
         duration_minutes=180,
-        initial_balance_cents=100,
+        initial_balance_cents=1_000,
         tariff_price_cents=100,
         return_catalog=True,
     )
@@ -1094,6 +1094,7 @@ async def test_three_hour_package_stays_active_at_two_hours_fifty_nine_remaining
         "operator",
         "three-hour-package-purchase",
     )
+    assert (await clients.get(client.id)).balance_cents == 900
 
     expected_remaining = (
         (5, 180),
@@ -1108,10 +1109,17 @@ async def test_three_hour_package_stays_active_at_two_hours_fifty_nine_remaining
         assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
         current_session = await sessions.get(session.id)
         current_package = await entitlements.get(package.id)
+        current_client = await clients.get(client.id)
+        current_meter = await meters.get(session.id)
         assert current_session is not None
         assert current_session.status.value == "active"
         assert current_package.status is EntitlementStatus.ACTIVE
         assert current_package.remaining_minutes == remaining_minutes
+        assert current_client.balance_cents == 900
+        assert current_meter is not None
+        assert current_meter.billed_cents == 0
+        assert current_meter.billed_minutes == 0
+        assert current_meter.package_minutes == max(0, elapsed - 5)
         assert await commands.pending_for_device(workstation.device_id) == []
 
 
