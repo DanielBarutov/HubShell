@@ -188,8 +188,21 @@ class BillingService:
         package_minutes = current.package_minutes
         active_entitlement_id = current.active_entitlement_id
         package_window_end: datetime.datetime | None = None
+        package_delta = 0
+        package_consumed_delta = 0
+        package_coverage_end: datetime.datetime | None = None
         if self._entitlements is not None:
-            package_anchor = session.started_at if meter_was_created else current.updated_at
+            # Keep the package baseline at the grant boundary until the first
+            # package minute is consumed. A worker tick may create the meter
+            # a few seconds after the free grant ends; using that tick as the
+            # next baseline would turn the uncovered seconds into a paid
+            # per-minute minute and could stop a zero-balance session before
+            # the package gets its first full minute.
+            package_anchor = (
+                session.started_at
+                if meter_was_created or current.package_minutes == 0
+                else current.updated_at
+            )
             grant_end = session.started_at + datetime.timedelta(minutes=session.login_grant_minutes)
             package_anchor = max(package_anchor, grant_end)
             if active_entitlement is not None and active_entitlement.activated_at is not None:
@@ -217,6 +230,7 @@ class BillingService:
                     ),
                 )
                 package_minutes += package_result.consumed_minutes
+                package_consumed_delta = package_result.consumed_minutes
                 active_entitlement_id = package_result.active_entitlement_id
             if (
                 package_window_end is not None
@@ -230,7 +244,31 @@ class BillingService:
                 active_entitlement_id = None
                 if session.status is SessionStatus.ACTIVE:
                     session = await self._sessions.save(session.stop(package_window_end))
+            if active_entitlement is not None and not active_entitlement.time_restricted:
+                package_coverage_end = package_anchor + datetime.timedelta(
+                    minutes=package_consumed_delta
+                )
         package_progressed = package_minutes > current.package_minutes
+        if (
+            tariff.billing_mode is BillingMode.PER_MINUTE
+            and active_entitlement is not None
+            and package_delta == 0
+            and not package_progressed
+            and active_entitlement_id is None
+            and session.status is SessionStatus.ACTIVE
+        ):
+            if current.active_entitlement_id != active_entitlement.id:
+                return await self._meter_repository.save(
+                    current.advance(
+                        billed_minutes=current.billed_minutes,
+                        billed_cents=current.billed_cents,
+                        operation_id=current.last_operation_id,
+                        now=moment,
+                        package_minutes=package_minutes,
+                        active_entitlement_id=active_entitlement.id,
+                    )
+                )
+            return current
         package_finished = active_entitlement_id is None and (
             package_progressed or (current.package_minutes > 0 and active_entitlement is None)
         )
@@ -289,10 +327,19 @@ class BillingService:
                     active_entitlement_id=active_entitlement_id,
                 )
             )
-        billable_minutes = max(
-            0,
-            elapsed_minutes - tariff.free_minutes - session.login_grant_minutes - package_minutes,
-        )
+        if package_coverage_end is not None:
+            billable_minutes = max(
+                0,
+                int((end_at - package_coverage_end).total_seconds() // 60),
+            )
+        else:
+            billable_minutes = max(
+                0,
+                elapsed_minutes
+                - tariff.free_minutes
+                - session.login_grant_minutes
+                - package_minutes,
+            )
         quote = await self._catalog.quote_for_tariff(
             tariff_id=tariff.id,
             group_id=effective_workstation_group_id(workstation.group_id),
