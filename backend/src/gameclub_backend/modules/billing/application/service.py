@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import logging
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
@@ -28,6 +29,8 @@ from gameclub_backend.modules.catalog.domain import BillingMode, TariffAudience
 from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.sessions.domain import SessionStatus
 from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
+
+logger = logging.getLogger(__name__)
 
 
 class UtcClock:
@@ -168,7 +171,6 @@ class BillingService:
         end_at = session.ended_at or moment
         elapsed_minutes = self._elapsed_minutes(session.started_at, end_at)
         current = await self._meter_repository.get(session.id)
-        meter_was_created = current is None
         if current is None:
             current = await self._meter_repository.ensure(
                 SessionMeter(
@@ -192,28 +194,33 @@ class BillingService:
         package_consumed_delta = 0
         package_coverage_end: datetime.datetime | None = None
         if self._entitlements is not None:
-            # Keep the package baseline at the grant boundary until the first
-            # package minute is consumed. A worker tick may create the meter
-            # a few seconds after the free grant ends; using that tick as the
-            # next baseline would turn the uncovered seconds into a paid
-            # per-minute minute and could stop a zero-balance session before
-            # the package gets its first full minute.
-            package_anchor = (
-                session.started_at
-                if meter_was_created or current.package_minutes == 0
-                else current.updated_at
-            )
+            # Keep one stable package baseline for the whole entitlement. Using
+            # current.updated_at here loses seconds between reconnects: for
+            # example, two ticks at 15:18 and 15:34 would discard the 16
+            # seconds before the next full package minute. The entitlement's
+            # consumed amount is already persisted, so each tick can calculate
+            # the new delta from the same activation/grant boundary.
+            package_anchor = session.started_at
             grant_end = session.started_at + datetime.timedelta(minutes=session.login_grant_minutes)
             package_anchor = max(package_anchor, grant_end)
             if active_entitlement is not None and active_entitlement.activated_at is not None:
                 package_anchor = max(package_anchor, active_entitlement.activated_at)
             if active_entitlement is not None:
                 package_window_end = active_entitlement.usage_window_ends_at(package_anchor)
-            package_delta = self._eligible_package_minutes(
+            eligible_package_minutes = self._eligible_package_minutes(
                 active_entitlement,
                 package_anchor,
                 end_at,
             )
+            consumed_by_active_entitlement = 0
+            if (
+                active_entitlement is not None
+                and current.active_entitlement_id == active_entitlement.id
+            ):
+                consumed_by_active_entitlement = (
+                    active_entitlement.duration_minutes - active_entitlement.remaining_minutes
+                )
+            package_delta = max(0, eligible_package_minutes - consumed_by_active_entitlement)
             if package_delta:
                 package_moment = self._latest_package_moment(
                     active_entitlement,
@@ -246,7 +253,7 @@ class BillingService:
                     session = await self._sessions.save(session.stop(package_window_end))
             if active_entitlement is not None and not active_entitlement.time_restricted:
                 package_coverage_end = package_anchor + datetime.timedelta(
-                    minutes=package_consumed_delta
+                    minutes=consumed_by_active_entitlement + package_consumed_delta
                 )
         package_progressed = package_minutes > current.package_minutes
         if (
@@ -358,15 +365,48 @@ class BillingService:
             and active_entitlement is None
             and current.package_minutes == 0
         )
+        debit_delta_cents = max(0, target_cents - current.billed_cents)
+        first_paid_minute_is_unavailable = (
+            login_grant_finished_without_package
+            and current.billed_minutes == 0
+            and billable_minutes == 0
+        )
+        package_finished_without_fallback_charge = (
+            package_finished
+            and package_progressed
+            and debit_delta_cents == 0
+        )
+        required_cents = debit_delta_cents
+        if required_cents == 0 and (
+            first_paid_minute_is_unavailable or package_finished_without_fallback_charge
+        ):
+            # At the exact boundary there is no new debit yet, but the server
+            # must decide whether the next minute is affordable. Do not use
+            # the whole accumulated session price for this decision.
+            required_cents = quote.price_cents
         if (
-            (package_finished or login_grant_finished_without_package)
+            required_cents > 0
+            and (package_finished or login_grant_finished_without_package)
             and active_entitlement_id is None
             and not await self._clients.can_debit(
                 session.client_id,
-                quote.price_cents,
+                required_cents,
                 allow_negative_balance=True,
             )
         ):
+            logger.warning(
+                "session_meter_debit_rejected session_id=%s client_id=%s "
+                "required_cents=%s balance_cents=%s target_cents=%s "
+                "billed_cents=%s billed_minutes=%s tariff_id=%s",
+                session.id,
+                session.client_id,
+                required_cents,
+                client.balance_cents,
+                target_cents,
+                current.billed_cents,
+                current.billed_minutes,
+                tariff.id,
+            )
             await self._exhaust_meter(
                 current,
                 now=moment,
@@ -376,10 +416,10 @@ class BillingService:
             )
             raise ApplicationError(ErrorCode.CONFLICT, "Insufficient balance")
         operation_id: uuid.UUID | None = current.last_operation_id
-        if target_cents > current.billed_cents:
+        if debit_delta_cents > 0:
             client, operation = await self._debit_meter_delta(
                 client_id=session.client_id,
-                amount_cents=target_cents - current.billed_cents,
+                amount_cents=debit_delta_cents,
                 session_id=session.id,
                 billed_minutes=billable_minutes,
                 charged_by=charged_by,
@@ -495,6 +535,20 @@ class BillingService:
                         "Meter repository is not configured",
                     ) from error
                 meter = await self._meter_repository.get(session_id)
+                client = await self._clients.get(client_id)
+                logger.warning(
+                    "session_meter_debit_failed session_id=%s client_id=%s "
+                    "amount_cents=%s balance_cents=%s billed_minutes=%s "
+                    "meter_billed_cents=%s meter_status=%s tariff_id=%s",
+                    session_id,
+                    client_id,
+                    amount_cents,
+                    client.balance_cents,
+                    billed_minutes,
+                    meter.billed_cents if meter is not None else None,
+                    meter.status.value if meter is not None else None,
+                    meter.tariff_id if meter is not None else None,
+                )
                 if meter is not None:
                     await self._meter_repository.save(
                         meter.advance(

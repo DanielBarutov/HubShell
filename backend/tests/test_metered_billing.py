@@ -300,6 +300,216 @@ async def test_metered_session_charges_only_delta_after_free_minutes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_per_minute_meter_reconnect_gaps_charge_only_new_server_minutes() -> None:
+    """Проверяет поминутную дельту после разрывов связи на нецелых минутах сервера."""
+    clock = FixedClock()
+    clock.current += datetime.timedelta(seconds=15)
+    workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
+        clock,
+        # Для device-сессии пять бесплатных минут приходят отдельным login-grant.
+        tariff_free_minutes=0,
+        price_per_minute_cents=10,
+        initial_balance_cents=1_000,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="per-minute-reconnect-gaps",
+    )
+
+    # Между точками 1 и 2 клиент теряет связь примерно на десять минут.
+    checkpoints = (
+        (datetime.timedelta(minutes=5, seconds=16), 1, 10, 990),
+        (datetime.timedelta(minutes=15, seconds=18), 11, 110, 890),
+        # Повторный heartbeat через 16 секунд не создаёт новую оплачиваемую минуту.
+        (datetime.timedelta(minutes=15, seconds=34), 11, 110, 890),
+        (datetime.timedelta(minutes=16, seconds=15), 12, 120, 880),
+        # Несколько разрывов не должны списывать одну и ту же минуту повторно.
+        (datetime.timedelta(minutes=16, seconds=33), 12, 120, 880),
+        (datetime.timedelta(minutes=17, seconds=15), 13, 130, 870),
+    )
+    for elapsed, expected_minutes, expected_cents, expected_balance in checkpoints:
+        clock.current = session.started_at + elapsed
+        assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+        current_session = await sessions.get(session.id)
+        current_meter = await meters.get(session.id)
+        assert current_session is not None
+        assert current_session.status.value == "active"
+        assert current_meter is not None
+        assert current_meter.billed_minutes == expected_minutes
+        assert current_meter.billed_cents == expected_cents
+        assert (await clients.get(client.id)).balance_cents == expected_balance
+        assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
+async def test_per_minute_meter_checks_only_the_next_delta_mid_session() -> None:
+    """
+    Проверяет, что в середине длинной сессии метр проверяет только новую минуту,
+    а не всю накопленную стоимость, и не завершает сессию при достаточном остатке.
+    """
+    clock = FixedClock()
+    workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        price_per_minute_cents=100,
+        initial_balance_cents=20_000,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="mid-session-delta-check",
+    )
+
+    # После 100 оплаченных минут баланс равен стоимости только следующих
+    # нескольких минут, но меньше накопленной стоимости сессии.
+    clock.current = session.started_at + datetime.timedelta(minutes=105)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    first = await meters.get(session.id)
+    assert first is not None
+    assert first.billed_minutes == 100
+    assert first.billed_cents == 10_000
+    assert (await clients.get(client.id)).balance_cents == 10_000
+
+    # Старая проверка сравнивала бы 10 100 копеек с остатком 9 900 копеек
+    # и ошибочно закрыла бы активную сессию.
+    clock.current = session.started_at + datetime.timedelta(minutes=106)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    second = await meters.get(session.id)
+    assert second is not None
+    assert second.billed_minutes == 101
+    assert second.billed_cents == 10_100
+    assert (await clients.get(client.id)).balance_cents == 9_900
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
+async def test_two_long_sessions_do_not_stop_after_successful_partial_debits() -> None:
+    """
+    Проверяет две последовательные длительные сессии: после списания 151 и 75
+    минут общий депозит 500 рублей остаётся достаточным, поэтому сервер не закрывает их ошибочно.
+    """
+    clock = FixedClock()
+    workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        price_per_minute_cents=100,
+        initial_balance_cents=50_000,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+
+    first_session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="two-long-sessions-first",
+    )
+    clock.current = first_session.started_at + datetime.timedelta(minutes=155)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    first_meter = await meters.get(first_session.id)
+    assert first_meter is not None
+    assert first_meter.billed_minutes == 150
+    assert first_meter.billed_cents == 15_000
+    await sessions.stop(first_session.id)
+
+    second_session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="two-long-sessions-second",
+    )
+    clock.current = second_session.started_at + datetime.timedelta(minutes=80)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    second_meter = await meters.get(second_session.id)
+    assert second_meter is not None
+    assert second_meter.billed_minutes == 75
+    assert second_meter.billed_cents == 7_500
+    assert (await clients.get(client.id)).balance_cents == 27_500
+    assert (await sessions.get(second_session.id)).status.value == "active"
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
+async def test_per_minute_meter_stops_only_after_the_next_minute_is_unaffordable() -> None:
+    """
+    Проверяет границу положительного баланса: сессия остаётся активной после
+    списания последней доступной минуты и завершается только на следующей попытке.
+    """
+    clock = FixedClock()
+    workstation, client, tariff, sessions, billing, meters, clients = await build_metered_services(
+        clock,
+        tariff_free_minutes=0,
+        price_per_minute_cents=100,
+        initial_balance_cents=1_000,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        tariff_id=tariff.id,
+        idempotency_key="stop-after-next-unaffordable-minute",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await meters.get(session.id)).billed_minutes == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+
+    clock.current = session.started_at + datetime.timedelta(minutes=15)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    charged = await meters.get(session.id)
+    assert charged is not None
+    assert charged.billed_minutes == 10
+    assert charged.billed_cents == 1_000
+    assert (await clients.get(client.id)).balance_cents == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+
+    clock.current = session.started_at + datetime.timedelta(minutes=16)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 1
+    exhausted = await meters.get(session.id)
+    assert exhausted is not None
+    assert exhausted.status is MeterStatus.EXHAUSTED
+    assert (await sessions.get(session.id)).status.value == "completed"
+    pending = await commands.pending_for_device(workstation.device_id)
+    assert {command.command_type for command in pending} == {"session.stop", "display.lock"}
+
+
+@pytest.mark.asyncio
 async def test_device_login_adds_separate_five_minute_grant() -> None:
     """
     Проверяет сценарий «test_device_login_adds_separate_five_minute_grant» и подтверждает
@@ -1031,6 +1241,77 @@ async def test_delayed_package_activation_does_not_bill_uncovered_partial_minute
     assert (await clients.get(client.id)).balance_cents == 900
     assert (await meters.get(session.id)).package_minutes == 1
     assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
+async def test_three_hour_package_reconnect_gaps_keep_fractional_server_time() -> None:
+    """Проверяет пакет после нескольких разрывов связи на нецелых минутах сервера."""
+    clock = FixedClock()
+    clock.current += datetime.timedelta(seconds=15)
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+        entitlements,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=180,
+        initial_balance_cents=1_000,
+        tariff_price_cents=100,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="three-hour-package-reconnect-gaps",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(seconds=16)
+    package = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "three-hour-package-reconnect-gaps-purchase",
+    )
+
+    # Между точками 1 и 2 клиент не передаёт heartbeat около десяти минут.
+    checkpoints = (
+        (datetime.timedelta(minutes=5, seconds=16), 0, 180),
+        (datetime.timedelta(minutes=15, seconds=18), 10, 170),
+        # Ещё один разрыв. 16 секунд не должны потеряться при следующем тике.
+        (datetime.timedelta(minutes=15, seconds=34), 10, 170),
+        (datetime.timedelta(minutes=16, seconds=15), 11, 169),
+        # И ещё один разрыв с нецелым остатком.
+        (datetime.timedelta(minutes=16, seconds=33), 11, 169),
+        (datetime.timedelta(minutes=17, seconds=15), 12, 168),
+    )
+    for elapsed, expected_package_minutes, expected_remaining in checkpoints:
+        clock.current = session.started_at + elapsed
+        assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+        current_session = await sessions.get(session.id)
+        current_package = await entitlements.get(package.id)
+        current_meter = await meters.get(session.id)
+        assert current_session is not None
+        assert current_session.status.value == "active"
+        assert current_package.status is EntitlementStatus.ACTIVE
+        assert current_package.remaining_minutes == expected_remaining
+        assert current_meter is not None
+        assert current_meter.package_minutes == expected_package_minutes
+        assert current_meter.billed_minutes == 0
+        assert current_meter.billed_cents == 0
+        assert (await clients.get(client.id)).balance_cents == 900
+        assert await commands.pending_for_device(workstation.device_id) == []
 
 
 @pytest.mark.asyncio
