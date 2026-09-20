@@ -1045,6 +1045,77 @@ async def test_queued_package_at_free_boundary_starts_before_vip_worker_can_stop
 
 
 @pytest.mark.asyncio
+async def test_three_hour_package_stays_active_at_two_hours_fifty_nine_remaining() -> None:
+    """Проверяет переход с пяти бесплатных минут на трёхчасовой пакет без перезагрузки ПК."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=180,
+        initial_balance_cents=100,
+        tariff_price_cents=100,
+        return_catalog=True,
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="three-hour-package-session",
+    )
+    package = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "three-hour-package-purchase",
+    )
+
+    expected_remaining = (
+        (5, 180),
+        (6, 179),  # 2 ч 59 мин: первая минута пакета уже списалась.
+        (7, 178),
+        (8, 177),
+        (9, 176),
+        (10, 175),
+    )
+    for elapsed, remaining_minutes in expected_remaining:
+        clock.current = session.started_at + datetime.timedelta(minutes=elapsed)
+        assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+        current_session = await sessions.get(session.id)
+        current_package = await entitlements.get(package.id)
+        assert current_session is not None
+        assert current_session.status.value == "active"
+        assert current_package.status is EntitlementStatus.ACTIVE
+        assert current_package.remaining_minutes == remaining_minutes
+        assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
 async def test_three_minute_package_counts_each_minute_and_stops_device_at_zero_balance() -> None:
     """Проверяет пять бесплатных минут, расход трёх пакетных минут и команду остановки ПК."""
     clock = FixedClock()
