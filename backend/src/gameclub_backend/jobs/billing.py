@@ -107,6 +107,15 @@ async def meter_sessions_once(
             reason = (
                 "balance_exhausted" if error.message == "Insufficient balance" else "time_exhausted"
             )
+            logger.warning(
+                "session_meter_stopped session_id=%s workstation_id=%s client_id=%s "
+                "reason=%s error=%s",
+                session.id,
+                session.workstation_id,
+                session.client_id,
+                reason,
+                error.message,
+            )
             payload = json.dumps({"session_id": str(session.id), "reason": reason})
             for command_type in ("session.stop", "display.lock"):
                 try:
