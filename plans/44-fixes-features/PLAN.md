@@ -185,7 +185,7 @@ native smoke для access-gate, restart и power/session failure.
     Передавать `active_session.client_id` из карты ПК в
     `DepositPanel`, предзаполнять и показывать имя клиента, а смену получателя
     делать явным подтверждённым действием. Backend остаётся последней проверкой.
-12. [x] **F-08.** [implementation complete: domain/repository/API/meter policy, settings editor, выбор группы в карточке клиента и unit tests реализованы; DSN/live остаются]
+12. [x] **F-08.** [implementation complete: domain/repository/API/meter policy, settings editor, выбор группы в карточке клиента и unit tests реализованы; обычное пополнение клиента с уже отрицательным балансом уменьшает долг и не возвращает 400; DSN/live остаются]
    Добавить bounded client-group policy: allow-negative и
     `negative_limit_cents`; проверять её в debit/quote/meter/session stop,
     а не только в UI.
@@ -256,7 +256,9 @@ PostgreSQL ledger/concurrency tests, settings/client UI tests и обновлё�
 активного тарифа. Клиент Windows показывает это же значение, а не ноль, ставку
 другой зоны или минуты, выведенные из цены пакетного тарифа.
 23. [x] **F-17.** [implementation complete: покупка и portal activation выбирают
-    первый доступный пакет; unit regression реализована] При пустом активном пакете выбирать первый совместимый и
+    первый доступный пакет; на границе пяти бесплатных минут фоновая задача
+    сначала активирует совместимый пакет из очереди, а затем проверяет баланс;
+    unit regression покрывает покупку в клиенте и операторскую продажу] При пустом активном пакете выбирать первый совместимый и
     доступный сейчас пакет из очереди; пакет с ночным окном остаётся в очереди
     и не блокирует следующий обычный пакет.
 24. [x] **F-18.** [implementation complete: карта отделяет недоступный пакет от

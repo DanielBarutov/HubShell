@@ -263,7 +263,7 @@ class ClientGroupResponse(BaseModel):
             allow_negative_balance=group.allow_negative_balance,
             negative_balance_limit_cents=group.negative_balance_limit_cents,
             active=group.active,
-            is_default=group.is_default,
+            is_default=bool(group.is_default),
             updated_at=group.updated_at.isoformat() if group.updated_at else None,
         )
 

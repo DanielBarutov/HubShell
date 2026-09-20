@@ -136,11 +136,13 @@ class Client:
         bonus = Bonus(bonus_amount)
         if amount.cents == 0 and bonus.units == 0:
             raise ValueError("Top-up must contain a positive amount or bonus")
-        balance = Money(self.balance_cents).add(amount)
         next_bonus = Bonus(self.balance_bonus).add(bonus)
         return dataclasses.replace(
             self,
-            balance_cents=balance.cents,
+            # Текущий баланс может быть отрицательным у клиента из группы
+            # должников. Само пополнение всегда положительно и выводит его из
+            # долга, поэтому не создаём Money из уже отрицательного остатка.
+            balance_cents=self.balance_cents + amount.cents,
             balance_bonus=next_bonus.units,
             updated_at=now,
         )

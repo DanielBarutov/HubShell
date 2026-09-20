@@ -113,15 +113,25 @@ class BillingService:
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         moment = now or self._clock.now()
+        active_entitlement = None
+        if self._entitlements is not None:
+            active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
+            if (
+                active_entitlement is None
+                and self._elapsed_minutes(session.started_at, moment) >= session.login_grant_minutes
+            ):
+                # A package may still be queued when the fifth free minute ends:
+                # for example, after a purchase races with a worker tick. Give a
+                # compatible paid package precedence over balance exhaustion.
+                active_entitlement = await self._entitlements.activate_next_compatible(
+                    session.client_id,
+                    workstation.group_id,
+                    moment,
+                )
         tariff_id = session.tariff_id
         quote_moment = session.started_at
-        active_entitlement = None
-        if tariff_id is None and self._entitlements is not None:
-            active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
-            if active_entitlement is not None:
-                tariff_id = active_entitlement.tariff_id
-        elif self._entitlements is not None:
-            active_entitlement = await self._entitlements.get_active_for_client(session.client_id)
+        if tariff_id is None and active_entitlement is not None:
+            tariff_id = active_entitlement.tariff_id
         selected_tariff = (
             await self._catalog.get_tariff(tariff_id) if tariff_id is not None else None
         )

@@ -20,6 +20,7 @@ from gameclub_backend.modules.client_groups.application.service import ClientGro
 from gameclub_backend.modules.client_groups.infrastructure.memory import (
     InMemoryClientGroupRepository,
 )
+from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
@@ -34,6 +35,8 @@ from gameclub_backend.modules.entitlements.domain import (
 from gameclub_backend.modules.entitlements.infrastructure.memory import (
     InMemoryEntitlementRepository,
 )
+from gameclub_backend.modules.sales.application.service import ProductSaleService
+from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
@@ -63,6 +66,12 @@ class FixedClock:
 
     def now(self) -> datetime.datetime:
         return self.current
+
+
+class EmptyChargeHistory:
+    async def list_charges_for_client(self, client_id: uuid.UUID, limit: int):
+        del client_id, limit
+        return []
 
 
 class NoopCashSettlement:
@@ -168,6 +177,7 @@ async def build_package_metered_services(
     client_group_id: str | None = None,
     initial_balance_cents: int = 1_000,
     tariff_price_cents: int = 100,
+    activate_package_on_purchase: bool = True,
 ):
     workstation_repository = InMemoryWorkstationRepository()
     workstation = await WorkstationService(workstation_repository).register(
@@ -209,8 +219,8 @@ async def build_package_metered_services(
         tariffs=catalog,
         clients=clients,
         clock=clock,
-        active_sessions=session_repository,
-        workstations=workstation_repository,
+        active_sessions=session_repository if activate_package_on_purchase else None,
+        workstations=workstation_repository if activate_package_on_purchase else None,
         cash=cash_settlement,
     )
     sessions = SessionService(
@@ -866,6 +876,172 @@ async def test_regular_package_starts_after_login_grant_and_returns_win_snapshot
     assert after_grant_snapshot.active_package.remaining_minutes == 299
     assert after_grant_snapshot.meter.package_minutes == 1
     assert after_grant_snapshot.meter.active_entitlement_id == str(purchased.id)
+
+
+@pytest.mark.asyncio
+async def test_package_bought_during_free_minutes_prevents_vip_worker_from_stopping_session(
+) -> None:
+    """Проверяет, что купленный до конца бесплатных минут VIP-пакет не даёт
+    фоновой задаче перезагрузить ПК.
+    """
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=300,
+        initial_balance_cents=1_000,
+        tariff_price_cents=100,
+        return_catalog=True,
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="vip-package-during-free-minutes",
+    )
+    purchased = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "vip-package-during-free-minutes-purchase",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await entitlements.get(purchased.id)).remaining_minutes == 300
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+    clock.current += datetime.timedelta(minutes=1)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await entitlements.get(purchased.id)).remaining_minutes == 299
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("purchase_channel", ("client", "operator"))
+async def test_queued_package_at_free_boundary_starts_before_vip_worker_can_stop_session(
+    purchase_channel: str,
+) -> None:
+    """Проверяет, что пакет из клиента или окна продаж стартует до остановки VIP-сессии."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        _meters,
+        _clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=300,
+        initial_balance_cents=1_000,
+        tariff_price_cents=100,
+        return_catalog=True,
+        activate_package_on_purchase=False,
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key=f"queued-vip-package-{purchase_channel}",
+    )
+    if purchase_channel == "client":
+        portal = ClientPortalService(
+            clients=_clients,
+            sessions=billing._sessions,
+            charges=EmptyChargeHistory(),
+            sales=ProductSaleService(
+                InMemoryProductSaleRepository(),
+                products=catalog,
+                clients=_clients,
+                clock=clock,
+            ),
+            tariffs=catalog,
+            entitlements=entitlements,
+            workstations=sessions._workstations,
+            clock=clock,
+        )
+        await portal.purchase_entitlement(
+            client.id,
+            package_tariff.id,
+            f"queued-vip-package-purchase-{purchase_channel}",
+            workstation.device_id,
+        )
+    else:
+        await entitlements.purchase(
+            client.id,
+            package_tariff.id,
+            "operator:purchase",
+            f"queued-vip-package-purchase-{purchase_channel}",
+        )
+    assert (await entitlements.get_active_for_client(client.id)) is None
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    active = await entitlements.get_active_for_client(client.id)
+    assert active is not None
+    assert active.tariff_id == package_tariff.id
+    assert active.remaining_minutes == 300
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+    clock.current += datetime.timedelta(minutes=1)
+
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await entitlements.get(active.id)).remaining_minutes == 299
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert await commands.pending_for_device(workstation.device_id) == []
 
 
 @pytest.mark.asyncio

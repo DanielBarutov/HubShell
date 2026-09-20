@@ -97,7 +97,7 @@ class InMemoryClientRepository:
             if current is None:
                 raise ValueError("Client not found")
             next_balance = current.balance_cents + operation.amount_cents
-            if next_balance < minimum_balance_cents:
+            if operation.amount_cents < 0 and next_balance < minimum_balance_cents:
                 raise ValueError("Insufficient balance")
             updated = dataclasses.replace(
                 current,
