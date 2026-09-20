@@ -959,6 +959,81 @@ async def test_package_bought_during_free_minutes_prevents_vip_worker_from_stopp
 
 
 @pytest.mark.asyncio
+async def test_delayed_package_activation_does_not_bill_uncovered_partial_minute() -> None:
+    """Проверяет, что задержка активации не превращает секунды в платную минуту."""
+    clock = FixedClock()
+    (
+        workstation,
+        client,
+        package_tariff,
+        sessions,
+        billing,
+        meters,
+        clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=180,
+        initial_balance_cents=1_000,
+        tariff_price_cents=100,
+        return_catalog=True,
+    )
+    await catalog.create_tariff(
+        "VIP · Поминутно",
+        "vip",
+        duration_minutes=1,
+        price_cents=0,
+        valid_from=clock.current,
+        valid_to=None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=10,
+    )
+    commands = WorkstationCommandService(
+        InMemoryWorkstationCommandRepository(),
+        workstations=sessions._workstations,
+        notifier=InMemoryCommandNotifier(),
+        clock=clock,
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="device",
+        idempotency_key="delayed-package-activation-session",
+    )
+
+    clock.current = session.started_at + datetime.timedelta(seconds=17)
+    package = await entitlements.purchase(
+        client.id,
+        package_tariff.id,
+        "operator",
+        "delayed-package-activation-purchase",
+    )
+    assert package.activated_at == clock.current
+
+    clock.current = session.started_at + datetime.timedelta(minutes=5, seconds=31)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await sessions.get(session.id)).status.value == "active"
+    assert (await entitlements.get(package.id)).remaining_minutes == 180
+    assert (await clients.get(client.id)).balance_cents == 900
+    meter = await meters.get(session.id)
+    assert meter is not None
+    assert meter.package_minutes == 0
+    assert meter.billed_minutes == 0
+    assert meter.billed_cents == 0
+    assert meter.active_entitlement_id == package.id
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+    clock.current = session.started_at + datetime.timedelta(minutes=6, seconds=31)
+    assert await meter_sessions_once(billing, billing._sessions, sessions, commands) == 0
+    assert (await entitlements.get(package.id)).remaining_minutes == 179
+    assert (await clients.get(client.id)).balance_cents == 900
+    assert (await meters.get(session.id)).package_minutes == 1
+    assert await commands.pending_for_device(workstation.device_id) == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("purchase_channel", ("client", "operator"))
 async def test_queued_package_at_free_boundary_starts_before_vip_worker_can_stop_session(
     purchase_channel: str,
