@@ -177,9 +177,7 @@ class PostgresSessionTransferRepository:
                         raise ValueError("Transfer already confirmed")
                     return current_offer.to_domain(), current_session.to_domain()
 
-                for workstation_id in sorted(
-                    {session.workstation_id, target_id}, key=str
-                ):
+                for workstation_id in sorted({session.workstation_id, target_id}, key=str):
                     await db.execute(
                         text("SELECT id FROM workstations WHERE id = :workstation_id FOR UPDATE"),
                         {"workstation_id": workstation_id},

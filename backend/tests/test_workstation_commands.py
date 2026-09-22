@@ -107,6 +107,7 @@ async def test_expired_command_is_not_delivered_or_acknowledged() -> None:
     Проверяет сценарий «test_expired_command_is_not_delivered_or_acknowledged» и подтверждает
     ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)

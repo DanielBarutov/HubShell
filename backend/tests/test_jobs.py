@@ -2,8 +2,8 @@ import asyncio
 import datetime
 from pathlib import Path
 
-import dramatiq
 import pytest
+from dramatiq.brokers.stub import StubBroker
 
 from gameclub_backend.config import Settings
 from gameclub_backend.infrastructure.broker import create_broker
@@ -20,7 +20,7 @@ def test_broker_uses_stub_without_redis_and_enables_asyncio_middleware() -> None
     """
     broker = create_broker(Settings())
 
-    assert isinstance(broker, dramatiq.brokers.stub.StubBroker)
+    assert isinstance(broker, StubBroker)
     assert any(type(middleware).__name__ == "AsyncIO" for middleware in broker.middleware)
 
 

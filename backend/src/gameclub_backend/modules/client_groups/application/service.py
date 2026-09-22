@@ -5,7 +5,7 @@ import datetime
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.client_groups.application.ports import ClientGroupRepository
+from gameclub_backend.modules.client_groups.application.ports import ClientGroupRepository, Clock
 from gameclub_backend.modules.client_groups.domain import ClientGroup
 
 
@@ -18,7 +18,7 @@ class ClientGroupService:
     def __init__(
         self,
         repository: ClientGroupRepository,
-        clock: UtcClock | None = None,
+        clock: Clock | None = None,
         audit: AuditRepository | None = None,
     ) -> None:
         self._repository = repository

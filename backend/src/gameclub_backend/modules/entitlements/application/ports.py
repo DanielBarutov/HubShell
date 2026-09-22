@@ -76,6 +76,7 @@ class ClientEntitlementDebit(typing.Protocol):
         reason: str,
         actor_id: str,
         idempotency_key: str,
+        allow_negative_balance: bool = False,
     ) -> tuple[object, object]:
         """Debit a registered client's balance for a package purchase."""
 

@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import typing
 import uuid
 
 import pytest
@@ -228,7 +229,9 @@ async def test_postgres_transfer_confirms_once_and_rejects_other_key(
             return_exceptions=True,
         )
 
-        successful = [item for item in results if not isinstance(item, Exception)]
+        successful = [
+            typing.cast(typing.Any, item) for item in results if not isinstance(item, BaseException)
+        ]
         failures = [item for item in results if isinstance(item, Exception)]
         assert len(successful) == 1
         assert len(failures) == 1
@@ -279,6 +282,7 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
     Проверяет сценарий «test_postgres_offline_duplicate_delivery_does_not_debit_twice» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 9, 2, 12, tzinfo=datetime.UTC)
@@ -516,7 +520,9 @@ async def test_postgres_transfer_to_two_targets_commits_only_one_owner(
             return_exceptions=True,
         )
 
-        successful = [item for item in results if not isinstance(item, Exception)]
+        successful = [
+            typing.cast(typing.Any, item) for item in results if not isinstance(item, BaseException)
+        ]
         failures = [item for item in results if isinstance(item, Exception)]
         assert len(successful) == 1
         assert len(failures) == 1

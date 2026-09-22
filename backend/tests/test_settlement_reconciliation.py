@@ -1,4 +1,5 @@
 import datetime
+import typing
 import uuid
 
 import pytest
@@ -22,11 +23,24 @@ class ToggleCashSettlement:
     def __init__(self) -> None:
         self.fail = True
         self.calls: list[dict[str, object]] = []
+        self.error: Exception = RuntimeError("cash acceptance is unknown")
 
-    async def settle(self, **kwargs: object) -> None:
-        self.calls.append(kwargs)
+    @typing.overload
+    async def settle(
+        self, shift_id: uuid.UUID, amount_cents: int, payment_idempotency_key: str, actor_id: str
+    ) -> None: ...
+
+    @typing.overload
+    async def settle(
+        self, shift_id: uuid.UUID, amount_cents: int, sale_idempotency_key: str, actor_id: str
+    ) -> None: ...
+
+    async def settle(self, *args: typing.Any, **kwargs: typing.Any) -> None:
+        call = {f"arg_{index}": value for index, value in enumerate(args)}
+        call.update(kwargs)
+        self.calls.append(call)
         if self.fail:
-            raise RuntimeError("cash acceptance is unknown")
+            raise self.error
 
 
 class FixedClock:
@@ -38,10 +52,9 @@ class FixedClock:
 
 
 class TransientCashSettlement(ToggleCashSettlement):
-    async def settle(self, **kwargs: object) -> None:
-        self.calls.append(kwargs)
-        if self.fail:
-            raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "cash shift is unavailable")
+    def __init__(self) -> None:
+        super().__init__()
+        self.error = ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "cash shift is unavailable")
 
 
 class RecordingAudit:
@@ -51,6 +64,9 @@ class RecordingAudit:
     async def record(self, event: AuditEvent) -> AuditEvent:
         self.events.append(event)
         return event
+
+    async def list_recent(self, limit: int = 100) -> list[AuditEvent]:
+        return self.events[-limit:]
 
 
 @pytest.mark.asyncio
@@ -130,7 +146,9 @@ async def test_sale_review_retry_reuses_original_cash_key_and_reserved_stock() -
 
     review = (await service.list_sales())[0]
     assert review.status.value == "needs_review"
-    assert (await catalog.get_product(product.id)).stock_quantity == 1
+    reserved_product = await catalog.get_product(product.id)
+    assert reserved_product is not None
+    assert reserved_product.stock_quantity == 1
     cash.fail = False
     completed = await service.reconcile(review.id)
     assert completed.status.value == "completed"
@@ -138,7 +156,9 @@ async def test_sale_review_retry_reuses_original_cash_key_and_reserved_stock() -
         "sale-review-retry:0",
         "sale-review-retry:0",
     ]
-    assert (await catalog.get_product(product.id)).stock_quantity == 1
+    completed_product = await catalog.get_product(product.id)
+    assert completed_product is not None
+    assert completed_product.stock_quantity == 1
 
 
 @pytest.mark.asyncio
@@ -278,7 +298,9 @@ async def test_product_transient_failure_has_durable_backoff_and_keeps_reserved_
     assert sale.next_attempt_at == now + datetime.timedelta(seconds=2)
     assert await repository.list_recoverable(now=now) == []
     assert len(await repository.list_recoverable(now=sale.next_attempt_at)) == 1
-    assert (await catalog.get_product(product.id)).stock_quantity == 1
+    reserved_product = await catalog.get_product(product.id)
+    assert reserved_product is not None
+    assert reserved_product.stock_quantity == 1
     assert audit.events[-1].action == "product_sale.settlement"
     assert audit.events[-1].outcome == "retryable"
     assert audit.events[-1].request_id == "sale-transient-retry"

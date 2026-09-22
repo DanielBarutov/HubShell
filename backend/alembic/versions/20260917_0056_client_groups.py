@@ -14,7 +14,12 @@ def upgrade() -> None:
         "client_groups",
         sa.Column("id", sa.String(length=128), primary_key=True),
         sa.Column("name", sa.String(length=128), nullable=False),
-        sa.Column("allow_negative_balance", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            "allow_negative_balance",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
         sa.Column("negative_balance_limit_cents", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
@@ -29,11 +34,14 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT INTO client_groups "
-            "(id, name, allow_negative_balance, negative_balance_limit_cents, active, is_default, updated_at) "
+            "(id, name, allow_negative_balance, negative_balance_limit_cents, "
+            "active, is_default, updated_at) "
             "VALUES ('regular', 'Обычные клиенты', FALSE, 0, TRUE, TRUE, CURRENT_TIMESTAMP)"
         )
     )
-    op.execute(sa.text("UPDATE clients SET client_group_id = 'regular' WHERE client_group_id IS NULL"))
+    op.execute(
+        sa.text("UPDATE clients SET client_group_id = 'regular' WHERE client_group_id IS NULL")
+    )
 
 
 def downgrade() -> None:

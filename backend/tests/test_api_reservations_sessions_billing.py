@@ -55,9 +55,7 @@ async def test_workstation_list_includes_snapshot_for_active_session_over_http()
     assert session_response.status_code == 201
     assert list_response.status_code == 200
     workstation = next(
-        item
-        for item in list_response.json()
-        if item["id"] == workstation_response.json()["id"]
+        item for item in list_response.json() if item["id"] == workstation_response.json()["id"]
     )
     assert workstation["active_session_id"] == session_response.json()["id"]
     assert workstation["session_snapshot"]["session"]["id"] == session_response.json()["id"]

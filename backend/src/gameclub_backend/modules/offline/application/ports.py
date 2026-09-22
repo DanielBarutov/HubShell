@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import typing
 import uuid
 
@@ -33,3 +34,8 @@ class OfflineReplayRepository(typing.Protocol):
         result: OfflineOperationResult,
     ) -> OfflineOperationResult:
         """Persist an operation and its replay result idempotently."""
+
+
+class Clock(typing.Protocol):
+    def now(self) -> datetime.datetime:
+        """Return an aware UTC datetime."""

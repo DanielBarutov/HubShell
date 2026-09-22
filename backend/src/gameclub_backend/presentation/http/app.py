@@ -16,8 +16,18 @@ from gameclub_backend.application.health import check_readiness
 from gameclub_backend.bootstrap import ApplicationServices, build_application_services
 from gameclub_backend.config import Settings, get_settings
 from gameclub_backend.infrastructure.resources import InfrastructureResources, create_resources
+from gameclub_backend.jobs.reports import generate_analytics_report
+from gameclub_backend.modules.analytics.presentation.finance_http import (
+    create_v2_router as create_analytics_v2_router,
+)
 from gameclub_backend.modules.analytics.presentation.http import (
     create_router as create_analytics_router,
+)
+from gameclub_backend.modules.analytics.presentation.read_v2_http import (
+    create_v2_read_router as create_analytics_read_v2_router,
+)
+from gameclub_backend.modules.analytics.presentation.reports_http import (
+    create_reports_router,
 )
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.modules.auth.infrastructure.refresh_memory import (
@@ -137,6 +147,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.sales = services.sales
     application.state.payment_methods = services.payment_methods
     application.state.analytics = services.analytics
+    application.state.finance_analytics = services.finance_analytics
+    application.state.analytics_read_v2 = services.analytics_read_v2
+    application.state.analytics_projection = services.analytics_projection
+    application.state.report_jobs = services.report_jobs
     application.state.session_transfers = services.session_transfers
     application.state.audit_repository = services.audit_repository
     application.state.refresh_tokens = refresh_tokens
@@ -167,6 +181,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_sales_router(services.sales))
     application.include_router(create_payment_methods_router(services.payment_methods))
     application.include_router(create_analytics_router(services.analytics))
+    application.include_router(create_analytics_v2_router(services.finance_analytics))
+    application.include_router(create_analytics_read_v2_router(services.analytics_read_v2))
+    application.include_router(
+        create_reports_router(services.report_jobs, generate_analytics_report.send)
+    )
 
     @application.exception_handler(ApplicationError)
     async def application_error_handler(

@@ -34,9 +34,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        sa.text(
-            "DELETE FROM payment_methods WHERE id = '00000000-0000-0000-0000-000000000003'"
-        )
+        sa.text("DELETE FROM payment_methods WHERE id = '00000000-0000-0000-0000-000000000003'")
     )
     op.alter_column(
         "guest_session_payments",

@@ -21,6 +21,7 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 
 pytestmark = pytest.mark.unit
 
+
 async def test_reservation_rejects_conflicts_and_allows_reuse_after_cancel() -> None:
     """
     Проверяет сценарий «test_reservation_rejects_conflicts_and_allows_reuse_after_cancel» и
@@ -247,6 +248,7 @@ async def test_reservation_no_show_requires_grace_period() -> None:
     Проверяет сценарий «test_reservation_no_show_requires_grace_period» и подтверждает ожидаемый
     публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 8, 27, 17, 59, tzinfo=datetime.UTC)
@@ -334,7 +336,9 @@ async def test_reservation_sweep_is_idempotent_and_skips_changed_state() -> None
     )
     swept = await service.sweep_no_shows(start_at + datetime.timedelta(hours=3))
     assert [item.id for item in swept] == [second_reservation.id]
-    assert (await repository.get(second_reservation.id)).status is ReservationStatus.NO_SHOW
+    no_show_reservation = await repository.get(second_reservation.id)
+    assert no_show_reservation is not None
+    assert no_show_reservation.status is ReservationStatus.NO_SHOW
     assert await service.sweep_no_shows(start_at + datetime.timedelta(hours=3)) == []
 
 
@@ -451,6 +455,7 @@ async def test_entry_decision_protects_reservations_and_allows_assigned_client()
     Проверяет сценарий «test_entry_decision_protects_reservations_and_allows_assigned_client» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)
 

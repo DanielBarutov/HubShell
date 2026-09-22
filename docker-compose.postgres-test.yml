@@ -1,0 +1,21 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: hubshell-test-postgres
+    environment:
+      POSTGRES_DB: gameclub_test
+      POSTGRES_USER: gameclub_test
+      POSTGRES_PASSWORD: gameclub_test
+    ports:
+      - "127.0.0.1:${GAMECLUB_TEST_POSTGRES_PORT:-55434}:5432"
+    volumes:
+      - hubshell-test-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameclub_test -d gameclub_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: "no"
+
+volumes:
+  hubshell-test-postgres-data:

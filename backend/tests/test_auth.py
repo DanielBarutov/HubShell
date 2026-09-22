@@ -16,7 +16,7 @@ def test_refresh_token_default_ttl_is_ninety_days() -> None:
     Проверяет сценарий «test_refresh_token_default_ttl_is_ninety_days» и подтверждает ожидаемый
     публичный результат согласно соответствующему бизнес-правилу.
     """
-    settings = Settings(_env_file=None, jwt_secret="test-secret-with-at-least-32-bytes-long")
+    settings = Settings(jwt_secret="test-secret-with-at-least-32-bytes-long")
 
     assert settings.jwt_refresh_ttl_seconds == 90 * 24 * 60 * 60
 

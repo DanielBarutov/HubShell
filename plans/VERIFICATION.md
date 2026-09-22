@@ -1,6 +1,6 @@
 # Verification matrix
 
-Дата последней проверки: `2026-09-17`.
+Дата последней проверки: `2026-09-21`.
 
 Документ разделяет фактически проверенное поведение и то, что пока подтверждено
 только исходниками или требует другой платформы.
@@ -8,7 +8,9 @@
 | Срез | Что проверено | Результат | Граница доказательства |
 | --- | --- | --- | --- |
 | Backend foundation и модули | Ruff, unit/API/contract tests, metered billing, package windows/auto-next, locked consumption delta, snapshot/heartbeat, transfer, offline replay, settlement review/retry, manager credential, lockdown policy, analytics, payment parts, guest paid-start и entry decision; guest `active_tariff` snapshot с server-calculated remaining time; shared Dramatiq broker и dedicated metering queue | `153 passed, 18 skipped` без DSN; contract-layout assertions обновлены под текущие API/Avalonia boundaries; bounded-context split и Russian docstring guard проходят | DSN suite включает PostgreSQL mixed settlement fault/idempotency, package locked-delta, transfer two-target concurrency и offline duplicate-debit; production cross-owner UoW остаётся policy gap |
-| PostgreSQL schema | Alembic migration chain through active-client, payment-parts, entitlement, guest-payment, login-grant, transfer, offline и settlement retry metadata migrations | `20260902_0048 (head)`; upgrade/rollback/upgrade rehearsal, constraints/column check и isolated backup/restore прошли | Production backup policy и cross-owner transaction boundary не утверждены |
+| PostgreSQL schema | Alembic migration chain through active-client, payment-parts, entitlement, guest-payment, login-grant, transfer, offline и settlement retry metadata migrations | `20260918_0061 (head)`; upgrade/rollback/upgrade rehearsal, constraints/column check и isolated backup/restore прошли | Production backup policy и cross-owner transaction boundary не утверждены |
+| Isolated PostgreSQL test container | Отдельный `postgres:16-alpine` из `docker-compose.postgres-test.yml`, Alembic migration, repeatable seed и analytics adapter against `GAMECLUB_TEST_POSTGRES_DSN` | `234 passed`; отдельный PostgreSQL marker run `21 passed, 213 deselected`; seed повторно применён без дублей | Контейнер предназначен для локальных проверок; production backup/restore policy остаётся отдельной задачей |
+| Backend typing and lint | Ruff check, Ruff format check и mypy по `src`/`tests` | все проверки успешно; mypy `Success: no issues found in 253 source files`; `314 files already formatted` | Типизация не заменяет runtime-проверки PostgreSQL, Redis, браузера или Windows |
 | Guest persistence | Guest CRUD/search и ссылки `guest_id` в Reservation/Session | успешно | Memory/API contract checks; PostgreSQL concurrency matrix пропущена без DSN |
 | Cash producer/approval boundary | provider-neutral producers, approvals, HTTP/gRPC contracts | успешно | Unit/API/contract suite; реальные provider webhook не подключены |
 | gRPC | generated protobuf, client portal entitlement queue/explicit activation, analytics/workstation/business registration, auth/audit и optional TLS policy; `SessionSnapshot.active_tariff` с названием/количеством/elapsed/remaining; внешний `SystemService/GetHealth` и авторизованный `SessionService/GetSnapshot` через `:51051` | generated contract и mapping-тесты успешно; Compose rebuild/health успешно | external TLS deployment и full gRPC flow matrix не проверялись; private-LAN insecure transport допускается |

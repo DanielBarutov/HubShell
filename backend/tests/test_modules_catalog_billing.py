@@ -79,6 +79,7 @@ async def test_catalog_available_tariffs_apply_audience_and_independent_windows(
     assert night.is_usable_at(datetime.datetime(2026, 8, 27, 23, tzinfo=datetime.UTC))
     assert not night.is_usable_at(datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC))
 
+
 async def test_catalog_quote_selects_the_cheapest_applicable_tariff() -> None:
     """
     Проверяет сценарий «test_catalog_quote_selects_the_cheapest_applicable_tariff» и
@@ -124,6 +125,7 @@ async def test_billing_charges_completed_session_once_with_quote_snapshot() -> N
     Проверяет сценарий «test_billing_charges_completed_session_once_with_quote_snapshot» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)
 
@@ -211,6 +213,7 @@ async def test_billing_reconciliation_retries_after_charge_persistence_failure()
     Проверяет сценарий «test_billing_reconciliation_retries_after_charge_persistence_failure» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)
 

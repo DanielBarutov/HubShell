@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import typing
 import uuid
 
 import httpx
@@ -22,7 +23,13 @@ from gameclub_backend.presentation.http.app import create_app
 
 
 class FailingCashSettlement:
-    async def settle(self, **kwargs) -> None:
+    async def settle(
+        self,
+        shift_id: uuid.UUID,
+        amount_cents: int,
+        sale_idempotency_key: str,
+        actor_id: str,
+    ) -> None:
         raise RuntimeError("cash provider timed out after acceptance")
 
 
@@ -151,7 +158,7 @@ async def test_concurrent_sale_key_with_different_payload_is_conflict() -> None:
     assert len(failures) == 1
     assert isinstance(failures[0], ApplicationError)
     assert failures[0].code is ErrorCode.CONFLICT
-    successful_sale = successful[0]
+    successful_sale = typing.cast(typing.Any, successful[0])
     assert successful_sale.quantity in {1, 2}
     assert (await clients.get(client.id)).balance_cents == 1_000 - 300 * successful_sale.quantity
     final_product = await catalog.get_product(product.id)
@@ -218,7 +225,9 @@ async def test_product_sale_can_use_manual_transfer_without_cash_shift() -> None
     assert sale.status.value == "completed"
     assert sale.payment_method.value == "transfer"
     assert sale.payment_parts[0].method == "transfer"
-    assert (await catalog.get_product(product.id)).stock_quantity == 1
+    final_product = await catalog.get_product(product.id)
+    assert final_product is not None
+    assert final_product.stock_quantity == 1
 
 
 async def test_unknown_cash_settlement_is_kept_for_manual_review() -> None:

@@ -296,6 +296,205 @@ export type BackendAnalyticsPayment = {
   share_bps: number;
 };
 
+export type BackendAnalyticsDataState =
+  | "available"
+  | "ready"
+  | "loading"
+  | "empty"
+  | "partial"
+  | "not_available"
+  | "not_calculated"
+  | "permission_denied"
+  | "error";
+
+export type BackendAnalyticsFilter = {
+  zone_id?: string;
+  workstation_id?: string;
+  tariff_id?: string;
+  client_group_id?: string;
+  payment_method?: string;
+  operation_type?: string;
+  product_id?: string;
+  operator_id?: string;
+};
+
+export type BackendAnalyticsComparison = {
+  mode: "previous_equal_period";
+  start_at: string;
+  end_at: string;
+  is_partial: boolean;
+};
+
+/** Generic additive read shape; the concrete finance response is typed below. */
+export type BackendAnalyticsReadQueryV2 = {
+  start_at: string;
+  end_at: string;
+  limit?: number;
+  filters?: BackendAnalyticsFilter;
+  comparison?: "previous_equal_period" | "none";
+};
+
+export type BackendAnalyticsReadMetric<T> = {
+  value: T | null;
+  state: BackendAnalyticsDataState;
+  unit?: string;
+  coverage?: number;
+};
+
+/** Generic additive DTO shape for future read families; finance uses the concrete DTO below. */
+export type BackendAnalyticsReadV2 = {
+  version: "v2";
+  start_at: string;
+  end_at: string;
+  timezone: "Europe/Moscow";
+  comparison: BackendAnalyticsComparison | null;
+  filters: BackendAnalyticsFilter;
+  metrics: Record<string, BackendAnalyticsReadMetric<number>>;
+};
+
+export type BackendAnalyticsFinanceFilters = {
+  start_at: string;
+  end_at: string;
+  zone_key: string | null;
+  workstation_key: string | null;
+  tariff_key: string | null;
+  client_group_key: string | null;
+  payment_method_key: string | null;
+  operation_type: string | null;
+  product_key: string | null;
+  operator_key: string | null;
+};
+
+export type BackendAnalyticsMetricInfo = {
+  key: string;
+  label: string;
+  description: string;
+  formula: string;
+  source: string;
+};
+
+export type BackendAnalyticsMetricComparison = {
+  current: number | null;
+  previous: number | null;
+  delta: number | null;
+  change_percent: number | null;
+  change_percentage_points: number | null;
+  state: BackendAnalyticsDataState;
+};
+
+export type BackendAnalyticsFinanceMetric = {
+  value_cents: number | null;
+  state: BackendAnalyticsDataState;
+  metric_info: BackendAnalyticsMetricInfo;
+  comparison: BackendAnalyticsMetricComparison | null;
+};
+
+export type BackendAnalyticsPeriodComparison = {
+  current_start_at: string;
+  current_end_at: string;
+  previous_start_at: string;
+  previous_end_at: string;
+  current_state: BackendAnalyticsDataState;
+};
+
+export type BackendAnalyticsFinanceFlow = {
+  payment_received_cents: number | null;
+  direct_payment_cents: number | null;
+  deposit_top_up_revenue_cents: number | null;
+  wallet_debit_cents: number | null;
+  recognized_revenue_cents: number | null;
+  refunds_cents: number | null;
+  adjustments_cents: number | null;
+  net_cash_received_cents: number | null;
+};
+
+export type BackendAnalyticsPaymentMethodAggregate = {
+  key: string;
+  amount_cents: number;
+  operation_count: number;
+  share_bps: number;
+  average_amount_cents: number;
+  counter: number;
+  refunds_cents: number;
+};
+
+export type BackendAnalyticsFinanceResponse = {
+  api_version: "v2";
+  period: BackendAnalyticsFinanceFilters;
+  comparison: BackendAnalyticsPeriodComparison;
+  flow: BackendAnalyticsFinanceFlow;
+  metrics: Record<string, BackendAnalyticsFinanceMetric>;
+  sources: Record<string, { state: BackendAnalyticsDataState }>;
+  payment_methods: BackendAnalyticsPaymentMethodAggregate[];
+};
+
+export type BackendAnalyticsV2Filter = {
+  start_at: string;
+  end_at: string;
+  zone_key: string | null;
+  workstation_key: string | null;
+  tariff_key: string | null;
+  client_group_key: string | null;
+  payment_method_key: string | null;
+  operation_type: string | null;
+  category_key: string | null;
+  product_key: string | null;
+  operator_key: string | null;
+};
+
+export type BackendAnalyticsV2Metric = {
+  key: string;
+  value: number | null;
+  state: BackendAnalyticsDataState;
+  metric_info: BackendAnalyticsMetricInfo;
+  comparison: BackendAnalyticsMetricComparison | null;
+  coverage: number | null;
+};
+
+export type BackendAnalyticsV2Block = {
+  key: string;
+  state: BackendAnalyticsDataState;
+  metrics: Record<string, BackendAnalyticsV2Metric>;
+  rows: Array<{
+    key: string;
+    label: string;
+    units: number;
+    revenue_cents: number;
+    cost_cents: number;
+    gross_profit_cents: number;
+    margin_bps: number | null;
+    share_bps: number;
+  }>;
+};
+
+export type BackendAnalyticsV2Dashboard = {
+  api_version: "v2";
+  timezone: "Europe/Moscow";
+  period: BackendAnalyticsV2Filter;
+  filters: BackendAnalyticsV2Filter;
+  comparison: { start_at: string; end_at: string; is_partial: boolean };
+  blocks: Record<string, BackendAnalyticsV2Block>;
+};
+
+export type BackendAnalyticsDrillDownItem = {
+  source_id: string;
+  kind: "sale" | "return" | "adjustment";
+  occurred_at: string;
+  amount_cents: number;
+  quantity: number;
+  product_id: string | null;
+  product_name: string | null;
+  operator_key: string | null;
+  reason: string | null;
+  source_reference: string | null;
+  client_id: string | null;
+};
+
+export type BackendAnalyticsDrillDown = {
+  state: BackendAnalyticsDataState;
+  items: BackendAnalyticsDrillDownItem[];
+};
+
 export type BackendAnalyticsOverview = {
   start_at: string;
   end_at: string;
@@ -328,6 +527,8 @@ export type BackendAnalyticsOverview = {
   tariffs: BackendAnalyticsBreakdown[];
   payment_methods: BackendAnalyticsPayment[];
   product_categories: BackendAnalyticsBreakdown[];
+  data_state?: BackendAnalyticsDataState;
+  data_message?: string | null;
 };
 
 export type BackendClientAnalytics = {

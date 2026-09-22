@@ -1,3 +1,4 @@
+import datetime
 import typing
 import uuid
 
@@ -16,3 +17,9 @@ class NotificationRuleRepository(typing.Protocol):
 
     async def delete(self, rule_id: uuid.UUID) -> None:
         """Delete a rule."""
+
+
+class Clock(typing.Protocol):
+    def now(self) -> datetime.datetime:
+        """Return an aware UTC datetime."""
+        ...
