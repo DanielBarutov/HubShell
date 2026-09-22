@@ -161,8 +161,8 @@ class CatalogService:
         valid_from: datetime.datetime,
         valid_to: datetime.datetime | None,
         tariff_key: str | None = None,
-        lifecycle: TariffLifecycle = TariffLifecycle.PUBLISHED,
-        billing_mode: BillingMode = BillingMode.BLOCK,
+        lifecycle: TariffLifecycle | str = TariffLifecycle.PUBLISHED,
+        billing_mode: BillingMode | str = BillingMode.BLOCK,
         price_per_minute_cents: int = 0,
         free_minutes: int = 0,
         time_restricted: bool = False,
@@ -171,8 +171,8 @@ class CatalogService:
         usage_window_start_minute: int | None = None,
         usage_window_end_minute: int | None = None,
         window_timezone: str | None = None,
-        audience: TariffAudience = TariffAudience.ALL,
-        sale_channel: TariffSaleChannel = TariffSaleChannel.BOTH,
+        audience: TariffAudience | str = TariffAudience.ALL,
+        sale_channel: TariffSaleChannel | str = TariffSaleChannel.BOTH,
     ) -> Tariff:
         try:
             lifecycle = TariffLifecycle(lifecycle)

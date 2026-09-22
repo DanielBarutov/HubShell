@@ -9,7 +9,7 @@ from gameclub_backend.modules.billing.domain import (
     SessionCharge,
     SessionMeter,
 )
-from gameclub_backend.modules.catalog.domain import Quote
+from gameclub_backend.modules.catalog.domain import Quote, TariffAudience
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
 from gameclub_backend.modules.entitlements.application.service import EntitlementConsumption
 from gameclub_backend.modules.sessions.domain import Session
@@ -75,6 +75,14 @@ class MeterRepository(typing.Protocol):
 class EntitlementMeter(typing.Protocol):
     async def get_active_for_client(self, client_id: uuid.UUID):
         """Return the package currently active for a client, if any."""
+
+    async def activate_next_compatible(
+        self,
+        client_id: uuid.UUID,
+        zone_id: str | None,
+        now: datetime.datetime,
+    ):
+        """Activate the next compatible queued package, if one exists."""
 
     async def consume_for_session(
         self,
@@ -155,6 +163,7 @@ class CatalogQuoter(typing.Protocol):
         discount_category: str | None = None,
         duration_minutes: int | None = None,
         quantity: int = 1,
+        audience: TariffAudience = TariffAudience.ALL,
     ) -> Quote:
         """Calculate a quote for the tariff explicitly selected at session start."""
 

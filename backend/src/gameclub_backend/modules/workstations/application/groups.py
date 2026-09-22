@@ -6,6 +6,7 @@ import secrets
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.workstations.application.ports import (
+    Clock,
     WorkstationGroupRepository,
     ZoneRateSynchronizer,
 )
@@ -24,7 +25,7 @@ class WorkstationGroupService:
     def __init__(
         self,
         repository: WorkstationGroupRepository,
-        clock: UtcClock | None = None,
+        clock: Clock | None = None,
         zone_rate_synchronizer: ZoneRateSynchronizer | None = None,
     ) -> None:
         self._repository = repository

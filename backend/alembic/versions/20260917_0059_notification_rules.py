@@ -19,7 +19,12 @@ def upgrade() -> None:
         sa.Column("play_sound", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("sound", sa.String(length=16), nullable=False, server_default="standard"),
         sa.Column("custom_sound_path", sa.String(length=512), nullable=True),
-        sa.Column("show_system_notification", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column(
+            "show_system_notification",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
         sa.Column("message", sa.String(length=512), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

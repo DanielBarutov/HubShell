@@ -112,6 +112,7 @@ class BillingService:
             raise ApplicationError(ErrorCode.CONFLICT, "Only an active session can be metered")
         if session.client_id is None:
             return None
+        client_id = session.client_id
         workstation = await self._workstations.get(session.workstation_id)
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
@@ -372,9 +373,7 @@ class BillingService:
             and billable_minutes == 0
         )
         package_finished_without_fallback_charge = (
-            package_finished
-            and package_progressed
-            and debit_delta_cents == 0
+            package_finished and package_progressed and debit_delta_cents == 0
         )
         required_cents = debit_delta_cents
         if required_cents == 0 and (
@@ -389,7 +388,7 @@ class BillingService:
             and (package_finished or login_grant_finished_without_package)
             and active_entitlement_id is None
             and not await self._clients.can_debit(
-                session.client_id,
+                client_id,
                 required_cents,
                 allow_negative_balance=True,
             )
@@ -418,7 +417,7 @@ class BillingService:
         operation_id: uuid.UUID | None = current.last_operation_id
         if debit_delta_cents > 0:
             client, operation = await self._debit_meter_delta(
-                client_id=session.client_id,
+                client_id=client_id,
                 amount_cents=debit_delta_cents,
                 session_id=session.id,
                 billed_minutes=billable_minutes,

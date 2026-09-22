@@ -63,6 +63,7 @@ async def test_grpc_audit_interceptor_records_actor_and_request_id() -> None:
         continuation,
         type("Details", (), {"method": "/gameclub.v1.ClientService/AcknowledgeCommand"})(),
     )
+    assert handler is not None
     result = await handler.unary_unary(
         "payload-is-not-recorded",
         FakeContext(
@@ -100,6 +101,7 @@ async def test_grpc_audit_interceptor_records_failed_mutation_without_payload() 
         continuation,
         type("Details", (), {"method": "/gameclub.v1.ClientService/TopUp"})(),
     )
+    assert handler is not None
     context = FakeContext((("x-request-id", "grpc-failure-01"),), grpc.StatusCode.INTERNAL)
 
     try:

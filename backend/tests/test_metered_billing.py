@@ -1100,8 +1100,9 @@ async def test_regular_package_starts_after_login_grant_and_returns_win_snapshot
 
 
 @pytest.mark.asyncio
-async def test_package_bought_during_free_minutes_prevents_vip_worker_from_stopping_session(
-) -> None:
+async def test_package_bought_during_free_minutes_prevents_vip_worker_from_stopping_session() -> (
+    None
+):
     """Проверяет, что купленный до конца бесплатных минут VIP-пакет не даёт
     фоновой задаче перезагрузить ПК.
     """
@@ -2142,7 +2143,9 @@ async def test_package_time_window_uses_configured_timezone() -> None:
     clock.current = datetime.datetime(2026, 8, 29, 18, tzinfo=datetime.UTC)
     assert await entitlements.next_compatible(client.id, "vip", now=clock.current) is None
     clock.current = datetime.datetime(2026, 8, 29, 19, tzinfo=datetime.UTC)
-    assert (await entitlements.next_compatible(client.id, "vip", now=clock.current)).id == item.id
+    compatible = await entitlements.next_compatible(client.id, "vip", now=clock.current)
+    assert compatible is not None
+    assert compatible.id == item.id
     assert (await entitlements.activate(item.id, client.id)).status is EntitlementStatus.ACTIVE
 
 

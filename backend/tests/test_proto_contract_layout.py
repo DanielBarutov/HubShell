@@ -14,7 +14,7 @@ from gameclub.v1 import (
 )
 
 
-class Utf8ProjectPath(type(Path())):
+class Utf8ProjectPath(type(Path())):  # type: ignore[misc]
     """Читает исходные файлы проекта в UTF-8 независимо от кодировки Windows."""
 
     def read_text(

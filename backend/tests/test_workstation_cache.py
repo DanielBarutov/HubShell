@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.domain import Workstation
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
@@ -8,11 +9,11 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 
 class FakeWorkstationSnapshotCache:
     def __init__(self) -> None:
-        self.value = None
+        self.value: list[Workstation] | None = None
         self.get_calls = 0
         self.set_calls = 0
         self.invalidate_calls = 0
-        self.ttl_seconds = None
+        self.ttl_seconds: int | None = None
 
     async def get(self):
         self.get_calls += 1

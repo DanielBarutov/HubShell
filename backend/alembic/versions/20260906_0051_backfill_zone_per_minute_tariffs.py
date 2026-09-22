@@ -54,18 +54,22 @@ def upgrade() -> None:
         ).where(groups.c.per_minute_price_cents > 0)
     ).mappings():
         tariff_key = f"zone:{group['id']}:per_minute"
-        current = bind.execute(
-            sa.select(
-                tariffs.c.price_per_minute_cents,
-                tariffs.c.active,
-                tariffs.c.lifecycle,
-                tariffs.c.valid_from,
-                tariffs.c.valid_to,
+        current = (
+            bind.execute(
+                sa.select(
+                    tariffs.c.price_per_minute_cents,
+                    tariffs.c.active,
+                    tariffs.c.lifecycle,
+                    tariffs.c.valid_from,
+                    tariffs.c.valid_to,
+                )
+                .where(tariffs.c.tariff_key == tariff_key)
+                .order_by(tariffs.c.version.desc())
+                .limit(1)
             )
-            .where(tariffs.c.tariff_key == tariff_key)
-            .order_by(tariffs.c.version.desc())
-            .limit(1)
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if current is not None and (
             current["price_per_minute_cents"] == group["per_minute_price_cents"]
             and current["active"]

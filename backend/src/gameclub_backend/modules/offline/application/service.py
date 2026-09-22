@@ -5,7 +5,7 @@ import datetime
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.application.service import BillingService
-from gameclub_backend.modules.offline.application.ports import OfflineReplayRepository
+from gameclub_backend.modules.offline.application.ports import Clock, OfflineReplayRepository
 from gameclub_backend.modules.offline.domain import (
     OfflineBatch,
     OfflineBatchResult,
@@ -31,7 +31,7 @@ class OfflineReplayService:
         session_repository: SessionRepository,
         workstations: WorkstationLookup,
         billing: BillingService,
-        clock: UtcClock | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._repository = repository
         self._sessions = sessions

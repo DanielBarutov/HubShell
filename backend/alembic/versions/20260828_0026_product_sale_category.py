@@ -18,8 +18,7 @@ def upgrade() -> None:
     )
     op.execute(
         sa.text(
-            "UPDATE product_sales SET product_category = 'unknown' "
-            "WHERE product_category IS NULL"
+            "UPDATE product_sales SET product_category = 'unknown' WHERE product_category IS NULL"
         )
     )
     op.alter_column("product_sales", "product_category", nullable=False)

@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import typing
 import uuid
 
 import pytest
@@ -158,7 +159,9 @@ async def test_postgres_persists_guest_links_for_reservation_and_session(
         )
         session_id = session.id
 
-        assert (await guest_repository.get(guest.id)).nickname == guest.nickname
+        persisted_guest = await guest_repository.get(guest.id)
+        assert persisted_guest is not None
+        assert persisted_guest.nickname == guest.nickname
         assert (await reservation_service.get(reservation.id)).guest_id == guest.id
         assert (await session_service.get(session.id)).guest_id == guest.id
     finally:
@@ -277,6 +280,7 @@ async def test_postgres_charges_one_completed_session_once_under_concurrency(
     Проверяет сценарий «test_postgres_charges_one_completed_session_once_under_concurrency» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         current = datetime.datetime(2037, 1, 15, 12, tzinfo=datetime.UTC)
 
@@ -447,7 +451,9 @@ async def test_postgres_serializes_conflicting_reservations(postgres_dsn: str) -
             return_exceptions=True,
         )
 
-        successful = [item for item in results if not isinstance(item, Exception)]
+        successful = [
+            typing.cast(typing.Any, item) for item in results if not isinstance(item, BaseException)
+        ]
         conflicts = [item for item in results if isinstance(item, ApplicationError)]
         reservation_ids.extend(item.id for item in successful)
         assert len(successful) == 1
@@ -524,7 +530,9 @@ async def test_postgres_serializes_active_sessions_and_retries_by_key(
             ),
             return_exceptions=True,
         )
-        successful = [item for item in results if not isinstance(item, Exception)]
+        successful = [
+            typing.cast(typing.Any, item) for item in results if not isinstance(item, BaseException)
+        ]
         conflicts = [item for item in results if isinstance(item, ApplicationError)]
         assert len(successful) == 1
         assert len(conflicts) == 1

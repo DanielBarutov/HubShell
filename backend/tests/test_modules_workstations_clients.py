@@ -1,4 +1,5 @@
 import datetime
+import typing
 
 import pytest
 
@@ -34,6 +35,7 @@ from gameclub_backend.modules.reservations.infrastructure.memory import (
 )
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
+from gameclub_backend.modules.workstations.application.ports import WorkstationGroupRepository
 from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.modules.workstations.domain import WorkstationStatus
 from gameclub_backend.modules.workstations.infrastructure.memory import (
@@ -41,6 +43,7 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 )
 
 pytestmark = pytest.mark.unit
+
 
 async def test_workstation_lifecycle_and_duplicate_device_are_guarded() -> None:
     """
@@ -78,12 +81,16 @@ async def test_legacy_group_can_be_repositioned_without_saved_group_configuratio
     Проверяет сценарий «test_legacy_group_can_be_repositioned_without_saved_group_configuration»
     и подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class EmptyGroupRepository:
         async def get(self, group_id: str) -> None:
             return None
 
     repository = InMemoryWorkstationRepository()
-    service = WorkstationService(repository, groups=EmptyGroupRepository())
+    service = WorkstationService(
+        repository,
+        groups=typing.cast(WorkstationGroupRepository, EmptyGroupRepository()),
+    )
     workstation = await service.register("legacy-device", "PC legacy", group_id="main", position=1)
 
     updated = await service.update(workstation.id, "PC legacy", "main", 6)
@@ -96,6 +103,7 @@ async def test_workstation_status_becomes_stale_and_offline_after_heartbeat() ->
     Проверяет сценарий «test_workstation_status_becomes_stale_and_offline_after_heartbeat» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 8, 27, 12, tzinfo=datetime.UTC)
@@ -200,6 +208,7 @@ async def test_entitlement_queue_requires_explicit_activation_and_preserves_orde
     Проверяет сценарий «test_entitlement_queue_requires_explicit_activation_and_preserves_order»
     и подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class AdvancingClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 9, 18, 12, 0, tzinfo=datetime.UTC)

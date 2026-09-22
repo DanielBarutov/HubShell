@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import typing
 
 from gameclub_backend.modules.client_groups.domain import ClientGroup
@@ -23,3 +24,8 @@ class ClientGroupRepository(typing.Protocol):
 
     async def count_clients(self, group_id: str) -> int:
         """Return the number of clients assigned to a group."""
+
+
+class Clock(typing.Protocol):
+    def now(self) -> datetime.datetime:
+        """Return an aware UTC datetime."""

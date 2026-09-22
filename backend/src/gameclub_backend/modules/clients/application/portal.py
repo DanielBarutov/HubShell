@@ -14,6 +14,7 @@ from gameclub_backend.modules.catalog.domain import (
     TariffLifecycle,
     TariffSaleChannel,
 )
+from gameclub_backend.modules.clients.application.ports import Clock
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
 from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementSettlementStatus
@@ -152,7 +153,7 @@ class ClientPortalService:
         workstations: WorkstationReader | None = None,
         payment_methods: PaymentMethodReader | None = None,
         reservations: ReservationReader | None = None,
-        clock: UtcClock | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._clients = clients
         self._sessions = sessions

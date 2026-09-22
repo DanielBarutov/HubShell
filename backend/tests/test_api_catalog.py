@@ -8,6 +8,7 @@ from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
 
+
 async def test_catalog_tariff_listing_filters_by_workstation_group() -> None:
     """
     Проверяет поведение публичного API в заявленном сценарии.

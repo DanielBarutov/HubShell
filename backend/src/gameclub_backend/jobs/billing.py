@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import typing
+import uuid
 
 import dramatiq
 
@@ -63,7 +64,11 @@ dramatiq.set_broker(shared_broker)
 
 
 class ActiveSessionReader(typing.Protocol):
-    async def list(self, active_only: bool = False) -> list[Session]:
+    async def list(
+        self,
+        workstation_id: uuid.UUID | None = None,
+        active_only: bool = False,
+    ) -> list[Session]:
         """Return active sessions for one metering run."""
 
 

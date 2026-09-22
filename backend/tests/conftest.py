@@ -48,6 +48,7 @@ async def api_context() -> AsyncIterator[ApiTestContext]:
 @pytest.fixture
 def workstation_payload() -> Callable[[str], dict[str, Any]]:
     """Формирует стабильный HTTP DTO регистрации игрового места."""
+
     def factory(device_id: str = "contract-device-01") -> dict[str, Any]:
         return {
             "device_id": device_id,
@@ -62,6 +63,7 @@ def workstation_payload() -> Callable[[str], dict[str, Any]]:
 @pytest.fixture
 def reservation_payload() -> Callable[[str], dict[str, Any]]:
     """Формирует стабильный HTTP DTO гостевой брони для контрактного smoke-теста."""
+
     def factory(workstation_id: str) -> dict[str, Any]:
         start_at = datetime.datetime(2026, 12, 1, 12, tzinfo=datetime.UTC)
         return {

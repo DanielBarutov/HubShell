@@ -313,8 +313,7 @@ class PostgresEntitlementRepository:
             result = await session.scalars(
                 select(EntitlementModel)
                 .where(
-                    EntitlementModel.settlement_status
-                    == EntitlementSettlementStatus.PENDING.value,
+                    EntitlementModel.settlement_status == EntitlementSettlementStatus.PENDING.value,
                     EntitlementModel.next_settlement_attempt_at <= moment,
                 )
                 .order_by(EntitlementModel.next_settlement_attempt_at)

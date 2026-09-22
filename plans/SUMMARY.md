@@ -75,7 +75,7 @@ runtime Windows-клиента и не служит доказательство
 | [`backend/src/gameclub_backend/`](../backend/src/gameclub_backend/) | composition root, application, modules, jobs, HTTP/gRPC | реализация backend |
 | [`backend/src/gameclub_backend/modules/`](../backend/src/gameclub_backend/modules/) | bounded contexts | домен, use cases, repositories, handlers |
 | [`backend/proto/gameclub/v1/`](../backend/proto/gameclub/v1/) | source-of-truth `.proto` | native gRPC-контракты |
-| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0060` | схема PostgreSQL; текущая голова `20260917_0060` |
+| [`backend/alembic/versions/`](../backend/alembic/versions/) | миграции `0001`…`0061` | схема PostgreSQL; локальная команда `uv run --directory ./backend alembic heads` на 2026-09-20 показывает `20260918_0061` |
 | [`backend/tests/`](../backend/tests/) | unit, API, contract, jobs, PostgreSQL checks | автоматические проверки backend |
 | [`frontend/`](../frontend/) | React/Vite-приложение и nginx image | операторская web-оболочка |
 | [`frontend/src/app/`](../frontend/src/app/) | композиция App, shell, PanelHost, Redux store/hooks и API facade | UI orchestration и серверный state boundary |
@@ -210,7 +210,7 @@ HTTP handlers находятся рядом с модулем в `presentation/h
 | Cash Shifts | open/close, cash ledger, movements, references, approvals, schedules, provider-neutral producer boundary | реальные provider/webhook producers и отдельные finance integrations |
 | Product Sales | client/guest sale, stock reservation, price/cost/category snapshots, balance/cash settlement boundary, mixed payment parts, idempotency, HTTP API | atomic cross-part reconciliation, basket/order, returns, bonuses, external acquirer |
 | Notifications | notification rules CRUD, thresholds, stable event id, session snapshot/HTTP/gRPC transport, frontend settings editor, Win Core deduplication and Windows sound/balloon adapter | native Windows audio/toast smoke and folder-package permission checks остаются |
-| Analytics | read-only overview/client analytics, daily/hourly dynamics, occupancy, zones/PC/tariffs/payment methods, margin, segments, CSV и gRPC read contract | фоновые отчёты через Dramatiq; retention/cohorts, heavy projections, XLSX/PDF |
+| Analytics | read-only overview/client analytics, daily/hourly dynamics, occupancy, zones/PC/tariffs/payment methods, margin, segments, CSV и gRPC read contract; модернизация по `stats.md` спроектирована в [`plans/11-analytics/PLAN.md`](11-analytics/PLAN.md) и [`METRICS-DICTIONARY.md`](11-analytics/METRICS-DICTIONARY.md) | финансовые факты Payment/Wallet/Revenue, retention/cohorts, deposit aging, profitability, period comparison, drill-down, фоновые отчёты и heavy projections |
 | Payment Methods | CRUD `/api/v1/payment-methods`, validation, PostgreSQL repository, migration seeds `balance`/`cash`/`transfer`, settings UI | provider activation/settlement integrations добавляются отдельно |
 
 ### HTTP BFF surface
@@ -451,7 +451,9 @@ evidence — в
 | `npm --prefix ./frontend run test:coverage` | `19 passed`; line coverage `17.18%`, guardrail `17%` | первый измеренный frontend baseline; coverage не заменяет behavior/accessibility tests |
 | `uv run --directory ./backend pytest --cov=src/gameclub_backend --cov-report=term-missing` | `154 passed, 18 skipped`; line coverage `70.10%`, guardrail `70%` | первый измеренный backend baseline без DSN; integration coverage не доказана |
 | `docker compose config --quiet` | успешно | Compose syntax/config |
-| `docker compose up -d --build` | успешно в текущем прогоне 2026-09-02 | backend stack пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; native Windows client в compose не входит |
+| `docker compose up -d --build` | исторически успешно в прогоне 2026-09-02 | backend stack тогда был пересобран/restarted; PostgreSQL/Redis/HTTP/gRPC/frontend healthy, migration head `20260902_0048`, HTTP и gRPC smoke прошли; после новых миграций этот Compose-чек нужно повторить; native Windows client в compose не входит |
+| Изолированный PostgreSQL test stack | `docker-compose.postgres-test.yml`, `scripts/prepare-postgres-test.sh`, `scripts/run-postgres-tests.sh`; контейнер `hubshell-test-postgres` на `127.0.0.1:55434`, Alembic head `20260918_0061`, repeatable seed | проверено 2026-09-21: полный backend с `GAMECLUB_TEST_POSTGRES_DSN` — `234 passed`; PostgreSQL marker run — `21 passed, 213 deselected`; повторный seed не создаёт дубли | это отдельная локальная test-база; Redis-тесты требуют отдельного `GAMECLUB_TEST_REDIS_URL`, production backup policy не доказывается |
+| Backend static quality | `uv run --directory ./backend ruff check .`, `ruff format --check src tests alembic/versions`, `mypy src tests` | проверено 2026-09-21: все проверки успешны; mypy без ошибок в `253` файлах, форматирование `314` файлов | статические проверки не заменяют browser, Redis, Compose и native Windows evidence |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
 | Live HTTP smoke | успешно | fresh operator token, `/auth/me`, payment methods, analytics 200, sales 200, auth-aware error path |
 | Redis cache smoke | TTL около `16 s` сразу после чтения | cache key created with bounded 20 s TTL; Redis не заменяет DB |
@@ -468,7 +470,7 @@ evidence — в
 | Kiosk security | `NoRun=1` provisioning доступен только как optional full-kiosk profile; базовый `app_gate` возвращает `Win+R` после входа. Assigned Access/Shell Launcher, обычный пользователь, edition, Explorer/Alt+Tab, recovery и restore требуют целевой Windows-машины |
 | Browser matrix/realtime | подтверждён локальный headed smoke основных routes и offline/confirmation guards; полноценный набор браузеров, queue/entry/transfer/guest/error/accessibility matrix и realtime transport не выполнялись |
 | Production security | нужны real secret storage, enrollment rate-limit/rebind, backups и deployment policy; TLS/mTLS certificates обязательны только при внешнем доступе |
-| Heavy analytics | текущий overview/client/CSV синхронный read model; фоновые отчёты с retry/status/file ещё не сделаны |
+| Heavy analytics | текущий overview/client/CSV синхронный read model; финансовое разделение Payment/Wallet/Revenue и расширенные показатели из `stats.md` требуют отдельных вертикальных срезов; фоновые отчёты с retry/status/file ещё не сделаны |
 
 ## 11. Следующие задачи
 
@@ -592,6 +594,18 @@ uv run --directory ./backend ruff format --check src tests alembic/versions/2026
 cd /home/daniel/HubShell
 GAMECLUB_TEST_POSTGRES_DSN=... GAMECLUB_TEST_REDIS_URL=... uv run --directory ./backend pytest -q
 ```
+
+Для отдельной локальной PostgreSQL-проверки:
+
+```bash
+cd /home/daniel/HubShell
+./scripts/prepare-postgres-test.sh
+./scripts/run-postgres-tests.sh
+```
+
+Скрипты поднимают только контейнер `hubshell-test-postgres`, применяют Alembic,
+добавляют повторяемые тестовые факты и передают приложению
+`GAMECLUB_TEST_POSTGRES_DSN`. Остальные контейнеры Compose при этом не запускаются.
 
 Frontend:
 

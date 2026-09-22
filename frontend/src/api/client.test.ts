@@ -84,6 +84,39 @@ describe("GameClubApi", () => {
     });
   });
 
+  it("вызывает отдельный analytics v2 finance endpoint с фильтрами и не подменяет v1", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ api_version: "v2" }));
+
+    const result = await new GameClubApi("http://backend/api/v1").getAnalyticsFinance({
+      startAt: "2026-09-20T21:00:00.000Z",
+      endAt: "2026-09-21T21:00:00.000Z",
+      zoneKey: "vip",
+      paymentMethodKey: "cash",
+    });
+
+    expect(result.api_version).toBe("v2");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://backend/api/v2/analytics/finance?start_at=2026-09-20T21%3A00%3A00.000Z&end_at=2026-09-21T21%3A00%3A00.000Z&zone_key=vip&payment_method_key=cash",
+    );
+  });
+
+  it("сохраняет v1 CSV flow и передаёт исходный период без смены endpoint", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(new Response("section,key", { status: 200 }));
+
+    await new GameClubApi("http://backend/api/v1").downloadAnalyticsCsv(
+      "2026-09-20T21:00:00.000Z",
+      "2026-09-21T21:00:00.000Z",
+      50,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://backend/api/v1/analytics/overview.csv?start_at=2026-09-20T21%3A00%3A00.000Z&end_at=2026-09-21T21%3A00%3A00.000Z&limit=50",
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
+  });
+
   it("передаёт группу клиента при создании и изменении профиля", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock

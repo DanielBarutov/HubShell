@@ -22,8 +22,21 @@ class FaultInjectingCashSettlement:
         self.fail = True
         self.calls: list[dict[str, object]] = []
 
-    async def settle(self, **kwargs: object) -> None:
-        self.calls.append(kwargs)
+    async def settle(
+        self,
+        shift_id: uuid.UUID,
+        amount_cents: int,
+        sale_idempotency_key: str,
+        actor_id: str,
+    ) -> None:
+        self.calls.append(
+            {
+                "shift_id": shift_id,
+                "amount_cents": amount_cents,
+                "sale_idempotency_key": sale_idempotency_key,
+                "actor_id": actor_id,
+            }
+        )
         if self.fail:
             raise RuntimeError("fault injected after the balance side effect")
 
@@ -209,7 +222,7 @@ async def test_postgres_concurrent_sale_key_with_different_payload_is_conflict(
 
 
 @pytest.mark.asyncio
-async def test_postgres_mixed_sale_fault_between_parts_reuses_balance_key(
+async def test_postgres_mixed_sale_fault_between_parts_retries_cash_and_transfer(
     postgres_dsn: str,
 ) -> None:
     """
@@ -260,22 +273,26 @@ async def test_postgres_mixed_sale_fault_between_parts_reuses_balance_key(
                 sold_by="integration-test",
                 idempotency_key=sale_key,
                 payment_parts=[
-                    {"method": "balance", "amount_cents": 100},
                     {"method": "cash", "amount_cents": 200},
+                    {"method": "transfer", "amount_cents": 100},
                 ],
             )
 
         pending = await sales.get_by_idempotency_key(sale_key)
         assert pending is not None
         assert pending.status.value == "needs_review"
-        assert (await clients.get(client.id)).balance_cents == 900
-        assert (await catalog.get_product(product.id)).stock_quantity == 1
+        assert (await clients.get(client.id)).balance_cents == 1_000
+        final_product = await catalog.get_product(product.id)
+        assert final_product is not None
+        assert final_product.stock_quantity == 1
 
         cash.fail = False
         completed = await service.reconcile(pending.id)
         assert completed.status.value == "completed"
-        assert (await clients.get(client.id)).balance_cents == 900
-        assert (await catalog.get_product(product.id)).stock_quantity == 1
+        assert (await clients.get(client.id)).balance_cents == 1_000
+        final_product = await catalog.get_product(product.id)
+        assert final_product is not None
+        assert final_product.stock_quantity == 1
         assert len(cash.calls) == 2
     finally:
         async with engine.begin() as connection:

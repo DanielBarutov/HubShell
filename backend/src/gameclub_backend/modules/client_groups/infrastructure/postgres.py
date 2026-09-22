@@ -76,9 +76,9 @@ class PostgresClientGroupRepository:
         async with open_session(self._engine_provider) as session:
             if group.is_default:
                 await session.execute(
-                    update(ClientGroupModel).values(is_default=False).where(
-                        ClientGroupModel.id != group.id
-                    )
+                    update(ClientGroupModel)
+                    .values(is_default=False)
+                    .where(ClientGroupModel.id != group.id)
                 )
             model = await session.get(ClientGroupModel, group.id)
             if model is None:

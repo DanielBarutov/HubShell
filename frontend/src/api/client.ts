@@ -18,6 +18,9 @@ import type {
   BackendProduct,
   BackendProductSale,
   BackendAnalyticsOverview,
+  BackendAnalyticsFinanceResponse,
+  BackendAnalyticsV2Dashboard,
+  BackendAnalyticsDrillDown,
   BackendClientAnalytics,
   BackendProductCategory,
   BackendPaymentMethod,
@@ -56,6 +59,7 @@ export class ApiError extends Error {
 
 export class GameClubApi {
   private readonly baseUrl: string;
+  private readonly analyticsV2BaseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private refreshInFlight: Promise<boolean> | null = null;
@@ -64,6 +68,7 @@ export class GameClubApi {
 
   constructor(baseUrl = import.meta.env.VITE_API_URL ?? "/api/v1") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.analyticsV2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
   }
 
   async login(username: string, password: string): Promise<void> {
@@ -649,6 +654,117 @@ export class GameClubApi {
     return this.request<BackendAnalyticsOverview>(`/analytics/overview?${query}`);
   }
 
+  async getAnalyticsFinance(params: {
+    startAt: string;
+    endAt: string;
+    zoneKey?: string;
+    workstationKey?: string;
+    tariffKey?: string;
+    clientGroupKey?: string;
+    paymentMethodKey?: string;
+    operationType?: string;
+    productKey?: string;
+    operatorKey?: string;
+  }): Promise<BackendAnalyticsFinanceResponse> {
+    const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
+    const filters: Array<[string, string | undefined]> = [
+      ["zone_key", params.zoneKey],
+      ["workstation_key", params.workstationKey],
+      ["tariff_key", params.tariffKey],
+      ["client_group_key", params.clientGroupKey],
+      ["payment_method_key", params.paymentMethodKey],
+      ["operation_type", params.operationType],
+      ["product_key", params.productKey],
+      ["operator_key", params.operatorKey],
+    ];
+    for (const [key, value] of filters) {
+      if (value) query.set(key, value);
+    }
+    return this.request<BackendAnalyticsFinanceResponse>(
+      `/analytics/finance?${query}`,
+      {},
+      true,
+      this.analyticsV2BaseUrl,
+    );
+  }
+
+  async getAnalyticsDashboard(params: {
+    startAt: string;
+    endAt: string;
+    zoneKey?: string;
+    workstationKey?: string;
+    tariffKey?: string;
+    clientGroupKey?: string;
+    paymentMethodKey?: string;
+    operationType?: string;
+    categoryKey?: string;
+    productKey?: string;
+    operatorKey?: string;
+    comparison?: boolean;
+  }): Promise<BackendAnalyticsV2Dashboard> {
+    const query = this.analyticsQuery(params);
+    if (params.comparison !== false) query.set("comparison", "previous_equal_period");
+    return this.request<BackendAnalyticsV2Dashboard>(
+      `/analytics/dashboard?${query}`,
+      {},
+      true,
+      this.analyticsV2BaseUrl,
+    );
+  }
+
+  async getAnalyticsDrillDown(params: {
+    startAt: string;
+    endAt: string;
+    zoneKey?: string;
+    workstationKey?: string;
+    tariffKey?: string;
+    clientGroupKey?: string;
+    paymentMethodKey?: string;
+    operationType?: string;
+    categoryKey?: string;
+    productKey?: string;
+    operatorKey?: string;
+    limit?: number;
+  }): Promise<BackendAnalyticsDrillDown> {
+    const query = this.analyticsQuery(params);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    return this.request<BackendAnalyticsDrillDown>(
+      `/analytics/drill-down?${query}`,
+      {},
+      true,
+      this.analyticsV2BaseUrl,
+    );
+  }
+
+  private analyticsQuery(params: {
+    startAt: string;
+    endAt: string;
+    zoneKey?: string;
+    workstationKey?: string;
+    tariffKey?: string;
+    clientGroupKey?: string;
+    paymentMethodKey?: string;
+    operationType?: string;
+    categoryKey?: string;
+    productKey?: string;
+    operatorKey?: string;
+  }): URLSearchParams {
+    const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
+    const filters: Array<[string, string | undefined]> = [
+      ["zone_key", params.zoneKey],
+      ["workstation_key", params.workstationKey],
+      ["tariff_key", params.tariffKey],
+      ["client_group_key", params.clientGroupKey],
+      ["payment_method_key", params.paymentMethodKey],
+      ["operation_type", params.operationType],
+      ["category_key", params.categoryKey],
+      ["product_key", params.productKey],
+      ["operator_key", params.operatorKey],
+    ];
+    for (const [key, value] of filters) if (value) query.set(key, value);
+    return query;
+  }
+
   async downloadAnalyticsCsv(startAt: string, endAt: string, limit = 10): Promise<Blob> {
     const query = new URLSearchParams({ start_at: startAt, end_at: endAt, limit: String(limit) });
     return this.requestBlob(`/analytics/overview.csv?${query}`);
@@ -859,16 +975,16 @@ export class GameClubApi {
     });
   }
 
-  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  private async request<T>(path: string, init: RequestInit = {}, retry = true, baseUrl = this.baseUrl): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Content-Type", "application/json");
     if (this.accessToken) {
       headers.set("Authorization", `Bearer ${this.accessToken}`);
     }
-    const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
+    const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
     if ((response.status === 401 || response.status === 403) && retry && this.refreshToken && path !== "/auth/refresh") {
       if (await this.refreshAccessToken()) {
-        return this.request<T>(path, init, false);
+        return this.request<T>(path, init, false, baseUrl);
       }
     } else if ((response.status === 401 || response.status === 403) && (this.accessToken || this.refreshToken)) {
       this.clearSession(true);

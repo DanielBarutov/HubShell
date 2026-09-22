@@ -153,9 +153,9 @@ def create_router(
         snapshots_by_workstation_id: dict[uuid.UUID, SessionSnapshot] = {}
         if session_service is not None:
             for active_session in await session_service.list(active_only=True):
-                snapshots_by_workstation_id[active_session.workstation_id] = (
-                    await session_service.snapshot(active_session.id)
-                )
+                snapshots_by_workstation_id[
+                    active_session.workstation_id
+                ] = await session_service.snapshot(active_session.id)
         return [
             WorkstationResponse.from_domain(
                 item,

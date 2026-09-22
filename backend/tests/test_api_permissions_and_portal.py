@@ -9,6 +9,7 @@ from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
 
+
 async def test_cash_correction_requires_separate_permission() -> None:
     """
     Проверяет поведение публичного API в заявленном сценарии.

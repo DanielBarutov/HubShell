@@ -10,10 +10,32 @@ from gameclub_backend.infrastructure.audit_memory import InMemoryAuditRepository
 from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
 from gameclub_backend.infrastructure.database import EngineProvider
 from gameclub_backend.infrastructure.resources import InfrastructureResources
-from gameclub_backend.modules.analytics.application.ports import AnalyticsRepository
+from gameclub_backend.modules.analytics.application.finance import FinanceAnalyticsService
+from gameclub_backend.modules.analytics.application.ports import (
+    AnalyticsRepository,
+    FinanceAnalyticsRepository,
+)
+from gameclub_backend.modules.analytics.application.read_v2 import AnalyticsReadService
 from gameclub_backend.modules.analytics.application.service import AnalyticsService
+from gameclub_backend.modules.analytics.heavy_memory import InMemoryAnalyticsHeavyRepository
+from gameclub_backend.modules.analytics.heavy_postgres import PostgresAnalyticsHeavyRepository
+from gameclub_backend.modules.analytics.infrastructure.finance_memory import (
+    InMemoryFinanceAnalyticsRepository,
+)
+from gameclub_backend.modules.analytics.infrastructure.finance_postgres import (
+    PostgresFinanceAnalyticsRepository,
+)
 from gameclub_backend.modules.analytics.infrastructure.memory import InMemoryAnalyticsRepository
 from gameclub_backend.modules.analytics.infrastructure.postgres import PostgresAnalyticsRepository
+from gameclub_backend.modules.analytics.infrastructure.read_memory import (
+    InMemoryAnalyticsReadRepository,
+)
+from gameclub_backend.modules.analytics.infrastructure.read_postgres import (
+    PostgresAnalyticsReadRepository,
+)
+from gameclub_backend.modules.analytics.projection import AnalyticsProjectionService
+from gameclub_backend.modules.analytics.read_v2 import AnalyticsReadRepository
+from gameclub_backend.modules.analytics.reporting import ReportJobService
 from gameclub_backend.modules.billing.application.ports import (
     ChargeReconciliationRepository,
     ChargeRepository,
@@ -188,6 +210,10 @@ class ApplicationServices:
     sales: ProductSaleService
     payment_methods: PaymentMethodService
     analytics: AnalyticsService
+    finance_analytics: FinanceAnalyticsService
+    analytics_read_v2: AnalyticsReadService
+    analytics_projection: AnalyticsProjectionService
+    report_jobs: ReportJobService
     session_transfers: SessionTransferService
     client_portal: ClientPortalService
     command_service: WorkstationCommandService
@@ -202,6 +228,8 @@ def build_application_services(
         return resources.engine
 
     postgres_engine_provider: EngineProvider = engine_provider
+    analytics_read_repository: AnalyticsReadRepository
+    analytics_heavy_repository: InMemoryAnalyticsHeavyRepository | PostgresAnalyticsHeavyRepository
     if settings.postgres_dsn:
         workstation_repository: WorkstationRepository = PostgresWorkstationRepository(
             postgres_engine_provider
@@ -257,7 +285,12 @@ def build_application_services(
         analytics_repository: AnalyticsRepository = PostgresAnalyticsRepository(
             postgres_engine_provider
         )
+        finance_repository: FinanceAnalyticsRepository = PostgresFinanceAnalyticsRepository(
+            postgres_engine_provider
+        )
+        analytics_read_repository = PostgresAnalyticsReadRepository(postgres_engine_provider)
         audit_repository: AuditRepository = PostgresAuditRepository(postgres_engine_provider)
+        analytics_heavy_repository = PostgresAnalyticsHeavyRepository(postgres_engine_provider)
     else:
         workstation_repository = InMemoryWorkstationRepository()
         workstation_group_repository = InMemoryWorkstationGroupRepository()
@@ -281,7 +314,10 @@ def build_application_services(
         transfer_repository = InMemorySessionTransferRepository()
         offline_repository = InMemoryOfflineReplayRepository()
         analytics_repository = InMemoryAnalyticsRepository()
+        finance_repository = InMemoryFinanceAnalyticsRepository()
+        analytics_read_repository = InMemoryAnalyticsReadRepository()
         audit_repository = InMemoryAuditRepository()
+        analytics_heavy_repository = InMemoryAnalyticsHeavyRepository()
 
     workstation_cache = (
         RedisWorkstationSnapshotCache(lambda: resources.redis)
@@ -373,6 +409,10 @@ def build_application_services(
     )
     payment_methods = PaymentMethodService(payment_method_repository)
     analytics = AnalyticsService(analytics_repository)
+    finance_analytics = FinanceAnalyticsService(finance_repository)
+    analytics_read_v2 = AnalyticsReadService(analytics_read_repository)
+    analytics_projection = AnalyticsProjectionService(analytics_heavy_repository)
+    report_jobs = ReportJobService(analytics_heavy_repository)
     command_service = WorkstationCommandService(
         command_repository,
         workstations=workstation_repository,
@@ -418,6 +458,10 @@ def build_application_services(
         sales=sales,
         payment_methods=payment_methods,
         analytics=analytics,
+        finance_analytics=finance_analytics,
+        analytics_read_v2=analytics_read_v2,
+        analytics_projection=analytics_projection,
+        report_jobs=report_jobs,
         session_transfers=session_transfers,
         client_portal=client_portal,
         command_service=command_service,

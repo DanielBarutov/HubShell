@@ -38,6 +38,7 @@ async def test_cash_shift_schedule_opens_and_closes_idempotently() -> None:
     Проверяет сценарий «test_cash_shift_schedule_opens_and_closes_idempotently» и подтверждает
     ожидаемый публичный результат согласно соответствующему бизнес-правилу.
     """
+
     class FixedClock:
         def __init__(self) -> None:
             self.current = datetime.datetime(2026, 8, 28, 6, 59, tzinfo=datetime.UTC)
