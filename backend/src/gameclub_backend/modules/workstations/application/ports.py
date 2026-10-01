@@ -62,6 +62,11 @@ class WorkstationSnapshotCache(typing.Protocol):
         """Remove the snapshot after a workstation mutation."""
 
 
+class ActiveWorkstationSessionReader(typing.Protocol):
+    async def get_active_for_workstation(self, workstation_id: uuid.UUID) -> typing.Any | None:
+        """Return an active session when a workstation mode cannot be changed."""
+
+
 class WorkstationCommandRepository(typing.Protocol):
     async def get(self, command_id: uuid.UUID) -> WorkstationCommand | None:
         """Return a command by ID."""

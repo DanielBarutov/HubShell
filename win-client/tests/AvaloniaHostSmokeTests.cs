@@ -24,7 +24,7 @@ public sealed class AvaloniaHostSmokeTests
 
         var window = new MainWindow();
 
-        Assert.Equal("HubShell client — Linux developer host", window.Title);
+        Assert.Equal("HubShell V2 client — Linux developer host", window.Title);
         Assert.IsType<MainViewModel>(window.DataContext);
         Assert.True(((MainViewModel)window.DataContext!).IsAccessGateVisible);
         Assert.Equal(390, window.MinWidth);

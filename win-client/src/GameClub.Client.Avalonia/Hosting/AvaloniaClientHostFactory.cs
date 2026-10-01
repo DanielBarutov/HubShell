@@ -2,7 +2,6 @@ namespace GameClub.Client.Avalonia.Hosting;
 
 /// <summary>
 /// Process startup selects the composition before Avalonia creates App.
-/// The default remains the explicit loopback-only Linux developer host.
 /// </summary>
 public static class AvaloniaClientHostFactory
 {
@@ -15,5 +14,5 @@ public static class AvaloniaClientHostFactory
     }
 
     public static IClientHost Create() => _create?.Invoke()
-        ?? new Development.LocalBackendClientHost();
+        ?? new Development.V2LinuxClientHost();
 }

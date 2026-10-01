@@ -4,12 +4,17 @@ import uuid
 from fastapi import APIRouter, Depends, Header, Query, status
 from pydantic import BaseModel, Field
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
 from gameclub_backend.modules.client_groups.domain import ClientGroup
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
+from gameclub_backend.modules.eventing_v2.application.deposit import (
+    V2DepositCreditCommand,
+    V2DepositCreditService,
+)
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.presentation.http.auth import require_permissions
 
@@ -36,6 +41,16 @@ class TopUpRequest(BaseModel):
     bonus_amount: int = Field(default=0, ge=0)
     reason: str = Field(min_length=1, max_length=255)
     payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class V2DepositRequest(BaseModel):
+    session_id: uuid.UUID
+    device_id: str = Field(min_length=1, max_length=128)
+    amount_cents: int = Field(gt=0)
+    currency: str = Field(min_length=3, max_length=3)
+    reason: str = Field(min_length=1, max_length=255)
+    payment_parts: list["PaymentPartRequest"] = Field(min_length=1)
+    cash_shift_id: uuid.UUID | None = None
 
 
 class PaymentPartRequest(BaseModel):
@@ -116,6 +131,18 @@ class TopUpResponse(BaseModel):
     idempotency_key: str
 
 
+class V2DepositResponse(BaseModel):
+    payment_operation_id: uuid.UUID
+    balance_operation_id: uuid.UUID
+    client_delivery_event_id: uuid.UUID
+    confirmed_domain_event_id: uuid.UUID
+    amount_delta_cents: int
+    currency: str
+    accepted_at: str
+    delivery_status: str = "pending_delivery"
+    is_duplicate: bool
+
+
 class BalanceOperationResponse(BaseModel):
     id: uuid.UUID
     client_id: uuid.UUID
@@ -146,7 +173,10 @@ class BalanceOperationResponse(BaseModel):
         )
 
 
-def create_router(service: ClientService) -> APIRouter:
+def create_router(
+    service: ClientService,
+    v2_deposit_credits: V2DepositCreditService | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/v1/clients", tags=["clients"])
 
     @router.get("", response_model=list[ClientResponse])
@@ -232,6 +262,57 @@ def create_router(service: ClientService) -> APIRouter:
             client=ClientResponse.from_domain(client),
             operation_id=operation.id,
             idempotency_key=operation.idempotency_key,
+        )
+
+    @router.post("/{client_id}/v2-deposits", response_model=V2DepositResponse)
+    async def create_v2_deposit(
+        client_id: uuid.UUID,
+        body: V2DepositRequest,
+        principal: Operator,
+        idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
+    ) -> V2DepositResponse:
+        if v2_deposit_credits is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "V2 deposit service is not configured",
+            )
+        payment_operation_id = uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"gameclub:v2-deposit:{client_id}:{idempotency_key}",
+        )
+        try:
+            result = await v2_deposit_credits.apply(
+                V2DepositCreditCommand(
+                    payment_operation_id=payment_operation_id,
+                    client_id=client_id,
+                    session_id=body.session_id,
+                    device_id=body.device_id,
+                    amount_delta_cents=body.amount_cents,
+                    currency=body.currency,
+                    reason=body.reason,
+                    actor_id=principal.subject_id,
+                    payment_parts=tuple(
+                        PaymentPart(
+                            method=part.method,
+                            amount_cents=part.amount_cents,
+                            reference=part.reference,
+                        )
+                        for part in body.payment_parts
+                    ),
+                    cash_shift_id=body.cash_shift_id,
+                )
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        return V2DepositResponse(
+            payment_operation_id=result.payment_operation_id,
+            balance_operation_id=result.balance_operation_id,
+            client_delivery_event_id=result.client_delivery_event_id,
+            confirmed_domain_event_id=result.confirmed_domain_event_id,
+            amount_delta_cents=result.amount_delta_cents,
+            currency=result.currency,
+            accepted_at=result.accepted_at.isoformat(),
+            is_duplicate=result.is_duplicate,
         )
 
     return router

@@ -28,6 +28,18 @@ class ClientGroupService:
     async def list(self) -> list[ClientGroup]:
         return await self._repository.list()
 
+    async def get(self, group_id: str) -> ClientGroup:
+        group = await self._repository.get(group_id.strip().lower())
+        if group is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Client group not found")
+        return group
+
+    async def get_default(self) -> ClientGroup:
+        group = await self._repository.get_default()
+        if group is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Default client group not found")
+        return group
+
     async def create(
         self,
         id: str,

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace GameClub.Client.Tests;
 
-public sealed class LocalAvaloniaBackendIntegrationTests
+public sealed class V2AvaloniaBackendIntegrationTests
 {
     [Fact]
     public async Task RegistersThroughTheLocalBackendAndOpensThePortal()
@@ -16,7 +16,7 @@ public sealed class LocalAvaloniaBackendIntegrationTests
             return;
         }
 
-        await using var host = new LocalBackendClientHost();
+        await using var host = new V2LinuxClientHost();
         await host.StartAsync();
 
         var viewModel = host.ViewModel;

@@ -1,15 +1,15 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using GameClub.Client.Application.Ports;
+using DevicesV2 = GameClub.Client.Contracts.Devices.V2;
+using Grpc.Core;
+using Grpc.Net.Client;
 
 namespace GameClub.Client.Infrastructure;
 
 public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
 {
-    private readonly HttpClient _httpClient;
-    private readonly bool _ownsHttpClient;
-    private readonly Uri _enrollmentEndpoint;
+    private const int MaxEnrollmentMacAddresses = 16;
+    private readonly IDeviceEnrollmentGateway _gateway;
+    private readonly IDisposable? _ownedGateway;
     private readonly IReadOnlyList<string> _macAddresses;
     private readonly string _installationId;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -18,18 +18,20 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
     private DateTimeOffset _expiresAt;
 
     public DeviceEnrollmentTokenProvider(
-        Uri authAddress,
+        Uri grpcAddress,
         string environment,
-        HttpClient? httpClient = null)
+        IDeviceEnrollmentGateway? gateway = null,
+        IReadOnlyList<string>? macAddresses = null,
+        string? installationId = null)
     {
-        ArgumentNullException.ThrowIfNull(authAddress);
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        _ownsHttpClient = httpClient is null;
-        _enrollmentEndpoint = new Uri(
-            EndpointPolicy.Validate(authAddress, "GAMECLUB_AUTH_ADDRESS", environment),
-            "/api/v1/auth/device-enrollment");
-        _macAddresses = MacAddressProvider.GetActiveMacAddresses();
-        _installationId = InstallationIdentity.LoadOrCreate();
+        ArgumentNullException.ThrowIfNull(grpcAddress);
+        var endpoint = EndpointPolicy.Validate(grpcAddress, "GAMECLUB_GRPC_ADDRESS", environment);
+        _gateway = gateway ?? new GrpcDeviceEnrollmentGateway(endpoint);
+        _ownedGateway = gateway is null ? (IDisposable)_gateway : null;
+        _macAddresses = (macAddresses ?? MacAddressProvider.GetActiveMacAddresses())
+            .Take(MaxEnrollmentMacAddresses)
+            .ToArray();
+        _installationId = installationId ?? InstallationIdentity.LoadOrCreate();
     }
 
     public string? DeviceId { get; private set; }
@@ -61,26 +63,17 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
                 throw new DeviceEnrollmentPendingException();
             }
 
-            using var response = await _httpClient.PostAsJsonAsync(
-                _enrollmentEndpoint,
-                new DeviceEnrollmentRequest(_macAddresses, _installationId),
-                cancellationToken);
-            if (response.StatusCode == HttpStatusCode.Conflict)
+            DeviceEnrollmentSnapshot payload;
+            try
             {
-                throw new DeviceEnrollmentDisabledException();
+                payload = await _gateway.EnrollAsync(
+                    _macAddresses,
+                    _installationId,
+                    cancellationToken);
             }
-
-            if (response.StatusCode == HttpStatusCode.Forbidden)
+            catch (RpcException error) when (error.StatusCode == StatusCode.PermissionDenied)
             {
                 throw new DeviceEnrollmentRejectedException();
-            }
-
-            response.EnsureSuccessStatusCode();
-            var payload = await response.Content.ReadFromJsonAsync<DeviceEnrollmentResponse>(
-                cancellationToken);
-            if (payload is null)
-            {
-                throw new InvalidOperationException("Backend returned an empty enrollment response");
             }
 
             if (string.Equals(payload.State, "pending", StringComparison.OrdinalIgnoreCase))
@@ -93,13 +86,11 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
                 throw new DeviceEnrollmentDisabledException();
             }
 
-            if (!response.IsSuccessStatusCode
-                || !string.Equals(payload.State, "approved", StringComparison.OrdinalIgnoreCase)
+            if (!string.Equals(payload.State, "approved", StringComparison.OrdinalIgnoreCase)
                 || string.IsNullOrWhiteSpace(payload.AccessToken)
                 || string.IsNullOrWhiteSpace(payload.DeviceId)
                 || string.IsNullOrWhiteSpace(payload.WorkstationId))
             {
-                response.EnsureSuccessStatusCode();
                 throw new InvalidOperationException("Backend returned an invalid enrollment response");
             }
 
@@ -119,27 +110,12 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
     public void Dispose()
     {
         _refreshLock.Dispose();
-        if (_ownsHttpClient)
-        {
-            _httpClient.Dispose();
-        }
+        _ownedGateway?.Dispose();
     }
 
     private bool HasUsableToken() =>
         !string.IsNullOrWhiteSpace(_accessToken)
         && _expiresAt > DateTimeOffset.UtcNow.AddSeconds(30);
-
-    private sealed record DeviceEnrollmentRequest(
-        [property: JsonPropertyName("mac_addresses")] IReadOnlyList<string> MacAddresses,
-        [property: JsonPropertyName("installation_id")] string InstallationId);
-
-    private sealed record DeviceEnrollmentResponse(
-        [property: JsonPropertyName("state")] string State,
-        [property: JsonPropertyName("device_id")] string? DeviceId,
-        [property: JsonPropertyName("workstation_id")] string? WorkstationId,
-        [property: JsonPropertyName("name")] string? WorkstationName,
-        [property: JsonPropertyName("access_token")] string? AccessToken,
-        [property: JsonPropertyName("expires_in")] int ExpiresIn);
 
     private static class InstallationIdentity
     {
@@ -174,4 +150,62 @@ public sealed class DeviceEnrollmentTokenProvider : ITokenProvider, IDisposable
             }
         }
     }
+}
+
+public interface IDeviceEnrollmentGateway
+{
+    ValueTask<DeviceEnrollmentSnapshot> EnrollAsync(
+        IReadOnlyList<string> macAddresses,
+        string installationId,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record DeviceEnrollmentSnapshot(
+    string State,
+    string? DeviceId,
+    string? WorkstationId,
+    string? WorkstationName,
+    string? AccessToken,
+    int ExpiresIn);
+
+public sealed class GrpcDeviceEnrollmentGateway : IDeviceEnrollmentGateway, IDisposable
+{
+    private readonly GrpcChannel _channel;
+    private readonly DevicesV2.DeviceControlService.DeviceControlServiceClient _client;
+
+    public GrpcDeviceEnrollmentGateway(Uri grpcAddress)
+    {
+        if (string.Equals(grpcAddress.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+        }
+
+        _channel = GrpcChannel.ForAddress(grpcAddress);
+        _client = new DevicesV2.DeviceControlService.DeviceControlServiceClient(_channel);
+    }
+
+    public async ValueTask<DeviceEnrollmentSnapshot> EnrollAsync(
+        IReadOnlyList<string> macAddresses,
+        string installationId,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new DevicesV2.DeviceEnrollmentRequest
+        {
+            InstallationId = installationId,
+        };
+        request.MacAddresses.AddRange(macAddresses);
+        var response = await _client.EnrollAsync(
+            request,
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return new DeviceEnrollmentSnapshot(
+            response.State,
+            string.IsNullOrWhiteSpace(response.DeviceId) ? null : response.DeviceId,
+            string.IsNullOrWhiteSpace(response.WorkstationId) ? null : response.WorkstationId,
+            string.IsNullOrWhiteSpace(response.WorkstationName) ? null : response.WorkstationName,
+            string.IsNullOrWhiteSpace(response.AccessToken) ? null : response.AccessToken,
+            response.ExpiresIn);
+    }
+
+    public void Dispose() => _channel.Dispose();
 }

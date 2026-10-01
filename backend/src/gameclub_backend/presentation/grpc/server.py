@@ -12,6 +12,7 @@ from gameclub.v1 import (
     system_pb2_grpc,
     workstations_pb2_grpc,
 )
+from gameclub.v2 import device_control_service_pb2_grpc, offline_session_service_pb2_grpc
 from gameclub_backend.bootstrap import ApplicationServices, build_application_services
 from gameclub_backend.config import Settings
 from gameclub_backend.infrastructure.resources import InfrastructureResources
@@ -19,6 +20,8 @@ from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.presentation.grpc.interceptors import GrpcAuditInterceptor
 from gameclub_backend.presentation.grpc.services import (
     ClientPortalGrpcService,
+    DeviceControlGrpcService,
+    OfflineSessionGrpcService,
     ReservationGrpcService,
     SessionGrpcService,
     WorkstationGrpcService,
@@ -98,6 +101,18 @@ def create_server(
     )
     clients_pb2_grpc.add_ClientPortalServiceServicer_to_server(
         ClientPortalGrpcService(current_services.client_portal, token_service),
+        server,
+    )
+    offline_session_service_pb2_grpc.add_OfflineSessionServiceServicer_to_server(
+        OfflineSessionGrpcService(current_services.v2_offline_login, token_service),
+        server,
+    )
+    device_control_service_pb2_grpc.add_DeviceControlServiceServicer_to_server(
+        DeviceControlGrpcService(
+            current_services.workstations,
+            token_service,
+            current_services.command_service,
+        ),
         server,
     )
     reservations_pb2_grpc.add_ReservationServiceServicer_to_server(

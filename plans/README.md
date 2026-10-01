@@ -76,6 +76,7 @@ Windows сохраняют свои короткие owner-level входы в `
 | 40 | [`40-avalonia-product-flows/PLAN.md`](40-avalonia-product-flows/PLAN.md) | portable transport и перенос access-gate/portal flows на Avalonia | `in_progress` |
 | 43 | [`43-manager-maintenance-hotkey/PLAN.md`](43-manager-maintenance-hotkey/PLAN.md) | менеджерский maintenance route и `Ctrl+Alt+P` | `in_progress` |
 | 44 | [`44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md) | сводный backlog фиксов, фич и UI-правок из `fixes.md` | `in_progress` |
+| 46 | [`46-v2-offline-event-platform/PLAN.md`](46-v2-offline-event-platform/PLAN.md) | V2: автономная сессия, Kafka inbox/outbox, финансовая сверка, аналитика и Grafana | `in_progress` |
 
 Статусы:
 
@@ -125,6 +126,16 @@ backend/PLAN.md
 │   ├── plans/31-settlement-reconciliation
 │   ├── plans/35-frontend-contract-consumers
 │   └── plans/36-windows-client-contract-consumers
+├── plans/46-v2-offline-event-platform
+│   ├── 00-contracts-decisions
+│   ├── 01-kafka-event-contracts
+│   ├── 02-client-local-ledger
+│   ├── 03-server-reconciliation
+│   ├── 04-deposit-payments
+│   ├── 05-analytics-domain-events
+│   ├── 06-observability-grafana
+│   ├── 07-migration-rollout
+│   └── 08-verification-evidence
 ├── frontend/PLAN.md
 └── win-client/PLAN.md
 ```

@@ -7,10 +7,12 @@ import type {
   BackendGuest,
   BackendBalanceOperation,
   BackendPaymentPart,
+  BackendV2Deposit,
   BackendEntitlement,
   BackendGuestSessionPayment,
   BackendAuditEvent,
   BackendCommand,
+  BackendV2DeviceCommand,
   BackendTariff,
   BackendDiscountRule,
   BackendQuote,
@@ -60,6 +62,7 @@ export class ApiError extends Error {
 export class GameClubApi {
   private readonly baseUrl: string;
   private readonly analyticsV2BaseUrl: string;
+  private readonly v2BaseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private refreshInFlight: Promise<boolean> | null = null;
@@ -69,6 +72,7 @@ export class GameClubApi {
   constructor(baseUrl = import.meta.env.VITE_API_URL ?? "/api/v1") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.analyticsV2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
+    this.v2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
   }
 
   async login(username: string, password: string): Promise<void> {
@@ -152,7 +156,12 @@ export class GameClubApi {
     });
   }
 
-  async updateWorkstation(workstationId: string, payload: { name: string; mac_address: string | null; group_id: string | null; position: number | null }): Promise<BackendWorkstation> {
+  async updateWorkstation(workstationId: string, payload: {
+    name: string;
+    mac_address: string | null;
+    group_id: string | null;
+    position: number | null;
+  }): Promise<BackendWorkstation> {
     return this.request<BackendWorkstation>(`/workstations/${workstationId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
@@ -388,6 +397,23 @@ export class GameClubApi {
     return this.request<BackendCommand>(`/workstations/${workstationId}/commands/${commandId}`);
   }
 
+  async dispatchV2DeviceCommand(
+    workstationId: string,
+    commandType: BackendV2DeviceCommand["command_type"],
+    idempotencyKey: string,
+  ): Promise<BackendV2DeviceCommand> {
+    return this.request<BackendV2DeviceCommand>(
+      `/workstations/${workstationId}/device-commands`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ command_type: commandType, payload: {} }),
+      },
+      true,
+      this.v2BaseUrl,
+    );
+  }
+
   async searchClients(query: string, field: "nickname" | "phone"): Promise<BackendClient[]> {
     const normalizedQuery = field === "phone" ? normalizePhoneQuery(query) : query.trim();
     const params = new URLSearchParams({ q: normalizedQuery, field });
@@ -481,6 +507,25 @@ export class GameClubApi {
       body: JSON.stringify(payload),
     });
     return response.client;
+  }
+
+  async createV2Deposit(
+    clientId: string,
+    payload: {
+      session_id: string;
+      device_id: string;
+      amount_cents: number;
+      currency: string;
+      reason: string;
+      payment_parts: BackendPaymentPart[];
+    },
+    idempotencyKey: string,
+  ): Promise<BackendV2Deposit> {
+    return this.request<BackendV2Deposit>(`/clients/${clientId}/v2-deposits`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
   }
 
   async listClientEntitlements(clientId: string): Promise<BackendEntitlement[]> {

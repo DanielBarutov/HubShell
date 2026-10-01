@@ -23,6 +23,14 @@ public sealed class ClientSessionCoordinator
 
     public IClientPortalGateway ClientPortal => _backendClient;
 
+    /// <summary>
+    /// Доступен только в V2-совместимой transport composition. Он не является
+    /// fallback к V1 portal API.
+    /// </summary>
+    public IV2OfflineSessionGateway? V2OfflineSession => _backendClient as IV2OfflineSessionGateway;
+
+    public IV2ClientPortalGateway? V2ClientPortal => _backendClient as IV2ClientPortalGateway;
+
     public async Task QueueOfflineOperationAsync(
         SessionSnapshot session,
         OfflineOperationSnapshot operation,
@@ -155,6 +163,7 @@ public sealed class ClientSessionCoordinator
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
         Action<SessionSnapshot>? onSessionSnapshotReceived = null,
         Action<ClientConnectionState>? onConnectionStateChanged = null,
+        Action? onWorkstationDisabled = null,
         Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
@@ -196,6 +205,12 @@ public sealed class ClientSessionCoordinator
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                return;
+            }
+            catch (DeviceEnrollmentDisabledException)
+            {
+                onWorkstationDisabled?.Invoke();
+                onConnectionStateChanged?.Invoke(ClientConnectionState.Offline);
                 return;
             }
             catch (Exception)

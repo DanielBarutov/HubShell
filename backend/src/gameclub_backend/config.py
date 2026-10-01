@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     reservation_grace_period_minutes: int = 15
     reservation_sweep_interval_seconds: int = 60
     billing_reconciliation_interval_seconds: int = 60
+    kafka_bootstrap_servers: str | None = None
+    v2_snapshot_signing_key_id: str | None = None
+    v2_snapshot_signing_private_key_b64: str | None = None
+    v2_snapshot_policy_version: str = "v2-local-ledger-1"
+    v2_observability_enabled: bool = False
+    v2_metrics_port: int = 9108
+    v2_client_facts_metrics_port: int = 9109
+    v2_confirmed_analytics_metrics_port: int = 9110
+    otel_exporter_otlp_endpoint: str | None = None
 
 
 @functools.lru_cache

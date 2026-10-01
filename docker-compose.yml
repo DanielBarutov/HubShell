@@ -26,8 +26,53 @@ x-backend-environment: &backend-environment
   GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES: ${GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES:-15}
   GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS: ${GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS:-60}
   GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS: ${GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS:-60}
+  GAMECLUB_KAFKA_BOOTSTRAP_SERVERS: ${GAMECLUB_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
 
 services:
+  kafka:
+    # Локальный single-node KRaft. Для production нужны несколько узлов и TLS/SASL/ACL.
+    image: apache/kafka:4.3.1
+    profiles: ["v2"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "127.0.0.1:${GAMECLUB_KAFKA_PORT:-29092}:29092"
+    volumes:
+      - gameclub-kafka-data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: unless-stopped
+
+  kafka-v2-topics:
+    image: apache/kafka:4.3.1
+    profiles: ["v2"]
+    command:
+      [
+        "bash",
+        "-ec",
+        "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.client-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.server-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.confirmed-domain-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.failed-events --partitions 3 --replication-factor 1",
+      ]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+
   steam-guest-postgres:
     image: postgres:16-alpine
     environment:
@@ -114,6 +159,141 @@ services:
         condition: service_healthy
     restart: "no"
 
+  v2-server-outbox:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles: ["v2"]
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_event_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_METRICS_PORT: 9108
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  v2-client-facts:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles: ["v2"]
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_client_facts_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_CLIENT_FACTS_METRICS_PORT: 9109
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  v2-confirmed-analytics:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    profiles: ["v2"]
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_confirmed_analytics_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_CONFIRMED_ANALYTICS_METRICS_PORT: 9110
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.122.1
+    profiles: ["v2"]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["v2"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - gameclub-prometheus-data:/prometheus
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.3
+    profiles: ["v2"]
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./deploy/observability/loki.yml:/etc/loki/config.yml:ro
+      - gameclub-loki-data:/loki
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    profiles: ["v2"]
+    command: ["-config.file=/etc/tempo/config.yml"]
+    volumes:
+      - ./deploy/observability/tempo.yml:/etc/tempo/config.yml:ro
+      - gameclub-tempo-data:/var/tempo
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.7.5
+    profiles: ["v2"]
+    command: ["run", "/etc/alloy/config.river", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./deploy/observability/alloy.river:/etc/alloy/config.river:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.3.2
+    profiles: ["v2"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GAMECLUB_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GAMECLUB_GRAFANA_ADMIN_PASSWORD:-change-me-locally}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:${GAMECLUB_GRAFANA_PORT:-3300}:3000"
+    volumes:
+      - gameclub-grafana-data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
   backend-http:
     build:
       context: ./backend
@@ -145,6 +325,8 @@ services:
     command: ["python", "-m", "gameclub_backend.main"]
     environment:
       <<: *backend-environment
+      GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID: ${GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID:-}
+      GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64: ${GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64:-}
     ports:
       - "${GAMECLUB_BIND_HOST:-0.0.0.0}:${GAMECLUB_GRPC_PORT:-51051}:51051"
     depends_on:
@@ -167,6 +349,22 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: ["dramatiq", "gameclub_backend.jobs.reservations", "gameclub_backend.jobs.billing", "gameclub_backend.jobs.cash_shifts", "--processes", "1", "--threads", "4", "--queues", "reservations", "billing", "cash-shifts"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  analytics-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["dramatiq", "gameclub_backend.jobs.reports", "--processes", "1", "--threads", "2", "--queues", "analytics-projection", "analytics-reports"]
     environment:
       <<: *backend-environment
     depends_on:
@@ -231,6 +429,11 @@ services:
     restart: unless-stopped
 
 volumes:
+  gameclub-grafana-data:
+  gameclub-kafka-data:
+  gameclub-loki-data:
   gameclub-postgres-data:
+  gameclub-prometheus-data:
   gameclub-redis-data:
   steam-guest-postgres-data:
+  gameclub-tempo-data:

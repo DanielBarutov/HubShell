@@ -6,7 +6,6 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using GameClub.Client.Avalonia.Development;
 using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Presentation;
 
@@ -23,7 +22,7 @@ public partial class MainWindow : Window
     private bool _normalizingPhone;
 
     public MainWindow()
-        : this(new LocalBackendClientHost())
+        : this(AvaloniaClientHostFactory.Create())
     {
     }
 
@@ -179,9 +178,11 @@ public partial class MainWindow : Window
 
     private async void SetPortalPassword(object? sender, RoutedEventArgs args)
     {
-        await ViewModel.SetPortalPasswordAsync();
-        ClearTextBox("PortalPasswordSetupBox");
-        ClearTextBox("PortalPasswordSetupConfirmationBox");
+        if (await ViewModel.SetPortalPasswordAsync())
+        {
+            ClearTextBox("PortalPasswordSetupBox");
+            ClearTextBox("PortalPasswordSetupConfirmationBox");
+        }
     }
 
     private void OpenManagerLogin(object? sender, RoutedEventArgs args) =>

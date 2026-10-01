@@ -8,9 +8,14 @@ from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.billing.domain import MeterStatus
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.domain import Session, SessionSnapshot, SessionStatus
+from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("sessions.manage"))]
+CutoverOperator = typing.Annotated[
+    Principal,
+    Depends(require_permissions("sessions.manage", "workstations.manage")),
+]
 QueryWorkstationId = typing.Annotated[uuid.UUID | None, Query()]
 QueryActiveOnly = typing.Annotated[bool, Query()]
 
@@ -30,6 +35,11 @@ class StartSessionRequest(BaseModel):
 
 class InterruptSessionRequest(BaseModel):
     reason: str = Field(default="Клиент завершил сессию раньше", min_length=1, max_length=256)
+
+
+class CutoverTerminationResponse(BaseModel):
+    terminated_sessions: list["SessionResponse"]
+    migrated_workstation_ids: list[uuid.UUID]
 
 
 class SessionResponse(BaseModel):
@@ -238,7 +248,10 @@ class SessionSnapshotResponse(BaseModel):
         )
 
 
-def create_router(service: SessionService) -> APIRouter:
+def create_router(
+    service: SessionService,
+    workstations: WorkstationService,
+) -> APIRouter:
     router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
     @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
@@ -263,6 +276,30 @@ def create_router(service: SessionService) -> APIRouter:
         del principal
         sessions = await service.list(workstation_id, active_only)
         return [SessionResponse.from_domain(item) for item in sessions]
+
+    @router.post("/cutover/terminate-v1", response_model=CutoverTerminationResponse)
+    async def terminate_v1_sessions_for_cutover(
+        principal: CutoverOperator,
+        confirmation: typing.Annotated[
+            str,
+            Header(alias="X-Cutover-Confirmation", min_length=1),
+        ],
+    ) -> CutoverTerminationResponse:
+        """Одноразовый test-contour шаг перед V2-only release."""
+        del principal
+        if confirmation != "terminate-v1-sessions":
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Explicit V1 cutover confirmation is required",
+            )
+        terminated = await service.terminate_active_v1_sessions_for_cutover()
+        migrated = await workstations.migrate_all_to_v2_for_cutover()
+        return CutoverTerminationResponse(
+            terminated_sessions=[SessionResponse.from_domain(item) for item in terminated],
+            migrated_workstation_ids=[item.id for item in migrated],
+        )
 
     @router.get("/{session_id}/snapshot", response_model=SessionSnapshotResponse)
     async def get_session_snapshot(

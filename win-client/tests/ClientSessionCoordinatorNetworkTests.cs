@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
 using GameClub.Client.Domain;
+using GameClub.Client.Infrastructure;
 using Xunit;
 
 namespace GameClub.Client.Tests;
@@ -38,6 +39,29 @@ public sealed class ClientSessionCoordinatorNetworkTests
         }
 
         Assert.Equal(new[] { ClientConnectionState.Reconnecting }, states);
+        Assert.Equal(0, backend.StopSessionCalls);
+    }
+
+    [Fact]
+    public async Task DisabledWorkstationLocksAccessInsteadOfTreatingItAsReconnect()
+    {
+        var states = new List<ClientConnectionState>();
+        var disabled = 0;
+        var backend = new NetworkBoundaryBackend
+        {
+            SendHeartbeat = _ => throw new DeviceEnrollmentDisabledException(),
+        };
+        await using var coordinator = new ClientSessionCoordinator(backend);
+
+        await coordinator.RunWorkstationHeartbeatLoopAsync(
+            "device-1",
+            "v2",
+            ["v2.local-ledger"],
+            onConnectionStateChanged: states.Add,
+            onWorkstationDisabled: () => disabled++);
+
+        Assert.Equal(1, disabled);
+        Assert.Equal(new[] { ClientConnectionState.Offline }, states);
         Assert.Equal(0, backend.StopSessionCalls);
     }
 

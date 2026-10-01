@@ -16,7 +16,11 @@ namespace GameClub.Client.Windows;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsClientHost : IClientHost
 {
-    private readonly DeviceEnrollmentTokenProvider _enrollment;
+    private readonly V2DeviceEnrollmentTokenProvider _enrollment;
+    private readonly V2LocalLedgerRecoveryCoordinator _v2Recovery;
+    private readonly HttpClient? _v2EventsHttpClient;
+    private readonly V2ClientOutboxWorker? _v2OutboxWorker;
+    private readonly V2ServerEventWorker? _v2ServerEventWorker;
     private readonly IWorkstationPowerController _powerController;
     private readonly WindowsClientWindowAdapter _windowAdapter;
     private bool _started;
@@ -24,18 +28,52 @@ public sealed class WindowsClientHost : IClientHost
     public WindowsClientHost()
     {
         var environment = DeploymentSettings.EnvironmentName;
-        _enrollment = new DeviceEnrollmentTokenProvider(DeploymentSettings.AuthAddress, environment);
+        _enrollment = new V2DeviceEnrollmentTokenProvider(DeploymentSettings.GrpcAddress, environment);
         _powerController = new WindowsWorkstationPowerController();
         _windowAdapter = new WindowsClientWindowAdapter();
+        var backend = new V2GrpcBackendClient(DeploymentSettings.GrpcAddress, _enrollment);
+        var v2Ledger = new V2LocalLedgerCoordinator(new ProtectedV2LocalLedgerStore());
+        _v2Recovery = new V2LocalLedgerRecoveryCoordinator(v2Ledger);
+        Uri? v2ServerEventsEndpoint = null;
+        if (DeploymentSettings.V2EventsHttpAddress is { } eventsAddress)
+        {
+            _v2EventsHttpClient = new HttpClient();
+            _v2OutboxWorker = new V2ClientOutboxWorker(
+                new V2ClientOutboxPublisher(
+                    v2Ledger,
+                    new V2HttpClientEventPublisher(
+                        _v2EventsHttpClient,
+                        eventsAddress,
+                        _enrollment)));
+            v2ServerEventsEndpoint = new Uri(eventsAddress, "/api/v2/events/server");
+        }
+        var v2Login = new V2OfflineLoginCoordinator(backend, v2Ledger);
+        var v2Verifier = new V2Ed25519OfflineSnapshotSignatureVerifier(
+            DeploymentSettings.V2SnapshotPublicKeys);
         ViewModel = new MainViewModel(
             new ClientSessionCoordinator(
-                new GrpcBackendClient(DeploymentSettings.GrpcAddress, _enrollment),
+                backend,
                 new JsonlOfflineJournal()),
             new EnvironmentAccessCredentialVerifier(environment),
-            clientVersion: "avalonia-windows",
-            capabilities: ["commands.v1", "display-lock.v1", "theme.v1", "sessions.v1", "widget.v1"],
+            clientVersion: "avalonia-windows-v2",
+            capabilities: ["display-lock.v2", "v2.local-ledger", "v2.device-commands", "widget.v2"],
             powerController: _powerController,
-            timeNotificationPresenter: _windowAdapter);
+            timeNotificationPresenter: _windowAdapter,
+            v2OfflineLogin: v2Login,
+            v2Ledger: v2Ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(v2Ledger),
+            v2SignatureVerifier: v2Verifier);
+        if (v2ServerEventsEndpoint is not null)
+        {
+            _v2ServerEventWorker = new V2ServerEventWorker(
+                new V2HttpServerEventConsumer(
+                    _v2EventsHttpClient!,
+                    v2ServerEventsEndpoint,
+                    _enrollment,
+                    new V2ServerEventProcessor(v2Ledger)),
+                onFailure: ViewModel.ApplyV2ServerEventTransportFailure,
+                onPoll: result => ViewModel.ApplyV2ServerEventPollResult(result.RejectedCount));
+        }
     }
 
     public MainViewModel ViewModel { get; }
@@ -65,6 +103,7 @@ public sealed class WindowsClientHost : IClientHost
     {
         WindowAdapter?.Dispose();
         await ViewModel.DisposeAsync();
+        _v2EventsHttpClient?.Dispose();
         _enrollment.Dispose();
     }
 
@@ -86,6 +125,15 @@ public sealed class WindowsClientHost : IClientHost
             _enrollment.DeviceId,
             _enrollment.WorkstationId,
             _enrollment.WorkstationName);
+        await ViewModel.RecoverV2SessionAsync(_v2Recovery, ViewModel.LifetimeToken);
+        if (_v2OutboxWorker is not null)
+        {
+            ViewModel.TrackBackgroundTask(_v2OutboxWorker.RunAsync(ViewModel.LifetimeToken));
+        }
+        if (_v2ServerEventWorker is not null)
+        {
+            ViewModel.TrackBackgroundTask(_v2ServerEventWorker.RunAsync(ViewModel.LifetimeToken));
+        }
         var deviceId = ViewModel.DeviceId;
         if (string.IsNullOrWhiteSpace(deviceId))
         {
@@ -99,16 +147,12 @@ public sealed class WindowsClientHost : IClientHost
                 ViewModel.ApplyManagerPasswordVerifier,
                 ViewModel.ApplyLockdownPolicy,
                 ViewModel.ApplySessionSnapshotFromHeartbeat,
-                ViewModel.ApplyHeartbeatConnectionState));
+                ViewModel.ApplyHeartbeatConnectionState,
+                () => ViewModel.LockClient("Место отключено администратором")));
         ViewModel.TrackBackgroundTask(
             ViewModel.RunCommandLoopAsync(
-                new WindowsCommandExecutor(
-                    deviceId,
-                    ViewModel.BackendClient,
-                    ViewModel.ApplyTheme,
+                new V2WindowsCommandExecutor(
                     _powerController,
-                    ViewModel.RegisterSessionStarted,
-                    ViewModel.RegisterSessionStopped,
-                    () => ViewModel.LockClient())));
+                    reason => ViewModel.LockClient(reason))));
     }
 }

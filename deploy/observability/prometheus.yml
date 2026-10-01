@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  - job_name: v2-server-outbox
+    static_configs:
+      - targets: ["v2-server-outbox:9108"]
+
+  - job_name: v2-client-facts
+    static_configs:
+      - targets: ["v2-client-facts:9109"]
+
+  - job_name: v2-confirmed-analytics
+    static_configs:
+      - targets: ["v2-confirmed-analytics:9110"]

@@ -5,6 +5,7 @@ import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.workstations.application.ports import (
+    ActiveWorkstationSessionReader,
     Clock,
     WorkstationGroupRepository,
     WorkstationRepository,
@@ -12,6 +13,7 @@ from gameclub_backend.modules.workstations.application.ports import (
 )
 from gameclub_backend.modules.workstations.domain import (
     Workstation,
+    WorkstationSessionMode,
     WorkstationStatus,
     normalize_mac_address,
 )
@@ -34,6 +36,7 @@ class WorkstationService:
         groups: WorkstationGroupRepository | None = None,
         cache: WorkstationSnapshotCache | None = None,
         cache_ttl_seconds: int = 20,
+        active_sessions: ActiveWorkstationSessionReader | None = None,
     ) -> None:
         self._repository = repository
         self._clock = clock or UtcClock()
@@ -42,6 +45,7 @@ class WorkstationService:
         self._groups = groups
         self._cache = cache
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._active_sessions = active_sessions
 
     async def register(
         self,
@@ -52,6 +56,7 @@ class WorkstationService:
         client_version: str | None = None,
         capabilities: typing.Sequence[str] = (),
         mac_address: str | None = None,
+        session_mode: WorkstationSessionMode = WorkstationSessionMode.V1_SERVER_OWNED,
     ) -> Workstation:
         try:
             normalized_mac = normalize_mac_address(mac_address) if mac_address else None
@@ -71,16 +76,20 @@ class WorkstationService:
         if normalized_mac and await self._repository.get_by_mac_address(normalized_mac):
             raise ApplicationError(ErrorCode.CONFLICT, "MAC address is already assigned")
 
-        workstation = Workstation(
-            id=uuid.uuid4(),
-            device_id=normalized_device_id,
-            name=normalized_name,
-            group_id=group_id,
-            position=position,
-            client_version=client_version,
-            capabilities=self._normalize_capabilities(capabilities),
-            mac_address=normalized_mac,
-        )
+        try:
+            workstation = Workstation(
+                id=uuid.uuid4(),
+                device_id=normalized_device_id,
+                name=normalized_name,
+                group_id=group_id,
+                position=position,
+                client_version=client_version,
+                capabilities=self._normalize_capabilities(capabilities),
+                mac_address=normalized_mac,
+                session_mode=session_mode,
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
         saved = await self._with_group_theme(await self._repository.save(workstation))
         await self._invalidate_cache()
         return saved
@@ -105,6 +114,12 @@ class WorkstationService:
         await self._invalidate_cache()
         return saved
 
+    async def get_by_device_id(self, device_id: str) -> Workstation:
+        workstation = await self._repository.get_by_device_id(device_id.strip())
+        if workstation is None or workstation.archived_at is not None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        return await self._with_group_theme(workstation)
+
     async def disable(self, workstation_id: uuid.UUID, reason: str) -> Workstation:
         workstation = await self._repository.get(workstation_id)
         if workstation is None:
@@ -120,6 +135,7 @@ class WorkstationService:
         group_id: str | None,
         position: int | None,
         mac_address: str | None = None,
+        session_mode: WorkstationSessionMode | None = None,
     ) -> Workstation:
         workstation = await self._repository.get(workstation_id)
         if workstation is None or workstation.archived_at is not None:
@@ -148,12 +164,33 @@ class WorkstationService:
             and await self._groups.get(normalized_group) is None
         ):
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation group not found")
+        try:
+            selected_session_mode = (
+                WorkstationSessionMode(session_mode)
+                if session_mode is not None
+                else workstation.session_mode
+            )
+        except ValueError as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Workstation session mode is invalid",
+            ) from error
+        if (
+            selected_session_mode != workstation.session_mode
+            and self._active_sessions is not None
+            and await self._active_sessions.get_active_for_workstation(workstation_id) is not None
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Workstation session mode cannot change during an active session",
+            )
         updated = dataclasses.replace(
             workstation,
             name=normalized_name,
             group_id=normalized_group,
             position=position,
             mac_address=normalized_mac,
+            session_mode=selected_session_mode,
         )
         saved = await self._with_group_theme(await self._repository.save(updated))
         await self._invalidate_cache()
@@ -213,6 +250,35 @@ class WorkstationService:
         if workstation.archived_at is None:
             await self._repository.save(workstation.archive(self._clock.now()))
             await self._invalidate_cache()
+
+    async def migrate_all_to_v2_for_cutover(self) -> list[Workstation]:
+        """Explicit release step: make every active place V2-owned.
+
+        The caller must finish legacy sessions first. This mutation preserves
+        workstation identity, MAC binding, group and history; it changes only
+        the session-owner flag and is safe to retry after an interrupted test
+        cutover.
+        """
+        migrated: list[Workstation] = []
+        for workstation in await self._repository.list():
+            if (
+                workstation.archived_at is not None
+                or workstation.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
+            ):
+                continue
+            migrated.append(
+                await self._with_group_theme(
+                    await self._repository.save(
+                        dataclasses.replace(
+                            workstation,
+                            session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
+                        )
+                    )
+                )
+            )
+        if migrated:
+            await self._invalidate_cache()
+        return migrated
 
     async def list(self) -> list[Workstation]:
         if self._cache is not None:

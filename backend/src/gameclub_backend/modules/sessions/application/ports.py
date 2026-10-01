@@ -45,6 +45,19 @@ class SessionRepository(typing.Protocol):
         """Persist a session or its lifecycle transition."""
 
 
+class SessionTransactionWriter(typing.Protocol):
+    async def save(self, transaction: typing.Any, session: Session) -> Session:
+        """Save a session in a transaction owned by a cross-module use case."""
+
+    async def complete(
+        self,
+        transaction: typing.Any,
+        session_id: uuid.UUID,
+        ended_at: datetime.datetime,
+    ) -> Session | None:
+        """Complete one session in a transaction owned by a cross-module use case."""
+
+
 class SessionTransferRepository(typing.Protocol):
     async def get(self, offer_id: uuid.UUID) -> SessionTransferOffer | None:
         """Return a transfer offer by ID."""

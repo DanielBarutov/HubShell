@@ -6,7 +6,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
-from gameclub_backend.modules.workstations.domain import Workstation, WorkstationStatus
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    WorkstationSessionMode,
+    WorkstationStatus,
+)
 
 
 class WorkstationBase(DeclarativeBase):
@@ -22,6 +26,9 @@ class WorkstationModel(WorkstationBase):
         String(17), unique=True, index=True, nullable=True
     )
     installation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    session_mode: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=WorkstationSessionMode.V1_SERVER_OWNED.value
+    )
     name: Mapped[str] = mapped_column(String(128))
     group_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     position: Mapped[int | None] = mapped_column(nullable=True)
@@ -52,6 +59,7 @@ class WorkstationModel(WorkstationBase):
             archived_at=self.archived_at,
             mac_address=self.mac_address,
             installation_id=self.installation_id,
+            session_mode=WorkstationSessionMode(self.session_mode),
         )
 
     @classmethod
@@ -70,6 +78,7 @@ class WorkstationModel(WorkstationBase):
             archived_at=workstation.archived_at,
             mac_address=workstation.mac_address,
             installation_id=workstation.installation_id,
+            session_mode=workstation.session_mode.value,
         )
 
 
