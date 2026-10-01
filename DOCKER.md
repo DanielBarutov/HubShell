@@ -9,7 +9,11 @@
 - `backend-http` — FastAPI HTTP/BFF на host-порту `8100`;
 - `backend-grpc` — gRPC на host-порту `51051`;
 - `worker` — Dramatiq workers для no-show и billing reconciliation;
+- `meter-worker` — периодический meter для server-owned/V1-сессий;
 - `scheduler` — постановка периодических задач;
+- `kafka` и `kafka-v2-topics` — локальный Kafka KRaft и создание V2 topics;
+- `v2-client-facts`, `v2-server-outbox`, `v2-confirmed-analytics` — приём и доставка V2 Kafka-событий;
+- `otel-collector`, `prometheus`, `loki`, `tempo`, `alloy`, `grafana` — локальная наблюдаемость;
 - `frontend` — production Vite build, который nginx отдаёт на host-порту `3100` и
   проксирует `/api` в `backend-http`.
 
@@ -42,10 +46,11 @@ GAMECLUB_HTTP_PORT=8100
 GAMECLUB_GRPC_PORT=51051
 ```
 
-После этого пересоздайте только backend-контейнеры:
+После изменения переменных пересоздайте нужные сервисы; для единой пересборки
+всего стека используйте:
 
 ```bash
-docker compose up -d --force-recreate backend-http backend-grpc
+docker compose up -d --build
 docker compose ps
 ```
 
@@ -56,11 +61,11 @@ firewall; не публикуйте их в Интернет.
 Dev-оператор берётся из `.env`: по умолчанию `operator` / `change-me-locally`.
 Эти значения предназначены только для локальной разработки.
 
-Миграции запускаются отдельным контейнером до backend-сервисов. При изменении
-кода для пересборки достаточно выполнить:
+Миграции запускаются отдельным контейнером до backend-сервисов. Код и весь стек
+пересобираются одной командой из корня репозитория:
 
 ```bash
-docker compose up -d --build backend-http backend-grpc worker scheduler frontend
+docker compose up -d --build
 ```
 
 Логи и остановка:

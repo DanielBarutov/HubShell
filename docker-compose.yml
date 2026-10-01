@@ -32,7 +32,6 @@ services:
   kafka:
     # Локальный single-node KRaft. Для production нужны несколько узлов и TLS/SASL/ACL.
     image: apache/kafka:4.3.1
-    profiles: ["v2"]
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -61,7 +60,6 @@ services:
 
   kafka-v2-topics:
     image: apache/kafka:4.3.1
-    profiles: ["v2"]
     command:
       [
         "bash",
@@ -163,7 +161,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    profiles: ["v2"]
     command: ["faststream", "run", "gameclub_backend.jobs.v2_event_transport:app"]
     environment:
       <<: *backend-environment
@@ -183,7 +180,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    profiles: ["v2"]
     command: ["faststream", "run", "gameclub_backend.jobs.v2_client_facts_transport:app"]
     environment:
       <<: *backend-environment
@@ -203,7 +199,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    profiles: ["v2"]
     command: ["faststream", "run", "gameclub_backend.jobs.v2_confirmed_analytics_transport:app"]
     environment:
       <<: *backend-environment
@@ -221,7 +216,6 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.122.1
-    profiles: ["v2"]
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./deploy/observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
@@ -232,7 +226,6 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    profiles: ["v2"]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -244,7 +237,6 @@ services:
 
   loki:
     image: grafana/loki:3.5.3
-    profiles: ["v2"]
     command: ["-config.file=/etc/loki/config.yml"]
     volumes:
       - ./deploy/observability/loki.yml:/etc/loki/config.yml:ro
@@ -253,7 +245,6 @@ services:
 
   tempo:
     image: grafana/tempo:2.7.2
-    profiles: ["v2"]
     command: ["-config.file=/etc/tempo/config.yml"]
     volumes:
       - ./deploy/observability/tempo.yml:/etc/tempo/config.yml:ro
@@ -262,7 +253,6 @@ services:
 
   alloy:
     image: grafana/alloy:v1.7.5
-    profiles: ["v2"]
     command: ["run", "/etc/alloy/config.river", "--server.http.listen-addr=0.0.0.0:12345"]
     volumes:
       - ./deploy/observability/alloy.river:/etc/alloy/config.river:ro
@@ -274,7 +264,6 @@ services:
 
   grafana:
     image: grafana/grafana:12.3.2
-    profiles: ["v2"]
     environment:
       GF_SECURITY_ADMIN_USER: ${GAMECLUB_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GAMECLUB_GRAFANA_ADMIN_PASSWORD:-change-me-locally}
@@ -310,6 +299,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live', timeout=2)"]
       interval: 5s

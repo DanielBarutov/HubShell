@@ -23,6 +23,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.protobuf import (
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class V2EventPublisher(typing.Protocol):
@@ -73,9 +74,25 @@ class V2ServerOutboxPublisher:
                 await self._publisher.publish(event)
             except Exception as error:
                 await self._outbox.record_publish_failure(event, str(error))
+                logger.exception(
+                    "v2_server_outbox_event_publish_failed event_id=%s operation_id=%s "
+                    "event_type=%s topic=%s",
+                    event.event.event_id,
+                    event.event.operation_id,
+                    event.event.event_type.value,
+                    event.topic,
+                )
             else:
                 await self._outbox.mark_published(event, datetime.datetime.now(datetime.UTC))
                 published += 1
+                logger.info(
+                    "v2_server_outbox_event_published event_id=%s operation_id=%s "
+                    "event_type=%s topic=%s",
+                    event.event.event_id,
+                    event.event.operation_id,
+                    event.event.event_type.value,
+                    event.topic,
+                )
         return published
 
 
@@ -132,6 +149,16 @@ class V2ClientFactsConsumer:
 
         result = await self._handler.accept(event)
         if result.status in {V2ClientFactStatus.ACCEPTED, V2ClientFactStatus.DUPLICATE}:
+            logger.info(
+                "v2_client_fact_reconciled status=%s event_type=%s event_id=%s "
+                "operation_id=%s session_id=%s result_event_id=%s",
+                result.status.value,
+                event.event_type.value,
+                event.event_id,
+                event.operation_id,
+                event.session_id,
+                result.result_event_id,
+            )
             return result
 
         await self._rejected_events.publish_rejected(
@@ -139,8 +166,13 @@ class V2ClientFactsConsumer:
             f"reconciliation_{result.status.value}",
         )
         logger.warning(
-            "v2_client_fact_reconciliation_rejected status=%s reason=%s",
+            "v2_client_fact_reconciliation_rejected status=%s event_type=%s event_id=%s "
+            "operation_id=%s session_id=%s reason=%s",
             result.status.value,
+            event.event_type.value,
+            event.event_id,
+            event.operation_id,
+            event.session_id,
             result.message,
         )
         return result

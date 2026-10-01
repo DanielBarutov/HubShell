@@ -13,6 +13,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from gameclub_backend.application.audit import AuditEvent
 from gameclub_backend.infrastructure.audit_postgres import AuditEventModel
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.clients.domain import BalanceOperation, BalanceOperationType
+from gameclub_backend.modules.clients.infrastructure.postgres import (
+    BalanceOperationModel,
+    ClientModel,
+)
 from gameclub_backend.modules.eventing_v2.application.reconciliation import (
     V2ClientFactResult,
     V2ClientFactStatus,
@@ -198,6 +203,14 @@ class PostgresV2ClientFactReconciliationRepository:
                     )
 
                 now = datetime.datetime.now(datetime.UTC)
+                if event.event_type is V2EventType.PER_MINUTE_DEBIT:
+                    if not await self._apply_per_minute_debit(session, event, now):
+                        return V2ClientFactResult(
+                            V2ClientFactStatus.CONFLICT,
+                            event.event_id,
+                            event.operation_id,
+                            "Недостаточно средств на серверном балансе для поминутного списания",
+                        )
                 if event.event_type is V2EventType.SESSION_STOPPED:
                     if self._session_writer is not None:
                         closed_session = await self._session_writer.complete(
@@ -365,6 +378,39 @@ class PostgresV2ClientFactReconciliationRepository:
             and isinstance(tariff_id, str)
             and bool(tariff_id.strip())
         )
+
+    @staticmethod
+    async def _apply_per_minute_debit(
+        session,
+        event: V2Event,
+        occurred_at: datetime.datetime,
+    ) -> bool:
+        """Списать минуту с серверного баланса в той же транзакции, что и подтверждение факта."""
+        payload = json.loads(event.payload_json)
+        amount_cents = payload["amount_cents"]
+        client = await session.scalar(
+            select(ClientModel)
+            .where(ClientModel.id == event.client_id)
+            .with_for_update()
+        )
+        if client is None or client.balance_cents < amount_cents:
+            return False
+
+        operation = BalanceOperation(
+            id=uuid.uuid5(event.operation_id, "v2-per-minute-balance-operation"),
+            client_id=event.client_id,
+            amount_cents=-amount_cents,
+            bonus_amount=0,
+            reason=f"Поминутное списание за сессию {event.session_id}",
+            actor_id=f"v2-device:{event.device_id[:117]}",
+            idempotency_key=f"v2-per-minute-debit:{event.operation_id}",
+            created_at=event.occurred_at,
+            operation_type=BalanceOperationType.DEBIT,
+        )
+        client.balance_cents -= amount_cents
+        client.updated_at = occurred_at
+        session.add(BalanceOperationModel.from_domain(operation))
+        return True
 
     @staticmethod
     async def _save_chain(session, chain: V2SessionChain) -> None:

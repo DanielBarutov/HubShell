@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 import typing
 
 from faststream import FastStream
@@ -35,6 +36,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 POLL_INTERVAL_SECONDS = 0.5
 SERVICE_NAME = "gameclub-v2-server-outbox"
 
@@ -70,11 +72,31 @@ async def publish_server_outbox_until_stopped(
 ) -> None:
     """Периодически доставлять факты; ошибка одной записи остаётся в outbox."""
 
+    retry_delay_seconds = 1.0
+    last_idle_log_at = 0.0
     while not stop_requested.is_set():
-        published = await publisher.publish_pending()
+        try:
+            published = await publisher.publish_pending()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("v2_server_outbox_poll_failed")
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    stop_requested.wait(),
+                    timeout=retry_delay_seconds,
+                )
+            retry_delay_seconds = min(retry_delay_seconds * 2, 30.0)
+            continue
+
+        retry_delay_seconds = 1.0
         if published:
             logger.info("v2_server_outbox_published count=%s", published)
             continue
+        now = time.monotonic()
+        if now - last_idle_log_at >= 30:
+            logger.info("v2_server_outbox_idle published_count=0")
+            last_idle_log_at = now
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(stop_requested.wait(), timeout=poll_interval_seconds)
 
@@ -158,6 +180,10 @@ async def start_server_outbox_delivery() -> None:
     if _resources is None or _stop_requested is None:
         raise RuntimeError("V2 Kafka worker was not prepared before broker startup")
     publisher = create_outbox_publisher(_resources, broker)
+    logger.info(
+        "v2_server_outbox_delivery_started poll_interval_seconds=%s",
+        POLL_INTERVAL_SECONDS,
+    )
     _delivery_task = asyncio.create_task(
         publish_server_outbox_until_stopped(publisher, _stop_requested),
         name="v2-server-outbox-delivery",

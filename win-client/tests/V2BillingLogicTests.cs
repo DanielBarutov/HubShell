@@ -48,6 +48,32 @@ public sealed class V2BillingLogicTests
     }
 
     [Fact]
+    public async Task DepositDuringFreeMinutesExtendsThePaidTimeAndEachMinuteCreatesADebitFact()
+    {
+        var coordinator = await CreateCoordinatorAsync(
+            grantMinutes: 5,
+            balanceCents: 200,
+            perMinutePriceCents: 100);
+        await coordinator.ApplyBalanceCreditAsync(Guid.NewGuid(), Guid.NewGuid(), 200);
+
+        var transitions = await new V2MinuteLedgerRunner(coordinator)
+            .ConsumeDueMinutesAsync(Activation.AddMinutes(9));
+        var ledger = await coordinator.ReadLedgerAsync();
+        var debitFacts = transitions
+            .SelectMany(item => item.OutboxFacts)
+            .Where(item => item.EventType == "per_minute_debit")
+            .ToArray();
+
+        Assert.Equal(9, transitions.Count);
+        Assert.Equal(0, ledger.BalanceCents);
+        Assert.Equal(4, debitFacts.Length);
+        Assert.Equal(4, debitFacts.Select(item => item.OperationId).Distinct().Count());
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-09-30T10:09:00Z"),
+            ledger.LastConsumedMinuteUtc);
+    }
+
+    [Fact]
     public async Task RunnerCatchesUpDelayedBoundariesWithoutLosingPaidMinutes()
     {
         /// Проверяет, что после задержки таймера списываются все пропущенные платные минутные границы.

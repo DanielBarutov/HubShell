@@ -1,3 +1,5 @@
+import logging
+
 import grpc
 import pytest
 
@@ -113,3 +115,30 @@ async def test_grpc_audit_interceptor_records_failed_mutation_without_payload() 
     assert repository.events[0].outcome == "failure"
     assert repository.events[0].status_code == 13
     assert repository.events[0].request_id == "grpc-failure-01"
+
+
+async def test_grpc_interceptor_logs_unary_calls_without_logging_payload(caplog) -> None:
+    """Проверяет, что gRPC пишет метод и статус, не выводя тело запроса."""
+    interceptor = GrpcAuditInterceptor(InMemoryAuditRepository(), None)
+
+    async def continuation(_details):
+        async def behavior(request, _context):
+            return request
+
+        return grpc.unary_unary_rpc_method_handler(behavior)
+
+    method = "/gameclub.devices.v2.DeviceControlService/Heartbeat"
+    handler = await interceptor.intercept_service(
+        continuation,
+        type("Details", (), {"method": method})(),
+    )
+    assert handler is not None
+
+    with caplog.at_level(logging.INFO, logger="gameclub_backend.presentation.grpc.interceptors"):
+        await handler.unary_unary(
+            "sensitive request payload",
+            FakeContext((), grpc.StatusCode.OK),
+        )
+
+    assert f"grpc_rpc_completed method={method} status=OK" in caplog.text
+    assert "sensitive request payload" not in caplog.text

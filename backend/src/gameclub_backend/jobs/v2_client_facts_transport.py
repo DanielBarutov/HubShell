@@ -38,6 +38,7 @@ from gameclub_backend.modules.sessions.infrastructure.postgres import (
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 SERVICE_NAME = "gameclub-v2-client-facts"
 
 

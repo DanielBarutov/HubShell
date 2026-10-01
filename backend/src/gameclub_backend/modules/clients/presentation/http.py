@@ -1,3 +1,4 @@
+import logging
 import typing
 import uuid
 
@@ -19,6 +20,7 @@ from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("clients.manage"))]
+logger = logging.getLogger(__name__)
 
 
 class CreateClientRequest(BaseModel):
@@ -303,7 +305,24 @@ def create_router(
                 )
             )
         except ValueError as error:
+            logger.warning(
+                "v2_deposit_rejected client_id=%s session_id=%s device_id=%s reason=%s",
+                client_id,
+                body.session_id,
+                body.device_id,
+                str(error),
+            )
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        logger.info(
+            "v2_deposit_applied client_id=%s session_id=%s device_id=%s "
+            "payment_operation_id=%s amount_cents=%s duplicate=%s",
+            client_id,
+            body.session_id,
+            body.device_id,
+            result.payment_operation_id,
+            result.amount_delta_cents,
+            result.is_duplicate,
+        )
         return V2DepositResponse(
             payment_operation_id=result.payment_operation_id,
             balance_operation_id=result.balance_operation_id,

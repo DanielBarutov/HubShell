@@ -124,7 +124,7 @@ class BillingService:
                 active_entitlement is None
                 and self._elapsed_minutes(session.started_at, moment) >= session.login_grant_minutes
             ):
-                # A package may still be queued when the fifth free minute ends:
+                # A package may still be queued when the login grant ends:
                 # for example, after a purchase races with a worker tick. Give a
                 # compatible paid package precedence over balance exhaustion.
                 active_entitlement = await self._entitlements.activate_next_compatible(

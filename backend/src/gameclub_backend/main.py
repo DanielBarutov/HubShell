@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import signal
+import sys
 
 from gameclub_backend.bootstrap import build_application_services
 from gameclub_backend.config import get_settings
@@ -8,6 +10,11 @@ from gameclub_backend.presentation.grpc.server import create_server
 
 
 async def serve() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        stream=sys.stdout,
+    )
     settings = get_settings()
     resources = create_resources(settings)
     services = build_application_services(settings, resources)
