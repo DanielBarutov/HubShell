@@ -36,6 +36,7 @@ from gameclub_backend.modules.analytics.infrastructure.read_postgres import (
 from gameclub_backend.modules.analytics.projection import AnalyticsProjectionService
 from gameclub_backend.modules.analytics.read_v2 import AnalyticsReadRepository
 from gameclub_backend.modules.analytics.reporting import ReportJobService
+from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.modules.billing.application.ports import (
     ChargeReconciliationRepository,
     ChargeRepository,
@@ -107,6 +108,18 @@ from gameclub_backend.modules.entitlements.infrastructure.memory import (
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
 )
+from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCreditService
+from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
+from gameclub_backend.modules.eventing_v2.application.snapshot_issue import V2SnapshotIssueService
+from gameclub_backend.modules.eventing_v2.infrastructure.deposit_postgres import (
+    PostgresV2DepositCreditRepository,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_ed25519 import (
+    create_v2_snapshot_signer,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_issue_postgres import (
+    PostgresV2SnapshotIssueRepository,
+)
 from gameclub_backend.modules.notifications.application.ports import NotificationRuleRepository
 from gameclub_backend.modules.notifications.application.service import NotificationRuleService
 from gameclub_backend.modules.notifications.infrastructure.memory import (
@@ -150,7 +163,10 @@ from gameclub_backend.modules.sessions.application.ports import (
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
-from gameclub_backend.modules.sessions.infrastructure.postgres import PostgresSessionRepository
+from gameclub_backend.modules.sessions.infrastructure.postgres import (
+    PostgresSessionRepository,
+    PostgresSessionTransactionWriter,
+)
 from gameclub_backend.modules.sessions.infrastructure.transfers_memory import (
     InMemorySessionTransferRepository,
 )
@@ -216,6 +232,8 @@ class ApplicationServices:
     report_jobs: ReportJobService
     session_transfers: SessionTransferService
     client_portal: ClientPortalService
+    v2_offline_login: V2OfflineLoginService | None
+    v2_deposit_credits: V2DepositCreditService | None
     command_service: WorkstationCommandService
     audit_repository: AuditRepository
 
@@ -336,6 +354,7 @@ def build_application_services(
         groups=workstation_group_repository,
         cache=workstation_cache,
         cache_ttl_seconds=20,
+        active_sessions=session_repository,
     )
     client_groups = ClientGroupService(client_group_repository, audit=audit_repository)
     notifications = NotificationRuleService(notification_repository)
@@ -439,6 +458,31 @@ def build_application_services(
         payment_methods=payment_methods,
         reservations=reservation_repository,
     )
+    v2_offline_login = None
+    v2_token_service = JwtTokenService(settings) if settings.jwt_secret else None
+    v2_deposit_credits = (
+        V2DepositCreditService(PostgresV2DepositCreditRepository(postgres_engine_provider))
+        if settings.postgres_dsn
+        else None
+    )
+    if settings.postgres_dsn and settings.v2_snapshot_signing_key_id:
+        signing_key_id, signer = create_v2_snapshot_signer(settings)
+        v2_offline_login = V2OfflineLoginService(
+            workstations=workstations,
+            client_portal=client_portal,
+            sessions=sessions,
+            client_groups=client_groups,
+            snapshot_issues=V2SnapshotIssueService(
+                PostgresV2SnapshotIssueRepository(
+                    postgres_engine_provider,
+                    PostgresSessionTransactionWriter(),
+                )
+            ),
+            signing_key_id=signing_key_id,
+            signer=signer,
+            policy_version=settings.v2_snapshot_policy_version,
+            token_service=v2_token_service,
+        )
     return ApplicationServices(
         workstations=workstations,
         workstation_groups=workstation_groups,
@@ -464,6 +508,8 @@ def build_application_services(
         report_jobs=report_jobs,
         session_transfers=session_transfers,
         client_portal=client_portal,
+        v2_offline_login=v2_offline_login,
+        v2_deposit_credits=v2_deposit_credits,
         command_service=command_service,
         audit_repository=audit_repository,
     )

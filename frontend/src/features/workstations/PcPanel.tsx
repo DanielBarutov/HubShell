@@ -7,6 +7,7 @@ import { getSearchField } from "../../shared/formatters";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import { statusMeta } from "../../shared/constants";
 import type { Client, Workstation } from "../../types";
+import type { V2DepositTarget } from "../workspace/uiSlice";
 
 export function PcPanel({
   pc,
@@ -27,7 +28,7 @@ export function PcPanel({
   onClose: () => void;
   onEdit: () => void;
   onBook: () => void;
-  onDeposit: (client?: Client, bonusOnly?: boolean) => void;
+  onDeposit: (client?: Client, bonusOnly?: boolean, v2Target?: V2DepositTarget) => void;
   onOpenSale: () => void;
   onSessionChanged: () => void;
   client?: Client;
@@ -47,6 +48,7 @@ export function PcPanel({
   const [transferTargetId, setTransferTargetId] = useState("");
   const [transferOffer, setTransferOffer] = useState<BackendTransferOffer | null>(null);
   const clientField = getSearchField(clientQuery);
+  const isV2 = pc.sessionMode === "v2_local_ledger";
 
   useEffect(() => {
     const workstationGroupId = pc.groupId?.trim().toLowerCase();
@@ -55,7 +57,7 @@ export function PcPanel({
   }, [pc.groupId, tariffs]);
 
   useEffect(() => {
-    if (!api || pc.status !== "busy" || !pc.sessionId) {
+    if (!api || isV2 || pc.status !== "busy" || !pc.sessionId) {
       setMeter(null);
       setSessionSnapshot(null);
       return undefined;
@@ -80,7 +82,7 @@ export function PcPanel({
       active = false;
       window.clearInterval(timer);
     };
-  }, [api, pc.sessionId, pc.status]);
+  }, [api, isV2, pc.sessionId, pc.status]);
 
   useEffect(() => {
     if (!api || !clientField) {
@@ -107,6 +109,11 @@ export function PcPanel({
   }, [api, clientField, clientQuery, pc.status]);
 
   const startOrStop = async () => {
+    if (isV2) {
+      setOperationSuccess(false);
+      setOperationState("V2-сессией управляет локальный журнал на игровом ПК");
+      return;
+    }
     if (!api) {
       setOperationSuccess(false);
       setOperationState("Mock-режим: сессия не отправлялась");
@@ -156,6 +163,36 @@ export function PcPanel({
     } catch (error) {
       setOperationSuccess(false);
       setOperationState(error instanceof ApiError ? error.message : "Не удалось изменить сессию");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const dispatchV2DeviceCommand = async (
+    commandType: "v2.display.lock" | "v2.system.restart",
+  ) => {
+    if (!api || !isV2 || pc.status === "maintenance" || pc.status === "offline") {
+      return;
+    }
+    const confirmation = commandType === "v2.system.restart"
+      ? `Перезапустить «${pc.name}»? Клиент сначала будет заблокирован.`
+      : `Заблокировать клиент на «${pc.name}»?`;
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+    setSubmitting(true);
+    setOperationSuccess(false);
+    setOperationState(null);
+    try {
+      await api.dispatchV2DeviceCommand(pc.id, commandType, crypto.randomUUID());
+      setOperationSuccess(true);
+      setOperationState(
+        commandType === "v2.system.restart"
+          ? "Команда перезапуска поставлена в очередь"
+          : "Команда блокировки поставлена в очередь",
+      );
+    } catch (error) {
+      setOperationState(error instanceof ApiError ? error.message : "Не удалось отправить команду");
     } finally {
       setSubmitting(false);
     }
@@ -285,11 +322,17 @@ export function PcPanel({
       <ChevronRight size={17} />
     </button>}
     <div className="panel-actions">
-      {pc.status === "busy" && client && <button className="secondary-button wide" onClick={() => onDeposit(client)}><WalletCards size={15} /> Пополнить депозит</button>}
+      {pc.status === "busy" && client && <button className="secondary-button wide" onClick={() => onDeposit(
+        client,
+        false,
+        pc.sessionMode === "v2_local_ledger" && pc.sessionId && pc.deviceId
+          ? { sessionId: pc.sessionId, deviceId: pc.deviceId, workstationName: pc.name }
+          : undefined,
+      )}><WalletCards size={15} /> Пополнить депозит</button>}
       <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
-      {pc.status === "busy" ? <><button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
-      {stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
-      {pc.status === "busy" && api && <>
+      {pc.status === "busy" ? isV2 ? <><p className="subheading">V2-сессия ведётся локальным журналом игрового ПК.</p><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <><button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
+      {!isV2 && stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
+      {!isV2 && pc.status === "busy" && api && <>
         <label>Перенести на место<select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)} disabled={submitting}>
           <option value="">Выберите свободный ПК</option>
           {workstations.filter((item) => item.id !== pc.id && item.status === "online").map((item) => <option value={item.id} key={item.id}>{item.name} · {item.group}</option>)}
@@ -297,6 +340,7 @@ export function PcPanel({
         <button className="secondary-button wide" onClick={() => void transferSession()} disabled={submitting || !transferTargetId}>Перенести сессию</button>
         {transferOffer && <small className="muted">Перенос создан · действует до {new Date(transferOffer.expires_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</small>}
       </>}
+      {isV2 && <><button className="secondary-button wide" onClick={() => void dispatchV2DeviceCommand("v2.display.lock")} disabled={submitting || pc.status === "maintenance" || pc.status === "offline"}>Заблокировать клиент</button><button className="danger-button wide" onClick={() => void dispatchV2DeviceCommand("v2.system.restart")} disabled={submitting || pc.status === "maintenance" || pc.status === "offline"}>Перезапустить ПК</button></>}
       <button className="secondary-button wide" onClick={onBook} disabled={pc.status !== "online"}>Забронировать место</button>
       {operationState && <div className={`${operationSuccess ? "form-success" : "form-error"} command-result`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
     </div>

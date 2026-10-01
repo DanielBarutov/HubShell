@@ -7,6 +7,7 @@ import typing
 import uuid
 
 from fastapi import FastAPI, Request
+from faststream.kafka import KafkaBroker
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -56,6 +57,17 @@ from gameclub_backend.modules.direct_payments.presentation.http import (
 from gameclub_backend.modules.entitlements.presentation.http import (
     create_router as create_entitlements_router,
 )
+from gameclub_backend.modules.eventing_v2.application.outbox import V2ServerOutboxService
+from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
+    PostgresV2ServerOutboxRepository,
+)
+from gameclub_backend.modules.eventing_v2.presentation.client_facts_http import (
+    V2ClientFactIngress,
+    create_v2_client_facts_router,
+)
+from gameclub_backend.modules.eventing_v2.presentation.server_events_http import (
+    create_v2_server_events_router,
+)
 from gameclub_backend.modules.notifications.presentation.http import (
     create_router as create_notification_rules_router,
 )
@@ -81,6 +93,9 @@ from gameclub_backend.modules.workstations.presentation.groups import (
 from gameclub_backend.modules.workstations.presentation.http import (
     create_router as create_workstations_router,
 )
+from gameclub_backend.modules.workstations.presentation.v2_http import (
+    create_v2_router as create_v2_workstations_router,
+)
 from gameclub_backend.presentation.http.audit import create_router as create_audit_router
 from gameclub_backend.presentation.http.auth import router as auth_router
 
@@ -100,6 +115,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     current_settings = settings or get_settings()
     resources = create_resources(current_settings)
     services: ApplicationServices = build_application_services(current_settings, resources)
+    v2_client_fact_ingress = (
+        V2ClientFactIngress(
+            KafkaBroker(
+                current_settings.kafka_bootstrap_servers,
+                client_id="gameclub-v2-http-ingress",
+            )
+        )
+        if current_settings.kafka_bootstrap_servers
+        else None
+    )
+    v2_server_events = None
+    if resources.engine is not None:
+        v2_engine = resources.engine
+        v2_server_events = V2ServerOutboxService(
+            PostgresV2ServerOutboxRepository(lambda: v2_engine)
+        )
     refresh_tokens = (
         RedisRefreshTokenRepository(lambda: resources.redis)
         if resources.redis is not None
@@ -117,6 +148,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await services.workstation_groups.restore_per_minute_tariffs()
             yield
         finally:
+            if v2_client_fact_ingress is not None:
+                await v2_client_fact_ingress.close()
             await resources.close()
 
     application = FastAPI(
@@ -132,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.workstations = services.workstations
     application.state.workstation_groups = services.workstation_groups
     application.state.clients = services.clients
+    application.state.v2_deposit_credits = services.v2_deposit_credits
     application.state.client_groups = services.client_groups
     application.state.notifications = services.notifications
     application.state.guests = services.guests
@@ -141,6 +175,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.guest_payments = services.guest_payments
     application.state.reservations = services.reservations
     application.state.sessions = services.sessions
+    application.state.v2_client_fact_ingress = v2_client_fact_ingress
+    application.state.v2_server_events = v2_server_events
     application.state.billing = services.billing
     application.state.billing_reconciliation = services.billing_reconciliation
     application.state.cash_shifts = services.cash_shifts
@@ -164,8 +200,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.sessions,
         )
     )
+    application.include_router(create_v2_workstations_router(services.command_service))
+    application.include_router(create_v2_client_facts_router())
+    application.include_router(create_v2_server_events_router())
     application.include_router(create_workstation_groups_router(services.workstation_groups))
-    application.include_router(create_clients_router(services.clients))
+    application.include_router(create_clients_router(services.clients, services.v2_deposit_credits))
     application.include_router(create_client_groups_router(services.client_groups))
     application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))
@@ -174,7 +213,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_guest_router(services.guests))
     application.include_router(create_catalog_router(services.catalog))
     application.include_router(create_reservations_router(services.reservations))
-    application.include_router(create_sessions_router(services.sessions))
+    application.include_router(create_sessions_router(services.sessions, services.workstations))
     application.include_router(create_session_transfer_router(services.session_transfers))
     application.include_router(create_billing_router(services.billing))
     application.include_router(create_cash_shifts_router(services.cash_shifts))

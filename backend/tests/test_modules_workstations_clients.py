@@ -37,7 +37,7 @@ from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.workstations.application.ports import WorkstationGroupRepository
 from gameclub_backend.modules.workstations.application.service import WorkstationService
-from gameclub_backend.modules.workstations.domain import WorkstationStatus
+from gameclub_backend.modules.workstations.domain import WorkstationSessionMode, WorkstationStatus
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
@@ -72,6 +72,45 @@ async def test_workstation_lifecycle_and_duplicate_device_are_guarded() -> None:
 
     with pytest.raises(ApplicationError) as error:
         await service.register("device-01", "VIP-01")
+
+    assert error.value.code is ErrorCode.CONFLICT
+
+
+async def test_workstation_session_mode_defaults_to_v1_and_can_be_explicitly_switched() -> None:
+    repository = InMemoryWorkstationRepository()
+    service = WorkstationService(repository)
+
+    workstation = await service.register("mode-device", "Mode PC")
+    updated = await service.update(
+        workstation.id,
+        "Mode PC",
+        None,
+        None,
+        session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
+    )
+
+    assert workstation.session_mode is WorkstationSessionMode.V1_SERVER_OWNED
+    assert updated.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
+
+
+async def test_workstation_session_mode_cannot_change_during_an_active_session() -> None:
+    class ActiveSessions:
+        async def get_active_for_workstation(self, workstation_id):
+            del workstation_id
+            return object()
+
+    repository = InMemoryWorkstationRepository()
+    service = WorkstationService(repository, active_sessions=ActiveSessions())
+    workstation = await service.register("mode-lock-device", "Mode lock PC")
+
+    with pytest.raises(ApplicationError) as error:
+        await service.update(
+            workstation.id,
+            "Mode lock PC",
+            None,
+            None,
+            session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
+        )
 
     assert error.value.code is ErrorCode.CONFLICT
 

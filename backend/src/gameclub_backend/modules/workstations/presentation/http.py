@@ -13,7 +13,11 @@ from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
 from gameclub_backend.modules.workstations.application.service import WorkstationService
-from gameclub_backend.modules.workstations.domain import Workstation, WorkstationStatus
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    WorkstationSessionMode,
+    WorkstationStatus,
+)
 from gameclub_backend.modules.workstations.domain_commands import (
     WorkstationCommand,
     WorkstationCommandStatus,
@@ -100,6 +104,7 @@ class WorkstationResponse(BaseModel):
     archived_at: str | None
     mac_address: str | None
     installation_bound: bool
+    session_mode: WorkstationSessionMode
     active_session_id: uuid.UUID | None = None
     active_session_status: str | None = None
     session_server_time: str | None = None
@@ -126,6 +131,7 @@ class WorkstationResponse(BaseModel):
             archived_at=workstation.archived_at.isoformat() if workstation.archived_at else None,
             mac_address=workstation.mac_address,
             installation_bound=workstation.installation_id is not None,
+            session_mode=workstation.session_mode,
             active_session_id=session_snapshot.session.id if session_snapshot else None,
             active_session_status=(
                 session_snapshot.session.status.value if session_snapshot else None
@@ -170,7 +176,10 @@ def create_router(
         principal: Operator,
     ) -> WorkstationResponse:
         del principal
-        workstation = await service.register(**body.model_dump())
+        workstation = await service.register(
+            **body.model_dump(),
+            session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
+        )
         return WorkstationResponse.from_domain(workstation)
 
     @router.post("/heartbeat", response_model=WorkstationResponse)

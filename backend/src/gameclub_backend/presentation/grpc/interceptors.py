@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 _AUDITED_OPERATIONS = frozenset(
     {
         "Register",
+        "Login",
         "Heartbeat",
         "Disable",
         "DispatchCommand",
@@ -37,6 +38,7 @@ _AUDITED_OPERATIONS = frozenset(
         "ConfirmTransfer",
         "ReplayOfflineBatch",
         "CheckEntry",
+        "Start",
     }
 )
 

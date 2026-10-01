@@ -101,6 +101,34 @@ describe("GameClubApi", () => {
     );
   });
 
+  it("отправляет только V2 device command на versioned endpoint", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      id: "command-1",
+      workstation_id: "pc-1",
+      command_type: "v2.display.lock",
+      status: "queued",
+      expires_at: "2026-09-28T12:00:00Z",
+    }, 202));
+
+    await new GameClubApi("http://backend/api/v1").dispatchV2DeviceCommand(
+      "pc-1",
+      "v2.display.lock",
+      "v2-command-key",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://backend/api/v2/workstations/pc-1/device-commands",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ command_type: "v2.display.lock", payload: {} }),
+      }),
+    );
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Idempotency-Key")).toBe(
+      "v2-command-key",
+    );
+  });
+
   it("сохраняет v1 CSV flow и передаёт исходный период без смены endpoint", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(new Response("section,key", { status: 200 }));

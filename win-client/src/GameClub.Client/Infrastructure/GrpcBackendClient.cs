@@ -2,11 +2,12 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using GameClub.Client.Application;
 using GameClub.Client.Application.Ports;
-using GameClub.Client.Contracts;
 using Workstations = GameClub.Client.Contracts.Workstations.V1;
 using Sessions = GameClub.Client.Contracts.Sessions.V1;
 using Clients = GameClub.Client.Contracts.Clients.V1;
 using Reservations = GameClub.Client.Contracts.Reservations.V1;
+using OfflineSessionsV2 = GameClub.Client.Contracts.Events.V2.OfflineSessionService;
+using DevicesV2 = GameClub.Client.Contracts.Devices.V2;
 using GameClub.Client.Domain;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -14,14 +15,15 @@ using Google.Protobuf.WellKnownTypes;
 
 namespace GameClub.Client.Infrastructure;
 
-public sealed class GrpcBackendClient : IBackendClient
+public sealed class GrpcBackendClient : IBackendClient, IV2OfflineSessionGateway
 {
     private readonly GrpcChannel _channel;
-    private readonly SystemService.SystemServiceClient _systemClient;
     private readonly Workstations.WorkstationService.WorkstationServiceClient _workstationClient;
     private readonly Sessions.SessionService.SessionServiceClient _sessionClient;
     private readonly Reservations.ReservationService.ReservationServiceClient _reservationClient;
     private readonly Clients.ClientPortalService.ClientPortalServiceClient _clientPortalClient;
+    private readonly OfflineSessionsV2.OfflineSessionServiceClient _offlineSessionClient;
+    private readonly DevicesV2.DeviceControlService.DeviceControlServiceClient _deviceControlClient;
     private readonly ITokenProvider? _tokenProvider;
     private string? _clientPortalAccessToken;
     private DateTimeOffset _clientPortalExpiresAt;
@@ -34,13 +36,91 @@ public sealed class GrpcBackendClient : IBackendClient
         }
 
         _channel = GrpcChannel.ForAddress(backendAddress);
-        _systemClient = new SystemService.SystemServiceClient(_channel);
         _workstationClient = new Workstations.WorkstationService.WorkstationServiceClient(_channel);
         _sessionClient = new Sessions.SessionService.SessionServiceClient(_channel);
         _reservationClient = new Reservations.ReservationService.ReservationServiceClient(_channel);
         _clientPortalClient = new Clients.ClientPortalService.ClientPortalServiceClient(_channel);
+        _offlineSessionClient = new OfflineSessionsV2.OfflineSessionServiceClient(_channel);
+        _deviceControlClient = new DevicesV2.DeviceControlService.DeviceControlServiceClient(_channel);
         _tokenProvider = tokenProvider;
     }
+
+    /// <summary>
+    /// V2-вход получает один signed snapshot. Подпись проверяется до того, как
+    /// вызывающая сторона сможет создать или записать local ledger.
+    /// </summary>
+    public async Task<V2OfflineLoginResult> LoginAsync(
+        string identifier,
+        string password,
+        string deviceId,
+        string idempotencyKey,
+        IOfflineSnapshotSignatureVerifier signatureVerifier,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        ArgumentNullException.ThrowIfNull(signatureVerifier);
+
+        var snapshot = await _offlineSessionClient.LoginAsync(
+            new GameClub.Client.Contracts.Events.V2.LoginOfflineSessionRequest
+            {
+                Identifier = identifier,
+                Password = password,
+                DeviceId = deviceId,
+                IdempotencyKey = idempotencyKey,
+            },
+            headers: await CreateDeviceMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return new V2OfflineLoginResult(
+            V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(snapshot, signatureVerifier),
+            PasswordResetRequired: false,
+            PasswordResetToken: null);
+    }
+
+    public async Task<V2OfflineLoginResult> RegisterAsync(
+        string nickname,
+        string phone,
+        string password,
+        string deviceId,
+        string idempotencyKey,
+        IOfflineSnapshotSignatureVerifier signatureVerifier,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nickname);
+        ArgumentException.ThrowIfNullOrWhiteSpace(phone);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        ArgumentNullException.ThrowIfNull(signatureVerifier);
+
+        var snapshot = await _offlineSessionClient.RegisterAsync(
+            new GameClub.Client.Contracts.Events.V2.RegisterOfflineSessionRequest
+            {
+                Nickname = nickname,
+                Phone = phone,
+                Password = password,
+                DeviceId = deviceId,
+                IdempotencyKey = idempotencyKey,
+            },
+            headers: await CreateDeviceMetadataAsync(cancellationToken),
+            deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return new V2OfflineLoginResult(
+            V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(snapshot, signatureVerifier),
+            PasswordResetRequired: false,
+            PasswordResetToken: null);
+    }
+
+    public Task ChangePasswordAsync(
+        string newPassword,
+        string deviceId,
+        string resetToken,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException(
+            new NotSupportedException("V2 password reset requires the V2 transport."));
 
     public async Task<ClientPortalAuthenticationSnapshot> RegisterAsync(
         string nickname,
@@ -193,8 +273,8 @@ public sealed class GrpcBackendClient : IBackendClient
         {
             var metadata = await CreateMetadataAsync(cancellationToken);
 
-            var response = await _systemClient.GetHealthAsync(
-                new HealthRequest(),
+            var response = await _deviceControlClient.GetHealthAsync(
+                new DevicesV2.DeviceHealthRequest(),
                 headers: metadata,
                 deadline: DateTime.UtcNow.AddSeconds(5),
                 cancellationToken: cancellationToken);
@@ -223,27 +303,33 @@ public sealed class GrpcBackendClient : IBackendClient
         CancellationToken cancellationToken = default)
     {
         var metadata = await CreateMetadataAsync(cancellationToken);
-        var request = new Workstations.HeartbeatRequest
+        var request = new DevicesV2.DeviceHeartbeatRequest
         {
             DeviceId = deviceId,
             ClientVersion = clientVersion,
         };
         request.Capabilities.AddRange(capabilities);
-        var response = await _workstationClient.HeartbeatAsync(
-            request,
-            headers: metadata,
-            deadline: DateTime.UtcNow.AddSeconds(5),
-            cancellationToken: cancellationToken);
+        DevicesV2.DeviceHeartbeatResponse response;
+        try
+        {
+            response = await _deviceControlClient.HeartbeatAsync(
+                request,
+                headers: metadata,
+                deadline: DateTime.UtcNow.AddSeconds(5),
+                cancellationToken: cancellationToken);
+        }
+        catch (RpcException error) when (error.StatusCode == StatusCode.AlreadyExists)
+        {
+            throw new DeviceEnrollmentDisabledException();
+        }
         return new WorkstationHeartbeatSnapshot(
             response.DeviceId,
             response.GroupId,
             response.Theme,
             response.ManagerPasswordVerifier,
             ToLockdownPolicySnapshot(response.LockdownPolicy),
-            response.SessionSnapshot is null || response.SessionSnapshot.CalculateSize() == 0
-                ? null
-                : ToSessionSnapshot(response.SessionSnapshot),
-            response.Name);
+            SessionSnapshot: null,
+            WorkstationName: response.WorkstationName);
     }
 
     public async Task<SessionSnapshot> StartSessionAsync(
@@ -806,6 +892,35 @@ public sealed class GrpcBackendClient : IBackendClient
 
     private static WorkstationLockdownPolicySnapshot ToLockdownPolicySnapshot(
         Workstations.WorkstationLockdownPolicy policy)
+    {
+        if (policy is null || policy.CalculateSize() == 0)
+        {
+            return WorkstationLockdownPolicySnapshot.SafeDefault;
+        }
+
+        var deploymentMode = policy.DeploymentMode.Trim().ToLowerInvariant();
+        if (deploymentMode is not ("app_gate" or "assigned_access" or "shell_launcher"))
+        {
+            return WorkstationLockdownPolicySnapshot.SafeDefault;
+        }
+
+        return new WorkstationLockdownPolicySnapshot(
+            deploymentMode,
+            policy.ShellEnabled,
+            policy.UserSelfLoginEnabled,
+            policy.LockAfterSession,
+            policy.RestartAfterSession,
+            policy.HiddenDrives.ToArray(),
+            policy.BlockExternalStorage,
+            policy.DisableStartMenu,
+            policy.DisableDesktopSwitching,
+            policy.BlockedWindowRules.ToArray(),
+            policy.AllowedApplicationIds.ToArray(),
+            policy.Version > 0 ? policy.Version : 1);
+    }
+
+    private static WorkstationLockdownPolicySnapshot ToLockdownPolicySnapshot(
+        DevicesV2.WorkstationLockdownPolicy policy)
     {
         if (policy is null || policy.CalculateSize() == 0)
         {

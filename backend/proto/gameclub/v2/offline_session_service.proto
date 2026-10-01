@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package gameclub.events.v2;
+
+import "gameclub/v2/offline_session_snapshot.proto";
+import "google/protobuf/empty.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Events.V2";
+option java_multiple_files = true;
+
+// Выдаёт единственный подписанный входной снимок V2-сессии. Минуты не подтверждает.
+service OfflineSessionService {
+  rpc Login(LoginOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
+  rpc Register(RegisterOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
+  rpc ChangePassword(ChangeOfflinePasswordRequest) returns (google.protobuf.Empty);
+  rpc GetPortalSnapshot(GetOfflinePortalSnapshotRequest) returns (OfflinePortalSnapshot);
+  rpc ActivateEntitlement(ActivateOfflineEntitlementRequest) returns (OfflinePortalSnapshot);
+  rpc PurchaseEntitlement(PurchaseOfflineEntitlementRequest) returns (OfflinePortalSnapshot);
+}
+
+message LoginOfflineSessionRequest {
+  string device_id = 1;
+  string identifier = 2;
+  string password = 3;
+  string idempotency_key = 4;
+
+  reserved 5 to 15;
+}
+
+message RegisterOfflineSessionRequest {
+  string device_id = 1;
+  string nickname = 2;
+  string phone = 3;
+  string password = 4;
+  string idempotency_key = 5;
+
+  reserved 6 to 15;
+}
+
+message ChangeOfflinePasswordRequest {
+  string device_id = 1;
+  string new_password = 2;
+
+  reserved 3 to 15;
+}
+
+message GetOfflinePortalSnapshotRequest {
+  string device_id = 1;
+  uint32 limit = 2;
+
+  reserved 3 to 15;
+}
+
+message ActivateOfflineEntitlementRequest {
+  string device_id = 1;
+  string entitlement_id = 2;
+
+  reserved 3 to 15;
+}
+
+message PurchaseOfflineEntitlementRequest {
+  string device_id = 1;
+  string tariff_id = 2;
+  string idempotency_key = 3;
+
+  reserved 4 to 15;
+}
+
+message OfflinePortalSnapshot {
+  string client_id = 1;
+  string nickname = 2;
+  string phone = 3;
+  sint64 balance_cents = 4;
+  sint64 balance_bonus = 5;
+  uint32 available_time_minutes = 6;
+  repeated OfflineBalanceOperation balance_operations = 7;
+  repeated OfflinePortalSession sessions = 8;
+  repeated OfflinePortalCharge charges = 9;
+  repeated OfflinePortalPurchase purchases = 10;
+  repeated OfflinePortalEntitlement entitlements = 11;
+  repeated OfflinePortalTariff tariffs = 12;
+  repeated OfflinePortalReservation reservations = 13;
+  repeated OfflinePaymentMethod payment_methods = 14;
+}
+
+message OfflinePaymentPart {
+  string method = 1;
+  sint64 amount_cents = 2;
+  string reference = 3;
+}
+
+message OfflineBalanceOperation {
+  string id = 1;
+  string operation_type = 2;
+  sint64 amount_cents = 3;
+  sint64 bonus_amount = 4;
+  string reason = 5;
+  string created_at = 6;
+  repeated OfflinePaymentPart payment_parts = 7;
+}
+
+message OfflinePortalSession {
+  string id = 1;
+  string workstation_id = 2;
+  string status = 3;
+  string started_at = 4;
+  string ended_at = 5;
+  string tariff_id = 6;
+  string tariff_name = 7;
+  uint32 tariff_quantity = 8;
+  string workstation_name = 9;
+  uint32 duration_minutes = 10;
+}
+
+message OfflinePortalCharge {
+  string id = 1;
+  string session_id = 2;
+  string tariff_id = 3;
+  uint32 duration_minutes = 4;
+  sint64 amount_cents = 5;
+  string tariff_name = 6;
+  string created_at = 7;
+}
+
+message OfflinePortalPurchase {
+  string id = 1;
+  string product_name = 2;
+  uint32 quantity = 3;
+  sint64 total_price_cents = 4;
+  string payment_method = 5;
+  string created_at = 6;
+  repeated OfflinePaymentPart payment_parts = 7;
+}
+
+message OfflinePortalEntitlement {
+  string id = 1;
+  string tariff_id = 2;
+  string zone_id = 3;
+  string status = 4;
+  uint32 duration_minutes = 5;
+  uint32 remaining_minutes = 6;
+  sint64 price_cents = 7;
+  uint32 queue_position = 8;
+  string tariff_name = 9;
+  string purchased_at = 10;
+  string activated_at = 11;
+  bool time_restricted = 12;
+  uint32 sale_window_start_minute = 13;
+  uint32 sale_window_end_minute = 14;
+  uint32 usage_window_start_minute = 15;
+  uint32 usage_window_end_minute = 16;
+  string window_timezone = 17;
+  string audience = 18;
+}
+
+message OfflinePortalTariff {
+  string id = 1;
+  string name = 2;
+  string zone_id = 3;
+  uint32 duration_minutes = 4;
+  sint64 price_cents = 5;
+  bool time_restricted = 6;
+  uint32 sale_window_start_minute = 7;
+  uint32 sale_window_end_minute = 8;
+  uint32 usage_window_start_minute = 9;
+  uint32 usage_window_end_minute = 10;
+  string window_timezone = 11;
+  string audience = 12;
+}
+
+message OfflinePortalReservation {
+  string id = 1;
+  repeated string workstation_ids = 2;
+  string start_at = 3;
+  string end_at = 4;
+  string status = 5;
+  string tariff_id = 6;
+}
+
+message OfflinePaymentMethod {
+  string key = 1;
+  string name = 2;
+}

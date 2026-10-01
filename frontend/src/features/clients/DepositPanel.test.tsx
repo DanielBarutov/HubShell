@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { GameClubApi } from "../../api";
 import { DepositPanel } from "./DepositPanel";
 import type { Client } from "../../types";
 
@@ -42,5 +43,41 @@ describe("Пополнение депозита", () => {
     expect(screen.getByRole("button", { name: "Зачислить депозит" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByRole("button", { name: "Зачислить депозит" })).toBeEnabled();
+  });
+
+  it("из V2-сессии отправляет пополнение только в её session и device", async () => {
+    /** Защищает от случайного ухода пополнения активного V2 ПК в старый V1 маршрут. */
+    const createV2Deposit = vi.fn().mockResolvedValue({
+      delivery_status: "pending_delivery",
+      is_duplicate: false,
+    });
+    const onCompleted = vi.fn();
+    const api = { createV2Deposit } as unknown as GameClubApi;
+
+    render(<DepositPanel
+      initialClient={client}
+      v2Target={{ sessionId: "session-v2-1", deviceId: "device-v2-1", workstationName: "VIP-07" }}
+      onClose={vi.fn()}
+      onCompleted={onCompleted}
+      clients={[client]}
+      api={api}
+    />);
+
+    expect(screen.getByRole("textbox", { name: "Ник или номер телефона" })).toBeDisabled();
+    expect(screen.getByText("Целевая V2-сессия").parentElement).toHaveTextContent("VIP-07");
+    fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
+
+    await waitFor(() => expect(createV2Deposit).toHaveBeenCalledWith(
+      client.id,
+      expect.objectContaining({
+        session_id: "session-v2-1",
+        device_id: "device-v2-1",
+        amount_cents: 100_000,
+        currency: "RUB",
+      }),
+      expect.any(String),
+    ));
+    expect(onCompleted).toHaveBeenCalledWith(false);
+    expect(screen.getByRole("status")).toHaveTextContent("Пополнение принято сервером");
   });
 });

@@ -53,6 +53,26 @@
                                 Foreground="{Binding ConnectionColor}"
                                 TextWrapping="Wrap"
                             />
+            <TextBlock
+                                Text="{Binding V2DeliveryStatus}"
+                                Foreground="{DynamicResource SignalBrush}"
+                                FontWeight="SemiBold"
+                                TextWrapping="Wrap"
+                            />
+            <TextBlock
+                                Text="{Binding V2DeliveryMessage}"
+                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                IsVisible="{Binding HasV2ServerEventIssues}"
+                            />
+            <TextBlock
+                                Text="{Binding V2DeliveryMessage}"
+                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                IsVisible="{Binding IsV2ServerEventTransportFailed}"
+                            />
           </StackPanel>
         </Border>
         <Border
@@ -588,6 +608,12 @@
                                 Text="Администратор сбросил старый пароль. Задайте новый, чтобы продолжить."
                                 Foreground="{DynamicResource SecondaryTextBrush}"
                                 FontSize="11"
+                                TextWrapping="Wrap"
+                            /><TextBlock
+                                Text="{Binding AccessMessage}"
+                                IsVisible="{Binding IsAccessFeedbackVisible}"
+                                Foreground="{DynamicResource SignalBrush}"
+                                FontSize="10"
                                 TextWrapping="Wrap"
                             /><TextBox
                                 Name="PortalPasswordSetupBox"

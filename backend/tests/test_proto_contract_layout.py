@@ -12,6 +12,7 @@ from gameclub.v1 import (
     sessions_pb2,
     workstations_pb2,
 )
+from gameclub.v2 import events_pb2
 
 
 class Utf8ProjectPath(type(Path())):  # type: ignore[misc]
@@ -110,6 +111,37 @@ def test_proto_sources_have_generated_python_and_csharp_consumers() -> None:
         assert (generated_root / f"{proto_path.stem}_pb2.py").exists()
         assert (generated_root / f"{proto_path.stem}_pb2_grpc.py").exists()
         assert proto_path.name in csproj
+
+    v2_proto = PROJECT_ROOT / "backend" / "proto" / "gameclub" / "v2" / "events.proto"
+    v2_generated_root = PROJECT_ROOT / "backend" / "src" / "gameclub" / "v2"
+    assert (v2_generated_root / "events_pb2.py").exists()
+    assert (v2_generated_root / "events_pb2_grpc.py").exists()
+    assert "gameclub\\v2\\events.proto" in csproj
+    assert "reserved 17 to 31;" in v2_proto.read_text()
+
+
+def test_v2_event_envelope_keeps_compatible_field_numbers() -> None:
+    """Запрещает случайно поменять номер уже опубликованного Kafka-поля."""
+    fields = events_pb2.EventEnvelope.DESCRIPTOR.fields_by_name
+
+    assert {name: field.number for name, field in fields.items()} == {
+        "event_id": 1,
+        "operation_id": 2,
+        "event_type": 3,
+        "schema_version": 4,
+        "producer_id": 5,
+        "client_id": 6,
+        "session_id": 7,
+        "device_id": 8,
+        "sequence": 9,
+        "occurred_at": 10,
+        "causation_id": 11,
+        "correlation_id": 12,
+        "traceparent": 13,
+        "payload_hash": 14,
+        "previous_hash": 15,
+        "payload_json": 16,
+    }
 
 
 def test_catalog_contract_contains_discount_and_lifecycle_methods() -> None:

@@ -251,6 +251,73 @@ use case. Backend сначала фиксирует остановку сесс�
 - Нет лимита длительности офлайна: локальная сессия идёт до исчерпания известного
   пакета или баланса. Если ПК был офлайн до входа, новую сессию начать нельзя.
 
+## V2: автономная событийная сессия
+
+- Поставляемый релиз использует только V2 local ledger; режима workstation,
+  который возвращает к V1 server-owned gRPC-meter, и V1 fallback в нём нет.
+- Существующая PostgreSQL остаётся источником клиентских профилей, балансов,
+  пакетов, тарифов, мест и неизменяемой истории. Эти данные входят в V2
+  snapshot только через server-owned границы и не превращают V1 runtime в
+  поддерживаемый режим.
+- V2-вход принимает совпадающую device identity и пароль клиента, а V2-регистрация
+  создаёт профиль в сохраняемой PostgreSQL и сразу открывает только V2-сессию.
+  Обе операции создают сессию с источником `v2_local_ledger`; повтор с тем же
+  idempotency key возвращает тот же подписанный snapshot. В тестовом cutover
+  сервер принудительно завершает активные V1-сессии до V2-only release; их
+  перенос в V2 запрещён.
+- После cutover `v2_local_ledger` является доменной границей: попытки создать
+  V1 server-owned session или поставить V1 command для V2-места получают
+  controlled conflict. Обратная подмена — V2 session/command на V1-месте —
+  также запрещена. Это правило не зависит от того, скрыт ли V1 UI.
+- HTTP и historical workstation-registration gRPC назначают новым местам
+  `v2_local_ledger` по умолчанию; public API больше не создаёт V1-place из-за
+  отсутствующего поля режима.
+- Создание V2 session, signed snapshot, lease, audit и `LoginSnapshotIssued`
+  сохраняются одной PostgreSQL-транзакцией. Если lease нельзя выдать, новая
+  session не сохраняется.
+- До access-gate ПК получает device JWT через `DeviceControlService.Enroll` V2:
+  MAC и стабильный `installation_id` находят только заранее назначенное место.
+  Неизвестное место остаётся `pending`, уже отключённое — `disabled`, а привязка
+  к другому installation получает controlled reject. Выданный токен имеет только
+  право `workstations.connect`; операторская identity через этот путь невозможна.
+- `DeviceControlService.GetHealth` и аутентифицированный V2 `Heartbeat` заменяют
+  для поставляемого клиента V1 system/workstation RPC. Heartbeat передаёт только
+  конфигурацию места (тема, manager verifier, lockdown policy), но не active
+  session, баланс или server meter snapshot.
+- Отключённое оператором место отвечает на V2 heartbeat controlled conflict.
+  Это revocation access-gate, а не сетевой reconnect: клиент обязан закрыть
+  доступ, но сохранить локальный ledger до reconciliation.
+- Операторские V2 device-команды доступны только по отдельному HTTP маршруту
+  `/api/v2/workstations/{workstation_id}/device-commands` и доставляются через
+  `DeviceControlService.WatchCommands/AcknowledgeCommand`. Разрешены строго
+  `v2.display.lock` и `v2.system.restart`; `session.start`, `session.stop`,
+  server meter и произвольные shell-команды не имеют V2 command form. Поток и
+  acknowledgement фильтруют V1-команды, даже если старые записи сохранены в
+  той же PostgreSQL.
+- После device-authenticated входа backend выдаёт подписанный
+  `OfflineSessionSnapshot`: client/device/session id, balance и limit долга,
+  login grant, активные/queued packages, tariff snapshots с ценой/зоной/окном,
+  версию правил и snapshot version.
+- После выдачи snapshot сервер не подтверждает каждую минуту. Клиент отправляет
+  позднее неизменяемые V2 facts через Kafka; сервер принимает их по
+  `operation_id`, sequence, payload hash и device/session scope либо возвращает
+  явный `needs_review`.
+- ServerInbox, подтверждённый financial/session факт, audit, projection и
+  ServerOutbox сохраняются одной PostgreSQL-транзакцией. Повтор Kafka delivery
+  не создаёт второй debit, package, stop или audit fact.
+- Пополнение всегда создаётся на сервере. `DepositCredit`, payment parts,
+  audit, balance delta и `BalanceCreditApplied` входят в одну транзакцию;
+  событие передаёт `deposit_operation_id` и сумму-дельту, а не абсолютный
+  balance. Клиент применяет такую дельту один раз.
+- Операторский маршрут V2-пополнения требует `Idempotency-Key`, `client_id` в
+  пути и server-validated `session_id`/`device_id`. Он создаёт стабильный
+  `payment_operation_id` из клиента и ключа, возвращает факт принятого
+  пополнения и статус `pending_delivery`, но не передаёт Windows-клиенту
+  абсолютный баланс.
+- Для V2 один клиент имеет только одну autonomous session. Второе device,
+  разрыв sequence/hash chain, неподписанный snapshot или подозрительный rollback
+  часов создают явный conflict/review, а не тихую коррекцию ledger.
+
 ## Уведомления об окончании времени
 
 - Backend хранит настраиваемые правила уведомлений по порогу оставшегося

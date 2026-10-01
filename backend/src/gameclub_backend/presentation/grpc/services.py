@@ -5,7 +5,7 @@ import typing
 import uuid
 
 import grpc
-from google.protobuf import timestamp_pb2
+from google.protobuf import empty_pb2, timestamp_pb2
 
 from gameclub.v1 import (
     analytics_pb2,
@@ -24,6 +24,13 @@ from gameclub.v1 import (
     sessions_pb2_grpc,
     workstations_pb2,
     workstations_pb2_grpc,
+)
+from gameclub.v2 import (
+    device_control_service_pb2,
+    device_control_service_pb2_grpc,
+    offline_session_service_pb2,
+    offline_session_service_pb2_grpc,
+    offline_session_snapshot_pb2,
 )
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.analytics.application.service import AnalyticsService
@@ -67,6 +74,7 @@ from gameclub_backend.modules.clients.application.portal import (
 )
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
+from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.offline.application.service import OfflineReplayService
 from gameclub_backend.modules.offline.domain import (
     OfflineBatch,
@@ -100,6 +108,7 @@ from gameclub_backend.modules.workstations.domain import (
     LockdownPolicy,
     Workstation,
     WorkstationGroup,
+    WorkstationSessionMode,
     WorkstationStatus,
 )
 from gameclub_backend.modules.workstations.domain_commands import (
@@ -504,6 +513,7 @@ class WorkstationGrpcService(workstations_pb2_grpc.WorkstationServiceServicer):
                 position=request.position or None,
                 client_version=request.client_version or None,
                 capabilities=request.capabilities,
+                session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
             )
         except ApplicationError as error:
             await abort_application_error(context, error)
@@ -963,6 +973,144 @@ def to_portal_snapshot_proto(
     return response
 
 
+def to_v2_portal_snapshot_proto(
+    snapshot: ClientPortalSnapshot,
+) -> offline_session_service_pb2.OfflinePortalSnapshot:
+    response = offline_session_service_pb2.OfflinePortalSnapshot(
+        client_id=str(snapshot.client.id),
+        nickname=snapshot.client.nickname,
+        phone=snapshot.client.phone or "",
+        balance_cents=snapshot.client.balance_cents,
+        balance_bonus=snapshot.client.balance_bonus,
+        available_time_minutes=snapshot.available_time_minutes,
+        payment_methods=[
+            offline_session_service_pb2.OfflinePaymentMethod(key=key, name=name)
+            for key, name in sorted(snapshot.payment_method_names.items())
+        ],
+    )
+    response.balance_operations.extend(
+        offline_session_service_pb2.OfflineBalanceOperation(
+            id=str(operation.id),
+            operation_type=operation.operation_type.value,
+            amount_cents=operation.amount_cents,
+            bonus_amount=operation.bonus_amount,
+            reason=operation.reason,
+            created_at=operation.created_at.isoformat(),
+            payment_parts=[
+                offline_session_service_pb2.OfflinePaymentPart(
+                    method=part.method,
+                    amount_cents=part.amount_cents,
+                    reference=part.reference or "",
+                )
+                for part in operation.payment_parts
+            ],
+        )
+        for operation in snapshot.balance_operations
+    )
+    response.sessions.extend(
+        offline_session_service_pb2.OfflinePortalSession(
+            id=str(session.id),
+            workstation_id=str(session.workstation_id),
+            status=session.status.value,
+            started_at=session.started_at.isoformat(),
+            ended_at=session.ended_at.isoformat() if session.ended_at else "",
+            tariff_id=str(session.tariff_id) if session.tariff_id else "",
+            tariff_name=(
+                snapshot.tariff_names.get(session.tariff_id, "")
+                if session.tariff_id
+                else ""
+            ),
+            tariff_quantity=session.tariff_quantity,
+            workstation_name=snapshot.workstation_names.get(session.workstation_id, ""),
+            duration_minutes=snapshot.session_duration_minutes.get(session.id, 0),
+        )
+        for session in snapshot.sessions
+    )
+    response.charges.extend(
+        offline_session_service_pb2.OfflinePortalCharge(
+            id=str(charge.id),
+            session_id=str(charge.session_id),
+            tariff_id=str(charge.tariff_id),
+            duration_minutes=charge.duration_minutes,
+            amount_cents=charge.amount_cents,
+            tariff_name=snapshot.tariff_names.get(charge.tariff_id, ""),
+            created_at=charge.created_at.isoformat(),
+        )
+        for charge in snapshot.charges
+    )
+    response.purchases.extend(
+        offline_session_service_pb2.OfflinePortalPurchase(
+            id=str(purchase.id),
+            product_name=purchase.product_name,
+            quantity=purchase.quantity,
+            total_price_cents=purchase.total_price_cents,
+            payment_method=purchase.payment_method.value,
+            created_at=purchase.created_at.isoformat(),
+            payment_parts=[
+                offline_session_service_pb2.OfflinePaymentPart(
+                    method=part.method,
+                    amount_cents=part.amount_cents,
+                    reference=part.reference or "",
+                )
+                for part in purchase.payment_parts
+            ],
+        )
+        for purchase in snapshot.purchases
+    )
+    response.entitlements.extend(
+        offline_session_service_pb2.OfflinePortalEntitlement(
+            id=str(item.id),
+            tariff_id=str(item.tariff_id),
+            zone_id=item.zone_id or "",
+            status=item.status.value,
+            duration_minutes=item.duration_minutes,
+            remaining_minutes=item.remaining_minutes,
+            price_cents=item.price_cents,
+            queue_position=item.queue_position,
+            tariff_name=snapshot.tariff_names.get(item.tariff_id, ""),
+            purchased_at=item.purchased_at.isoformat(),
+            activated_at=item.activated_at.isoformat() if item.activated_at else "",
+            time_restricted=item.time_restricted,
+            sale_window_start_minute=item.sale_window_start_minute or 0,
+            sale_window_end_minute=item.sale_window_end_minute or 0,
+            usage_window_start_minute=item.usage_window_start_minute or 0,
+            usage_window_end_minute=item.usage_window_end_minute or 0,
+            window_timezone=item.window_timezone or "",
+            audience=item.audience.value,
+        )
+        for item in snapshot.entitlements
+    )
+    response.tariffs.extend(
+        offline_session_service_pb2.OfflinePortalTariff(
+            id=str(tariff.id),
+            name=tariff.name,
+            zone_id=tariff.group_id or "",
+            duration_minutes=tariff.duration_minutes,
+            price_cents=tariff.price_cents,
+            time_restricted=tariff.time_restricted,
+            sale_window_start_minute=tariff.sale_window_start_minute or 0,
+            sale_window_end_minute=tariff.sale_window_end_minute or 0,
+            usage_window_start_minute=tariff.usage_window_start_minute or 0,
+            usage_window_end_minute=tariff.usage_window_end_minute or 0,
+            window_timezone=tariff.window_timezone or "",
+            audience=tariff.audience.value,
+        )
+        for tariff in snapshot.tariffs
+    )
+    response.reservations.extend(
+        offline_session_service_pb2.OfflinePortalReservation(
+            id=str(reservation.id),
+            workstation_ids=[str(item) for item in reservation.workstation_ids],
+            start_at=reservation.start_at.isoformat(),
+            end_at=reservation.end_at.isoformat(),
+            status=reservation.status.value,
+            tariff_id=str(reservation.tariff_id) if reservation.tariff_id else "",
+        )
+        for reservation in snapshot.reservations
+    )
+    return response
+
+
 class ClientGrpcService(clients_pb2_grpc.ClientServiceServicer):
     def __init__(
         self,
@@ -1365,6 +1513,359 @@ class ClientPortalGrpcService(clients_pb2_grpc.ClientPortalServiceServicer):
             snapshot=to_portal_snapshot_proto(snapshot),
             resumed=resumed,
         )
+
+
+class DeviceControlGrpcService(device_control_service_pb2_grpc.DeviceControlServiceServicer):
+    """V2 workstation configuration transport without V1 session ownership."""
+
+    def __init__(
+        self,
+        service: WorkstationService,
+        token_service: JwtTokenService | None,
+        command_service: WorkstationCommandService | None = None,
+    ) -> None:
+        self._service = service
+        self._token_service = token_service
+        self._command_service = command_service
+
+    async def GetHealth(
+        self,
+        request: device_control_service_pb2.DeviceHealthRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> device_control_service_pb2.DeviceHealthResponse:
+        del request, context
+        return device_control_service_pb2.DeviceHealthResponse(
+            service="gameclub-backend",
+            status="ok",
+            version="2.0.0",
+        )
+
+    async def Enroll(
+        self,
+        request: device_control_service_pb2.DeviceEnrollmentRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> device_control_service_pb2.DeviceEnrollmentResponse:
+        if self._token_service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "Authentication is not configured")
+        try:
+            workstation = await self._service.enroll_by_mac(
+                request.mac_addresses,
+                request.installation_id,
+            )
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        if workstation is None:
+            return device_control_service_pb2.DeviceEnrollmentResponse(state="pending")
+        if workstation.status is WorkstationStatus.DISABLED:
+            return device_control_service_pb2.DeviceEnrollmentResponse(
+                state="disabled",
+                device_id=workstation.device_id,
+                workstation_id=str(workstation.id),
+                workstation_name=workstation.name,
+            )
+        assert self._token_service is not None
+        access_token, expires_in = self._token_service.issue_access_token(
+            Principal(
+                subject_id=workstation.device_id,
+                subject_type=SubjectType.DEVICE,
+                roles=frozenset({"device"}),
+                permissions=frozenset({"workstations.connect"}),
+            )
+        )
+        return device_control_service_pb2.DeviceEnrollmentResponse(
+            state="approved",
+            device_id=workstation.device_id,
+            workstation_id=str(workstation.id),
+            workstation_name=workstation.name,
+            access_token=access_token,
+            expires_in=expires_in,
+        )
+
+    async def Heartbeat(
+        self,
+        request: device_control_service_pb2.DeviceHeartbeatRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> device_control_service_pb2.DeviceHeartbeatResponse:
+        await require_device(context, self._token_service, request.device_id)
+        try:
+            workstation = await self._service.heartbeat(
+                request.device_id,
+                request.client_version or None,
+                request.capabilities,
+            )
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        policy = workstation.lockdown_policy
+        return device_control_service_pb2.DeviceHeartbeatResponse(
+            device_id=workstation.device_id,
+            workstation_id=str(workstation.id),
+            workstation_name=workstation.name,
+            group_id=workstation.group_id or "",
+            theme=workstation.theme,
+            manager_password_verifier=workstation.manager_password_verifier or "",
+            lockdown_policy=device_control_service_pb2.WorkstationLockdownPolicy(
+                deployment_mode=policy.deployment_mode.value,
+                shell_enabled=policy.shell_enabled,
+                user_self_login_enabled=policy.user_self_login_enabled,
+                lock_after_session=policy.lock_after_session,
+                restart_after_session=policy.restart_after_session,
+                hidden_drives=list(policy.hidden_drives),
+                block_external_storage=policy.block_external_storage,
+                disable_start_menu=policy.disable_start_menu,
+                disable_desktop_switching=policy.disable_desktop_switching,
+                blocked_window_rules=list(policy.blocked_window_rules),
+                allowed_application_ids=list(policy.allowed_application_ids),
+                version=policy.version,
+            ),
+        )
+
+    async def WatchCommands(
+        self,
+        request: device_control_service_pb2.DeviceCommandWatchRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> typing.AsyncIterator[device_control_service_pb2.DeviceCommand]:
+        await require_device(context, self._token_service, request.device_id)
+        if self._command_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Command delivery is not configured")
+            raise AssertionError("context.abort must not return")
+        sent_ids: set[uuid.UUID] = set()
+        while True:
+            try:
+                pending = await self._command_service.pending_v2_for_device(request.device_id)
+            except ApplicationError as error:
+                await abort_application_error(context, error)
+            fresh = [command for command in pending if command.id not in sent_ids]
+            if fresh:
+                for command in fresh:
+                    sent_ids.add(command.id)
+                    yield to_v2_device_command_proto(command)
+                continue
+            await self._command_service.wait_for_commands(request.device_id)
+
+    async def AcknowledgeCommand(
+        self,
+        request: device_control_service_pb2.DeviceCommandAcknowledgementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> device_control_service_pb2.DeviceCommand:
+        await require_device(context, self._token_service, request.device_id)
+        if self._command_service is None:
+            await context.abort(grpc.StatusCode.UNIMPLEMENTED, "Command delivery is not configured")
+            raise AssertionError("context.abort must not return")
+        try:
+            command = await self._command_service.acknowledge_v2(
+                command_id=parse_uuid(request.command_id, "command_id"),
+                device_id=request.device_id,
+                success=request.success,
+                message=request.message,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return to_v2_device_command_proto(command)
+
+
+def to_v2_device_command_proto(
+    command: WorkstationCommand,
+) -> device_control_service_pb2.DeviceCommand:
+    return device_control_service_pb2.DeviceCommand(
+        id=str(command.id),
+        command_type=command.command_type,
+        payload_json=command.payload_json,
+        idempotency_key=command.idempotency_key,
+        status=command.status.value,
+        acknowledgement_message=command.acknowledgement_message or "",
+        expires_at=command.expires_at.isoformat(),
+    )
+
+
+class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionServiceServicer):
+    """Отдельный V2 transport; он не меняет V1 ClientPortalService."""
+
+    def __init__(
+        self,
+        service: V2OfflineLoginService | None,
+        token_service: JwtTokenService | None,
+    ) -> None:
+        self._service = service
+        self._token_service = token_service
+
+    async def Login(
+        self,
+        request: offline_session_service_pb2.LoginOfflineSessionRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot:
+        await require_device(context, self._token_service, request.device_id)
+        if self._service is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "V2 offline login is not configured",
+            )
+            raise AssertionError("context.abort must not return")
+        try:
+            return await self._service.login(
+                device_id=request.device_id,
+                identifier=request.identifier,
+                password=request.password,
+                idempotency_key=request.idempotency_key,
+            )
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        except ValueError as error:
+            message = str(error)
+            status = (
+                grpc.StatusCode.ALREADY_EXISTS
+                if "active V2 lease" in message
+                else grpc.StatusCode.INVALID_ARGUMENT
+            )
+            await context.abort(status, message)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def Register(
+        self,
+        request: offline_session_service_pb2.RegisterOfflineSessionRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot:
+        await require_device(context, self._token_service, request.device_id)
+        if self._service is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "V2 offline login is not configured",
+            )
+            raise AssertionError("context.abort must not return")
+        try:
+            return await self._service.register(
+                device_id=request.device_id,
+                nickname=request.nickname,
+                phone=request.phone,
+                password=request.password,
+                idempotency_key=request.idempotency_key,
+            )
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def ChangePassword(
+        self,
+        request: offline_session_service_pb2.ChangeOfflinePasswordRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> empty_pb2.Empty:
+        if self._service is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE,
+                "V2 offline login is not configured",
+            )
+            raise AssertionError("context.abort must not return")
+        try:
+            principal = await require_principal(context, self._token_service)
+            if (
+                principal.subject_type is not SubjectType.CLIENT
+                or not principal.password_reset_required
+            ):
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    "V2 password reset identity is not permitted",
+                )
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+                allow_password_reset=True,
+            )
+            await self._service.change_password(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+                new_password=request.new_password,
+            )
+            return empty_pb2.Empty()
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def GetPortalSnapshot(
+        self,
+        request: offline_session_service_pb2.GetOfflinePortalSnapshotRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.OfflinePortalSnapshot:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.get_portal_snapshot(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+                limit=request.limit or 50,
+            )
+            return to_v2_portal_snapshot_proto(snapshot)
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def ActivateEntitlement(
+        self,
+        request: offline_session_service_pb2.ActivateOfflineEntitlementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.OfflinePortalSnapshot:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.activate_entitlement(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+                entitlement_id=parse_uuid(request.entitlement_id, "entitlement_id"),
+            )
+            return to_v2_portal_snapshot_proto(snapshot)
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def PurchaseEntitlement(
+        self,
+        request: offline_session_service_pb2.PurchaseOfflineEntitlementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.OfflinePortalSnapshot:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context,
+                self._token_service,
+                principal.subject_id,
+                request.device_id,
+            )
+            snapshot = await self._service.purchase_entitlement(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+                tariff_id=parse_uuid(request.tariff_id, "tariff_id"),
+                idempotency_key=request.idempotency_key,
+            )
+            return to_v2_portal_snapshot_proto(snapshot)
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
 
 
 def to_product_proto(product: Product) -> catalog_pb2.Product:

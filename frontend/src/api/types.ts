@@ -3,6 +3,7 @@ export type BackendWorkstation = {
   device_id: string;
   mac_address: string | null;
   installation_bound: boolean;
+  session_mode: "v1_server_owned" | "v2_local_ledger";
   name: string;
   group_id: string | null;
   position: number | null;
@@ -83,6 +84,19 @@ export type BackendPaymentPart = {
   reference?: string | null;
 };
 
+/** Результат server-side пополнения активной автономной сессии. */
+export type BackendV2Deposit = {
+  payment_operation_id: string;
+  balance_operation_id: string;
+  client_delivery_event_id: string;
+  confirmed_domain_event_id: string;
+  amount_delta_cents: number;
+  currency: string;
+  accepted_at: string;
+  delivery_status: "pending_delivery";
+  is_duplicate: boolean;
+};
+
 export type BackendEntitlement = {
   id: string;
   client_id: string;
@@ -153,6 +167,14 @@ export type BackendCommand = {
   expires_at: string;
   acknowledged_at: string | null;
   acknowledgement_message: string | null;
+};
+
+export type BackendV2DeviceCommand = {
+  id: string;
+  workstation_id: string;
+  command_type: "v2.display.lock" | "v2.system.restart";
+  status: "queued" | "acknowledged" | "failed" | "expired";
+  expires_at: string;
 };
 
 export type BackendTariff = {

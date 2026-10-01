@@ -30,6 +30,13 @@ class WorkstationStatus(enum.StrEnum):
     DISABLED = "disabled"
 
 
+class WorkstationSessionMode(enum.StrEnum):
+    """Defines which side owns billing decisions for a workstation session."""
+
+    V1_SERVER_OWNED = "v1_server_owned"
+    V2_LOCAL_LEDGER = "v2_local_ledger"
+
+
 class LockdownDeploymentMode(enum.StrEnum):
     APP_GATE = "app_gate"
     ASSIGNED_ACCESS = "assigned_access"
@@ -110,12 +117,18 @@ class Workstation:
     lockdown_policy: LockdownPolicy = dataclasses.field(default_factory=LockdownPolicy)
     mac_address: str | None = None
     installation_id: str | None = None
+    session_mode: WorkstationSessionMode = WorkstationSessionMode.V1_SERVER_OWNED
 
     def __post_init__(self) -> None:
         if not self.device_id.strip():
             raise ValueError("Device identity cannot be empty")
         if not self.name.strip():
             raise ValueError("Workstation name cannot be empty")
+        if not isinstance(self.session_mode, WorkstationSessionMode):
+            try:
+                object.__setattr__(self, "session_mode", WorkstationSessionMode(self.session_mode))
+            except ValueError as error:
+                raise ValueError("Workstation session mode is invalid") from error
         if self.mac_address:
             object.__setattr__(self, "mac_address", normalize_mac_address(self.mac_address))
         if self.installation_id is not None:

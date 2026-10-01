@@ -17,7 +17,11 @@ from gameclub_backend.modules.catalog.domain import (
 from gameclub_backend.modules.clients.application.ports import Clock
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
-from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementSettlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    Entitlement,
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
 from gameclub_backend.modules.payment_methods.domain import PaymentMethod
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 from gameclub_backend.modules.sales.domain import ProductSale
@@ -175,6 +179,9 @@ class ClientPortalService:
     async def set_password(self, client_id: uuid.UUID, password: str) -> Client:
         return await self._clients.set_portal_password(client_id, password)
 
+    async def get_client(self, client_id: uuid.UUID) -> Client:
+        return await self._clients.get(client_id)
+
     async def snapshot(
         self,
         client_id: uuid.UUID,
@@ -265,6 +272,50 @@ class ClientPortalService:
             client_id,
             limit,
             group_id=effective_workstation_group_id(workstation.group_id),
+        )
+
+    async def v2_offline_snapshot_for_device(
+        self,
+        client_id: uuid.UUID,
+        device_id: str,
+    ) -> ClientPortalSnapshot:
+        """Return only the durable, server-owned inputs allowed in a V2 snapshot."""
+        if self._entitlements is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Entitlement service is not configured",
+            )
+        workstation = await self._workstation_for_device(device_id)
+        group_id = effective_workstation_group_id(workstation.group_id)
+        client = await self._clients.get(client_id)
+        if client.blocked_at is not None:
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        now = self._clock.now()
+        entitlements = tuple(
+            item
+            for item in await self._entitlements.list_for_client(client_id)
+            if item.settlement_status is EntitlementSettlementStatus.SETTLED
+            and item.status in {EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED}
+        )
+        tariffs = tuple(
+            tariff
+            for tariff in await self._tariffs.list_tariffs()
+            if tariff.applies_at(now, group_id, TariffAudience.REGISTERED)
+        )
+        return ClientPortalSnapshot(
+            client=client,
+            balance_operations=(),
+            sessions=(),
+            charges=(),
+            purchases=(),
+            available_time_minutes=self._available_time_minutes(
+                client.balance_cents,
+                list(tariffs),
+                group_id,
+                now,
+            ),
+            entitlements=entitlements,
+            tariffs=tariffs,
         )
 
     async def resume_for_device(

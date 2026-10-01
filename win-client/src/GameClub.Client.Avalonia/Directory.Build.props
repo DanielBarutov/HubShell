@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'GameClub.Client.Avalonia.V2'">
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj-v2\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(MSBuildThisFileDirectory)obj-v2\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

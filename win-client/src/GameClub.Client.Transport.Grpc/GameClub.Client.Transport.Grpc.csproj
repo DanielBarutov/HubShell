@@ -11,6 +11,7 @@
     <PackageReference Include="Grpc.Net.Client" Version="2.66.0" />
     <PackageReference Include="Google.Protobuf" Version="3.28.2" />
     <PackageReference Include="Grpc.Tools" Version="2.66.0" PrivateAssets="All" />
+    <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,10 @@
     <Protobuf Include="..\..\..\backend\proto\gameclub\v1\billing.proto" GrpcServices="Client" />
     <Protobuf Include="..\..\..\backend\proto\gameclub\v1\cash_shifts.proto" GrpcServices="Client" />
     <Protobuf Include="..\..\..\backend\proto\gameclub\v1\analytics.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v2\events.proto" GrpcServices="None" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v2\offline_session_snapshot.proto" GrpcServices="None" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v2\offline_session_service.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\backend\proto\gameclub\v2\device_control_service.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <ItemGroup>

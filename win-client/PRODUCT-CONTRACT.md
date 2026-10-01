@@ -187,10 +187,64 @@
 - Если на локальном снимке заканчиваются пакет и баланс, завершить сессию и
   заблокировать ПК. Если сеть отсутствует до входа, новую сессию не запускать.
 - После последней минуты пакета при невозможности оплатить следующую минуту
-  клиент получает команды `session.stop` и `display.lock` в том же цикле
-  серверной обработки. Активный виджет не остаётся на экране с нулём минут.
+  локальный V2 ledger атомарно записывает `SESSION_STOP`, закрывает доступ и
+  блокирует application shell; V2 operator command может отдельно подтвердить
+  `v2.display.lock`. Активный виджет не остаётся на экране с нулём минут.
 - На карте оператора офлайн-ПК остаётся виден с последним клиентом, временем и
   статусом отсутствия связи.
+
+## V2: локальный ledger и Kafka
+
+- После валидного подписанного snapshot клиент сам выбирает источник времени:
+  login grant → активный пакет → подходящий queued package → поминутное
+  списание → exhaustion/access-gate. Это единственный поставляемый режим
+  клиента; V1 server-backed gRPC-meter и переключатель V1/V2 отсутствуют.
+- Локальное хранилище постоянно содержит session state, immutable ledger,
+  ClientInbox, ClientOutbox и checkpoint. Изменение времени/денег и запись
+  outbox происходят одной локальной транзакцией; память процесса не является
+  источником истины.
+- Клиент создаёт только заранее разрешённые facts: расход grant/package,
+  `PER_MINUTE_DEBIT`, package purchase из локального balance, burn active
+  package/grant и session stop. Внешнее пополнение, новый неизвестный клиент и
+  новый вход без snapshot при отсутствии сервера не разрешены.
+- Outbox worker публикует facts через Kafka с постоянным `operation_id` и
+  retry/backoff. ClientInbox дедуплицирует server events до commit offset.
+  Heartbeat передаёт состояние устройства и watermarks; он не списывает деньги
+  и не подтверждает минуты.
+- `BalanceCreditApplied` содержит id пополнения и balance delta. Клиент
+  применяет его один раз, не заменяя локальный balance абсолютным server value;
+  так pending local debits не теряются.
+- До записи `BalanceCreditApplied` сверяется server producer, hash payload и
+  точная цель `client_id`/`session_id`/`device_id`. Чужой или повреждённый факт
+  не меняет локальный ledger и должен быть возвращён транспортом как controlled
+  reject, а не подтверждён как успешно применённый.
+- При invalid signature, другом устройстве, sequence gap или clock rollback
+  клиент останавливает новые финансовые действия, показывает понятное состояние
+  `needs review` и сохраняет journal до server reconciliation.
+- Windows V2 host получает только public keyring `GAMECLUB_V2_SNAPSHOT_PUBLIC_KEYS`
+  (формат `key_id=base64;...`) из deployment-конфигурации. Отсутствующий или
+  повторяющийся key id не допускает запуск V2 host; private signing key никогда
+  не передаётся на ПК.
+- V2 access-gate вызывает только `OfflineSessionService.Login/Register`,
+  создаёт ledger после проверки подписи и ведёт minute timer локально. Он не
+  запускает V1 command-loop, который способен создать server-owned session.
+- До входа Windows V2 host использует только V2 `DeviceControlService`: health,
+  enrollment по MAC/`installation_id` и device-authenticated heartbeat. Полученный
+  heartbeat содержит policy/тему места, но не V1 session snapshot; локальный ledger
+  остаётся единственным источником активной V2-сессии.
+- Windows publish собирается через отдельные `GameClub.Client.Avalonia.V2` и
+  `GameClub.Client.Transport.V2.Grpc`: их dependency manifest не содержит V1
+  protobuf transport. Linux developer host также использует V2 transport и
+  local ledger для ручного тестирования; plaintext store остаётся только
+  manual-dev boundary и не является production security proof.
+- Операторское отключение места — это V2 revocation: следующий heartbeat
+  возвращает controlled conflict, Windows немедленно блокирует access-gate и
+  прекращает reconnect loop. Durable V2 ledger не удаляется, чтобы факты можно
+  было сверить после повторного допуска или вручную разобрать конфликт.
+- V2 Windows host подключает только `DeviceControlService` command stream.
+  Исполнитель принимает строго `v2.display.lock` и `v2.system.restart`; оба
+  сначала блокируют application shell. В нём нет session gateway, поэтому
+  operator command не может создать, завершить или meter-ить V1-сессию.
 
 ## Enrollment и темы
 

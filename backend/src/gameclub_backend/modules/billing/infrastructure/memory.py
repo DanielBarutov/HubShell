@@ -68,6 +68,13 @@ class InMemoryChargeRepository:
             reverse=True,
         )[:limit]
 
+    async def list_charges_for_client(
+        self,
+        client_id: uuid.UUID,
+        limit: int,
+    ) -> list[SessionCharge]:
+        return await self.list_for_client(client_id, limit)
+
     async def save(self, charge: SessionCharge) -> SessionCharge:
         async with self._lock:
             existing_by_key = self._by_key.get(charge.idempotency_key)

@@ -30,6 +30,7 @@ from gameclub_backend.modules.sessions.domain import (
     SessionTimeNotification,
 )
 from gameclub_backend.modules.workstations.domain import (
+    WorkstationSessionMode,
     WorkstationStatus,
     effective_workstation_group_id,
 )
@@ -42,6 +43,7 @@ class UtcClock:
 
 class SessionService:
     LOGIN_GRANT_MINUTES = 5
+    V2_LOCAL_LEDGER_SOURCE = "v2_local_ledger"
 
     def __init__(
         self,
@@ -84,6 +86,7 @@ class SessionService:
         tariff_quantity: int = 1,
         guest_payment_id: uuid.UUID | None = None,
         entitlement_id: uuid.UUID | None = None,
+        persist: bool = True,
     ) -> Session:
         normalized_idempotency_key = idempotency_key.strip() if idempotency_key else None
         if idempotency_key is not None and (
@@ -95,7 +98,9 @@ class SessionService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Session author is required")
         normalized_guest_name = guest_name.strip() if guest_name else None
         normalized_source = source.strip() or "operator"
-        login_grant_minutes = self.LOGIN_GRANT_MINUTES if normalized_source == "device" else 0
+        login_grant_minutes = (
+            self.LOGIN_GRANT_MINUTES if normalized_source in {"device", "v2_local_ledger"} else 0
+        )
         if tariff_quantity <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff quantity must be positive")
         workstation = await self._workstations.get(workstation_id)
@@ -103,6 +108,22 @@ class SessionService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
+        if (
+            workstation.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
+            and normalized_source != self.V2_LOCAL_LEDGER_SOURCE
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "V2 workstation does not accept V1 session creation",
+            )
+        if (
+            workstation.session_mode is WorkstationSessionMode.V1_SERVER_OWNED
+            and normalized_source == self.V2_LOCAL_LEDGER_SOURCE
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "V1 workstation does not accept V2 local ledger sessions",
+            )
         effective_group_id = effective_workstation_group_id(workstation.group_id)
         if device_id is not None and workstation.device_id != device_id:
             raise ApplicationError(
@@ -307,6 +328,8 @@ class SessionService:
             login_grant_minutes=login_grant_minutes,
             entitlement_id=entitlement_id,
         )
+        if not persist:
+            return session
         try:
             saved = await self._repository.save(session)
         except ValueError as error:
@@ -540,6 +563,22 @@ class SessionService:
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, "session_stop")
         return saved
+
+    async def terminate_active_v1_sessions_for_cutover(self) -> list[Session]:
+        """Finish every current V1 session before the one-time V2 cutover.
+
+        The operation deliberately uses the ordinary stop lifecycle, so a
+        legacy package is finalized consistently with a manual stop. Repeating
+        it is safe: completed sessions are no longer returned by ``list``.
+        V2 local-ledger sessions are outside this operation.
+        """
+        active_sessions = await self._repository.list(active_only=True)
+        terminated: list[Session] = []
+        for session in active_sessions:
+            if session.source == self.V2_LOCAL_LEDGER_SOURCE:
+                continue
+            terminated.append(await self.stop(session.id))
+        return terminated
 
     async def interrupt(
         self,
