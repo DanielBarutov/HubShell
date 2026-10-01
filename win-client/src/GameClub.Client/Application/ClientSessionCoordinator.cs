@@ -167,6 +167,7 @@ public sealed class ClientSessionCoordinator
         Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
+        ClientConnectionState? lastLoggedHeartbeatState = null;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -177,6 +178,11 @@ public sealed class ClientSessionCoordinator
                     clientVersion,
                     capabilities,
                     cancellationToken);
+                if (lastLoggedHeartbeatState != ClientConnectionState.Online)
+                {
+                    ClientLog.Info("heartbeat", $"device_id={deviceId} status=online");
+                    lastLoggedHeartbeatState = ClientConnectionState.Online;
+                }
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Online);
                 if (!string.IsNullOrWhiteSpace(heartbeat.Theme))
                 {
@@ -209,12 +215,19 @@ public sealed class ClientSessionCoordinator
             }
             catch (DeviceEnrollmentDisabledException)
             {
+                ClientLog.Warning("heartbeat", $"device_id={deviceId} status=disabled");
+                lastLoggedHeartbeatState = ClientConnectionState.Offline;
                 onWorkstationDisabled?.Invoke();
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Offline);
                 return;
             }
-            catch (Exception)
+            catch (Exception error)
             {
+                if (lastLoggedHeartbeatState != ClientConnectionState.Reconnecting)
+                {
+                    ClientLog.Exception("heartbeat", error, $"device_id={deviceId} status=reconnecting");
+                    lastLoggedHeartbeatState = ClientConnectionState.Reconnecting;
+                }
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Reconnecting);
             }
 

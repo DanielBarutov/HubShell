@@ -6,6 +6,7 @@ import { refreshWorkspace, selectWorkspace } from "../features/workspace/workspa
 import { selectUi } from "../features/workspace/uiSlice";
 import { BookingEditPanel, BookingPanel } from "../features/bookings/BookingPanels";
 import { ClientPanel, NewClientPanel } from "../features/clients/ClientsScreen";
+import { findActiveV2DepositTarget } from "../features/clients/v2DepositTarget";
 import { DepositPanel } from "../features/clients/DepositPanel";
 import { DiscountPanel, ProductPanel, TariffPanel } from "../features/catalog/CatalogScreen";
 import { SaleWorkspace } from "../features/catalog/SaleWorkspace";
@@ -30,7 +31,13 @@ export function PanelHost() {
     dispatch(bumpBookingRefresh());
     if (closePanel) close();
   };
-  const openClientDeposit = (client = selectedClient, bonusOnly = false, v2Target?: V2DepositTarget) => dispatch(openDeposit({ clientId: client?.id, bonusOnly, v2Target }));
+  const openClientDeposit = (client = selectedClient, bonusOnly = false, v2Target?: V2DepositTarget) => {
+    const target = v2Target
+      ?? (client && !bonusOnly
+        ? findActiveV2DepositTarget(client.id, workspace.workstations)
+        : undefined);
+    dispatch(openDeposit({ clientId: client?.id, bonusOnly, v2Target: target }));
+  };
 
   if (!ui.panel) return null;
 

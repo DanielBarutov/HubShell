@@ -158,7 +158,7 @@ async def test_v2_login_creates_only_v2_session_and_reuses_signed_snapshot_on_re
     active = await sessions.list(active_only=True)
     assert len(active) == 1
     assert active[0].source == "v2_local_ledger"
-    assert active[0].login_grant_minutes == 5
+    assert active[0].login_grant_minutes == 1
     assert first.payload.session_id == str(active[0].id)
     assert first.SerializeToString() == repeated.SerializeToString()
 

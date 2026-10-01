@@ -57,12 +57,22 @@ public sealed class V2ClientOutboxWorker
 
             if (result.Failure is not null)
             {
+                ClientLog.Exception(
+                    "v2.outbox",
+                    result.Failure,
+                    $"publish failed published={result.PublishedCount} pending={result.PendingCount}");
                 _onFailure?.Invoke(result.Failure);
                 await _delay(retryDelay, cancellationToken);
                 retryDelay = NextRetryDelay(retryDelay);
             }
             else
             {
+                if (result.PublishedCount > 0)
+                {
+                    ClientLog.Info(
+                        "v2.outbox",
+                        $"publish succeeded published={result.PublishedCount} pending={result.PendingCount}");
+                }
                 retryDelay = _initialRetryDelay;
                 await _delay(_pollInterval, cancellationToken);
             }

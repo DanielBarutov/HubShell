@@ -52,6 +52,16 @@ public sealed class V2MinuteLedgerRunner
                 continue;
             }
             transitions.Add(transition);
+            foreach (var fact in transition.OutboxFacts)
+            {
+                ClientLog.Info(
+                    "v2.ledger",
+                    $"event_type={fact.EventType} session_id={fact.SessionId} " +
+                    $"event_id={fact.EventId} operation_id={fact.OperationId} " +
+                    $"sequence={fact.Sequence} occurred_at={fact.OccurredAt:O} " +
+                    $"balance_cents={transition.Ledger.BalanceCents} " +
+                    $"login_grant_remaining={transition.Ledger.LoginGrantRemainingMinutes}");
+            }
             if (transition.LockWorkstation)
             {
                 break;

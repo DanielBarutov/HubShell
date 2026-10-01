@@ -1,3 +1,5 @@
+using GameClub.Client.Application;
+
 namespace GameClub.Client.Infrastructure;
 
 /// <summary>
@@ -46,6 +48,13 @@ public sealed class V2ServerEventWorker
             try
             {
                 var result = await _consumer.PollOnceAsync(cancellationToken);
+                if (result.ReceivedCount > 0 || result.RejectedCount > 0)
+                {
+                    ClientLog.Info(
+                        "v2.server-events",
+                        $"poll received={result.ReceivedCount} " +
+                        $"acknowledged={result.AcknowledgedCount} rejected={result.RejectedCount}");
+                }
                 _onPoll?.Invoke(result);
                 retryDelay = _initialRetryDelay;
                 await _delay(_pollInterval, cancellationToken);
@@ -56,6 +65,7 @@ public sealed class V2ServerEventWorker
             }
             catch (Exception error)
             {
+                ClientLog.Exception("v2.server-events", error, "server event poll failed");
                 _onFailure?.Invoke(error);
                 await _delay(retryDelay, cancellationToken);
                 retryDelay = NextRetryDelay(retryDelay);

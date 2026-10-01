@@ -117,6 +117,18 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
     operation_ids = (first.operation_id, second.operation_id)
     try:
         now = datetime.datetime.now(datetime.UTC)
+        await PostgresClientRepository(lambda: engine).save(
+            Client(
+                id=client_id,
+                nickname=f"V2Reconcile{client_id.hex[:10]}",
+                phone=None,
+                discount_category=None,
+                balance_cents=500,
+                balance_bonus=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
         async with engine.begin() as connection:
             await connection.execute(
                 text("""
@@ -185,6 +197,17 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         assert analytics.status is V2InboxStatus.ACCEPTED
 
         async with engine.connect() as connection:
+            balance = await connection.scalar(
+                text("SELECT balance_cents FROM clients WHERE id = :client_id"),
+                {"client_id": client_id},
+            )
+            debit_count = await connection.scalar(
+                text("""
+                    SELECT count(*) FROM balance_operations
+                    WHERE client_id = :client_id AND operation_type = 'debit'
+                """),
+                {"client_id": client_id},
+            )
             counts = (
                 (
                     await connection.execute(
@@ -212,6 +235,8 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 .one()
             )
 
+        assert balance == 300
+        assert debit_count == 2
         assert dict(counts) == {
             "inbox_rows": 3,
             "confirmed_rows": 2,
@@ -245,6 +270,14 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
                 {"session_id": session_id},
             )
+            await connection.execute(
+                text("DELETE FROM balance_operations WHERE client_id = :client_id"),
+                {"client_id": client_id},
+            )
+            await connection.execute(
+                text("DELETE FROM clients WHERE id = :client_id"),
+                {"client_id": client_id},
+            )
         await engine.dispose()
 
 
@@ -266,6 +299,18 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
     producer = AIOKafkaProducer(bootstrap_servers=kafka_bootstrap_servers, acks="all")
     try:
         now = datetime.datetime.now(datetime.UTC)
+        await PostgresClientRepository(lambda: engine).save(
+            Client(
+                id=client_id,
+                nickname=f"V2KafkaDebit{client_id.hex[:10]}",
+                phone=None,
+                discount_category=None,
+                balance_cents=500,
+                balance_bonus=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
         async with engine.begin() as connection:
             await connection.execute(
                 text("""
@@ -323,6 +368,12 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
 
         assert accepted, "V2 FastStream worker did not reconcile the Kafka fact in time"
         assert analytics_received, "Confirmed V2 debit did not reach the analytics worker in time"
+        async with engine.connect() as connection:
+            balance = await connection.scalar(
+                text("SELECT balance_cents FROM clients WHERE id = :client_id"),
+                {"client_id": client_id},
+            )
+        assert balance == 400
 
         project_analytics_events.send()
         projected = False
@@ -417,6 +468,14 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
             await connection.execute(
                 text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
                 {"session_id": session_id},
+            )
+            await connection.execute(
+                text("DELETE FROM balance_operations WHERE client_id = :client_id"),
+                {"client_id": client_id},
+            )
+            await connection.execute(
+                text("DELETE FROM clients WHERE id = :client_id"),
+                {"client_id": client_id},
             )
         await engine.dispose()
 

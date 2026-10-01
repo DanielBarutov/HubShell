@@ -42,7 +42,8 @@ class UtcClock:
 
 
 class SessionService:
-    LOGIN_GRANT_MINUTES = 5
+    # Временно уменьшено для проверки поминутного списания; после проверки вернуть 5.
+    LOGIN_GRANT_MINUTES = 1
     V2_LOCAL_LEDGER_SOURCE = "v2_local_ledger"
 
     def __init__(

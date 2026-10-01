@@ -44,6 +44,12 @@ public sealed class V2ServerEventProcessor
                 operationId,
                 payload.AmountCents,
                 cancellationToken);
+            ClientLog.Info(
+                "v2.balance",
+                $"event=balance_credit_applied status={(transition.IsDuplicate ? "duplicate" : "applied")} " +
+                $"session_id={transition.Ledger.SessionId} event_id={eventId} " +
+                $"operation_id={operationId} amount_cents={payload.AmountCents} " +
+                $"balance_cents={transition.Ledger.BalanceCents}");
             return new EventProcessingResult
             {
                 EventId = envelope.EventId,

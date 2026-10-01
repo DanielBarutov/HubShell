@@ -255,8 +255,10 @@ Device-команды `session.start/stop` считаются фактом се�
 минут, сериализуется по `session_id` и при недостатке основного баланса завершает
 сессию. После успешного device login отдельные пять минут `login_grant` не
 смешиваются с tariff `free_minutes`; их состояние и idempotency должны быть
-видны в server session snapshot. Последовательные блочные единицы фиксируются в
-`tariff_quantity`. Один клиент не может иметь две активные сессии; это правило
+видны в server session snapshot. Для временной проверки поминутного списания
+`LOGIN_GRANT_MINUTES` установлен в 1; после проверки вернуть 5.
+Последовательные блочные единицы фиксируются в `tariff_quantity`. Один клиент не
+может иметь две активные сессии; это правило
 защищается и application guard, и PostgreSQL constraint.
 
 ### 5.6. Billing / Session Charges
