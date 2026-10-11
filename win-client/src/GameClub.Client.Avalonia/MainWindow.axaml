@@ -16,7 +16,7 @@
         Background="{DynamicResource PageBackgroundBrush}"
         ClipToBounds="True"
     >
-  <Grid
+  <Grid Name="WindowContentGrid"
             Background="{DynamicResource PageBackgroundBrush}"
             KeyDown="RecordKeyActivity"
             PointerPressed="RecordPointerActivity"
@@ -415,6 +415,7 @@
     </Grid>
 
     <!-- Виджет использует те же данные и команды, что и access-gate. -->
+    <Grid Name="ExpandedWidgetContainer">
     <Border Name="PortalWidgetSurface" IsVisible="{Binding IsWidgetContentVisible}" CornerRadius="14"
             BorderBrush="#246176" BorderThickness="1" ClipToBounds="True">
       <Border.Background><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%"><GradientStop Color="#020D12" Offset="0"/><GradientStop Color="#061E2A" Offset="1"/></LinearGradientBrush></Border.Background>
@@ -432,7 +433,7 @@
             <Border Width="32" Height="32" Background="{DynamicResource AccentBrush}" CornerRadius="9"><TextBlock Text="H" FontWeight="Black" FontSize="24" Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
             <TextBlock Grid.Column="1" Text="HUBSHELL" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center"/>
             <Button Name="PortalLogoutButton" Grid.Column="2" IsVisible="{Binding !IsActiveSessionVisible}" Click="Logout" Background="Transparent" Foreground="{DynamicResource AccentBrush}" Padding="6" Content="Выйти"/>
-            <Button Name="HideToTrayButton" Grid.Column="3" Click="HideToTray" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Скрыть в трей" AutomationProperties.Name="Скрыть в трей"><Path Width="14" Height="14" Stretch="Uniform" Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="1.5" Data="M0,0 L14,14 M14,0 L0,14"/></Button>
+            <Button Name="HideToTrayButton" Grid.Column="3" Click="CollapseWidget" Background="Transparent" Foreground="{DynamicResource PrimaryTextBrush}" Width="32" Height="32" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" ToolTip.Tip="Свернуть в таймер" AutomationProperties.Name="Свернуть в таймер"><Path Width="14" Height="14" Stretch="Uniform" Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="1.5" Data="M0,0 L14,14 M14,0 L0,14"/></Button>
           </Grid>
           <Border Classes="widget-card" Padding="8">
             <Grid ColumnDefinitions="52,*" ColumnSpacing="14">
@@ -561,6 +562,28 @@
         </StackPanel>
       </ScrollViewer>
     </Border>
+    </Grid>
+    <Button Name="CompactWidgetButton" IsVisible="False" Click="ExpandWidget"
+            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="0"
+            ToolTip.Tip="Развернуть HUBSHELL" AutomationProperties.Name="Развернуть HUBSHELL">
+      <Button.Template><ControlTemplate>
+        <Grid Name="CompactHudSurface">
+          <Viewbox Stretch="Fill"><Canvas Width="68" Height="280">
+            <Path Data="M68,0 C68,26 62,30 34,38 C14,44 1,55 1,78 L1,202 C1,224 14,236 34,242 C62,250 68,254 68,280 L68,0 Z" StrokeThickness="1.5">
+              <Path.Fill><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%"><GradientStop Color="#020D12" Offset="0"/><GradientStop Color="#061E2A" Offset="1"/></LinearGradientBrush></Path.Fill>
+              <Path.Stroke><LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%"><GradientStop Color="#61D8FF" Offset="0"/><GradientStop Color="#B6F35A" Offset="1"/></LinearGradientBrush></Path.Stroke>
+            </Path>
+          </Canvas></Viewbox>
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="26">
+            <Border Width="30" Height="30" CornerRadius="6" Background="{DynamicResource AccentBrush}"><TextBlock Text="H" FontWeight="Black" FontSize="24" Foreground="{DynamicResource AccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <LayoutTransformControl><LayoutTransformControl.LayoutTransform><RotateTransform Angle="90"/></LayoutTransformControl.LayoutTransform>
+              <TextBlock Name="CompactWidgetTimer" Text="{Binding WidgetTimerSummary}" FontSize="34" FontWeight="SemiBold"><TextBlock.Foreground><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%"><GradientStop Color="#61D8FF" Offset="0"/><GradientStop Color="#B6F35A" Offset="1"/></LinearGradientBrush></TextBlock.Foreground></TextBlock>
+            </LayoutTransformControl>
+          </StackPanel>
+        </Grid>
+      </ControlTemplate></Button.Template>
+      <Button.Styles><Style Selector="Button:pointerover /template/ Grid#CompactHudSurface"><Setter Property="Opacity" Value="0.85"/></Style></Button.Styles>
+    </Button>
 
   </Grid>
   </Border>

@@ -157,6 +157,35 @@ C:\Git\HubShell\win-client\artifacts
 - `scripts\new-access-hash.ps1` — только developer helper для PBKDF2 verifier,
   не часть обычной установки клиента.
 
+Для установки восстановления процесса в PowerShell **от администратора**:
+
+```powershell
+.\win-client\scripts\install-windows.ps1 -PublishPath "C:\HubShellPublish" -RegisterWatchdogService
+```
+
+Клиент и служба устанавливаются в `Program Files\GameClub\Client`. Служба
+`HubShell.Watchdog` запускает GUI под уже вошедшим пользователем; системные
+политики и учётные записи не меняются. Старые HKCU Run/recovery task удаляются
+для текущего пользователя, вместо них запуском владеет служба.
+Перед обновлением завершите игровые сессии, остановите службу и клиент.
+Для диагностики смотрите Windows Application Event Log (`HubShell.Watchdog`).
+Для обслуживания: `Stop-Service HubShell.Watchdog`, после него оператор может
+остановить процесс; возобновление: `Start-Service HubShell.Watchdog`.
+Удаление этой установки: `uninstall-windows.ps1 -RemoveWatchdogService -ConfirmRemoval`.
+
+Крестик/Alt+F4 не завершают UI; крестик сворачивает в HUD. На рабочем столе
+виджет показывается, в других приложениях скрывается. Режим менеджера остаётся
+отдельным входом по Ctrl+Alt+P с проверкой пароля и позволяет скрыть окно обслуживания.
+На экране входа WH_KEYBOARD_LL подавляет клавиши Win и Win+D/Win+R; после входа
+или допуска менеджера hook снимается. Ctrl+Alt+P и обычный ввод остаются доступны.
+Ctrl+Alt+Del не блокируется. Это ограничение приложения, не системная защита Windows.
+
+Native-проверка после установки: рабочий стол → HUD → оконная/полноэкранная игра →
+Win+D/возврат на рабочий стол; вход → Alt+F4 → менеджер → скрытие → восстановление;
+завершение UI через диспетчер задач → единственный восстановленный процесс с тем
+же V2 ledger; остановка/запуск службы, перезагрузка, выход пользователя и DPI/мониторы.
+Эти сценарии не подтверждаются Linux-сборкой и headless-тестами.
+
 `build-installer.ps1` удалён: это не был установщик, а дублирующий упаковочный
 скрипт без отдельного installer-формата.
 
@@ -176,3 +205,32 @@ C:\Git\HubShell\win-client\artifacts
 После запуска клиент определяет MAC, ждёт назначения workstation в админке,
 получает device identity и тему группы через backend. Подробный пользовательский
 flow проверяется по `REAL-PC-VERIFICATION.md`.
+
+## Готовая папка release для C:\GameClub
+
+1. Скопируйте **содержимое** `release/` в `C:\GameClub` на Windows x64.
+2. Заполните `server.ini`: `GrpcAddress` (обычно `http://IP:51051`),
+   `V2EventsHttpAddress` (обычно `http://IP:8100`) и `V2SnapshotPublicKeys`
+   (`key_id=base64` публичного Ed25519-ключа сервера). Секретные ключи не переносите.
+3. Нажмите правой кнопкой `start-service.cmd` → **Запуск от имени администратора**.
+   Скрипт установит и запустит `HubShell.Watchdog` на месте. Каталог будет доступен
+   пользователю только для чтения/запуска; администратор и SYSTEM могут его менять.
+4. Назначьте MAC каждого ПК в операторской админке. Не копируйте AppData,
+   device tokens или ledger с другого ПК.
+
+Адреса читаются рядом с EXE, независимо от рабочего каталога, один раз при запуске.
+Существующие `GAMECLUB_*` env overrides имеют приоритет. Для изменения INI запустите
+редактор от администратора, завершите игровую сессию, остановите watchdog,
+завершите GUI, измените файл и запустите службу вновь. При обновлении EXE также
+сначала остановите службу и GUI. Не перезаписывайте свой INI пустым шаблоном.
+
+Сборка из корня на Linux (.NET 8 SDK):
+
+```bash
+dotnet publish win-client/src/GameClub.Client.Windows/GameClub.Client.Windows.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o release
+cp win-client/scripts/{install-windows.ps1,uninstall-windows.ps1,start-service.ps1,start-service.cmd} release/
+# Только при первой сборке, чтобы не затереть настроенный адрес:
+cp -n win-client/server.ini.example release/server.ini
+```
+
+Публикация на Linux создаёт Windows EXE, но не доказывает запуск SCM/WTS/ACL на Windows.

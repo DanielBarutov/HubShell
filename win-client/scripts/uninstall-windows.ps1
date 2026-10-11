@@ -2,7 +2,8 @@
 param(
     [string]$InstallPath = (Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "GameClub\Client"),
     [switch]$RemoveRuntimeData,
-    [switch]$ConfirmRemoval
+    [switch]$ConfirmRemoval,
+    [switch]$RemoveWatchdogService
 )
 
 Set-StrictMode -Version Latest
@@ -15,6 +16,10 @@ if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
 
 if (-not $ConfirmRemoval) {
     throw "Удаление требует явного параметра -ConfirmRemoval."
+}
+
+if ($RemoveWatchdogService -and -not $PSBoundParameters.ContainsKey("InstallPath")) {
+    $InstallPath = Join-Path ([Environment]::GetFolderPath("ProgramFiles")) "GameClub\Client"
 }
 
 $resolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath)
@@ -38,12 +43,31 @@ if ([string]::Equals(
 }
 
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$removeMatchingWatchdog = $false
+$watchdog = Get-CimInstance -ClassName Win32_Service -Filter "Name='HubShell.Watchdog'"
+if ($null -ne $watchdog) {
+    $expectedCommand = '"{0}" --watchdog-service' -f (Join-Path $resolvedInstallPath "HubShell.exe")
+    if ([string]::Equals($watchdog.PathName, $expectedCommand, [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not $RemoveWatchdogService) { throw "Для этой установки требуется -RemoveWatchdogService." }
+        $removeMatchingWatchdog = $true
+    }
+    elseif ($RemoveWatchdogService) {
+        throw "Служба относится к другому каталогу; удаление остановлено."
+    }
+}
+
 $removed = $false
 if ($PSCmdlet.ShouldProcess($resolvedInstallPath, "удалить установку HubShell")) {
     Remove-ItemProperty -Path $runKey -Name "GameClub.Client.Windows" -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName "GameClub.Client.Windows.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
     Remove-ItemProperty -Path $runKey -Name "HubShell" -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName "HubShell.Recovery" -Confirm:$false -ErrorAction SilentlyContinue
+
+    if ($removeMatchingWatchdog) {
+        Stop-Service -Name "HubShell.Watchdog" -ErrorAction Stop
+        & sc.exe delete "HubShell.Watchdog"
+        if ($LASTEXITCODE -ne 0) { throw "Не удалось удалить службу watchdog." }
+    }
 
     if (Test-Path -LiteralPath $resolvedInstallPath) {
         Remove-Item -LiteralPath $resolvedInstallPath -Recurse -Force

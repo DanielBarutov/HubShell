@@ -439,6 +439,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : _activeSession is null
             ? string.Empty
             : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
+    public string WidgetTimerSummary
+    {
+        get
+        {
+            long? minutes = _activeV2Ledger is not null
+                ? V2LocalLedgerEngine.RemainingMinutes(_activeV2Ledger)
+                : _sessionTimeProjection.GetRemainingMinutes(_clock());
+            return minutes is long value
+                ? $"{Math.Max(0, value) / 60:00}:{Math.Max(0, value) % 60:00}"
+                : "--:--";
+        }
+    }
     public string ActiveTimeSummary => _activeV2Ledger is not null
         ? V2ActiveTimeSummary(_activeV2Ledger)
         : _activeSession is null
@@ -863,6 +875,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             if (_activeSession is not null)
             {
                 OnPropertyChanged(nameof(ActiveTimeSummary));
+                OnPropertyChanged(nameof(WidgetTimerSummary));
             }
         }
     }
@@ -904,14 +917,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         bool altPressed,
         bool tabPressed,
         bool windowsPressed,
-        bool rPressed)
+        bool rPressed,
+        bool dPressed = false)
     {
         if (!IsAccessLocked)
         {
             return false;
         }
 
-        return (altPressed && tabPressed) || (windowsPressed && rPressed);
+        return (altPressed && tabPressed) || (windowsPressed && (rPressed || dPressed));
     }
 
     public void ShowPortalRegistration()
@@ -2623,6 +2637,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
         OnPropertyChanged(nameof(ActiveTimeSummary));
+        OnPropertyChanged(nameof(WidgetTimerSummary));
         OnPropertyChanged(nameof(CurrentSessionModeSummary));
         OnPropertyChanged(nameof(CurrentSessionTariffSummary));
         OnPropertyChanged(nameof(IsPortalBalanceTimeVisible));

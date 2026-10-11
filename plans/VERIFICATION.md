@@ -1,5 +1,51 @@
 # Verification matrix
 
+2026-10-11: собрана `release/` — self-contained single-file Windows x64 EXE (~104 MiB),
+server.ini и start-service.cmd/ps1 + install/uninstall. 158 .NET тестов прошли:
+разбор INI, ошибка/дубликаты/небезопасный HTTP, чтение рядом с host, env priority.
+PowerShell Parser 7.4.6 проверил синтаксис start/install/uninstall/publish.
+`IncludeAllContentForSelfExtract=false`: отдельный .NET 8 Linux single-file probe
+подтвердил BaseDirectory рядом с executable (true возвращает extraction directory).
+Watchdog использует ProcessPath, не extraction directory. Права C:\GameClub защищает
+installer: SYSTEM/Administrators F, Users RX, владелец Administrators, reparse запрещены.
+Адрес клуба ещё не предоставлен: server.ini оставлен незаполненным, запуск installer
+блокируется до заполнения GrpcAddress. Публичные snapshot keys нужны для V2-входа.
+Windows EXE/SCM/WTS/ACL вручную не запускались; Linux publish этого не доказывает.
+
+
+2026-10-11: реализован постоянный desktop-виджет без изменения Windows-пользователя
+и kiosk policy. В Windows User-режиме Topmost выключен; foreground WinEvent скрывает
+виджет в других приложениях и возвращает на Explorer Desktop в прежнем состоянии.
+Обычное закрытие отменяется, выход убран из трея. Повторный Opened после Hide/Show
+не запускает host/recovery повторно и не сбрасывает геометрию HUD. Скрытие владельца
+отменяет незавершённое подтверждение и освобождает окно; история повторно показывается. Maintenance после существующей
+проверки пароля — обычное окно без Topmost, доступно скрытие через прежнюю кнопку.
+Добавлена опциональная LocalSystem-служба HubShell.Watchdog: проверка console-сессии,
+запуск GUI с токеном/окружением текущего пользователя, session-local mutex, retry delay,
+SCM recovery. Install/uninstall поддерживают службу с явными параметрами; Windows
+учётные записи/политики не меняются. Установка только в Program Files от администратора.
+Проверено на Linux: 148 .NET тестов, сборки Windows host и Avalonia/Linux;
+синтаксис install/uninstall проверен PowerShell Parser 7.4.6 без исполнения скриптов.
+Пользователь разрешил исключение из AGENTS.md: глобальный WH_KEYBOARD_LL только в
+Locked. Подавляются Win и Win+D/Win+R; при User/Maintenance/Dispose hook снимается.
+Unit-проверки: нажатия/отпускания, оба Win, снятие ограничения, доступность Ctrl+Alt+P.
+Реальное подавление системных сочетаний на Windows не проверено.
+Ctrl+Alt+Del не перехватывается. Native foreground/Win+D, SCM/WTS, restart с настоящим
+ledger, Event Log, PowerShell installation и режим менеджера в Windows не проверены.
+
+
+2026-10-11: крестик зарегистрированного и гостевого виджета сворачивает
+клиент в вертикальную HUD-кнопку по `ref/Неоновый Windows 11 с HUD-таймером.png`.
+Кнопка 68×280 DIP стоит вплотную к правому краю рабочей области, показывает
+остаток сессии ЧЧ:ММ и разворачивает виджет по клику. Переход 260 мс;
+закрытия клиента и изменения игровой сессии нет. Блокировка/maintenance
+отменяют анимацию и показывают access-gate. Реализация общая для Linux/Windows.
+Проверки: 137 .NET тестов (гость/аккаунт, сворачивание/разворачивание,
+сохранение сессии, отмена перехода блокировкой, обновление времени после допродажи),
+Skia headless-рендер и обе сборки на Linux. Native Windows/DPI и живой
+backend-сеанс не проверены.
+
+
 2026-10-11: история аккаунта, уведомление виджета (включая недостаток средств)
 и подтверждения покупки/переноса/выхода приведены к тёмно-бирюзовому оформлению.
 Подтверждения используют общую форму с высотой по содержимому, компактными кнопками,

@@ -38,3 +38,6 @@ steam-guest/.runtime/
 .delta/
 graphify-out/
 ref/
+
+# Portable Windows delivery
+/release/

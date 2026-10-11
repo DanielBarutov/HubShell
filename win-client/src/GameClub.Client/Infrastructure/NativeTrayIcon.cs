@@ -23,10 +23,8 @@ internal sealed class NativeTrayIcon : IDisposable
     private const uint TpmRetcmd = 0x00000100;
     private const uint TpmRightButton = 0x00000002;
     private const uint TrayShowCommand = 1;
-    private const uint TrayExitCommand = 2;
     private static readonly IntPtr IdiApplication = new(32512);
 
-    private readonly Action _onExit;
     private readonly Action _onRestore;
     private readonly IntPtr _iconHandle;
     private readonly bool _ownsIconHandle;
@@ -35,7 +33,7 @@ internal sealed class NativeTrayIcon : IDisposable
     private readonly IntPtr _previousWindowProc;
     private bool _disposed;
 
-    public NativeTrayIcon(IntPtr windowHandle, Action onRestore, Action onExit)
+    public NativeTrayIcon(IntPtr windowHandle, Action onRestore)
     {
         if (windowHandle == IntPtr.Zero)
         {
@@ -44,7 +42,6 @@ internal sealed class NativeTrayIcon : IDisposable
 
         _windowHandle = windowHandle;
         _onRestore = onRestore;
-        _onExit = onExit;
         (_iconHandle, _ownsIconHandle) = LoadTrayIcon();
         _windowProc = HandleWindowMessage;
         _previousWindowProc = SetWindowLongPtr(
@@ -138,7 +135,6 @@ internal sealed class NativeTrayIcon : IDisposable
         try
         {
             AppendMenu(menu, MfString, new UIntPtr(TrayShowCommand), "Показать");
-            AppendMenu(menu, MfString, new UIntPtr(TrayExitCommand), "Выйти");
             if (!GetCursorPos(out var cursorPosition))
             {
                 return;
@@ -158,10 +154,6 @@ internal sealed class NativeTrayIcon : IDisposable
             if (command == TrayShowCommand)
             {
                 _onRestore();
-            }
-            else if (command == TrayExitCommand)
-            {
-                _onExit();
             }
         }
         finally
