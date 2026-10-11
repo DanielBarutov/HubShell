@@ -589,3 +589,41 @@ async def test_session_validates_linked_reservation_ownership() -> None:
 
     assert session.reservation_id == reservation.id
     assert mismatch_error.value.code is ErrorCode.CONFLICT
+
+
+@pytest.mark.parametrize("minutes", [0, 3])
+async def test_device_session_uses_configured_login_grant(minutes: int, monkeypatch) -> None:
+    """Новая сессия получает заданный через окружение grant, включая отключение."""
+    from gameclub_backend.config import Settings
+
+    monkeypatch.setenv("GAMECLUB_LOGIN_GRANT_MINUTES", str(minutes))
+    settings = Settings(_env_file=None)
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations).register("grant-device", "PC")
+    clients = InMemoryClientRepository()
+    client = await ClientService(clients).create("GrantFox")
+    service = SessionService(
+        InMemorySessionRepository(),
+        workstations=workstations,
+        clients=clients,
+        login_grant_minutes=settings.login_grant_minutes,
+    )
+    session = await service.start(
+        workstation_id=workstation.id,
+        client_id=client.id,
+        created_by="device",
+        source="device",
+    )
+    assert session.login_grant_minutes == minutes
+
+
+@pytest.mark.parametrize("value", ["-1", "1.5", "4294967296"])
+def test_login_grant_setting_rejects_invalid_minutes(value: str, monkeypatch) -> None:
+    """Настройка отклоняет отрицательные, дробные и не помещающиеся в snapshot минуты."""
+    from pydantic import ValidationError
+
+    from gameclub_backend.config import Settings
+
+    monkeypatch.setenv("GAMECLUB_LOGIN_GRANT_MINUTES", value)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

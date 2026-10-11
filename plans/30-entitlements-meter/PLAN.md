@@ -27,7 +27,8 @@ server-backed активации, сохранять остаток между �
 - При добровольном или операторском stop остаток начатого пакета сгорает;
   не начатые элементы очереди сохраняются.
 - После нового входа сохранённый пакет только предлагается к явной активации.
-- Каждый успешный login получает отдельные 5 минут `login_grant`, не связанные
+- Каждый успешный login получает отдельный `login_grant` по настройке
+  `GAMECLUB_LOGIN_GRANT_MINUTES` (по умолчанию 1; 0 отключает период), не связанные
   с tariff `free_minutes`.
 
 ## Текущее состояние
@@ -42,7 +43,7 @@ account-portal login без игровой сессии grant не выдаёт 
 Добавлены migrations `0040`–`0043`, timezone-aware окна, repository operations
 для activation/consume/burn, auto-next, immediate activation при пустой
 очереди, monotonic meter package state и server snapshot. Device session
-получает durable `login_grant_minutes=5`; portal activation остаётся отдельным
+получает durable `login_grant_minutes` из серверной настройки; portal activation остаётся отдельным
 явным действием. Unit/API slice подтверждён 130 тестами; полный DSN suite после
 concurrency-коррекции прошёл 146 тестов.
 
@@ -113,3 +114,8 @@ concurrency-коррекции прошёл 146 тестов.
 per-minute tariff зоны для session без явно выбранного тарифа реализован в
 `SessionService` и `BillingService`; отдельным остатком остаётся dedicated grant
 audit test.
+
+## Настройка стартовых минут — 2026-10-11
+
+- `GAMECLUB_LOGIN_GRANT_MINUTES` задаёт целые минуты для новых device/local-ledger сессий: по умолчанию 1, 0 отключает grant. Значение сохраняется в сессии и передаётся в подписанном snapshot; текущие сессии не меняются. После изменения .env требуется пересоздание backend-сервисов.
+- Проверено: 64 unit-теста sessions/metered billing/V2 login, Ruff и Compose resolution. Native Windows и PostgreSQL integration не запускались.

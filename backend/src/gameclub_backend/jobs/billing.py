@@ -270,6 +270,7 @@ async def meter_active_sessions() -> None:
             clients=client_repository,
             entitlements=entitlements,
             meters=PostgresMeterRepository(engine_provider),
+            login_grant_minutes=settings.login_grant_minutes,
         )
         commands = WorkstationCommandService(
             PostgresWorkstationCommandRepository(engine_provider),

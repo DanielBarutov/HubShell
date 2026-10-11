@@ -265,3 +265,9 @@ Set-Location "C:\Git\HubShell"
   остатка и окончания; на момент проверки ранние пакеты уже израсходованы.
 - Тест 2 минуты текущего + 6 минут в очереди проверяет сумму 8 и оба тарифа.
   Ручная допродажа/финансовая операция для проверки не создавалась.
+
+### 2026-10-11 — GAMECLUB_LOGIN_GRANT_MINUTES
+
+- Unit: `uv run --directory ./backend pytest tests/test_modules_reservations_sessions.py tests/test_metered_billing.py tests/test_v2_offline_login.py -q` — 64 passed. Проверены grant 0/3, отказ для отрицательного/дробного/overflow значения, существующий grant 5 и списания.
+- Ruff check/format изменённых Python-файлов пройдены; Compose config передаёт значение 1 всем backend-сервисам.
+- Приложение не перезапускалось; PostgreSQL integration и native Windows smoke не запускались. Graphify update выполнен с предупреждениями парсера frontend и метаданных графа.

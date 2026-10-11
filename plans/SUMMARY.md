@@ -1096,3 +1096,7 @@ dotnet test win-client\GameClub.Client.sln --configuration Debug -p:Platform=x64
 
 Не считать задачу закрытой только потому, что она есть в плане или UI-кнопка
 видна: нужен проверяемый backend use case и подходящий чек уровня требования.
+
+### 2026-10-11 — стартовые бесплатные минуты
+
+`GAMECLUB_LOGIN_GRANT_MINUTES=1` вынесен в .env и общий backend environment Compose. Целое число от 0; применяется к новым сессиям через сохранённый серверный grant и V2 snapshot. Подробности: [30-entitlements-meter/PLAN.md](30-entitlements-meter/PLAN.md).

@@ -173,6 +173,7 @@ async def build_package_metered_services(
     window_timezone: str | None = None,
     cash_settlement=None,
     return_catalog: bool = False,
+    login_grant_minutes: int = 1,
     client_groups=None,
     client_group_id: str | None = None,
     initial_balance_cents: int = 1_000,
@@ -225,6 +226,7 @@ async def build_package_metered_services(
     )
     sessions = SessionService(
         session_repository,
+        login_grant_minutes=login_grant_minutes,
         workstations=workstation_repository,
         clients=client_repository,
         clock=clock,
@@ -1494,11 +1496,8 @@ async def test_three_hour_package_stays_active_at_two_hours_fifty_nine_remaining
 
 
 @pytest.mark.asyncio
-async def test_three_minute_package_counts_each_minute_and_stops_device_at_zero_balance(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_three_minute_package_counts_each_minute_and_stops_device_at_zero_balance() -> None:
     """Проверяет расход пакета и остановку сессии для ранее созданного grant на пять минут."""
-    monkeypatch.setattr(SessionService, "LOGIN_GRANT_MINUTES", 5)
     clock = FixedClock()
     (
         workstation,
@@ -1516,6 +1515,7 @@ async def test_three_minute_package_counts_each_minute_and_stops_device_at_zero_
         initial_balance_cents=100,
         tariff_price_cents=100,
         return_catalog=True,
+        login_grant_minutes=5,
     )
     await catalog.create_tariff(
         "VIP · Поминутно",
