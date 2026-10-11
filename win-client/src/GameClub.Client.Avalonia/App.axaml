@@ -75,9 +75,9 @@
       <Setter Property="BorderBrush" Value="#7DA76F" />
     </Style>
     <Style Selector="Button.access-secondary">
-      <Setter Property="Background" Value="#245B6B" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
-      <Setter Property="BorderBrush" Value="#4DB0C8" />
+      <Setter Property="Background" Value="#80071113" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SignalBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Padding" Value="14,10" />
@@ -106,9 +106,9 @@
       <Setter Property="BorderBrush" Value="#52777F" />
     </Style>
     <Style Selector="Button.access-secondary /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#245B6B" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
-      <Setter Property="BorderBrush" Value="#4DB0C8" />
+      <Setter Property="Background" Value="#80071113" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SignalBrush}" />
       <Setter Property="Transitions">
         <Transitions>
           <BrushTransition Property="Background" Duration="0:0:0.14" />
@@ -124,13 +124,21 @@
     </Style>
     <Style Selector="Button.access-secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#24697E" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
       <Setter Property="BorderBrush" Value="#5EC7DF" />
     </Style>
     <Style Selector="Button.access-secondary:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#3C5961" />
       <Setter Property="Foreground" Value="#D2E0E3" />
       <Setter Property="BorderBrush" Value="#52777F" />
+    </Style>
+    <Style Selector="TextBox.neon-input">
+      <Setter Property="Background" Value="#B0071113"/>
+      <Setter Property="BorderBrush" Value="#476064"/>
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+      <Setter Property="FontSize" Value="18"/>
+      <Setter Property="MinHeight" Value="50"/>
+      <Setter Property="Padding" Value="14,10"/>
     </Style>
     <Style Selector="Button.widget-primary">
       <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
@@ -178,9 +186,9 @@
       <Setter Property="BorderBrush" Value="#7DA76F" />
     </Style>
     <Style Selector="Button.widget-secondary">
-      <Setter Property="Background" Value="#245B6B" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
-      <Setter Property="BorderBrush" Value="#4DB0C8" />
+      <Setter Property="Background" Value="#80071113" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SignalBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="10,6" />
@@ -203,9 +211,9 @@
       <Setter Property="BorderBrush" Value="#52777F" />
     </Style>
     <Style Selector="Button.widget-secondary /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#245B6B" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
-      <Setter Property="BorderBrush" Value="#4DB0C8" />
+      <Setter Property="Background" Value="#80071113" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SignalBrush}" />
       <Setter Property="Transitions"><Transitions><BrushTransition Property="Background" Duration="0:0:0.14" /><BrushTransition Property="Foreground" Duration="0:0:0.14" /><BrushTransition Property="BorderBrush" Duration="0:0:0.14" /></Transitions></Setter>
     </Style>
     <Style Selector="Button.widget-secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
@@ -215,7 +223,7 @@
     </Style>
     <Style Selector="Button.widget-secondary:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#24697E" />
-      <Setter Property="Foreground" Value="#F0FBFF" />
+      <Setter Property="Foreground" Value="{DynamicResource SignalBrush}" />
       <Setter Property="BorderBrush" Value="#5EC7DF" />
     </Style>
     <Style Selector="Button.widget-secondary:disabled /template/ ContentPresenter#PART_ContentPresenter">

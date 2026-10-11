@@ -27,5 +27,6 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\HubShell.ico" />
+    <AvaloniaResource Include="Assets\LoginBackground.png" />
   </ItemGroup>
 </Project>

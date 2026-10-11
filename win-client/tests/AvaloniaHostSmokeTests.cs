@@ -66,6 +66,32 @@ public sealed class AvaloniaHostSmokeTests
     }
 
     [Fact]
+    public void NeonAccessGateLoadsItsBundledBackground()
+    {
+        EnsureAvaloniaInitialized();
+        var window = new MainWindow();
+        Assert.NotNull(window.FindControl<Image>("AccessGateBackground")!.Source);
+        Assert.NotNull(window.FindControl<Border>("AccessLoginCard"));
+    }
+
+    [Fact]
+    public void RegistrationUsesTheNeonFormAndKeepsTheReturnToLoginRoute()
+    {
+        EnsureAvaloniaInitialized();
+        var window = new MainWindow();
+        var viewModel = (MainViewModel)window.DataContext!;
+        viewModel.ShowPortalRegistration();
+        Assert.True(viewModel.IsPortalRegistrationVisible);
+        Assert.False(viewModel.IsUserLoginVisible);
+        foreach (var name in new[] { "PortalNicknameBox", "PortalPhoneBox", "PortalRegistrationPasswordBox" })
+            Assert.Contains("neon-input", window.FindControl<TextBox>(name)!.Classes);
+        Assert.Equal(HorizontalAlignment.Stretch, window.FindControl<Button>("PortalRegisterButton")!.HorizontalAlignment);
+        Assert.NotNull(window.FindControl<Button>("BackToPortalLoginButton"));
+        viewModel.CancelPortalRegistration();
+        Assert.True(viewModel.IsUserLoginVisible);
+    }
+
+    [Fact]
     public void AccountHistoryIsASeparateBorderlessClientWindowWithCloseControl()
     {
         EnsureAvaloniaInitialized();

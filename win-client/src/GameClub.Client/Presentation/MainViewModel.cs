@@ -1750,8 +1750,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return false;
         }
-        if (ledger.IsGuest && _v2GuestSession is not null)
+        if (ledger.IsGuest)
         {
+            if (_v2GuestSession is null)
+            {
+                return false;
+            }
             await _v2GuestSession.StopGuestSessionAsync(
                 DeviceId,
                 ledger.SessionId.ToString(),
@@ -2155,7 +2159,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         CancellationToken cancellationToken)
     {
         if (_v2Ledger is null
-            || _v2OfflineSession is null
+            || (_v2OfflineSession is null && _v2GuestSession is null)
             || string.IsNullOrWhiteSpace(DeviceId))
         {
             return;
@@ -2176,11 +2180,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             try
             {
-                await _v2OfflineSession.StopSessionAsync(
-                    DeviceId,
-                    previous.SessionId.ToString(),
-                    previous.ClientId.ToString(),
-                    cancellationToken);
+                if (!await StopV2OnServerAsync(previous, cancellationToken))
+                {
+                    throw new InvalidOperationException("V2 session stop transport is unavailable");
+                }
                 return;
             }
             catch (RpcException error) when (error.StatusCode == StatusCode.NotFound)
