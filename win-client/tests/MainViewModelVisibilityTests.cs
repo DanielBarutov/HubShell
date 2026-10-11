@@ -40,6 +40,9 @@ public sealed class MainViewModelVisibilityTests
             nameof(MainViewModel.IsMaintenanceVisible),
             nameof(MainViewModel.IsManagerEntryVisible),
             nameof(MainViewModel.IsPortalContentVisible),
+            nameof(MainViewModel.IsGuestWidgetVisible),
+            nameof(MainViewModel.IsWidgetContentVisible),
+            nameof(MainViewModel.IsAccountWidgetReadyVisible),
             nameof(MainViewModel.IsPortalPasswordSetupVisible),
             nameof(MainViewModel.IsPortalReadyVisible),
             nameof(MainViewModel.IsAccessFeedbackVisible),
@@ -447,6 +450,14 @@ public sealed class MainViewModelVisibilityTests
                 "Ночной пакет · В очереди · 60 из 60 мин",
             },
             viewModel.PortalEntitlementQueue);
+        Assert.Equal(
+            new[]
+            {
+                new PortalEntitlementRow("Дневной пакет", "Активен", "20 из 60 мин", true),
+                new PortalEntitlementRow("Ночной пакет", "В очереди", "60 из 60 мин", false),
+            },
+            viewModel.PortalEntitlementRows);
+        Assert.Equal(viewModel.PortalEntitlementRows, viewModel.WidgetEntitlementRows);
         Assert.False(viewModel.CanActivatePortalEntitlement);
         Assert.False(viewModel.IsPortalBalanceTimeVisible);
     }

@@ -120,10 +120,11 @@ public sealed class V2AccessGateTests
     private sealed class GuestStopGateway(bool denyStop) : IV2GuestSessionGateway
     {
         public (string DeviceId, string SessionId, string PaymentId)? Stopped { get; private set; }
+        public V2LocalSessionLedger? PendingLedger { get; set; }
         public Task<V2LocalSessionLedger?> RedeemPendingGuestAccessAsync(
             string deviceId, IOfflineSnapshotSignatureVerifier signatureVerifier,
             CancellationToken cancellationToken = default, V2LocalSessionLedger? activeGuestLedger = null)
-            => Task.FromResult<V2LocalSessionLedger?>(null);
+            => Task.FromResult(PendingLedger);
         public Task StopGuestSessionAsync(string deviceId, string sessionId, string paymentId,
             CancellationToken cancellationToken = default)
         {
@@ -163,7 +164,15 @@ public sealed class V2AccessGateTests
     public async Task GuestRecoveryAndRefreshDoNotUseTheAccountPortal()
     {
         // Проверяет восстановление гостевого ledger без кабинета и клиентского счёта.
-        var saved = CreateLedger() with
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            packages:
+            [
+                new("active-guest", "t-guest", null, 2, V2LocalPackageStatus.Active),
+                new("queued-guest", "t-guest", null, 3, V2LocalPackageStatus.Queued),
+                new("exhausted-guest", "t-guest", null, 0, V2LocalPackageStatus.Exhausted),
+                new("burned-guest", "t-guest", null, 0, V2LocalPackageStatus.Burned),
+            ],
+            tariffs: [new("t-guest", "Тест", null, 3, 0, 0, false)]) with
         {
             ClientId = Guid.Empty,
             GuestName = "Гость",
@@ -171,6 +180,7 @@ public sealed class V2AccessGateTests
         };
         var ledger = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
         await ledger.InitializeAsync(saved);
+        var guestGateway = new GuestStopGateway(false);
         await using var viewModel = new MainViewModel(
             new ClientSessionCoordinator(CreateBackend()),
             new Credentials(),
@@ -179,14 +189,55 @@ public sealed class V2AccessGateTests
             v2Ledger: ledger,
             v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
             v2SignatureVerifier: new AcceptingVerifier(),
-            v2ClientPortal: new CompletedSessionPortal(saved));
+            v2ClientPortal: new CompletedSessionPortal(saved),
+            v2GuestSession: guestGateway);
 
+        var cachedProfile = new ClientPortalSnapshot("old-client", "Previous player", "79990000000", 90000, 10, 60,
+            [], [], [], [], [], [new("old-tariff", "Old tariff", null, 60, 10000, false, null, null, null, null, null, "registered")], []);
+        typeof(MainViewModel).GetMethod("SetPortalSnapshot", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(viewModel, [cachedProfile]);
         await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(ledger));
         await viewModel.RefreshPortalAsync();
 
         Assert.False(viewModel.IsAccessLocked);
         Assert.True(viewModel.IsActiveSessionVisible);
         Assert.Equal(saved, await ledger.ReadLedgerAsync());
+        Assert.True(viewModel.IsGuestWidgetVisible);
+        Assert.True(viewModel.IsWidgetContentVisible);
+        Assert.False(viewModel.IsSecuredContentVisible);
+        Assert.False(viewModel.IsPortalContentVisible);
+        Assert.False(viewModel.IsAccountWidgetReadyVisible);
+        Assert.False(viewModel.IsTariffsVisible);
+        Assert.False(viewModel.CanCreateTransferOffer);
+        Assert.Equal("Гость", viewModel.WidgetAccountSummary);
+        Assert.Equal(
+            new[]
+            {
+                new PortalEntitlementRow("Тест", "Активен", "2 мин", true),
+                new PortalEntitlementRow("Тест", "В очереди", "3 мин", false),
+            }, viewModel.WidgetEntitlementRows);
+        var changes = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        var grantId = Guid.NewGuid();
+        guestGateway.PendingLedger = saved with
+        {
+            SnapshotId = grantId,
+            Packages = [new(grantId.ToString(), "t-guest", null, 3, V2LocalPackageStatus.Active)],
+        };
+        var poll = typeof(MainViewModel).GetMethod("PollGuestAccessAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await (Task)poll.Invoke(viewModel, [])!;
+        Assert.Equal(3, viewModel.WidgetEntitlementRows.Count);
+        Assert.Equal(new PortalEntitlementRow("Тест", "В очереди", "3 мин", false), viewModel.WidgetEntitlementRows[^1]);
+        Assert.Contains(nameof(MainViewModel.WidgetEntitlementRows), changes);
+        Assert.False(viewModel.HasV2DeliveryWarning);
+        viewModel.ApplyV2ServerEventTransportFailure(new IOException("connection unavailable"));
+        Assert.True(viewModel.HasV2DeliveryWarning);
+        viewModel.ApplyV2ServerEventPollResult(0);
+        Assert.False(viewModel.HasV2DeliveryWarning);
+        Assert.True(await viewModel.StopActiveSessionAsync());
+        Assert.False(viewModel.IsWidgetContentVisible);
+        Assert.False(viewModel.IsGuestWidgetVisible);
+        Assert.Contains(nameof(MainViewModel.WidgetEntitlementRows), changes);
     }
 
     [Fact]

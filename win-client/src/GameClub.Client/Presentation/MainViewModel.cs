@@ -118,16 +118,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string BackendVersion => _connection.BackendVersion;
     public bool HasV2ServerEventIssues => _v2ServerEventIssueCount > 0;
     public bool IsV2ServerEventTransportFailed => _v2ServerEventTransportFailed;
+    public bool HasV2DeliveryWarning => HasV2ServerEventIssues || IsV2ServerEventTransportFailed;
     public string V2DeliveryStatus => _v2ServerEventTransportFailed
-        ? "Ошибка синхронизации V2"
+        ? "Ошибка синхронизации"
         : HasV2ServerEventIssues
             ? "Требует проверки"
-            : "Синхронизация V2 работает";
+            : "Синхронизация работает";
     public string V2DeliveryMessage => _v2ServerEventTransportFailed
-        ? "Server events временно не доставляются. Клиент повторит попытку автоматически."
+        ? "Обновления временно не доставляются. Повторим попытку автоматически."
         : HasV2ServerEventIssues
-            ? $"Отклонённых server events: {_v2ServerEventIssueCount}. Финансовые изменения не применены."
-            : "Server events применяются локально до подтверждения backend.";
+            ? $"Отклонено обновлений: {_v2ServerEventIssueCount}. Финансовые изменения не применены."
+            : "Обновления применяются локально до подтверждения сервера.";
     public bool IsOnline => _connection.State == ClientConnectionState.Online;
     public bool IsWaitingForAssignment =>
         _connection.State == ClientConnectionState.WaitingForAssignment;
@@ -145,7 +146,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool IsSecuredContentVisible => !IsAccessLocked
         && !IsMaintenanceMode
         && _portalSnapshot is null
-        && !_portalPasswordResetRequired;
+        && !_portalPasswordResetRequired
+        && !IsGuestWidgetVisible;
     public bool IsUserLoginVisible => IsAccessLocked
         && _lockdownPolicy.UserSelfLoginEnabled
         && !IsWaitingForAssignment
@@ -163,8 +165,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !_isManagerLoginRequested
         && !_isPortalRegistrationRequested;
     public bool IsPortalContentVisible => (_portalSnapshot is not null || _portalPasswordResetRequired)
+        && _activeV2Ledger?.IsGuest != true
         && !IsAccessLocked
         && !IsMaintenanceMode;
+    public bool IsGuestWidgetVisible => _activeV2Ledger?.IsGuest == true
+        && !IsAccessLocked
+        && !IsMaintenanceMode;
+    public bool IsWidgetContentVisible => IsPortalContentVisible || IsGuestWidgetVisible;
+    public bool IsAccountWidgetReadyVisible => IsPortalContentVisible && !_portalPasswordResetRequired;
+    public string WidgetAccountSummary => IsGuestWidgetVisible ? "Гость" : PortalAccountSummary;
     public bool IsPortalPasswordSetupVisible => _portalPasswordResetRequired;
     public bool IsPortalReadyVisible => !_portalPasswordResetRequired;
     public string AccessMessage => string.IsNullOrWhiteSpace(_portalMessage)
@@ -368,26 +377,45 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public IReadOnlyList<string> PortalSessionHistory => _portalSnapshot is null
         ? Array.Empty<string>()
         : ClientPortalHistoryFormatter.FormatSessions(_portalSnapshot);
-    public IReadOnlyList<string> PortalEntitlementQueue => _portalSnapshot?.Entitlements
+    public IReadOnlyList<PortalEntitlementRow> PortalEntitlementRows => _portalSnapshot?.Entitlements
         .Where(item => item.Status.Equals("active", StringComparison.OrdinalIgnoreCase)
             || item.Status.Equals("queued", StringComparison.OrdinalIgnoreCase))
         .OrderBy(item => item.QueuePosition)
-        .Select(item =>
-            $"{item.TariffName ?? "Пакет"} · {FormatEntitlementStatus(item.Status)} · {item.RemainingMinutes} из {item.DurationMinutes} мин")
-        .ToArray() ?? Array.Empty<string>();
+        .Select(item => new PortalEntitlementRow(
+            item.TariffName ?? "Пакет",
+            FormatEntitlementStatus(item.Status),
+            $"{item.RemainingMinutes} из {item.DurationMinutes} мин",
+            item.Status.Equals("active", StringComparison.OrdinalIgnoreCase)))
+        .ToArray() ?? Array.Empty<PortalEntitlementRow>();
+    public IReadOnlyList<PortalEntitlementRow> WidgetEntitlementRows => _activeV2Ledger is { IsGuest: true } guest
+        ? guest.Packages
+            .Where(item => item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued)
+            .Select(item => new PortalEntitlementRow(
+                V2PackageName(guest, item),
+                item.Status == V2LocalPackageStatus.Active ? "Активен" : "В очереди",
+                $"{item.RemainingMinutes} мин",
+                item.Status == V2LocalPackageStatus.Active))
+            .ToArray()
+        : PortalEntitlementRows;
+    public IReadOnlyList<string> PortalEntitlementQueue => PortalEntitlementRows
+        .Select(item => $"{item.Name} · {item.StatusSummary} · {item.RemainingSummary}")
+        .ToArray();
     public IReadOnlyList<ClientPortalTariff> PortalTariffs => _portalSnapshot?.Tariffs
         ?? Array.Empty<ClientPortalTariff>();
     public bool HasPortalTariffs => PortalTariffs.Count > 0;
-    public bool IsTariffsVisible => HasPortalTariffs && !_portalPasswordResetRequired;
+    public bool IsTariffsVisible => HasPortalTariffs && !_portalPasswordResetRequired
+        && _activeV2Ledger?.IsGuest != true;
     public bool HasPortalBalance => _portalSnapshot?.BalanceCents > 0;
     public ClientPortalTariff? FindPortalTariff(string tariffId) =>
         _portalSnapshot?.Tariffs.FirstOrDefault(item => item.Id == tariffId);
-    public bool IsUpcomingBookingVisible => FindUpcomingBooking() is not null;
+    public bool IsUpcomingBookingVisible => _activeV2Ledger?.IsGuest != true
+        && FindUpcomingBooking() is not null;
     public string UpcomingBookingTitle => FormatUpcomingBookingTitle(FindUpcomingBooking());
     public string UpcomingBookingDetails => FormatUpcomingBooking(
         FindUpcomingBooking(),
         CurrentWorkstationLabel);
-    public bool IsTransferPanelVisible => _isTransferExpanded && !_portalPasswordResetRequired;
+    public bool IsTransferPanelVisible => _isTransferExpanded && !_portalPasswordResetRequired
+        && _activeV2Ledger?.IsGuest != true;
     public string TransferToggleLabel => _isTransferExpanded
         ? _isTransferWaiting ? "Ожидаем вход на новом ПК" : "Свернуть перенос"
         : "Перенести сессию на другой ПК";
@@ -2430,6 +2458,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(IsUserLoginVisible));
         OnPropertyChanged(nameof(IsPortalRegistrationVisible));
         OnPropertyChanged(nameof(IsPortalContentVisible));
+        OnPropertyChanged(nameof(IsGuestWidgetVisible));
+        OnPropertyChanged(nameof(IsWidgetContentVisible));
+        OnPropertyChanged(nameof(IsAccountWidgetReadyVisible));
+        OnPropertyChanged(nameof(WidgetAccountSummary));
         OnPropertyChanged(nameof(IsPortalPasswordSetupVisible));
         OnPropertyChanged(nameof(IsPortalReadyVisible));
         OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
@@ -2451,6 +2483,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private void PublishPortalState()
     {
         OnPropertyChanged(nameof(IsPortalContentVisible));
+        OnPropertyChanged(nameof(IsGuestWidgetVisible));
+        OnPropertyChanged(nameof(IsWidgetContentVisible));
+        OnPropertyChanged(nameof(IsAccountWidgetReadyVisible));
+        OnPropertyChanged(nameof(WidgetAccountSummary));
         OnPropertyChanged(nameof(IsPortalPasswordSetupVisible));
         OnPropertyChanged(nameof(IsPortalReadyVisible));
         OnPropertyChanged(nameof(IsPortalPasswordResetRequired));
@@ -2468,6 +2504,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalChargeHistory));
         OnPropertyChanged(nameof(PortalSessionHistory));
         OnPropertyChanged(nameof(PortalEntitlementQueue));
+        OnPropertyChanged(nameof(PortalEntitlementRows));
+        OnPropertyChanged(nameof(WidgetEntitlementRows));
         OnPropertyChanged(nameof(PortalTariffs));
         OnPropertyChanged(nameof(HasPortalTariffs));
         OnPropertyChanged(nameof(IsTariffsVisible));
@@ -2571,6 +2609,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void PublishSessionState()
     {
+        OnPropertyChanged(nameof(IsGuestWidgetVisible));
+        OnPropertyChanged(nameof(IsWidgetContentVisible));
+        OnPropertyChanged(nameof(IsAccountWidgetReadyVisible));
+        OnPropertyChanged(nameof(IsSecuredContentVisible));
+        OnPropertyChanged(nameof(IsPortalContentVisible));
+        OnPropertyChanged(nameof(WidgetAccountSummary));
+        OnPropertyChanged(nameof(WidgetEntitlementRows));
+        OnPropertyChanged(nameof(IsUpcomingBookingVisible));
+        OnPropertyChanged(nameof(IsTariffsVisible));
+        OnPropertyChanged(nameof(IsTransferPanelVisible));
         OnPropertyChanged(nameof(IsActiveSessionVisible));
         OnPropertyChanged(nameof(CanStopActiveSession));
         OnPropertyChanged(nameof(ActiveSessionDescription));
@@ -2588,6 +2636,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         OnPropertyChanged(nameof(HasV2ServerEventIssues));
         OnPropertyChanged(nameof(IsV2ServerEventTransportFailed));
+        OnPropertyChanged(nameof(HasV2DeliveryWarning));
         OnPropertyChanged(nameof(V2DeliveryStatus));
         OnPropertyChanged(nameof(V2DeliveryMessage));
     }
@@ -2744,3 +2793,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
     }
 }
+
+public sealed record PortalEntitlementRow(
+    string Name,
+    string StatusSummary,
+    string RemainingSummary,
+    bool IsActive);
