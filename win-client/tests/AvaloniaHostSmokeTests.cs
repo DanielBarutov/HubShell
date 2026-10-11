@@ -56,6 +56,13 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(window.FindControl<ItemsControl>("PortalEntitlementQueueList"));
         Assert.NotNull(window.FindControl<Border>("TransferPanel"));
         Assert.NotNull(window.FindControl<Button>("OpenAccountHistoryButton"));
+        Assert.NotNull(window.FindControl<Border>("PortalWidgetSurface"));
+        Assert.NotNull(window.FindControl<Grid>("WidgetFooterActions"));
+        Assert.Equal(1, Grid.GetColumn(window.FindControl<Button>("OpenAccountHistoryButton")!));
+        Assert.Equal(0, Grid.GetColumn(window.FindControl<Button>("ToggleTransferButton")!));
+        Assert.NotNull(window.FindControl<Button>("ToggleTransferButton"));
+        Assert.False(window.FindControl<Button>("GuestTransferButton")!.IsEnabled);
+        Assert.NotNull(window.FindControl<Button>("ActivatePortalEntitlementButton"));
         Assert.Null(window.FindControl<Expander>("PortalHistory"));
         Assert.NotNull(window.FindControl<Border>("WindowContentSurface"));
         Assert.NotNull(window.FindControl<Button>("PortalLogoutButton"));

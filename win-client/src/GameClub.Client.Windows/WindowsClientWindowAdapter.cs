@@ -6,6 +6,7 @@ using GameClub.Client.Application.Ports;
 using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Domain;
 using GameClub.Client.Infrastructure;
+using GameClub.Client.Presentation;
 
 namespace GameClub.Client.Windows;
 
@@ -18,7 +19,7 @@ namespace GameClub.Client.Windows;
 public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNotificationPresenter
 {
     private const double WidgetWidth = 390;
-    private const double WidgetHeight = 700;
+    private const double WidgetHeight = 1000;
     private const double WidgetCornerRadius = 14;
     private Window? _window;
     private Border? _windowContentSurface;
@@ -77,6 +78,7 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
 
         if (mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance)
         {
+            _window.MinHeight = 520;
             SetWindowContentCornerRadius(0);
             _window.WindowState = WindowState.FullScreen;
             return;
@@ -85,7 +87,11 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
         SetWindowContentCornerRadius(WidgetCornerRadius);
         _window.WindowState = WindowState.Normal;
         _window.Width = WidgetWidth;
-        _window.Height = WidgetHeight;
+        var widgetHeight = _window.DataContext is MainViewModel { IsGuestWidgetVisible: true } ? 700 : WidgetHeight;
+        var screen = _window.Screens.ScreenFromWindow(_window) ?? _window.Screens.Primary;
+        var availableHeight = screen is null ? widgetHeight : screen.WorkingArea.Height / screen.Scaling - 36;
+        _window.MinHeight = Math.Min(520, Math.Max(0, availableHeight));
+        _window.Height = Math.Clamp(availableHeight, _window.MinHeight, widgetHeight);
         PlaceWidgetNearRightEdge(_window);
     }
 
@@ -167,8 +173,8 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
         }
 
         var scale = screen.Scaling;
-        var width = (int)Math.Ceiling(WidgetWidth * scale);
-        var height = (int)Math.Ceiling(WidgetHeight * scale);
+        var width = (int)Math.Ceiling(window.Width * scale);
+        var height = (int)Math.Ceiling(window.Height * scale);
         var workArea = screen.WorkingArea;
         window.Position = new PixelPoint(
             workArea.X + Math.Max(18, workArea.Width - width - 18),

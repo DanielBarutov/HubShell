@@ -16,7 +16,7 @@ public partial class MainWindow : Window
     private const double DeveloperAccessGateWidth = 1120;
     private const double DeveloperAccessGateHeight = 680;
     private const double DeveloperWidgetWidth = 390;
-    private const double DeveloperWidgetHeight = 700;
+    private const double DeveloperWidgetHeight = 1000;
     private readonly IClientHost _clientHost;
     private AccountHistoryWindow? _accountHistoryWindow;
     private bool _normalizingPhone;
@@ -514,7 +514,13 @@ public partial class MainWindow : Window
         WindowState = WindowState.Normal;
         var useAccessGateSize = mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance;
         Width = useAccessGateSize ? DeveloperAccessGateWidth : DeveloperWidgetWidth;
-        Height = useAccessGateSize ? DeveloperAccessGateHeight : DeveloperWidgetHeight;
+        var widgetHeight = ViewModel.IsGuestWidgetVisible ? 700 : DeveloperWidgetHeight;
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var availableHeight = screen is null
+            ? widgetHeight
+            : screen.WorkingArea.Height / screen.Scaling - 36;
+        MinHeight = useAccessGateSize ? 520 : Math.Min(520, Math.Max(0, availableHeight));
+        Height = useAccessGateSize ? DeveloperAccessGateHeight : Math.Clamp(availableHeight, MinHeight, widgetHeight);
     }
 
     private static string FormatRussianPhone(string value)
