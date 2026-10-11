@@ -233,72 +233,10 @@ public partial class MainWindow : Window
         await ViewModel.StopActiveSessionAsync();
     }
 
-    private async Task<bool> ConfirmSessionExitAsync(string title, string confirmationText)
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 410,
-            Height = 208,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-        };
-        var cancel = new Button
-        {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
-        };
-        var confirm = new Button
-        {
-            Content = confirmationText,
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
-        };
-        cancel.Click += (_, _) => dialog.Close(false);
-        confirm.Click += (_, _) => dialog.Close(true);
-        dialog.Content = new Border
-        {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
-            Child = new StackPanel
-            {
-                Spacing = 10,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = title,
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
-                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
-                    },
-                    new TextBlock
-                    {
-                        Text = "Активная игровая сессия будет завершена. Неиспользованные минуты текущего пакета сгорят.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
-                    },
-                    new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
-                        Children = { cancel, confirm },
-                    },
-                },
-            },
-        };
-
-        return await dialog.ShowDialog<bool>(this);
-    }
+    private Task<bool> ConfirmSessionExitAsync(string title, string confirmationText) =>
+        CreateConfirmationDialog(title,
+            "Активная игровая сессия будет завершена. Неиспользованные минуты текущего пакета сгорят.",
+            confirmationText).ShowDialog<bool>(this);
 
     private async void ActivateFirstPortalEntitlement(object? sender, RoutedEventArgs args) =>
         await ViewModel.ActivateFirstPortalEntitlementAsync();
@@ -319,72 +257,10 @@ public partial class MainWindow : Window
     private async void ConfirmTransfer(object? sender, RoutedEventArgs args) =>
         await ViewModel.ConfirmTransferAsync();
 
-    private async Task<bool> ConfirmTransferAsync()
-    {
-        var dialog = new Window
-        {
-            Title = "Пересесть на другой ПК?",
-            Width = 430,
-            Height = 224,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-        };
-        var cancel = new Button
-        {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
-        };
-        var confirm = new Button
-        {
-            Content = "Пересесть",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
-        };
-        cancel.Click += (_, _) => dialog.Close(false);
-        confirm.Click += (_, _) => dialog.Close(true);
-        dialog.Content = new Border
-        {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
-            Child = new StackPanel
-            {
-                Spacing = 10,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "Пересесть на другой ПК?",
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
-                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
-                    },
-                    new TextBlock
-                    {
-                        Text = "После подтверждения войдите в этот же аккаунт на новом ПК. Активная сессия и доступное время перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
-                    },
-                    new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
-                        Children = { cancel, confirm },
-                    },
-                },
-            },
-        };
-
-        return await dialog.ShowDialog<bool>(this);
-    }
+    private Task<bool> ConfirmTransferAsync() =>
+        CreateConfirmationDialog("Пересесть на другой ПК?",
+            "После подтверждения войдите в этот же аккаунт на новом ПК. Активная сессия и доступное время перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
+            "Пересесть").ShowDialog<bool>(this);
 
     private void DismissSessionNotification(object? sender, RoutedEventArgs args) =>
         ViewModel.DismissSessionNotification();
@@ -423,71 +299,92 @@ public partial class MainWindow : Window
         await ViewModel.PurchasePortalTariffAsync(tariffId);
     }
 
-    private async Task<bool> ConfirmTariffPurchaseAsync(string name, string duration, string price)
+    private Task<bool> ConfirmTariffPurchaseAsync(string name, string duration, string price) =>
+        CreateConfirmationDialog($"Купить «{name}»?",
+            $"{duration} · {price}. Сумма будет списана с баланса.",
+            "Купить").ShowDialog<bool>(this);
+
+    private Window CreateConfirmationDialog(string title, string message, string confirmationText)
     {
         var dialog = new Window
         {
-            Title = "Подтвердите покупку",
+            Title = title,
             Width = 390,
-            Height = 184,
+            SizeToContent = SizeToContent.Height,
             CanResize = false,
+            SystemDecorations = SystemDecorations.None,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
+            Topmost = Topmost,
+            Background = new SolidColorBrush(Color.Parse("#020D12")),
         };
         var cancel = new Button
         {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
+            Content = "Отмена", MinWidth = 110,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { "widget-secondary" },
         };
         var confirm = new Button
         {
-            Content = "Купить",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
+            Content = confirmationText, MinWidth = 110,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { "widget-primary" },
         };
         cancel.Click += (_, _) => dialog.Close(false);
         confirm.Click += (_, _) => dialog.Close(true);
+        dialog.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Escape)
+            {
+                dialog.Close(false);
+                args.Handled = true;
+            }
+        };
+        dialog.Opened += (_, _) => cancel.Focus();
         dialog.Content = new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#020D12"), 0),
+                    new GradientStop(Color.Parse("#061E2A"), 1),
+                },
+            },
+            BorderBrush = new SolidColorBrush(Color.Parse("#246176")),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
+            Padding = new Thickness(16),
             Child = new StackPanel
             {
-                Spacing = 10,
+                Spacing = 12,
                 Children =
                 {
                     new TextBlock
                     {
-                        Text = $"Купить «{name}»?",
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
+                        Text = title, FontSize = 17, FontWeight = FontWeight.SemiBold,
+                        TextWrapping = TextWrapping.Wrap,
                         Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
                     },
                     new TextBlock
                     {
-                        Text = $"{duration} · {price}. Сумма будет списана с баланса.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
+                        Text = message, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Color.Parse("#A6C0C8")),
                     },
                     new StackPanel
                     {
                         Orientation = Orientation.Horizontal,
                         HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
+                        Spacing = 8,
                         Children = { cancel, confirm },
                     },
                 },
             },
         };
-
-        return await dialog.ShowDialog<bool>(this);
+        return dialog;
     }
 
     private void ClearTextBox(string name)
