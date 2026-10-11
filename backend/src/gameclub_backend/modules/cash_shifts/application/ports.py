@@ -26,6 +26,9 @@ class CashShiftRepository(typing.Protocol):
     async def get_by_open_key(self, idempotency_key: str) -> CashShift | None:
         """Return a shift opened by the same idempotency key."""
 
+    async def get_by_close_key(self, idempotency_key: str) -> CashShift | None:
+        """Return a shift closed by the same idempotency key."""
+
     async def get_open(self, register_id: str) -> CashShift | None:
         """Return the active shift for a cash register."""
 

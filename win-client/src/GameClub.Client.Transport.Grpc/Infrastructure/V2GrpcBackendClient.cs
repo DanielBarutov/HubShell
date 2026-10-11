@@ -286,19 +286,31 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
     public async Task<V2LocalSessionLedger?> RedeemPendingGuestAccessAsync(
         string deviceId,
         IOfflineSnapshotSignatureVerifier signatureVerifier,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        V2LocalSessionLedger? activeGuestLedger = null)
     {
         try
         {
+            var request = new GameClub.Client.Contracts.Events.V2.RedeemGuestAccessRequest
+            {
+                DeviceId = deviceId,
+                SessionId = activeGuestLedger?.SessionId.ToString() ?? string.Empty,
+            };
+            if (activeGuestLedger is not null)
+            {
+                request.AppliedGrantIds.Add(activeGuestLedger.AppliedServerOperationIds
+                    .Append(activeGuestLedger.SnapshotId).Select(id => id.ToString()));
+            }
             var snapshot = await _offlineSessionClient.RedeemGuestAccessAsync(
-                new GameClub.Client.Contracts.Events.V2.RedeemGuestAccessRequest { DeviceId = deviceId },
+                request,
                 headers: await CreateDeviceMetadataAsync(cancellationToken),
                 deadline: DateTime.UtcNow.AddSeconds(10),
                 cancellationToken: cancellationToken);
             return V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(
                 snapshot,
                 signatureVerifier,
-                deviceId);
+                deviceId,
+                activeGuestLedger?.SessionId);
         }
         catch (RpcException error) when (error.StatusCode == StatusCode.NotFound)
         {

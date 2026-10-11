@@ -67,6 +67,8 @@ message SignedOfflineSessionSnapshot {
   uint32 portal_access_expires_in = 7;
 }
 
+// schema 1 открывает гостевую сессию; schema 2 добавляет оплаченный пакет
+// только в указанную активную сессию, без сброса локального ledger.
 message GuestSessionAccessPayload {
   string grant_id = 1;
   uint32 schema_version = 2;

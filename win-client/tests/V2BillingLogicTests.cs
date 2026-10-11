@@ -7,6 +7,71 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2BillingLogicTests
 {
+    [Fact]
+    public void RemainingTimeIncludesActiveQueuedPackagesAndBalance()
+    {
+        var ledger = CreateLedger(0, 3_600, 100,
+            packages: [new("active", "test", "vip", 3, V2LocalPackageStatus.Active)]);
+        Assert.Equal(39, V2LocalLedgerEngine.RemainingMinutes(ledger));
+        ledger = ledger with { Packages = ledger.Packages.Append(
+            new V2LocalPackage("queued", "hour", "vip", 60, V2LocalPackageStatus.Queued)).ToArray() };
+        Assert.Equal(99, V2LocalLedgerEngine.RemainingMinutes(ledger));
+        var next = V2LocalLedgerEngine.ConsumeOneMinute(ledger, Guid.NewGuid(), Activation);
+        Assert.Equal(98, V2LocalLedgerEngine.RemainingMinutes(next.Ledger));
+        Assert.Equal(3_600, next.Ledger.BalanceCents);
+    }
+
+    [Fact]
+    public async Task GuestAdditionsAreDurableOrderedAndBurnOnExit()
+    {
+        var guest = CreateLedger(0, 0, 0,
+            packages: [new("initial", "first", "vip", 1, V2LocalPackageStatus.Active)])
+            with { GuestPaymentId = Guid.NewGuid(), GuestName = "Гость" };
+        var addition = guest with
+        {
+            SnapshotId = Guid.NewGuid(), GuestPaymentId = Guid.NewGuid(),
+            Packages = [new(Guid.NewGuid().ToString(), "second", "vip", 2, V2LocalPackageStatus.Active)],
+        };
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(guest);
+        await coordinator.ApplyGuestPackageAsync(addition);
+        // Reopening the coordinator simulates a client restart after a lost RPC reply.
+        coordinator = new V2LocalLedgerCoordinator(store);
+        Assert.True((await coordinator.ApplyGuestPackageAsync(addition)).IsDuplicate);
+        var ledger = await coordinator.ReadLedgerAsync();
+        Assert.Equal(2, ledger.Packages.Count);
+        Assert.Equal(V2LocalPackageStatus.Queued, ledger.Packages[1].Status);
+        Assert.Equal(guest.ActivatedAtUtc, ledger.ActivatedAtUtc);
+        Assert.Equal(guest.GuestPaymentId, ledger.GuestPaymentId);
+        var next = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), Activation);
+        Assert.Equal(2, next.Ledger.Packages[1].RemainingMinutes);
+        next = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), Activation.AddMinutes(1));
+        Assert.Equal(1, next.Ledger.Packages[1].RemainingMinutes);
+        Assert.Equal(V2LocalPackageStatus.Active, next.Ledger.Packages[1].Status);
+        var third = addition with { SnapshotId = Guid.NewGuid(),
+            Packages = [new("third", "third", "vip", 10, V2LocalPackageStatus.Active)] };
+        await coordinator.ApplyGuestPackageAsync(third);
+        var stopped = await coordinator.StopEarlyAsync(Guid.NewGuid(), Activation.AddMinutes(2));
+        Assert.All(stopped.Ledger.Packages, package => Assert.Equal(0, package.RemainingMinutes));
+        Assert.All(stopped.Ledger.Packages.Skip(1),
+            package => Assert.Equal(V2LocalPackageStatus.Burned, package.Status));
+        Assert.Empty(stopped.OutboxFacts);
+        Assert.Throws<InvalidOperationException>(() =>
+            V2LocalLedgerEngine.ApplyGuestPackage(stopped.Ledger, addition));
+        var serverStopped = V2LocalLedgerEngine.ApplyServerStop(ledger);
+        Assert.All(serverStopped.Ledger.Packages,
+            package => Assert.Equal(V2LocalPackageStatus.Burned, package.Status));
+    }
+
+    [Fact]
+    public void GuestAdditionRejectsAnotherSession()
+    {
+        var guest = CreateLedger(0, 0, 0) with { GuestPaymentId = Guid.NewGuid() };
+        Assert.Throws<InvalidOperationException>(() => V2LocalLedgerEngine.ApplyGuestPackage(
+            guest, guest with { SessionId = Guid.NewGuid() }));
+    }
+
     private static readonly DateTimeOffset Activation =
         DateTimeOffset.Parse("2026-09-30T10:00:20Z");
 

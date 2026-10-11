@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.catalog.domain import TariffAudience, TariffSaleChannel
+from gameclub_backend.modules.catalog.domain import BillingMode, TariffAudience, TariffSaleChannel
 from gameclub_backend.modules.direct_payments.application.ports import (
     ActiveSessionLookup,
     CashDirectSettlement,
@@ -54,6 +54,9 @@ class GuestSessionPaymentService:
         self._active_sessions = active_sessions
         self._reconciliation_lock = asyncio.Lock()
 
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        return await self._repository.list_for_session(session_id)
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment:
         payment = await self._repository.get(payment_id)
         if payment is None:
@@ -71,6 +74,7 @@ class GuestSessionPaymentService:
         payment_parts: Sequence[PaymentPart | Mapping[str, object]],
         guest_id: uuid.UUID | None = None,
         cash_shift_id: uuid.UUID | None = None,
+        session_id: uuid.UUID | None = None,
     ) -> GuestSessionPayment:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -93,6 +97,7 @@ class GuestSessionPaymentService:
                 tariff_id=tariff_id,
                 tariff_quantity=tariff_quantity,
                 guest_id=guest_id,
+                session_id=session_id,
                 guest_name=guest_name,
                 cash_shift_id=cash_shift_id,
                 payment_parts=expected_parts,
@@ -120,15 +125,29 @@ class GuestSessionPaymentService:
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone",
                 )
-        if (
-            self._active_sessions is not None
-            and await self._active_sessions.get_active_for_workstation(workstation_id) is not None
-        ):
+        active = (
+            await self._active_sessions.get_active_for_workstation(workstation_id)
+            if self._active_sessions is not None
+            else None
+        )
+        if session_id is not None:
+            if (
+                active is None
+                or active.id != session_id
+                or active.client_id is not None
+                or active.source != "guest_local_ledger"
+            ):
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Active guest session does not match payment"
+                )
+        elif active is not None:
             raise ApplicationError(
                 ErrorCode.CONFLICT,
                 "Guest tariff cannot be sold while the workstation has an active session",
             )
         now = self._clock.now()
+        if tariff.billing_mode is not BillingMode.BLOCK or tariff.duration_minutes <= 0:
+            raise ApplicationError(ErrorCode.CONFLICT, "Guest time requires a block tariff")
         if not tariff.active or tariff.price_cents <= 0:
             raise ApplicationError(ErrorCode.CONFLICT, "Tariff is not payable as a guest package")
         if not tariff.is_sellable_through(TariffSaleChannel.OPERATOR):
@@ -150,8 +169,11 @@ class GuestSessionPaymentService:
                 tariff_id=tariff_id,
                 tariff_quantity=tariff_quantity,
                 guest_id=guest_id,
+                session_id=session_id,
                 guest_name=guest_name,
                 total_price_cents=tariff.price_cents * tariff_quantity,
+                duration_minutes=tariff.duration_minutes,
+                tariff_name=tariff.name,
                 payment_parts=parts,
                 cash_shift_id=cash_shift_id,
                 status=DirectPaymentStatus.PENDING,
@@ -302,6 +324,7 @@ class GuestSessionPaymentService:
         tariff_id: uuid.UUID,
         tariff_quantity: int,
         guest_id: uuid.UUID | None,
+        session_id: uuid.UUID | None,
         guest_name: str,
         cash_shift_id: uuid.UUID | None,
         payment_parts: tuple[PaymentPart, ...],
@@ -310,6 +333,7 @@ class GuestSessionPaymentService:
             payment.workstation_id == workstation_id
             and payment.tariff_id == tariff_id
             and payment.tariff_quantity == tariff_quantity
+            and payment.session_id == session_id
             and payment.guest_id == guest_id
             and payment.guest_name == guest_name.strip()
             and payment.cash_shift_id == cash_shift_id

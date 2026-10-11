@@ -1,5 +1,15 @@
 # Verification matrix
 
+2026-10-11: карта мест по умолчанию 10 × 4 — 8 тестов MapScreen проходят,
+`npm --prefix ./frontend run build` проходит. Ручная проверка в браузере и
+пересборка Compose frontend не выполнены.
+
+2026-10-11: `uv run --directory ./backend pytest tests/test_modules_cash.py
+tests/test_jobs.py -q` — 18 passed. Проверены повторные запуски расписания,
+ручное открытие после автозакрытия и закрытие на следующий день; Ruff проходит.
+Это unit-проверка с memory repository, PostgreSQL adapter и обновлённый
+Compose worker в этом срезе не проверены.
+
 Дата последней проверки: `2026-10-03`.
 
 Документ разделяет фактически проверенное поведение и то, что пока подтверждено
@@ -100,3 +110,52 @@ Set-Location "C:\Git\HubShell"
 Новый срез можно отметить проверенным только после проверки на уровне его
 требования. Статическая проверка не заменяет native runtime, а unit-тест не
 заменяет PostgreSQL concurrency или визуальный browser smoke.
+
+### 2026-10-11 — гостевая очередь допродаж
+
+- Backend: 79 тестов платежей, V2 guest access, metered billing, settlement,
+  Clients/Workstations и session API прошли. Отдельный прогон с реальным
+  изолированным PostgreSQL: 18 passed, включая сохранение session-bound
+  платежа, snapshot тарифа, повторную выдачу grant и фильтр durable grant IDs.
+- Новая миграция `20261011_0074` применена на чистом тестовом PostgreSQL
+  вместе со всей цепочкой миграций; рабочая БД не изменялась.
+- Linux: `dotnet test ./win-client/tests/GameClub.Client.Tests.csproj
+  --configuration Debug -p:Platform=x64` — 130 passed; проверены signed
+  schema-2 пакет, очередь, restart/dedupe, auto-next, сгорание и server stop.
+- Frontend: SaleWorkspace — 10 passed; production build прошёл. Полный
+  frontend — 82 passed, 1 failed: незатронутый AnalyticsView-тест
+  `loads the additive v2 dashboard and exposes comparison and product states`
+  ожидает текст `Состояние данных: Частичные данные`.
+- Ruff затронутого backend и `git diff --check` прошли.
+- Не выполнены запуск обновлённого Compose и ручной browser/Avalonia
+  сценарий допродажи. Unit/adapter checks не доказывают живой UI/gRPC flow.
+
+### 2026-10-11 — включение гостевой допродажи в рабочем dev-стеке
+
+- Причина сохранявшегося POST 409: dev-frontend на 3102 проксировал запросы
+  в старый HTTP backend на 8100; в его коде ещё не было payment.session_id.
+- Пересобраны backend-migrate, backend-http и backend-grpc; рабочая БД
+  обновлена с 0073 до `20261011_0074`. HTTP/gRPC контейнеры healthy.
+- Live OpenAPI содержит session_id в GuestSessionPaymentRequest; gRPC
+  protobuf содержит session_id и applied_grant_ids; frontend proxy 3102
+  возвращает ожидаемый 401 на неавторизованный read-запрос guest-payments.
+- Linux runtime клиент пересобран без ошибок/предупреждений. Запущенный
+  ранее процесс не перезапускался и требует перезапуска для получения
+  допродаж. Новую финансовую операцию для smoke не создавали.
+
+### 2026-10-11 — hover остаток гостевой очереди
+
+- Причина: operator SessionSnapshot содержал только исходный active_tariff,
+  без оплаченных допродаж. Добавлен guest_packages через публичный порт
+  GuestPaymentLookup; неподтверждённые платежи исключаются.
+- Frontend учитывает всю очередь без двойного счёта active_tariff. Server
+  projection расходует гостевые минуты по UTC minute boundaries, как V2
+  runner; confirmed financial facts этот расчёт не создаёт.
+- Backend срез: 75 passed, 1 skipped (PostgreSQL DSN не задан); после
+  выравнивания minute boundaries — 73 passed в затронутом срезе. Frontend
+  MapScreen/sessionTooltip: 16 passed; production build и Ruff прошли.
+- HTTP/gRPC backend пересобраны и обновлены. В пользовательском Chrome
+  на localhost:3102 подтверждено отображение гостевого пакета, общего
+  остатка и окончания; на момент проверки ранние пакеты уже израсходованы.
+- Тест 2 минуты текущего + 6 минут в очереди проверяет сумму 8 и оба тарифа.
+  Ручная допродажа/финансовая операция для проверки не создавалась.

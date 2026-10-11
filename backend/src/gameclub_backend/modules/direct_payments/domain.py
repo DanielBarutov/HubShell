@@ -30,6 +30,9 @@ class GuestSessionPayment:
     attempts: int = 0
     next_attempt_at: datetime.datetime | None = None
     settlement_error: str | None = None
+    session_id: uuid.UUID | None = None
+    duration_minutes: int | None = None
+    tariff_name: str | None = None
 
     def __post_init__(self) -> None:
         if not self.guest_name.strip():

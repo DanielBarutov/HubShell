@@ -168,6 +168,15 @@ class SessionTimeNotificationResponse(BaseModel):
     show_system_notification: bool
 
 
+class GuestPackageSnapshotResponse(BaseModel):
+    id: uuid.UUID
+    tariff_id: uuid.UUID
+    tariff_name: str
+    duration_minutes: int
+    remaining_minutes: int
+    status: str
+
+
 class SessionSnapshotResponse(BaseModel):
     schema_version: int
     server_time: str
@@ -180,6 +189,7 @@ class SessionSnapshotResponse(BaseModel):
     balance_bonus: int | None
     active_entitlement: SnapshotEntitlementResponse | None
     entitlements: list[SnapshotEntitlementResponse]
+    guest_packages: list[GuestPackageSnapshotResponse]
     meter: SnapshotMeterResponse | None
     active_tariff: SnapshotTariffResponse | None
     login_grant_remaining_minutes: int
@@ -213,6 +223,17 @@ class SessionSnapshotResponse(BaseModel):
                     snapshot.tariff_names.get(item.tariff_id),
                 )
                 for item in snapshot.entitlements
+            ],
+            guest_packages=[
+                GuestPackageSnapshotResponse(
+                    id=item.id,
+                    tariff_id=item.tariff_id,
+                    tariff_name=item.tariff_name,
+                    duration_minutes=item.duration_minutes,
+                    remaining_minutes=item.remaining_minutes,
+                    status=item.status,
+                )
+                for item in snapshot.guest_packages
             ],
             meter=SnapshotMeterResponse.from_domain(snapshot.meter) if snapshot.meter else None,
             active_tariff=(

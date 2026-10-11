@@ -120,6 +120,12 @@ export function getSessionTooltipDetails(
       status: item.status as "active" | "queued",
       availableNow: isPackageAvailableNow(item, validSnapshotTime),
     }));
+  for (const item of snapshot.guest_packages ?? []) {
+    packages.push({
+      id: item.id, tariffName: item.tariff_name, durationMinutes: item.duration_minutes,
+      remainingMinutes: item.remaining_minutes, status: item.status, availableNow: true,
+    });
+  }
   const activeTariffMinutes = packages.length
     ? 0
     : Math.max(0, snapshot.active_tariff?.remaining_minutes ?? 0);

@@ -3,6 +3,29 @@ import { getSessionTooltipDetails, sessionTooltip, SessionEndingProjection } fro
 import type { Workstation } from "../../types";
 
 describe("sessionTooltip", () => {
+  it("суммирует текущий пакет и все допроданные гостевые пакеты без двойного счёта", () => {
+    const pc: Workstation = {
+      id: "guest-pc", name: "Guest PC", group: "Зал", status: "busy", client: "Гость",
+      sessionSnapshot: {
+        server_time: "2026-10-11T11:14:00Z", session: { id: "guest-session" },
+        entitlements: [], balance_cents: null, balance_remaining_minutes: null,
+        login_grant_remaining_minutes: 0,
+        active_tariff: { remaining_minutes: 2 },
+        guest_packages: [
+          { id: "first", tariff_id: "three", tariff_name: "Три минуты", duration_minutes: 3,
+            remaining_minutes: 2, status: "active" },
+          { id: "second", tariff_id: "six", tariff_name: "Шесть минут", duration_minutes: 6,
+            remaining_minutes: 6, status: "queued" },
+        ],
+      } as never,
+    };
+    const details = getSessionTooltipDetails(pc)!;
+    expect(details.packageMinutes).toBe(8);
+    expect(details.totalMinutes).toBe(8);
+    expect(details.packages.map(item => item.tariffName)).toEqual(["Три минуты", "Шесть минут"]);
+    expect(details.ending?.toISOString()).toBe("2026-10-11T11:22:00.000Z");
+  });
+
   it("показывает snapshot, только активные пакеты и расчетное окончание", () => {
     const pc: Workstation = {
       id: "pc-1",

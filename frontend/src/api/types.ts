@@ -127,6 +127,7 @@ export type BackendEntitlement = {
 };
 
 export type BackendGuestSessionPayment = {
+  session_id: string | null;
   id: string;
   workstation_id: string;
   tariff_id: string;
@@ -696,6 +697,14 @@ export type BackendSessionSnapshot = {
   balance_bonus: number | null;
   active_entitlement: BackendSnapshotEntitlement | null;
   entitlements: BackendSnapshotEntitlement[];
+  guest_packages?: Array<{
+    id: string;
+    tariff_id: string;
+    tariff_name: string;
+    duration_minutes: number;
+    remaining_minutes: number;
+    status: "active" | "queued";
+  }>;
   meter: BackendSessionMeter | null;
   active_tariff: BackendSessionTariff | null;
   login_grant_remaining_minutes: number;

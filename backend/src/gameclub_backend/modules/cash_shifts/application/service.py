@@ -215,9 +215,8 @@ class CashShiftService:
                 continue
             current_time = local_now.time().replace(second=0, microsecond=0)
             scheduled_open_key = f"auto-open:{schedule.register_id}:{local_now.date().isoformat()}"
-            shifts = await self._repository.list_shifts(500)
-            has_opened_today = any(
-                shift.open_idempotency_key == scheduled_open_key for shift in shifts
+            has_opened_today = (
+                await self._repository.get_by_open_key(scheduled_open_key) is not None
             )
             if (
                 schedule.auto_open
@@ -233,10 +232,14 @@ class CashShiftService:
                         idempotency_key=scheduled_open_key,
                     )
                     actions += 1
+            scheduled_close_key = (
+                f"auto-close:{schedule.register_id}:{local_now.date().isoformat()}"
+            )
             if (
                 schedule.auto_close
                 and schedule.auto_close_at is not None
                 and current_time >= schedule.auto_close_at
+                and await self._repository.get_by_close_key(scheduled_close_key) is None
             ):
                 shift = await self._repository.get_open(schedule.register_id)
                 if shift is not None:
@@ -244,7 +247,7 @@ class CashShiftService:
                         shift_id=shift.id,
                         actual_close_cents=shift.expected_close_cents,
                         closed_by="system:auto",
-                        idempotency_key=f"auto-close:{schedule.register_id}:{local_now.date().isoformat()}",
+                        idempotency_key=scheduled_close_key,
                     )
                     actions += 1
         return actions

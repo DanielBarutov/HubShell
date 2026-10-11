@@ -24,6 +24,7 @@ from gameclub_backend.modules.sessions.application.ports import (
     WorkstationLookup,
 )
 from gameclub_backend.modules.sessions.domain import (
+    GuestPackageSnapshot,
     Session,
     SessionSnapshot,
     SessionStatus,
@@ -105,9 +106,7 @@ class SessionService:
         normalized_guest_name = guest_name.strip() if guest_name else None
         normalized_source = source.strip() or "operator"
         login_grant_minutes = (
-            self.LOGIN_GRANT_MINUTES
-            if normalized_source in {"device"} | self.LOCAL_SOURCES
-            else 0
+            self.LOGIN_GRANT_MINUTES if normalized_source in {"device"} | self.LOCAL_SOURCES else 0
         )
         if tariff_quantity <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff quantity must be positive")
@@ -438,6 +437,48 @@ class SessionService:
             session.started_at,
             session.ended_at or server_time,
         )
+        guest_packages: list[GuestPackageSnapshot] = []
+        if (
+            session.client_id is None
+            and session.guest_payment_id is not None
+            and session.status is SessionStatus.ACTIVE
+            and self._guest_payments is not None
+        ):
+            first = await self._guest_payments.get(session.guest_payment_id)
+            payments = (
+                [first] if first is not None else []
+            ) + await self._guest_payments.list_for_session(session.id)
+            # V2 consumes at UTC minute boundaries, not by rounding a partial minute up.
+            end = (
+                (session.ended_at or server_time)
+                .astimezone(datetime.UTC)
+                .replace(second=0, microsecond=0)
+            )
+            start = session.started_at.astimezone(datetime.UTC).replace(second=0, microsecond=0)
+            consumed_minutes = max(0, int((end - start).total_seconds() // 60))
+            for payment in payments:
+                if payment.status is not DirectPaymentStatus.CONFIRMED:
+                    continue
+                duration = payment.duration_minutes
+                name = payment.tariff_name
+                if duration is None and self._tariffs is not None:
+                    tariff = await self._tariffs.get_tariff(payment.tariff_id)
+                    if tariff is not None:
+                        duration, name = tariff.duration_minutes, tariff.name
+                total = (duration or 0) * payment.tariff_quantity
+                remaining = max(0, total - consumed_minutes)
+                consumed_minutes = max(0, consumed_minutes - total)
+                if remaining > 0:
+                    guest_packages.append(
+                        GuestPackageSnapshot(
+                            id=payment.id,
+                            tariff_id=payment.tariff_id,
+                            tariff_name=name or "Гостевой тариф",
+                            duration_minutes=total,
+                            remaining_minutes=remaining,
+                            status="active" if not guest_packages else "queued",
+                        )
+                    )
         balance_remaining_minutes = None
         if client is not None and self._tariffs is not None:
             per_minute_tariff = (
@@ -506,6 +547,7 @@ class SessionService:
             tariff_names=tariff_names,
             balance_remaining_minutes=balance_remaining_minutes,
             time_notifications=time_notifications,
+            guest_packages=tuple(guest_packages),
         )
 
     @staticmethod
@@ -564,10 +606,7 @@ class SessionService:
                     ErrorCode.PERMISSION_DENIED,
                     "Device identity does not match workstation",
                 )
-        if (
-            session.status is SessionStatus.COMPLETED
-            and session.source in self.LOCAL_SOURCES
-        ):
+        if session.status is SessionStatus.COMPLETED and session.source in self.LOCAL_SOURCES:
             if self._v2_session_leases is not None:
                 await self._v2_session_leases.revoke(
                     session.id,
@@ -579,10 +618,7 @@ class SessionService:
             saved = await self._repository.save(session.stop(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-        if (
-            saved.source in self.LOCAL_SOURCES
-            and self._v2_session_leases is not None
-        ):
+        if saved.source in self.LOCAL_SOURCES and self._v2_session_leases is not None:
             await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, "session_stop")
@@ -611,10 +647,7 @@ class SessionService:
             saved = await self._repository.save(session.interrupt(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-        if (
-            saved.source == self.LOCAL_LEDGER_SOURCE
-            and self._v2_session_leases is not None
-        ):
+        if saved.source == self.LOCAL_LEDGER_SOURCE and self._v2_session_leases is not None:
             await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, normalized_reason)

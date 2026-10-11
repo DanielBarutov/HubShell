@@ -105,3 +105,10 @@ frontend/Windows smoke относятся к плану 37.
 - имя и версия конкретных RPC;
 - минимальный набор PII для operator map;
 - TTL last-known snapshot и политика отображения stale.
+
+### 2026-10-11 — очередь гостевых допродаж в operator snapshot
+
+HTTP snapshot расширен `guest_packages`; Sessions читает подтверждённые
+прямые платежи через GuestPaymentLookup, строит текущий пакет и очередь
+по elapsed minutes. Frontend tooltip учитывает каждый пакет один раз.
+Неподтверждённые платежи и пакеты завершённой сессии не доступны.

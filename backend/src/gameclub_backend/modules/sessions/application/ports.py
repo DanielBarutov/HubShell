@@ -93,6 +93,9 @@ class GuestLookup(typing.Protocol):
 
 
 class GuestPaymentLookup(typing.Protocol):
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        """Return confirmed additional guest payments in sale order."""
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment | None:
         """Return a confirmed direct payment for a guest session."""
 

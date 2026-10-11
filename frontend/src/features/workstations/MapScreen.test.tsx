@@ -166,6 +166,8 @@ describe("Карта игровых мест", () => {
     );
 
     expect(screen.queryByText("Обычный зал")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Столбцы карты")).toHaveValue("10");
+    expect(screen.getByLabelText("Ряды карты")).toHaveValue("4");
     fireEvent.change(screen.getByLabelText("Столбцы карты"), {
       target: { value: "4" },
     });

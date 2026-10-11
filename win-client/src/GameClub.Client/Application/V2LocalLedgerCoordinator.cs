@@ -228,6 +228,13 @@ public sealed class V2LocalLedgerCoordinator
             ledger => V2LocalLedgerEngine.StopEarly(ledger, actionId, occurredAt),
             cancellationToken);
 
+    public Task<V2LocalLedgerTransition> ApplyGuestPackageAsync(
+        V2LocalSessionLedger signedPackage,
+        CancellationToken cancellationToken = default) =>
+        ApplyClientActionAsync(
+            ledger => V2LocalLedgerEngine.ApplyGuestPackage(ledger, signedPackage),
+            cancellationToken);
+
     public Task<V2LocalLedgerTransition> ApplyServerStopAsync(
         CancellationToken cancellationToken = default) =>
         ApplyClientActionAsync(

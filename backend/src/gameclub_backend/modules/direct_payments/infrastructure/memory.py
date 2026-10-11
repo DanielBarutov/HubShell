@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import uuid
 
-from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
+from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus, GuestSessionPayment
 
 
 class InMemoryGuestSessionPaymentRepository:
@@ -10,6 +10,16 @@ class InMemoryGuestSessionPaymentRepository:
         self._items: dict[uuid.UUID, GuestSessionPayment] = {}
         self._by_key: dict[str, uuid.UUID] = {}
         self._lock = asyncio.Lock()
+
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        return sorted(
+            (
+                item
+                for item in self._items.values()
+                if item.session_id == session_id and item.status is DirectPaymentStatus.CONFIRMED
+            ),
+            key=lambda item: item.created_at,
+        )
 
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment | None:
         return self._items.get(payment_id)
@@ -24,6 +34,7 @@ class InMemoryGuestSessionPaymentRepository:
             if existing is not None:
                 if (
                     existing.workstation_id != payment.workstation_id
+                    or existing.session_id != payment.session_id
                     or existing.tariff_id != payment.tariff_id
                     or existing.tariff_quantity != payment.tariff_quantity
                     or existing.guest_id != payment.guest_id

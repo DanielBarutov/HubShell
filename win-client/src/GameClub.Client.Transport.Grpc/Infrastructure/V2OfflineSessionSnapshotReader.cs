@@ -62,7 +62,8 @@ public static class V2OfflineSessionSnapshotReader
     public static V2LocalSessionLedger VerifyAndCreateGuestLedger(
         SignedGuestSessionAccess snapshot,
         IOfflineSnapshotSignatureVerifier verifier,
-        string? expectedDeviceId = null)
+        string? expectedDeviceId = null,
+        Guid? expectedSessionId = null)
     {
         if (snapshot.Payload is null
             || string.IsNullOrWhiteSpace(snapshot.SigningKeyId)
@@ -76,7 +77,9 @@ public static class V2OfflineSessionSnapshotReader
             throw new InvalidOperationException("V2 guest access signature is invalid");
         }
         var payload = snapshot.Payload;
-        if (payload.SchemaVersion != 1 || payload.IssuedAt is null || payload.ExpiresAt is null
+        if (payload.SchemaVersion != (expectedSessionId is null ? 1 : 2)
+            || (expectedSessionId is not null && payload.SessionId != expectedSessionId.Value.ToString())
+            || payload.IssuedAt is null || payload.ExpiresAt is null
             || string.IsNullOrWhiteSpace(payload.GuestName)
             || (expectedDeviceId is not null
                 && !string.Equals(payload.DeviceId, expectedDeviceId, StringComparison.Ordinal)))
@@ -107,7 +110,8 @@ public static class V2OfflineSessionSnapshotReader
             debtLimitCents: 0,
             loginGrantRemainingMinutes: 0,
             packages: new[] { package },
-            tariffs: Array.Empty<V2LocalTariff>(),
+            tariffs: new[] { new V2LocalTariff(payload.TariffId, payload.TariffName,
+                package.ZoneId, minutes, 0, 0, false) },
             snapshotId: grantId,
             activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime()),
             guestName: payload.GuestName,
