@@ -89,6 +89,51 @@ public sealed class V2AccessGateTests
         Assert.Equal(previous.OutboxFacts, await ledger.ReadPendingOutboxAsync());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AccountLoginAfterStoppedGuestUsesGuestStopAndPreservesServerDenial(bool denyStop)
+    {
+        var previous = V2LocalLedgerEngine.StopEarly(
+            CreateLedger() with { ClientId = Guid.Empty, GuestName = "Гость", GuestPaymentId = Guid.NewGuid() },
+            Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var ledger = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await ledger.InitializeAsync(previous.Ledger);
+        var next = CreateLedger() with { SessionId = Guid.NewGuid(), SnapshotId = Guid.NewGuid() };
+        var account = new V2Gateway(next);
+        var guest = new GuestStopGateway(denyStop);
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: "device-01",
+            v2OfflineLogin: new V2OfflineLoginCoordinator(account, ledger), v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger), v2SignatureVerifier: new AcceptingVerifier(),
+            v2OfflineSession: account, v2GuestSession: guest);
+        viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+        viewModel.PortalIdentifier = "NightFox";
+        viewModel.PortalPassword = "safe-password";
+
+        Assert.Equal(!denyStop, await viewModel.LoginPortalAsync());
+        Assert.Empty(account.StoppedSessions);
+        Assert.Equal(("device-01", previous.Ledger.SessionId.ToString(), previous.Ledger.GuestPaymentId!.Value.ToString()), guest.Stopped);
+        Assert.Equal(denyStop ? previous.Ledger.SessionId : next.SessionId, (await ledger.ReadLedgerAsync()).SessionId);
+    }
+
+    private sealed class GuestStopGateway(bool denyStop) : IV2GuestSessionGateway
+    {
+        public (string DeviceId, string SessionId, string PaymentId)? Stopped { get; private set; }
+        public Task<V2LocalSessionLedger?> RedeemPendingGuestAccessAsync(
+            string deviceId, IOfflineSnapshotSignatureVerifier signatureVerifier,
+            CancellationToken cancellationToken = default, V2LocalSessionLedger? activeGuestLedger = null)
+            => Task.FromResult<V2LocalSessionLedger?>(null);
+        public Task StopGuestSessionAsync(string deviceId, string sessionId, string paymentId,
+            CancellationToken cancellationToken = default)
+        {
+            Stopped = (deviceId, sessionId, paymentId);
+            if (denyStop)
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "guest stop denied"));
+            return Task.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task V2HostRecoveryReopensOnlyTheDurableActiveLedgerForThisDevice()
     {

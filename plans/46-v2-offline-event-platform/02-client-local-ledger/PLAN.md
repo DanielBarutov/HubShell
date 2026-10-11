@@ -1,5 +1,12 @@
 # V2.02 — локальный ledger, автономная сессия и Windows lifecycle
 
+2026-10-11: исправлен вход в аккаунт после завершённого гостевого V2 ledger:
+повторный stop использует guest endpoint с payment ID, не account endpoint с пустым client ID.
+Сохранён отказ при PermissionDenied; журнал не очищается. Иконки access-gate выровнены
+в фиксированных Canvas/Viewbox. Проверено: 133 .NET unit/headless теста и Skia-рендер;
+живой повторный вход и Windows smoke не выполнены.
+
+
 Статус: `in_progress`
 Владелец: `win-client/`
 Зависимости: `V2.00`, `V2.01`
