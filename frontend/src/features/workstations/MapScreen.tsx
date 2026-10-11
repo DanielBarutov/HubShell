@@ -80,7 +80,7 @@ export function MapView({
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [gridColumns, setGridColumns] = useState(() =>
-    gridSetting("gameshell.map-grid-columns", 6, 12),
+    gridSetting("gameshell.map-grid-columns", 10, 12),
   );
   const [gridRows, setGridRows] = useState(() =>
     gridSetting("gameshell.map-grid-rows", 4, 12),

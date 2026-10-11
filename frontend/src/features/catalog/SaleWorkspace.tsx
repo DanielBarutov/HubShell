@@ -364,6 +364,9 @@ export function SaleWorkspace({
   const activeClientSession = Boolean(
     registeredSession && client?.id === pc?.clientId,
   );
+  const activeGuestSession = Boolean(
+    pc?.status === "busy" && !pc.clientId && pc.sessionId && buyerMode === "guest",
+  );
   const lineCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const visibleTariffs =
     tariffCategory === "all"
@@ -502,10 +505,11 @@ export function SaleWorkspace({
       timeLines.length &&
       pc &&
       pc.status === "busy" &&
-      !activeClientSession
+      !activeClientSession &&
+      !activeGuestSession
     ) {
       setError(
-        "Тариф можно добавить только в активную сессию зарегистрированного клиента этого места. Товары можно оформить отдельно.",
+        "Для допродажи времени нужна текущая гостевая сессия или её зарегистрированный клиент. Товары можно оформить отдельно.",
       );
       return;
     }
@@ -513,7 +517,8 @@ export function SaleWorkspace({
       timeLines.length &&
       pc &&
       pc.status !== "online" &&
-      !activeClientSession
+      !activeClientSession &&
+      !activeGuestSession
     ) {
       setError("Новую сессию нельзя открыть: игровое место не в сети");
       return;
@@ -579,6 +584,7 @@ export function SaleWorkspace({
         const payment = await api.confirmGuestSessionPayment(
           {
             workstation_id: pc!.id,
+            session_id: activeGuestSession ? pc!.sessionId : undefined,
             tariff_id: timeLines[0].sourceId,
             tariff_quantity: timeLines[0].quantity,
             guest_name: "Гость",

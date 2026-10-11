@@ -983,7 +983,13 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
         if self._guest_access is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 guest access is not configured")
         try:
-            return await self._guest_access.redeem(request.device_id)
+            return await self._guest_access.redeem(
+                request.device_id,
+                uuid.UUID(request.session_id) if request.session_id else None,
+                tuple(uuid.UUID(value) for value in request.applied_grant_ids),
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:
             await abort_application_error(context, error)
         raise AssertionError("unreachable after gRPC abort")

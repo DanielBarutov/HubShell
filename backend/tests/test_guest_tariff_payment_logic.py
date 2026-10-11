@@ -1,5 +1,6 @@
 import datetime
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -359,3 +360,173 @@ async def test_guest_mixed_cash_transfer_requires_exact_two_methods_and_total() 
             "guest-invalid-mixed",
             [PaymentPart("transfer", 250), PaymentPart("transfer", 250)],
         )
+
+
+@pytest.mark.asyncio
+async def test_guest_additional_payment_is_bound_to_active_session_and_idempotent() -> None:
+    session_id = uuid.uuid4()
+    active = SimpleNamespace(id=session_id, client_id=None, source="guest_local_ledger")
+    lookup = ActiveSessionLookup(active)
+    service, tariff, cash, workstation_id = await build_guest_payment_service(
+        active_sessions=lookup
+    )
+    shift = uuid.uuid4()
+    request = dict(
+        workstation_id=workstation_id,
+        tariff_id=tariff.id,
+        tariff_quantity=2,
+        guest_name="Гость",
+        actor_id="operator",
+        idempotency_key="guest-addition",
+        payment_parts=[PaymentPart("cash", 1000)],
+        cash_shift_id=shift,
+        session_id=session_id,
+    )
+    first = await service.confirm(**request)
+    assert first.session_id == session_id
+    assert first.duration_minutes == 60
+    assert first.status is DirectPaymentStatus.CONFIRMED
+    assert await service.confirm(**request) == first
+    assert len(cash.calls) == 1
+    with pytest.raises(ApplicationError, match="another payment"):
+        await service.confirm(**(request | {"session_id": uuid.uuid4()}))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "client_id,source,matches",
+    [
+        (uuid.uuid4(), "local_ledger", True),
+        (None, "guest_local_ledger", False),
+        (None, "local_ledger", True),
+    ],
+)
+async def test_guest_addition_rejects_wrong_session(client_id, source, matches) -> None:
+    session_id = uuid.uuid4()
+    active = SimpleNamespace(
+        id=session_id if matches else uuid.uuid4(), client_id=client_id, source=source
+    )
+    service, tariff, cash, workstation_id = await build_guest_payment_service(
+        active_sessions=ActiveSessionLookup(active)
+    )
+    with pytest.raises(ApplicationError, match="does not match"):
+        await service.confirm(
+            workstation_id,
+            tariff.id,
+            1,
+            "Гость",
+            "operator",
+            "wrong-session",
+            [PaymentPart("cash", 500)],
+            cash_shift_id=uuid.uuid4(),
+            session_id=session_id,
+        )
+    assert cash.calls == []
+
+
+@pytest.mark.asyncio
+async def test_guest_snapshot_includes_all_paid_packages_and_advances_queue() -> None:
+    import dataclasses
+
+    from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+    from gameclub_backend.modules.sessions.application.service import SessionService
+    from gameclub_backend.modules.sessions.domain import Session, SessionStatus
+    from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
+    from gameclub_backend.modules.sessions.presentation.http import SessionSnapshotResponse
+
+    clock = FixedClock()
+    workstations = InMemoryWorkstationRepository()
+    workstation = await WorkstationService(workstations).register("guest-snapshot", "Guest PC")
+    catalog = CatalogService(InMemoryCatalogRepository())
+    tariffs = [
+        await catalog.create_tariff(
+            name,
+            None,
+            duration_minutes=minutes,
+            price_cents=500,
+            valid_from=clock.now(),
+            valid_to=None,
+            audience=TariffAudience.GUEST,
+        )
+        for name, minutes in [("Три минуты", 3), ("Шесть минут", 6)]
+    ]
+    session_repository = InMemorySessionRepository()
+    payment_repository = InMemoryGuestSessionPaymentRepository()
+    payments = GuestSessionPaymentService(
+        payment_repository,
+        catalog,
+        RecordingCash(),
+        clock=clock,
+        active_sessions=session_repository,
+    )
+    first = await payments.confirm(
+        workstation.id,
+        tariffs[0].id,
+        1,
+        "Гость",
+        "operator",
+        "snapshot-first",
+        [PaymentPart("transfer", 500)],
+    )
+    session = Session(
+        id=uuid.uuid4(),
+        workstation_id=workstation.id,
+        client_id=None,
+        guest_name="Гость",
+        status=SessionStatus.ACTIVE,
+        started_at=clock.now() + datetime.timedelta(seconds=20),
+        ended_at=None,
+        source="guest_local_ledger",
+        created_by="operator",
+        created_at=clock.now(),
+        idempotency_key="snapshot-session",
+        tariff_id=tariffs[0].id,
+        tariff_quantity=1,
+        guest_payment_id=first.id,
+    )
+    await session_repository.save(session)
+    addition = await payments.confirm(
+        workstation.id,
+        tariffs[1].id,
+        1,
+        "Гость",
+        "operator",
+        "snapshot-addition",
+        [PaymentPart("transfer", 500)],
+        session_id=session.id,
+    )
+    await payment_repository.save(
+        dataclasses.replace(
+            addition,
+            id=uuid.uuid4(),
+            idempotency_key="snapshot-pending",
+            status=DirectPaymentStatus.PENDING,
+        )
+    )
+    sessions = SessionService(
+        session_repository,
+        workstations=workstations,
+        clients=InMemoryClientRepository(),
+        tariffs=catalog,
+        guest_payments=payments,
+        clock=clock,
+    )
+    before_boundary = await sessions.snapshot(
+        session.id, now=clock.now() + datetime.timedelta(seconds=30)
+    )
+    assert sum(item.remaining_minutes for item in before_boundary.guest_packages) == 9
+    snapshot = await sessions.snapshot(session.id, now=clock.now() + datetime.timedelta(minutes=1))
+    assert [
+        (item.tariff_name, item.remaining_minutes, item.status) for item in snapshot.guest_packages
+    ] == [
+        ("Три минуты", 2, "active"),
+        ("Шесть минут", 6, "queued"),
+    ]
+    response = SessionSnapshotResponse.from_domain(snapshot)
+    assert sum(item.remaining_minutes for item in response.guest_packages) == 8
+    later = await sessions.snapshot(session.id, now=clock.now() + datetime.timedelta(minutes=4))
+    assert len(later.guest_packages) == 1
+    assert later.guest_packages[0].remaining_minutes == 5
+    assert later.guest_packages[0].status == "active"
+    await session_repository.save(session.stop(clock.now() + datetime.timedelta(minutes=4)))
+    assert (await sessions.snapshot(session.id)).guest_packages == ()

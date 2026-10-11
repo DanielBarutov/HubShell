@@ -39,10 +39,14 @@ class StopOfflineSessionRequest(_message.Message):
     def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., client_id: _Optional[str] = ...) -> None: ...
 
 class RedeemGuestAccessRequest(_message.Message):
-    __slots__ = ("device_id",)
+    __slots__ = ("device_id", "session_id", "applied_grant_ids")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    APPLIED_GRANT_IDS_FIELD_NUMBER: _ClassVar[int]
     device_id: str
-    def __init__(self, device_id: _Optional[str] = ...) -> None: ...
+    session_id: str
+    applied_grant_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., applied_grant_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class StopGuestAccessRequest(_message.Message):
     __slots__ = ("device_id", "session_id", "payment_id")

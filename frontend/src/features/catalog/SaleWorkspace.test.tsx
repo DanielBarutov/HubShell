@@ -168,6 +168,30 @@ describe("Окно продажи", () => {
     expect(startSession).not.toHaveBeenCalled();
   });
 
+  it("допродаёт тариф в текущую гостевую сессию", async () => {
+    const activePc: Workstation = { ...pc, status: "busy", sessionId: "guest-session-1", client: "Гость" };
+    const confirmGuestSessionPayment = vi.fn().mockResolvedValue({ id: "addition-1", status: "confirmed" });
+    const prepareGuestSessionAccess = vi.fn().mockResolvedValue({ status: "pending" });
+    const onSaved = vi.fn();
+    render(
+      <SaleWorkspace
+        api={{ confirmGuestSessionPayment, prepareGuestSessionAccess } as unknown as GameClubApi}
+        pc={activePc} initialClient={null} initialProduct={null} clients={[]}
+        cashShifts={[]} tariffs={tariffs} products={products} categories={categories}
+        onClose={vi.fn()} onSaved={onSaved}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Час в основном зале/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Перевод/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(confirmGuestSessionPayment).toHaveBeenCalledWith(expect.objectContaining({
+      workstation_id: pc.id, session_id: "guest-session-1", tariff_id: "main-hour",
+      payment_parts: [{ method: "transfer", amount_cents: 400 }],
+    }), expect.any(String));
+    expect(prepareGuestSessionAccess).toHaveBeenCalledWith("addition-1");
+  });
+
   it("после оплаты выдаёт V2 guest access и не вызывает V1 session.start", async () => {
     const confirmGuestSessionPayment = vi.fn().mockResolvedValue({ id: "payment-1", status: "confirmed" });
     const prepareGuestSessionAccess = vi.fn().mockResolvedValue({

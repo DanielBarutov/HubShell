@@ -7,7 +7,8 @@ public interface IV2GuestSessionGateway
     Task<V2LocalSessionLedger?> RedeemPendingGuestAccessAsync(
         string deviceId,
         IOfflineSnapshotSignatureVerifier signatureVerifier,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        V2LocalSessionLedger? activeGuestLedger = null);
 
     Task StopGuestSessionAsync(
         string deviceId,

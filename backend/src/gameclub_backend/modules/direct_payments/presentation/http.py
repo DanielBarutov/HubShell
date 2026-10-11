@@ -20,6 +20,7 @@ class PaymentPartRequest(BaseModel):
 
 
 class GuestSessionPaymentRequest(BaseModel):
+    session_id: uuid.UUID | None = None
     workstation_id: uuid.UUID
     tariff_id: uuid.UUID
     tariff_quantity: int = Field(default=1, ge=1, le=100)
@@ -31,6 +32,7 @@ class GuestSessionPaymentRequest(BaseModel):
 
 class GuestSessionPaymentResponse(BaseModel):
     id: uuid.UUID
+    session_id: uuid.UUID | None = None
     workstation_id: uuid.UUID
     tariff_id: uuid.UUID
     tariff_quantity: int
@@ -51,6 +53,7 @@ class GuestSessionPaymentResponse(BaseModel):
         return cls(
             id=payment.id,
             workstation_id=payment.workstation_id,
+            session_id=payment.session_id,
             tariff_id=payment.tariff_id,
             tariff_quantity=payment.tariff_quantity,
             guest_id=payment.guest_id,
@@ -109,6 +112,7 @@ def create_router(
     ) -> GuestSessionPaymentResponse:
         payment = await service.confirm(
             workstation_id=body.workstation_id,
+            session_id=body.session_id,
             tariff_id=body.tariff_id,
             tariff_quantity=body.tariff_quantity,
             guest_id=body.guest_id,

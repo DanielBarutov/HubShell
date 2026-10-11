@@ -615,6 +615,40 @@ public sealed class V2LocalLedgerTests
     }
 
     [Fact]
+    public void GuestAdditionSignatureIsBoundToActiveSession()
+    {
+        var sessionId = Guid.NewGuid();
+        var payload = new GuestSessionAccessPayload
+        {
+            GrantId = Guid.NewGuid().ToString(), SchemaVersion = 2,
+            IssuedAt = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExpiresAt = Timestamp.FromDateTime(DateTime.UtcNow.AddMinutes(10)),
+            PaymentId = Guid.NewGuid().ToString(), SessionId = sessionId.ToString(),
+            DeviceId = "guest-device", GuestName = "Гость", TariffId = "second",
+            TariffName = "Второй пакет", DurationMinutes = 30, TariffQuantity = 1,
+        };
+        var bytes = V2OfflineSessionSnapshotReader.SerializeDeterministic(payload);
+        var signed = new SignedGuestSessionAccess
+        {
+            Payload = payload, SigningKeyId = "club-key-1",
+            Signature = ByteString.CopyFrom([1, 2, 3]),
+        };
+        var verifier = new SnapshotVerifier(bytes, accepts: true);
+        var addition = V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(
+            signed, verifier, "guest-device", sessionId);
+        Assert.Equal(30, Assert.Single(addition.Packages).RemainingMinutes);
+        Assert.Equal("Второй пакет", Assert.Single(addition.Tariffs).Name);
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(signed, verifier, "guest-device"));
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(
+                signed, verifier, "guest-device", Guid.NewGuid()));
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(
+                signed, new SnapshotVerifier(bytes, accepts: false), "guest-device", sessionId));
+    }
+
+    [Fact]
     public void Ed25519VerifierAcceptsKnownClubKeyAndRejectsUnknownOrChangedData()
     {
         var verifier = new V2Ed25519OfflineSnapshotSignatureVerifier(

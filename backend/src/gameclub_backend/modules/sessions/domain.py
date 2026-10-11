@@ -118,6 +118,16 @@ class SessionTimeNotification:
 
 
 @dataclasses.dataclass(frozen=True)
+class GuestPackageSnapshot:
+    id: uuid.UUID
+    tariff_id: uuid.UUID
+    tariff_name: str
+    duration_minutes: int
+    remaining_minutes: int
+    status: str
+
+
+@dataclasses.dataclass(frozen=True)
 class SessionSnapshot:
     """Server-owned, versioned state sent to operator and device consumers."""
 
@@ -139,6 +149,7 @@ class SessionSnapshot:
     tariff_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
     balance_remaining_minutes: int | None = None
     time_notifications: tuple[SessionTimeNotification, ...] = ()
+    guest_packages: tuple[GuestPackageSnapshot, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version < 1:

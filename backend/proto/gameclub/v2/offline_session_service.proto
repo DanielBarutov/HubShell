@@ -44,6 +44,9 @@ message StopOfflineSessionRequest {
 
 message RedeemGuestAccessRequest {
   string device_id = 1;
+  // Для допродажи: текущая гостевая сессия и durable IDs уже принятых пакетов.
+  string session_id = 16;
+  repeated string applied_grant_ids = 17;
   reserved 2 to 15;
 }
 

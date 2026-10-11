@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Computer, Receipt, Settings, WalletCards } from "lucide-react";
+import {
+  ChevronRight,
+  Computer,
+  Receipt,
+  Settings,
+  WalletCards,
+} from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import { statusMeta } from "../../shared/constants";
@@ -21,7 +27,11 @@ export function PcPanel({
   onClose: () => void;
   onEdit: () => void;
   onBook: () => void;
-  onDeposit: (client?: Client, bonusOnly?: boolean, target?: DepositTarget) => void;
+  onDeposit: (
+    client?: Client,
+    bonusOnly?: boolean,
+    target?: DepositTarget,
+  ) => void;
   onOpenSale: () => void;
   onSessionChanged: () => void;
   client?: Client;
@@ -38,8 +48,9 @@ export function PcPanel({
   }));
   const [submitting, setSubmitting] = useState(false);
   const hasActiveSession = pc.status === "busy";
-  const snapshotChanged = sessionSnapshotState.workstationId !== pc.id
-    || sessionSnapshotState.sessionId !== pc.sessionId;
+  const snapshotChanged =
+    sessionSnapshotState.workstationId !== pc.id ||
+    sessionSnapshotState.sessionId !== pc.sessionId;
   const sessionSnapshot = pc.sessionSnapshot ?? null;
 
   useEffect(() => {
@@ -57,9 +68,10 @@ export function PcPanel({
     if (!api || pc.status === "maintenance" || pc.status === "offline") {
       return;
     }
-    const confirmation = commandType === "system.restart"
-      ? `Перезапустить «${pc.name}»? Клиент сначала будет заблокирован.`
-      : `Заблокировать клиент на «${pc.name}»?`;
+    const confirmation =
+      commandType === "system.restart"
+        ? `Перезапустить «${pc.name}»? Клиент сначала будет заблокирован.`
+        : `Заблокировать клиент на «${pc.name}»?`;
     if (!window.confirm(confirmation)) {
       return;
     }
@@ -75,7 +87,11 @@ export function PcPanel({
           : "Команда блокировки поставлена в очередь",
       );
     } catch (error) {
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось отправить команду");
+      setOperationState(
+        error instanceof ApiError
+          ? error.message
+          : "Не удалось отправить команду",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -85,7 +101,11 @@ export function PcPanel({
     if (!api || !hasActiveSession || !pc.sessionId) {
       return;
     }
-    if (!window.confirm(`Прервать сессию на «${pc.name}»? Неиспользованный остаток активного пакета сгорит.`)) {
+    if (
+      !window.confirm(
+        `Прервать сессию на «${pc.name}»? Неиспользованный остаток активного пакета сгорит.`,
+      )
+    ) {
       return;
     }
     setSubmitting(true);
@@ -101,14 +121,23 @@ export function PcPanel({
       setOperationState("Сессия завершена");
       onSessionChanged();
     } catch (error) {
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось прервать сессию");
+      setOperationState(
+        error instanceof ApiError
+          ? error.message
+          : "Не удалось прервать сессию",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   const toggleAvailability = async () => {
-    if (!api || !window.confirm(`${pc.status === "maintenance" ? "Включить" : "Отключить"} игровое место «${pc.name}»?`)) {
+    if (
+      !api ||
+      !window.confirm(
+        `${pc.status === "maintenance" ? "Включить" : "Отключить"} игровое место «${pc.name}»?`,
+      )
+    ) {
       return;
     }
     setSubmitting(true);
@@ -125,7 +154,11 @@ export function PcPanel({
       onSessionChanged();
     } catch (error) {
       setOperationSuccess(false);
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось отключить место");
+      setOperationState(
+        error instanceof ApiError
+          ? error.message
+          : "Не удалось отключить место",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -143,67 +176,225 @@ export function PcPanel({
       onSessionChanged();
       onClose();
     } catch (error) {
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось удалить место");
+      setOperationState(
+        error instanceof ApiError ? error.message : "Не удалось удалить место",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  return <div className="panel-inner pc-panel flex flex-col gap-4 p-5">
-    <PanelHeader title={pc.name} subtitle={pc.group} onClose={onClose} />
-    <div className="panel-pc-hero flex items-center gap-3 rounded-xl border border-primary/20! bg-base-200/70! p-4 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
-      <div className={`large-pc-icon grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-primary/15! text-primary! ${pc.status}`}><Computer size={50} strokeWidth={1.2} /></div>
-      <div className="min-w-0">
-        <span className="pill-status badge badge-soft badge-success gap-1"><i className="h-1.5 w-1.5 rounded-full bg-current" /> {meta.label}</span>
-        <h2 className="mt-2 text-lg font-bold">{pc.client || "Место свободно"}</h2>
-        <p className="text-xs text-base-content/60!">{pc.session ? `Сессия началась ${pc.session} назад` : pc.status === "offline" ? "Нет связи; новые операции заблокированы" : pc.lastSeen || "Готово к новой сессии"}</p>
-        {sessionSnapshot?.meter && <small className="meter-status mt-2 block text-xs text-primary!">
-          {sessionSnapshot.meter.package_minutes > 0 ? `Пакет · использовано ${sessionSnapshot.meter.package_minutes} мин` : "Поминутно"}
-          {" · "}списано {(sessionSnapshot.meter.billed_cents / 100).toLocaleString("ru-RU")} ₽
-          {" · "}{sessionSnapshot.meter.billed_minutes} мин
-          {" · "}{sessionSnapshot.meter.status === "exhausted" ? "баланс исчерпан" : "активно"}
-        </small>}
+  return (
+    <div className="panel-inner pc-panel flex flex-col gap-4 p-5">
+      <PanelHeader title={pc.name} subtitle={pc.group} onClose={onClose} />
+      <div className="panel-pc-hero flex items-center gap-3 rounded-xl border border-primary/20! bg-base-200/70! p-4 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
+        <div
+          className={`large-pc-icon grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-primary/15! text-primary! ${pc.status}`}
+        >
+          <Computer size={50} strokeWidth={1.2} />
+        </div>
+        <div className="min-w-0">
+          <span className="pill-status badge badge-soft badge-success gap-1">
+            <i className="h-1.5 w-1.5 rounded-full bg-current" /> {meta.label}
+          </span>
+          <h2 className="mt-2 text-lg font-bold">
+            {pc.client || "Место свободно"}
+          </h2>
+          <p className="text-xs text-base-content/60!">
+            {pc.session
+              ? `Сессия началась ${pc.session} назад`
+              : pc.status === "offline"
+                ? "Нет связи; новые операции заблокированы"
+                : pc.lastSeen || "Готово к новой сессии"}
+          </p>
+          {sessionSnapshot?.meter && (
+            <small className="meter-status mt-2 block text-xs text-primary!">
+              {sessionSnapshot.meter.package_minutes > 0
+                ? `Пакет · использовано ${sessionSnapshot.meter.package_minutes} мин`
+                : "Поминутно"}
+              {" · "}списано{" "}
+              {(sessionSnapshot.meter.billed_cents / 100).toLocaleString(
+                "ru-RU",
+              )}{" "}
+              ₽{" · "}
+              {sessionSnapshot.meter.billed_minutes} мин
+              {" · "}
+              {sessionSnapshot.meter.status === "exhausted"
+                ? "баланс исчерпан"
+                : "активно"}
+            </small>
+          )}
+        </div>
       </div>
-    </div>
-    <div className="panel-section rounded-xl border border-primary/15! bg-base-100/35! p-4">
-      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Группа</span><strong>{pc.group}</strong></div>
-      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Позиция на карте</span><strong>{pc.position ?? "—"}</strong></div>
-      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Устройство</span><strong>{pc.name}</strong></div>
-      {sessionSnapshot?.active_entitlement && <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm"><span className="text-base-content/60!">Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
-    </div>
-    {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="rounded-xl border border-primary/15! bg-base-100/35! p-4">
-      <div className="mb-3"><h3 className="font-semibold">Очередь пакетов</h3><p className="text-xs text-base-content/60!">Следующие пакеты активируются по порядку</p></div>
-      <div className="flex flex-col gap-1">
-      {sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="flex items-center justify-between gap-3 border-t border-primary/10! py-2 text-sm" key={item.id}>
-        <span className="text-base-content/70!">#{item.queue_position} · {item.remaining_minutes} мин</span>
-        <strong className="text-primary!">В очереди</strong>
-      </div>)}
+      <div className="panel-section rounded-xl border border-primary/15! bg-base-100/35! p-4">
+        <div className="detail-row flex items-center rounded-xl justify-between gap-3 border-b border-primary/10! py-2 px-5 mb-1 text-sm">
+          <span className="text-base-content/60!">Группа</span>
+          <strong>{pc.group}</strong>
+        </div>
+        <div className="detail-row flex items-center rounded-xl justify-between gap-3 border-b border-primary/10! py-2 px-5 mb-1 text-sm">
+          <span className="text-base-content/60!">Позиция на карте</span>
+          <strong>{pc.position ?? "—"}</strong>
+        </div>
+        <div className="detail-row flex items-center rounded-xl justify-between gap-3 border-b border-primary/10! py-2 px-5 mb-1 text-sm">
+          <span className="text-base-content/60!">Устройство</span>
+          <strong>{pc.name}</strong>
+        </div>
+        {sessionSnapshot?.active_entitlement && (
+          <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm">
+            <span className="text-base-content/60!">Активный пакет</span>
+            <strong>
+              {sessionSnapshot.active_entitlement.remaining_minutes} мин
+              осталось
+            </strong>
+          </div>
+        )}
       </div>
-    </div>}
-    {(pc.status === "online" || pc.status === "busy") && <button type="button" className="sale-entry-card btn btn-ghost flex w-full items-center gap-3 rounded-xl border border-primary/30! bg-primary/10! p-3 text-left" onClick={onOpenSale}>
-      <div className="sale-entry-icon grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary! text-primary-content!"><Receipt size={20} /></div>
-      <div className="min-w-0 grow"><strong className="block">Оформить продажу</strong><span className="block text-xs text-base-content/60!">Время, товары и покупатель — в одном окне</span></div>
-      <ChevronRight size={17} />
-    </button>}
-    <div className="panel-actions pc-panel-actions flex flex-col gap-2">
-      {pc.status === "busy" && client && <button className="secondary-button wide btn btn-outline" onClick={() => onDeposit(
-        client,
-        false,
-        pc.sessionId && pc.deviceId
-          ? { sessionId: pc.sessionId, deviceId: pc.deviceId, workstationName: pc.name }
-          : undefined,
-      )}><WalletCards size={15} /> Пополнить депозит</button>}
-      <button className="secondary-button wide btn btn-outline" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
-      <div className="pc-session-actions flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/45! p-3">
-        {hasActiveSession && <p className="pc-session-note m-0 text-xs text-base-content/60!">Активная сессия управляется игровым ПК.</p>}
-        {hasActiveSession && pc.sessionId && <button className="danger-button wide btn btn-error btn-outline" onClick={() => void interruptSession()} disabled={submitting || !api}>Прервать сессию</button>}
-        <button className="secondary-button wide btn btn-outline" onClick={() => void dispatchDeviceCommand("display.lock")} disabled={submitting || !api || pc.status === "maintenance" || pc.status === "offline"}>Заблокировать клиент</button>
-        <button className="danger-button wide btn btn-error btn-outline" onClick={() => void dispatchDeviceCommand("system.restart")} disabled={submitting || !api || pc.status === "maintenance" || pc.status === "offline"}>Перезапустить ПК</button>
+      {sessionSnapshot &&
+        sessionSnapshot.entitlements.some(
+          (item) => item.status === "queued",
+        ) && (
+          <div className="rounded-xl border border-primary/15! bg-base-100/35! p-4">
+            <div className="mb-3">
+              <h3 className="font-semibold">Очередь пакетов</h3>
+              <p className="text-xs text-base-content/60!">
+                Следующие пакеты активируются по порядку
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {sessionSnapshot.entitlements
+                .filter((item) => item.status === "queued")
+                .map((item) => (
+                  <div
+                    className="flex items-center justify-between gap-3 border-t border-primary/10! py-2 text-sm"
+                    key={item.id}
+                  >
+                    <span className="text-base-content/70!">
+                      #{item.queue_position} · {item.remaining_minutes} мин
+                    </span>
+                    <strong className="text-primary!">В очереди</strong>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      {(pc.status === "online" || pc.status === "busy") && (
+        <button
+          type="button"
+          className="sale-entry-card btn btn-ghost flex w-full h-auto items-center gap-3 rounded-xl border border-primary/30! bg-primary/10! p-3 text-left"
+          onClick={onOpenSale}
+        >
+          <div className="sale-entry-icon grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary! text-primary-content!">
+            <Receipt size={20} />
+          </div>
+          <div className="min-w-0 grow">
+            <strong className="block mb-1">Оформить продажу</strong>
+            <span className="block text-xs text-base-content/40!">
+              Время, товары и покупатель — в одном окне
+            </span>
+          </div>
+          <ChevronRight size={17} />
+        </button>
+      )}
+      <div className="panel-actions pc-panel-actions flex flex-col gap-2">
+        {pc.status === "busy" && client && (
+          <button
+            className="secondary-button wide btn btn-outline"
+            onClick={() =>
+              onDeposit(
+                client,
+                false,
+                pc.sessionId && pc.deviceId
+                  ? {
+                      sessionId: pc.sessionId,
+                      deviceId: pc.deviceId,
+                      workstationName: pc.name,
+                    }
+                  : undefined,
+              )
+            }
+          >
+            <WalletCards size={15} /> Пополнить депозит
+          </button>
+        )}
+        <button
+          className="secondary-button wide btn btn-outline"
+          onClick={onEdit}
+        >
+          <Settings size={15} /> Редактировать ПК
+        </button>
+        <div className="pc-session-actions flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/45! p-3">
+          {hasActiveSession && (
+            <p className="pc-session-note m-0 text-xs text-base-content/60!">
+              Управление сессией
+            </p>
+          )}
+          {hasActiveSession && pc.sessionId && (
+            <button
+              className="danger-button wide btn btn-error btn-outline"
+              onClick={() => void interruptSession()}
+              disabled={submitting || !api}
+            >
+              Прервать сессию
+            </button>
+          )}
+          <button
+            className="secondary-button wide btn btn-outline"
+            onClick={() => void dispatchDeviceCommand("display.lock")}
+            disabled={
+              submitting ||
+              !api ||
+              pc.status === "maintenance" ||
+              pc.status === "offline"
+            }
+          >
+            Заблокировать клиент
+          </button>
+          <button
+            className="danger-button wide btn btn-error btn-outline"
+            onClick={() => void dispatchDeviceCommand("system.restart")}
+            disabled={
+              submitting ||
+              !api ||
+              pc.status === "maintenance" ||
+              pc.status === "offline"
+            }
+          >
+            Перезапустить ПК
+          </button>
+        </div>
+        <button
+          className="secondary-button wide btn btn-outline"
+          onClick={onBook}
+          disabled={pc.status !== "online"}
+        >
+          Забронировать место
+        </button>
+        {operationState && (
+          <div
+            className={`${operationSuccess ? "form-success border-success/40! bg-success/10! text-success-content!" : "form-error border-error/40! bg-error/10! text-error-content!"} command-result rounded-lg border p-3 text-sm`}
+            role={operationSuccess ? "status" : "alert"}
+            aria-live="polite"
+          >
+            {operationState}
+          </div>
+        )}
       </div>
-      <button className="secondary-button wide btn btn-outline" onClick={onBook} disabled={pc.status !== "online"}>Забронировать место</button>
-      {operationState && <div className={`${operationSuccess ? "form-success border-success/40! bg-success/10! text-success-content!" : "form-error border-error/40! bg-error/10! text-error-content!"} command-result rounded-lg border p-3 text-sm`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
+      <button
+        className="danger-button btn btn-error btn-outline"
+        onClick={() => void toggleAvailability()}
+        disabled={!api || submitting}
+        aria-disabled={!api}
+      >
+        {pc.status === "maintenance" ? "Включить место" : "Отключить место"}{" "}
+        <ChevronRight size={15} />
+      </button>
+      <button
+        className="danger-button btn btn-error btn-outline"
+        onClick={() => void deleteWorkstation()}
+        disabled={!api || submitting}
+      >
+        Удалить из карты
+      </button>
     </div>
-    <button className="danger-button btn btn-error btn-outline" onClick={() => void toggleAvailability()} disabled={!api || submitting} aria-disabled={!api}>{pc.status === "maintenance" ? "Включить место" : "Отключить место"} <ChevronRight size={15} /></button>
-    <button className="danger-button btn btn-error btn-outline" onClick={() => void deleteWorkstation()} disabled={!api || submitting}>Удалить из карты</button>
-  </div>;
+  );
 }

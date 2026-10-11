@@ -257,6 +257,15 @@ class PostgresCashShiftRepository:
             )
             return model.to_domain() if model else None
 
+    async def get_by_close_key(self, idempotency_key: str) -> CashShift | None:
+        async with open_session(self._engine_provider) as session:
+            model = await session.scalar(
+                select(CashShiftModel).where(
+                    CashShiftModel.close_idempotency_key == idempotency_key
+                )
+            )
+            return model.to_domain() if model else None
+
     async def get_open(self, register_id: str) -> CashShift | None:
         async with open_session(self._engine_provider) as session:
             model = await session.scalar(

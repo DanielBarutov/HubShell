@@ -197,6 +197,21 @@ public sealed record V2ServerEventIssue(
 /// </summary>
 public static class V2LocalLedgerEngine
 {
+    public static long RemainingMinutes(V2LocalSessionLedger ledger)
+    {
+        if (ledger.Status != V2LocalSessionStatus.Active)
+        {
+            return 0;
+        }
+        var rate = FindPerMinuteTariff(ledger)?.PerMinutePriceCents ?? 0;
+        var paidMinutes = rate > 0 ? Math.Max(0, ledger.BalanceCents) / rate : 0;
+        return ledger.LoginGrantRemainingMinutes + paidMinutes
+            + ledger.Packages.Where(item =>
+                item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued
+                && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId))
+                .Sum(item => (long)item.RemainingMinutes);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -410,6 +425,16 @@ public static class V2LocalLedgerEngine
                     .ToArray(),
             };
         }
+        if (ledger.IsGuest)
+        {
+            next = next with
+            {
+                Packages = next.Packages.Select(item =>
+                    item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued
+                        ? item with { RemainingMinutes = 0, Status = V2LocalPackageStatus.Burned }
+                        : item).ToArray(),
+            };
+        }
         facts.Add(("session_stopped", Payload(("reason", "client_early_exit"))));
         return AppendClientFacts(
             next with { Status = V2LocalSessionStatus.Stopped },
@@ -432,13 +457,49 @@ public static class V2LocalLedgerEngine
                 Status = V2LocalSessionStatus.Stopped,
                 LoginGrantRemainingMinutes = 0,
                 Packages = ledger.Packages
-                    .Select(item => item.Status == V2LocalPackageStatus.Active
+                    .Select(item => (item.Status == V2LocalPackageStatus.Active
+                        || ledger.IsGuest && item.Status == V2LocalPackageStatus.Queued)
                         ? item with { RemainingMinutes = 0, Status = V2LocalPackageStatus.Burned }
                         : item)
                     .ToArray(),
             },
             Array.Empty<V2LocalFact>(),
             LockWorkstation: true);
+    }
+
+    public static V2LocalLedgerTransition ApplyGuestPackage(
+        V2LocalSessionLedger ledger,
+        V2LocalSessionLedger signedPackage)
+    {
+        EnsureActive(ledger);
+        if (!ledger.IsGuest || !signedPackage.IsGuest
+            || ledger.SessionId != signedPackage.SessionId
+            || ledger.DeviceId != signedPackage.DeviceId
+            || ledger.ZoneId != signedPackage.ZoneId)
+        {
+            throw new InvalidOperationException("Guest package belongs to another session");
+        }
+        var grantId = signedPackage.SnapshotId;
+        if (ledger.AppliedServerOperationIds.Contains(grantId) || ledger.SnapshotId == grantId)
+        {
+            return new(ledger, Array.Empty<V2LocalFact>(), false, IsDuplicate: true);
+        }
+        var package = signedPackage.Packages.Single();
+        if (package.RemainingMinutes <= 0
+            || !V2LocalSessionLedger.IsZoneCompatible(package.ZoneId, ledger.ZoneId))
+        {
+            throw new InvalidOperationException("Guest package is invalid");
+        }
+        return new(
+            ledger with
+            {
+                Packages = ledger.Packages.Append(package with
+                    { Status = V2LocalPackageStatus.Queued }).ToArray(),
+                Tariffs = ledger.Tariffs.Concat(signedPackage.Tariffs)
+                    .DistinctBy(item => item.Id).ToArray(),
+                AppliedServerOperationIds = ledger.AppliedServerOperationIds.Append(grantId).ToArray(),
+            },
+            Array.Empty<V2LocalFact>(), false);
     }
 
     public static V2LocalLedgerTransition ApplyBalanceCredit(

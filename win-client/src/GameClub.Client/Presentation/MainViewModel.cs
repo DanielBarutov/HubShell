@@ -768,20 +768,31 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return;
         }
-        if (_activeV2Ledger is not null)
+        if (_activeV2Ledger is { IsGuest: false })
         {
             return;
         }
         try
         {
+            var activeGuest = _activeV2Ledger is null ? null
+                : await _v2Ledger!.ReadLedgerAsync(_lifetime.Token);
             var ledger = await _v2GuestSession.RedeemPendingGuestAccessAsync(
                 DeviceId,
                 _v2SignatureVerifier,
-                _lifetime.Token);
+                _lifetime.Token, activeGuest);
             if (ledger is not null)
             {
-                await _v2Ledger!.InitializeNextSessionAsync(ledger, _lifetime.Token);
-                OpenV2Session(ledger, "Гостевая сессия открыта");
+                if (activeGuest is not null)
+                {
+                    var transition = await _v2Ledger!.ApplyGuestPackageAsync(ledger, _lifetime.Token);
+                    _activeV2Ledger = transition.Ledger;
+                    PublishSessionState();
+                }
+                else
+                {
+                    await _v2Ledger!.InitializeNextSessionAsync(ledger, _lifetime.Token);
+                    OpenV2Session(ledger, "Гостевая сессия открыта");
+                }
             }
         }
         catch (RpcException error) when (
@@ -2496,17 +2507,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     }
 
     private static string V2ActiveTimeSummary(V2LocalSessionLedger ledger) =>
-        V2LocalLedgerEngine.CurrentSource(ledger) switch
-        {
-            V2TimeSource.LoginGrant => $"Осталось {FormatDuration(ledger.LoginGrantRemainingMinutes)}",
-            V2TimeSource.Package => ledger.Packages.FirstOrDefault(item =>
-                item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued)
-                is { } package
-                    ? $"Осталось {FormatDuration(package.RemainingMinutes)}"
-                    : "Пакет завершён",
-            V2TimeSource.PerMinute => $"Баланс: {FormatMoney(ledger.BalanceCents)}",
-            _ => "Сессия завершена",
-        };
+        ledger.Status == V2LocalSessionStatus.Active
+            ? $"Осталось {FormatDuration(V2LocalLedgerEngine.RemainingMinutes(ledger))}"
+            : "Сессия завершена";
 
     private static string V2TariffSummary(V2LocalSessionLedger ledger) =>
         V2LocalLedgerEngine.CurrentSource(ledger) switch

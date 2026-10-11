@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, LargeBinary, String, select
+from sqlalchemy import Boolean, DateTime, LargeBinary, String, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -16,6 +16,7 @@ class GuestAccessBase(DeclarativeBase):
 class GuestAccessGrantModel(GuestAccessBase):
     __tablename__ = "v2_guest_access_grants"
 
+    is_extension: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default="false")
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     payment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, index=True)
     workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
@@ -28,6 +29,7 @@ class GuestAccessGrantModel(GuestAccessBase):
     def to_domain(self) -> GuestAccessGrant:
         return GuestAccessGrant(
             id=self.id,
+            is_extension=self.is_extension,
             payment_id=self.payment_id,
             workstation_id=self.workstation_id,
             expires_at=self.expires_at,
@@ -41,6 +43,7 @@ class GuestAccessGrantModel(GuestAccessBase):
     def from_domain(cls, value: GuestAccessGrant) -> "GuestAccessGrantModel":
         return cls(
             id=value.id,
+            is_extension=value.is_extension,
             payment_id=value.payment_id,
             workstation_id=value.workstation_id,
             expires_at=value.expires_at,
@@ -63,16 +66,29 @@ class PostgresGuestAccessGrantRepository:
             return model.to_domain() if model else None
 
     async def get_pending_for_workstation(
-        self, workstation_id: uuid.UUID, now: datetime.datetime
+        self,
+        workstation_id: uuid.UUID,
+        now: datetime.datetime,
+        session_id: uuid.UUID | None = None,
+        applied_grant_ids: tuple[uuid.UUID, ...] = (),
     ) -> GuestAccessGrant | None:
         async with open_session(self._engine_provider) as session:
             model = await session.scalar(
                 select(GuestAccessGrantModel)
                 .where(
                     GuestAccessGrantModel.workstation_id == workstation_id,
-                    GuestAccessGrantModel.expires_at >= now,
+                    GuestAccessGrantModel.id.not_in(applied_grant_ids),
+                    (GuestAccessGrantModel.session_id == session_id)
+                    if session_id is not None
+                    else (GuestAccessGrantModel.expires_at >= now),
+                    GuestAccessGrantModel.is_extension == (session_id is not None),
                 )
-                .order_by(GuestAccessGrantModel.expires_at)
+                .order_by(
+                    GuestAccessGrantModel.payload.is_not(None)
+                    if session_id is None
+                    else GuestAccessGrantModel.expires_at,
+                    GuestAccessGrantModel.expires_at,
+                )
                 .limit(1)
             )
             return model.to_domain() if model else None

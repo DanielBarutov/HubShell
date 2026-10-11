@@ -72,6 +72,20 @@ async def test_cash_shift_schedule_opens_and_closes_idempotently() -> None:
     assert closed.status.value == "closed"
     assert closed.actual_close_cents == closed.expected_close_cents
 
+    reopened = await service.open(
+        register_id="front-desk",
+        opening_balance_cents=500,
+        opened_by="operator",
+        idempotency_key="manual-reopen",
+    )
+    assert await service.run_auto_schedule() == 0
+    assert await service.run_auto_schedule() == 0
+    assert (await service.get(reopened.id)).status.value == "open"
+
+    clock.current += datetime.timedelta(days=1)
+    assert await service.run_auto_schedule() == 1
+    assert (await service.get(reopened.id)).status.value == "closed"
+
 
 async def test_client_operation_history_is_scoped_and_limited() -> None:
     """

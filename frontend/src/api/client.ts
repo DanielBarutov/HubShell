@@ -504,6 +504,7 @@ export class GameClubApi {
 
   async confirmGuestSessionPayment(
     payload: {
+      session_id?: string;
       workstation_id: string;
       tariff_id: string;
       tariff_quantity?: number;
