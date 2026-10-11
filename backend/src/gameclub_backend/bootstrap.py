@@ -426,6 +426,7 @@ def build_application_services(
         tariffs=catalog,
         notifications=session_notifications,
         v2_session_leases=v2_session_leases,
+        login_grant_minutes=settings.login_grant_minutes,
     )
     offline = OfflineReplayService(
         offline_repository,

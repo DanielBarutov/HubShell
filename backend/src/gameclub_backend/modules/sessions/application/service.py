@@ -44,8 +44,6 @@ class UtcClock:
 
 
 class SessionService:
-    # Временно уменьшено для проверки поминутного списания; после проверки вернуть 5.
-    LOGIN_GRANT_MINUTES = 1
     LOCAL_LEDGER_SOURCE = "local_ledger"
     GUEST_LOCAL_LEDGER_SOURCE = "guest_local_ledger"
     LOCAL_SOURCES = frozenset({LOCAL_LEDGER_SOURCE, GUEST_LOCAL_LEDGER_SOURCE})
@@ -64,7 +62,11 @@ class SessionService:
         tariffs: TariffLookup | None = None,
         notifications: TimeNotificationLookup | None = None,
         v2_session_leases: V2SessionLeaseRevoker | None = None,
+        login_grant_minutes: int = 1,
     ) -> None:
+        if not 0 <= login_grant_minutes <= 4_294_967_295:
+            raise ValueError("Login grant minutes must fit an unsigned 32-bit integer")
+        self._login_grant_minutes = login_grant_minutes
         self._repository = repository
         self._workstations = workstations
         self._clients = clients
@@ -106,7 +108,7 @@ class SessionService:
         normalized_guest_name = guest_name.strip() if guest_name else None
         normalized_source = source.strip() or "operator"
         login_grant_minutes = (
-            self.LOGIN_GRANT_MINUTES if normalized_source in {"device"} | self.LOCAL_SOURCES else 0
+            self._login_grant_minutes if normalized_source in {"device"} | self.LOCAL_SOURCES else 0
         )
         if tariff_quantity <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff quantity must be positive")

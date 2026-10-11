@@ -1,5 +1,6 @@
 import functools
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     workstation_command_ttl_seconds: int = 120
     workstation_stale_after_seconds: int = 45
     workstation_offline_after_seconds: int = 120
+    login_grant_minutes: int = Field(default=1, ge=0, le=4_294_967_295)
     reservation_grace_period_minutes: int = 15
     reservation_sweep_interval_seconds: int = 60
     billing_reconciliation_interval_seconds: int = 60
