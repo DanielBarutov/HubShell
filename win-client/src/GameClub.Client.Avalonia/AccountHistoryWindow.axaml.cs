@@ -21,7 +21,7 @@ public partial class AccountHistoryWindow : Window
         {
             TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
             Background = Brushes.Transparent;
-            TransparencyBackgroundFallback = new SolidColorBrush(Color.Parse("#07090D"));
+            TransparencyBackgroundFallback = new SolidColorBrush(Color.Parse("#020D12"));
         }
     }
 

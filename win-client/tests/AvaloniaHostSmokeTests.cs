@@ -57,6 +57,7 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(window.FindControl<Border>("TransferPanel"));
         Assert.NotNull(window.FindControl<Button>("OpenAccountHistoryButton"));
         Assert.NotNull(window.FindControl<Border>("PortalWidgetSurface"));
+        Assert.NotNull(window.FindControl<Border>("WidgetNotificationPanel"));
         Assert.NotNull(window.FindControl<Grid>("WidgetFooterActions"));
         Assert.Equal(1, Grid.GetColumn(window.FindControl<Button>("OpenAccountHistoryButton")!));
         Assert.Equal(0, Grid.GetColumn(window.FindControl<Button>("ToggleTransferButton")!));
@@ -110,6 +111,8 @@ public sealed class AvaloniaHostSmokeTests
 
         Assert.Equal(SystemDecorations.None, history.SystemDecorations);
         Assert.False(history.CanResize);
+        Assert.Equal(SizeToContent.Height, history.SizeToContent);
+        Assert.Equal(650, history.MaxHeight);
         var closeButton = history.FindControl<Button>("CloseAccountHistoryButton");
         Assert.NotNull(closeButton);
         Assert.Equal(HorizontalAlignment.Center, closeButton.HorizontalContentAlignment);
@@ -118,6 +121,26 @@ public sealed class AvaloniaHostSmokeTests
         Assert.NotNull(history.FindControl<ItemsControl>("AccountPurchaseHistory"));
         Assert.Null(history.FindControl<ItemsControl>("AccountChargeHistory"));
         Assert.NotNull(history.FindControl<ItemsControl>("AccountSessionHistory"));
+    }
+
+    [Fact]
+    public void ConfirmationFitsItsContentAndKeepsBothActionsAndWarning()
+    {
+        EnsureAvaloniaInitialized();
+        var window = new MainWindow();
+        var method = typeof(MainWindow).GetMethod("CreateConfirmationDialog",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var dialog = (Window)method.Invoke(window,
+            ["Завершить игровую сессию?", "Неиспользованные минуты текущего пакета сгорят.", "Завершить"])!;
+        Assert.Equal(SizeToContent.Height, dialog.SizeToContent);
+        Assert.Equal(SystemDecorations.None, dialog.SystemDecorations);
+        var content = (StackPanel)((Border)dialog.Content!).Child!;
+        Assert.Contains("сгорят", ((TextBlock)content.Children[1]).Text);
+        var actions = (StackPanel)content.Children[2];
+        Assert.Equal("Отмена", ((Button)actions.Children[0]).Content);
+        Assert.Contains("widget-secondary", ((Button)actions.Children[0]).Classes);
+        Assert.Equal("Завершить", ((Button)actions.Children[1]).Content);
+        Assert.Contains("widget-primary", ((Button)actions.Children[1]).Classes);
     }
 
     [Fact]
