@@ -31,6 +31,7 @@
     <ProjectReference Include="..\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
     <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 

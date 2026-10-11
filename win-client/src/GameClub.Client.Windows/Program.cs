@@ -13,6 +13,16 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.Contains("--watchdog-service", StringComparer.Ordinal))
+        {
+            System.ServiceProcess.ServiceBase.Run(new ClientWatchdogService());
+            return;
+        }
+        using var instance = new Mutex(true, @"Local\HubShell.Client", out var firstInstance);
+        if (!firstInstance)
+        {
+            return;
+        }
         ClientLog.Initialize("windows");
         ClientLog.Info("startup", $"arguments={args.Length} log={ClientLog.FilePath}");
         StartupDiagnostics.Info($"Avalonia Windows startup: PID={Environment.ProcessId}");

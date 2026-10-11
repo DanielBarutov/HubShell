@@ -210,6 +210,7 @@ public sealed class V2AccessGateTests
         Assert.False(viewModel.IsTariffsVisible);
         Assert.False(viewModel.CanCreateTransferOffer);
         Assert.Equal("Гость", viewModel.WidgetAccountSummary);
+        Assert.Equal("00:05", viewModel.WidgetTimerSummary);
         Assert.Equal(
             new[]
             {
@@ -227,6 +228,8 @@ public sealed class V2AccessGateTests
         var poll = typeof(MainViewModel).GetMethod("PollGuestAccessAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
         await (Task)poll.Invoke(viewModel, [])!;
         Assert.Equal(3, viewModel.WidgetEntitlementRows.Count);
+        Assert.Equal("00:08", viewModel.WidgetTimerSummary);
+        Assert.Contains(nameof(MainViewModel.WidgetTimerSummary), changes);
         Assert.Equal(new PortalEntitlementRow("Тест", "В очереди", "3 мин", false), viewModel.WidgetEntitlementRows[^1]);
         Assert.Contains(nameof(MainViewModel.WidgetEntitlementRows), changes);
         Assert.False(viewModel.HasV2DeliveryWarning);

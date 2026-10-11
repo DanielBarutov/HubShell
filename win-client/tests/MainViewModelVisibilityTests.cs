@@ -146,12 +146,14 @@ public sealed class MainViewModelVisibilityTests
 
         Assert.True(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
         Assert.True(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+        Assert.True(viewModel.TrySuppressLockedSystemShortcut(false, false, true, false, dPressed: true));
 
         viewModel.UserAccessCode = "4826";
         Assert.True(viewModel.TryUnlockUser());
 
         Assert.False(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
         Assert.False(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+        Assert.False(viewModel.TrySuppressLockedSystemShortcut(false, false, true, false, dPressed: true));
     }
 
     [Fact]
