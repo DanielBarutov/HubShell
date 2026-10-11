@@ -58,7 +58,7 @@ def _service_from_request(request: Request) -> V2ServerOutboxService:
 
 
 def create_v2_server_events_router() -> APIRouter:
-    router = APIRouter(prefix="/api/v2/events", tags=["v2-events"])
+    router = APIRouter(prefix="/api/events", tags=["events"])
 
     @router.get("/server", response_model=ServerEventPollResponse)
     async def poll_server_events(

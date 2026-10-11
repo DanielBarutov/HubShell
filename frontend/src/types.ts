@@ -18,7 +18,6 @@ export type Workstation = {
   deviceId?: string;
   macAddress?: string | null;
   installationBound?: boolean;
-  sessionMode?: "v1_server_owned" | "v2_local_ledger";
   sessionSnapshot?: import("./api/types").BackendSessionSnapshot | null;
 };
 

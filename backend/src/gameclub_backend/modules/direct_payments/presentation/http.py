@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
+from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("sales.manage"))]
@@ -75,7 +76,17 @@ class GuestSessionPaymentResponse(BaseModel):
         )
 
 
-def create_router(service: GuestSessionPaymentService) -> APIRouter:
+class GuestV2AccessResponse(BaseModel):
+    payment_id: uuid.UUID
+    grant_id: uuid.UUID
+    status: str
+    expires_at: str
+
+
+def create_router(
+    service: GuestSessionPaymentService,
+    v2_access: V2GuestAccessService | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/v1/guest-payments", tags=["guest-payments"])
 
     @router.get("/{payment_id}", response_model=GuestSessionPaymentResponse)
@@ -122,6 +133,27 @@ def create_router(service: GuestSessionPaymentService) -> APIRouter:
     ) -> GuestSessionPaymentResponse:
         return GuestSessionPaymentResponse.from_domain(
             await service.retry_reconciliation(payment_id, principal.subject_id)
+        )
+
+    @router.post("/{payment_id}/v2-access", response_model=GuestV2AccessResponse)
+    async def prepare_v2_access(
+        payment_id: uuid.UUID,
+        principal: Operator,
+    ) -> GuestV2AccessResponse:
+        del principal
+        if v2_access is None:
+            from gameclub_backend.application.errors import ApplicationError, ErrorCode
+
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "V2 guest access is not configured",
+            )
+        grant = await v2_access.prepare(payment_id)
+        return GuestV2AccessResponse(
+            payment_id=payment_id,
+            grant_id=grant.id,
+            status="redeemed" if grant.redeemed else "pending",
+            expires_at=grant.expires_at.isoformat(),
         )
 
     return router

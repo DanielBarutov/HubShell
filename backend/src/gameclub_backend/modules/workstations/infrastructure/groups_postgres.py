@@ -77,8 +77,8 @@ def policy_from_json(value: str | None) -> LockdownPolicy:
             version=version,
         )
     except (TypeError, ValueError, json.JSONDecodeError):
-        # A malformed stored policy must never enable a more permissive unknown
-        # configuration. The domain safe default keeps the app gate active.
+        # Повреждённая политика не должна включить неизвестную, более мягкую
+        # конфигурацию. Безопасное значение домена оставляет app gate включённым.
         return LockdownPolicy()
 
 

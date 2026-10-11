@@ -94,12 +94,36 @@ from gameclub_backend.modules.workstations.presentation.http import (
     create_router as create_workstations_router,
 )
 from gameclub_backend.modules.workstations.presentation.v2_http import (
-    create_v2_router as create_v2_workstations_router,
+    create_router as create_workstation_commands_router,
 )
 from gameclub_backend.presentation.http.audit import create_router as create_audit_router
 from gameclub_backend.presentation.http.auth import router as auth_router
 
 logger = logging.getLogger(__name__)
+
+
+def _start_pyroscope(settings: Settings) -> typing.Callable[[], None] | None:
+    if not settings.pyroscope_server_address:
+        return None
+
+    try:
+        import pyroscope
+
+        pyroscope.configure(
+            application_name=settings.pyroscope_application_name,
+            server_address=settings.pyroscope_server_address,
+            sample_rate=settings.pyroscope_sample_rate,
+            tags={"environment": settings.environment, "service": "backend-http"},
+        )
+    except Exception:
+        logger.exception("Failed to start Pyroscope profiler; continuing without profiles")
+        return None
+
+    logger.info(
+        "Pyroscope profiler started for %s",
+        settings.pyroscope_application_name,
+    )
+    return pyroscope.shutdown
 
 
 class HealthResponse(BaseModel):
@@ -139,6 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(application: FastAPI) -> typing.AsyncIterator[None]:
+        stop_pyroscope = _start_pyroscope(current_settings)
         application.state.settings = current_settings
         application.state.jwt_service = (
             JwtTokenService(current_settings) if current_settings.jwt_secret else None
@@ -148,6 +173,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await services.workstation_groups.restore_per_minute_tariffs()
             yield
         finally:
+            if stop_pyroscope is not None:
+                try:
+                    stop_pyroscope()
+                except Exception:
+                    logger.exception("Failed to stop Pyroscope profiler cleanly")
             if v2_client_fact_ingress is not None:
                 await v2_client_fact_ingress.close()
             await resources.close()
@@ -200,7 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.sessions,
         )
     )
-    application.include_router(create_v2_workstations_router(services.command_service))
+    application.include_router(create_workstation_commands_router(services.command_service))
     application.include_router(create_v2_client_facts_router())
     application.include_router(create_v2_server_events_router())
     application.include_router(create_workstation_groups_router(services.workstation_groups))
@@ -209,11 +239,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))
     application.include_router(create_offline_router(services.offline))
-    application.include_router(create_guest_payment_router(services.guest_payments))
+    application.include_router(
+        create_guest_payment_router(services.guest_payments, services.v2_guest_access)
+    )
     application.include_router(create_guest_router(services.guests))
     application.include_router(create_catalog_router(services.catalog))
     application.include_router(create_reservations_router(services.reservations))
-    application.include_router(create_sessions_router(services.sessions, services.workstations))
+    application.include_router(create_sessions_router(services.sessions))
     application.include_router(create_session_transfer_router(services.session_transfers))
     application.include_router(create_billing_router(services.billing))
     application.include_router(create_cash_shifts_router(services.cash_shifts))
@@ -261,6 +293,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def audit_middleware(request: Request, call_next: typing.Callable) -> typing.Any:
         audited_prefixes = (
             "/api/v1/workstations",
+            "/api/workstations",
             "/api/v1/workstation-groups",
             "/api/v1/clients",
             "/api/v1/clients/",

@@ -15,9 +15,8 @@ public sealed class V2AccessGateTests
     {
         var store = new InMemoryLedgerStore();
         var ledger = new V2LocalLedgerCoordinator(store);
-        var v2Login = new V2OfflineLoginCoordinator(
-            new V2Gateway(CreateLedger()),
-            ledger);
+        var gateway = new V2Gateway(CreateLedger());
+        var v2Login = new V2OfflineLoginCoordinator(gateway, ledger);
         var viewModel = new MainViewModel(
             new ClientSessionCoordinator(CreateBackend()),
             new Credentials(),
@@ -26,7 +25,8 @@ public sealed class V2AccessGateTests
             v2OfflineLogin: v2Login,
             v2Ledger: ledger,
             v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
-            v2SignatureVerifier: new AcceptingVerifier());
+            v2SignatureVerifier: new AcceptingVerifier(),
+            v2OfflineSession: gateway);
         await using var disposable = viewModel;
         viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
         viewModel.PortalIdentifier = "NightFox";
@@ -43,6 +43,50 @@ public sealed class V2AccessGateTests
         Assert.False(viewModel.IsActiveSessionVisible);
         Assert.Equal(V2LocalSessionStatus.Stopped, (await ledger.ReadLedgerAsync()).Status);
         Assert.NotEmpty(await ledger.ReadPendingOutboxAsync());
+        Assert.Equal(
+            [("device-01", "00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000001")],
+            gateway.StoppedSessions);
+    }
+
+    [Fact]
+    public async Task V2LoginRetriesServerStopForPreviouslyStoppedLocalLedger()
+    {
+        var previous = V2LocalLedgerEngine.StopEarly(
+            CreateLedger(),
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow);
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        await ledger.InitializeAsync(previous.Ledger);
+        await store.WriteAsync(new V2LocalLedgerStorageSnapshot(
+            previous.Ledger,
+            previous.OutboxFacts,
+            Array.Empty<V2ClientInboxEntry>()));
+        var next = CreateLedger() with
+        {
+            SnapshotId = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+        };
+        var gateway = new V2Gateway(next, stopFailuresRemaining: 1);
+        var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new Credentials(),
+            deviceId: "device-01",
+            v2OfflineLogin: new V2OfflineLoginCoordinator(gateway, ledger),
+            v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier(),
+            v2OfflineSession: gateway);
+        await using var disposable = viewModel;
+        viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+        viewModel.PortalIdentifier = "NightFox";
+        viewModel.PortalPassword = "safe-password";
+
+        Assert.True(await viewModel.LoginPortalAsync());
+
+        Assert.Equal(2, gateway.StoppedSessions.Count);
+        Assert.Equal(next.SessionId, (await ledger.ReadLedgerAsync()).SessionId);
+        Assert.Equal(previous.OutboxFacts, await ledger.ReadPendingOutboxAsync());
     }
 
     [Fact]
@@ -68,6 +112,110 @@ public sealed class V2AccessGateTests
         Assert.False(viewModel.IsAccessLocked);
         Assert.True(viewModel.IsActiveSessionVisible);
         Assert.Equal("Бесплатное время входа", viewModel.CurrentSessionModeSummary);
+    }
+
+    [Fact]
+    public async Task GuestRecoveryAndRefreshDoNotUseTheAccountPortal()
+    {
+        // Проверяет восстановление гостевого ledger без кабинета и клиентского счёта.
+        var saved = CreateLedger() with
+        {
+            ClientId = Guid.Empty,
+            GuestName = "Гость",
+            GuestPaymentId = Guid.Parse("00000000-0000-0000-0000-000000000004"),
+        };
+        var ledger = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await ledger.InitializeAsync(saved);
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new Credentials(),
+            deviceId: saved.DeviceId,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), ledger),
+            v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier(),
+            v2ClientPortal: new CompletedSessionPortal(saved));
+
+        await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(ledger));
+        await viewModel.RefreshPortalAsync();
+
+        Assert.False(viewModel.IsAccessLocked);
+        Assert.True(viewModel.IsActiveSessionVisible);
+        Assert.Equal(saved, await ledger.ReadLedgerAsync());
+    }
+
+    [Fact]
+    public async Task V2CurrentPackageSummaryShowsTariffNameInsteadOfTariffId()
+    {
+        const string tariffId = "9064b0b0-dac8-49dd-aaf6-d06a7a21e2b4";
+        var ledgerSnapshot = CreateLedger(
+            loginGrantMinutes: 0,
+            packages:
+            [
+                new V2LocalPackage(
+                    "package-1",
+                    tariffId,
+                    null,
+                    3,
+                    V2LocalPackageStatus.Active),
+            ],
+            tariffs:
+            [
+                new V2LocalTariff(tariffId, "Ночной тест", null, 660, 30_000, 0, true),
+            ]);
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new Credentials(),
+            deviceId: "device-01",
+            v2OfflineLogin: new V2OfflineLoginCoordinator(
+                new V2Gateway(ledgerSnapshot),
+                ledger),
+            v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier());
+        await using var disposable = viewModel;
+        viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+        viewModel.PortalIdentifier = "NightFox";
+        viewModel.PortalPassword = "safe-password";
+
+        Assert.True(await viewModel.LoginPortalAsync());
+
+        Assert.Contains("Ночной тест", viewModel.CurrentSessionTariffSummary);
+        Assert.DoesNotContain(tariffId, viewModel.CurrentSessionTariffSummary);
+    }
+
+    [Fact]
+    public async Task FailedServerStopPersistenceKeepsLedgerForRetryAndStopsMinuteBilling()
+    {
+        var saved = CreateLedger();
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        await ledger.InitializeAsync(saved);
+        store.FailNextWrite = true;
+        var portal = new CompletedSessionPortal(saved);
+        var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()),
+            new Credentials(),
+            deviceId: saved.DeviceId,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), ledger),
+            v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier(),
+            v2ClientPortal: portal);
+        await using var disposable = viewModel;
+
+        await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(ledger));
+        Assert.True(viewModel.IsSessionLocked);
+        Assert.True(viewModel.IsActiveSessionVisible);
+        Assert.Equal(V2LocalSessionStatus.Active, (await ledger.ReadLedgerAsync()).Status);
+
+        await viewModel.RefreshPortalAsync();
+
+        Assert.True(viewModel.IsSessionLocked);
+        Assert.False(viewModel.IsActiveSessionVisible);
+        Assert.Equal(V2LocalSessionStatus.Stopped, (await ledger.ReadLedgerAsync()).Status);
     }
 
     [Fact]
@@ -137,7 +285,10 @@ public sealed class V2AccessGateTests
     private static IBackendClient CreateBackend() =>
         DispatchProxy.Create<IBackendClient, V1MustNotBeCalledBackend>();
 
-    private static V2LocalSessionLedger CreateLedger() =>
+    private static V2LocalSessionLedger CreateLedger(
+        int loginGrantMinutes = 5,
+        IReadOnlyList<V2LocalPackage>? packages = null,
+        IReadOnlyList<V2LocalTariff>? tariffs = null) =>
         V2LocalSessionLedger.Create(
             snapshotVersion: 1,
             clientId: Guid.Parse("00000000-0000-0000-0000-000000000001"),
@@ -146,14 +297,20 @@ public sealed class V2AccessGateTests
             zoneId: null,
             balanceCents: 1_000,
             debtLimitCents: 0,
-            loginGrantRemainingMinutes: 5,
-            packages: Array.Empty<V2LocalPackage>(),
-            tariffs: Array.Empty<V2LocalTariff>(),
+            loginGrantRemainingMinutes: loginGrantMinutes,
+            packages: packages ?? Array.Empty<V2LocalPackage>(),
+            tariffs: tariffs ?? Array.Empty<V2LocalTariff>(),
             snapshotId: Guid.Parse("00000000-0000-0000-0000-000000000003"),
             activatedAtUtc: DateTimeOffset.Parse("2026-09-28T10:00:20Z"));
 
-    private sealed class V2Gateway(V2LocalSessionLedger ledger) : IV2OfflineSessionGateway
+    private sealed class V2Gateway(
+        V2LocalSessionLedger ledger,
+        int stopFailuresRemaining = 0) : IV2OfflineSessionGateway
     {
+        private int _stopFailuresRemaining = stopFailuresRemaining;
+
+        public List<(string DeviceId, string SessionId, string ClientId)> StoppedSessions { get; } = [];
+
         public Task<V2OfflineLoginResult> LoginAsync(
             string identifier,
             string password,
@@ -178,6 +335,20 @@ public sealed class V2AccessGateTests
             string deviceId,
             string resetToken,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task StopSessionAsync(
+            string deviceId,
+            string sessionId,
+            string clientId,
+            CancellationToken cancellationToken = default)
+        {
+            StoppedSessions.Add((deviceId, sessionId, clientId));
+            if (_stopFailuresRemaining-- > 0)
+            {
+                throw new RpcException(new Status(StatusCode.Unavailable, "temporarily unavailable"));
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ResetV2Gateway(
@@ -234,11 +405,18 @@ public sealed class V2AccessGateTests
             NewPassword = newPassword;
             return Task.CompletedTask;
         }
+
+        public Task StopSessionAsync(
+            string deviceId,
+            string sessionId,
+            string clientId,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class InMemoryLedgerStore : IV2LocalLedgerStore
     {
         private V2LocalLedgerStorageSnapshot? _snapshot;
+        public bool FailNextWrite { get; set; }
 
         public Task<V2LocalLedgerStorageSnapshot?> ReadAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(_snapshot);
@@ -247,9 +425,68 @@ public sealed class V2AccessGateTests
             V2LocalLedgerStorageSnapshot snapshot,
             CancellationToken cancellationToken = default)
         {
+            if (FailNextWrite)
+            {
+                FailNextWrite = false;
+                throw new IOException("Simulated ledger write failure");
+            }
             _snapshot = snapshot;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class CompletedSessionPortal(V2LocalSessionLedger ledger) : IV2ClientPortalGateway
+    {
+        private ClientPortalSnapshot CreateSnapshot() => new(
+            ledger.ClientId.ToString(),
+            "NightFox",
+            "79990000000",
+            ledger.BalanceCents,
+            0,
+            0,
+            Array.Empty<ClientPortalBalanceOperation>(),
+            [
+                new ClientPortalSession(
+                    ledger.SessionId.ToString(),
+                    "workstation-01",
+                    "completed",
+                    "2026-09-28T09:00:00Z",
+                    "2026-09-28T09:15:00Z",
+                    null,
+                    null,
+                    1),
+            ],
+            Array.Empty<ClientPortalCharge>(),
+            Array.Empty<ClientPortalPurchase>(),
+            Array.Empty<ClientPortalEntitlement>(),
+            Array.Empty<ClientPortalTariff>(),
+            Array.Empty<ClientPortalReservation>());
+
+        public Task<ClientPortalSnapshot> ResumePortalAsync(
+            string deviceId,
+            string sessionId,
+            string clientId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateSnapshot());
+
+        public Task<ClientPortalSnapshot> RefreshAsync(
+            string deviceId,
+            int limit = 50,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateSnapshot());
+
+        public Task<ClientPortalSnapshot> ActivateEntitlementAsync(
+            string deviceId,
+            string entitlementId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ClientPortalSnapshot> PurchaseEntitlementAsync(
+            string deviceId,
+            string tariffId,
+            string idempotencyKey,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class AcceptingVerifier : IOfflineSnapshotSignatureVerifier

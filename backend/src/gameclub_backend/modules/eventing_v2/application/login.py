@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import typing
 import uuid
@@ -29,6 +30,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_protobuf impor
     sign_offline_session_snapshot,
 )
 from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.domain import SessionStatus
 from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
 
@@ -41,6 +43,13 @@ class Clock(typing.Protocol):
 class UtcClock:
     def now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.UTC)
+
+
+@dataclasses.dataclass(frozen=True)
+class V2PortalResumeResult:
+    client_id: uuid.UUID
+    portal_access_token: str
+    portal_access_expires_in: int
 
 
 class V2OfflineLoginService:
@@ -124,6 +133,76 @@ class V2OfflineLoginService:
             )
         await self._client_portal.set_password(client_id, new_password)
 
+    async def resume_portal(
+        self,
+        *,
+        device_id: str,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+    ) -> V2PortalResumeResult:
+        """Issue a fresh portal token only for this device's existing active V2 session."""
+        if self._token_service is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "V2 portal authentication is not configured",
+            )
+        workstation = await self._workstations.get_by_device_id(device_id)
+        session = await self._sessions.get(session_id)
+        if (
+            session is None
+            or session.status is not SessionStatus.ACTIVE
+            or session.source != "local_ledger"
+            or session.client_id != client_id
+            or session.workstation_id != workstation.id
+            or workstation.session_mode is not WorkstationSessionMode.LOCAL_LEDGER
+            or not await self._snapshot_issues.has_active_lease(
+                session_id,
+                client_id,
+                device_id,
+            )
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "No active V2 session matches this device and account",
+            )
+
+        token, expires_in = self._token_service.issue_access_token(
+            Principal(
+                subject_id=str(client_id),
+                subject_type=SubjectType.CLIENT,
+                roles=frozenset({"client"}),
+                permissions=frozenset({"client.portal"}),
+                device_id=device_id,
+            )
+        )
+        return V2PortalResumeResult(
+            client_id=client_id,
+            portal_access_token=token,
+            portal_access_expires_in=expires_in,
+        )
+
+    async def stop_session(
+        self,
+        *,
+        device_id: str,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+    ) -> None:
+        workstation = await self._workstations.get_by_device_id(device_id)
+        session = await self._sessions.get(session_id)
+        if (
+            session is None
+            or session.source != "local_ledger"
+            or session.client_id != client_id
+            or session.workstation_id != workstation.id
+            or workstation.session_mode is not WorkstationSessionMode.LOCAL_LEDGER
+        ):
+            raise ApplicationError(
+                ErrorCode.PERMISSION_DENIED,
+                "V2 session does not belong to this client and device",
+            )
+        await self._sessions.stop(session_id, device_id)
+
     async def register(
         self,
         *,
@@ -190,7 +269,7 @@ class V2OfflineLoginService:
         idempotency_key: str,
     ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot:
         workstation = await self._workstations.get_by_device_id(device_id)
-        if workstation.session_mode is not WorkstationSessionMode.V2_LOCAL_LEDGER:
+        if workstation.session_mode is not WorkstationSessionMode.LOCAL_LEDGER:
             raise ApplicationError(
                 ErrorCode.CONFLICT,
                 "Workstation is not configured for the V2 local ledger mode",
@@ -199,7 +278,7 @@ class V2OfflineLoginService:
             workstation_id=workstation.id,
             client_id=client_id,
             created_by=f"client:{client_id}",
-            source="v2_local_ledger",
+            source="local_ledger",
             idempotency_key=idempotency_key,
             device_id=device_id,
             persist=False,

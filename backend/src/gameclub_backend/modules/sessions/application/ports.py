@@ -45,6 +45,11 @@ class SessionRepository(typing.Protocol):
         """Persist a session or its lifecycle transition."""
 
 
+class V2SessionLeaseRevoker(typing.Protocol):
+    async def revoke(self, session_id: uuid.UUID, revoked_at: datetime.datetime) -> None:
+        """Revoke the V2 lease when its server session completes."""
+
+
 class SessionTransactionWriter(typing.Protocol):
     async def save(self, transaction: typing.Any, session: Session) -> Session:
         """Save a session in a transaction owned by a cross-module use case."""

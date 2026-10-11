@@ -18,7 +18,7 @@ describe("Экран входа оператора", () => {
     expect(screen.getByRole("textbox", { name: "Логин" })).toBeVisible();
     expect(screen.getByLabelText("Пароль")).toBeVisible();
     expect(screen.getByRole("button", { name: "Войти" })).toBeDisabled();
-    expect(screen.getByText("Восстанавливаем защищённую сессию…")).toBeVisible();
+    expect(screen.getByText("Проверяем вход…")).toBeVisible();
   });
 
   it("показывает ошибку истёкшей сессии как alert и разрешает повторный вход", () => {

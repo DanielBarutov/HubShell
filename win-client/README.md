@@ -82,7 +82,7 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
   --configuration Debug --runtime win-x64 --self-contained false
 ```
 
-Полученный artifact не является доказательством Windows runtime.
+Полученный artifact сам по себе не подтверждает работу в Windows runtime.
 
 ## Windows Avalonia host
 

@@ -5,6 +5,7 @@ import uuid
 
 from gameclub_backend.modules.eventing_v2.domain import (
     V2Event,
+    V2EventType,
     V2OutgoingEventStatus,
     V2OutgoingServerEvent,
     V2SessionChain,
@@ -66,6 +67,8 @@ class InMemoryV2ServerOutboxRepository:
             for event in self._events.values()
             if event.event.device_id == device_id
             and event.status is V2OutgoingEventStatus.PUBLISHED
+            and event.topic == "v2.server-events"
+            and event.event.event_type is V2EventType.BALANCE_CREDIT_APPLIED
         ]
         published.sort(key=lambda event: (event.created_at, event.event.event_id))
         return tuple(published[:limit])

@@ -15,8 +15,8 @@ public sealed class V2WindowsCommandExecutorTests
         var executor = new V2WindowsCommandExecutor(power, lockReasons.Add);
 
         var legacy = await executor.ExecuteAsync(Command("session.stop"));
-        var locked = await executor.ExecuteAsync(Command("v2.display.lock"));
-        var restarted = await executor.ExecuteAsync(Command("v2.system.restart"));
+        var locked = await executor.ExecuteAsync(Command("display.lock"));
+        var restarted = await executor.ExecuteAsync(Command("system.restart"));
 
         Assert.False(legacy.Success);
         Assert.True(locked.Success);

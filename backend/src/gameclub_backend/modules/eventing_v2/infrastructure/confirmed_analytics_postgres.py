@@ -8,6 +8,7 @@ import json
 import uuid
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.eventing_v2.application.analytics import (
@@ -91,7 +92,13 @@ class PostgresV2ConfirmedAnalyticsRepository:
             sa.select(V2EventInboxModel).where(
                 V2EventInboxModel.consumer_name == CONSUMER_NAME,
                 V2EventInboxModel.producer_id == event.producer_id,
-                V2EventInboxModel.operation_id == event.operation_id,
+                sa.or_(
+                    V2EventInboxModel.operation_id == event.operation_id,
+                    sa.and_(
+                        V2EventInboxModel.session_id == event.session_id,
+                        V2EventInboxModel.sequence == event.sequence,
+                    ),
+                ),
             )
         )
         if existing is not None:
@@ -110,7 +117,41 @@ class PostgresV2ConfirmedAnalyticsRepository:
                 "Confirmed V2-событие уже учтено аналитикой",
             )
 
-        session.add(V2EventInboxModel(**V2EventInboxModel.values_from_domain(CONSUMER_NAME, event)))
+        inserted_event_id = await session.scalar(
+            insert(V2EventInboxModel)
+            .values(**V2EventInboxModel.values_from_domain(CONSUMER_NAME, event))
+            .on_conflict_do_nothing()
+            .returning(V2EventInboxModel.event_id)
+        )
+        if inserted_event_id is None:
+            stored = await session.scalar(
+                sa.select(V2EventInboxModel).where(
+                    V2EventInboxModel.consumer_name == CONSUMER_NAME,
+                    V2EventInboxModel.producer_id == event.producer_id,
+                    sa.or_(
+                        V2EventInboxModel.operation_id == event.operation_id,
+                        sa.and_(
+                            V2EventInboxModel.session_id == event.session_id,
+                            V2EventInboxModel.sequence == event.sequence,
+                        ),
+                    ),
+                )
+            )
+            if stored is None:
+                raise RuntimeError("Confirmed analytics inbox conflict was not persisted")
+            if stored.payload_hash != event.payload_hash or stored.event_type != event.event_type:
+                return V2InboxResult(
+                    V2InboxStatus.CONFLICT,
+                    stored.event_id,
+                    event.operation_id,
+                    "sequence уже принадлежит другому confirmed событию",
+                )
+            return V2InboxResult(
+                V2InboxStatus.DUPLICATE,
+                stored.event_id,
+                event.operation_id,
+                "Confirmed V2-событие уже учтено аналитикой",
+            )
         for item in analytics_events:
             await session.execute(
                 sa.text(

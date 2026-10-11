@@ -23,7 +23,7 @@ def dispatch_periodic_jobs() -> None:
     reconcile_pending_settlements.send()
     meter_active_sessions.send()
     run_cash_shift_schedule.send()
-    # Analytics outbox содержит только immutable факты; проекция не меняет write-path.
+    # Analytics outbox содержит только неизменяемые факты; проекция не меняет write-path.
     backfill_v2_confirmed_per_minute_debits.send()
     project_analytics_events.send()
 

@@ -260,7 +260,7 @@ public sealed class MainViewModelVisibilityTests
             BalanceRemainingMinutes: 120));
 
         Assert.Equal("Пакет времени", viewModel.CurrentSessionModeSummary);
-        Assert.Equal("Осталось 30 мин", viewModel.ActiveTimeSummary);
+        Assert.Equal("Осталось 2 ч 30 мин", viewModel.ActiveTimeSummary);
     }
 
     [Fact]

@@ -59,6 +59,70 @@ public static class V2OfflineSessionSnapshotReader
         return stream.ToArray();
     }
 
+    public static V2LocalSessionLedger VerifyAndCreateGuestLedger(
+        SignedGuestSessionAccess snapshot,
+        IOfflineSnapshotSignatureVerifier verifier,
+        string? expectedDeviceId = null)
+    {
+        if (snapshot.Payload is null
+            || string.IsNullOrWhiteSpace(snapshot.SigningKeyId)
+            || snapshot.Signature.IsEmpty)
+        {
+            throw new InvalidOperationException("V2 guest access signature data is incomplete");
+        }
+        var signedBytes = SerializeDeterministic(snapshot.Payload);
+        if (!verifier.Verify(snapshot.SigningKeyId, signedBytes, snapshot.Signature.Memory))
+        {
+            throw new InvalidOperationException("V2 guest access signature is invalid");
+        }
+        var payload = snapshot.Payload;
+        if (payload.SchemaVersion != 1 || payload.IssuedAt is null || payload.ExpiresAt is null
+            || string.IsNullOrWhiteSpace(payload.GuestName)
+            || (expectedDeviceId is not null
+                && !string.Equals(payload.DeviceId, expectedDeviceId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("V2 guest access payload is invalid");
+        }
+        var paymentId = ParseGuid(payload.PaymentId, "payment id");
+        var sessionId = ParseGuid(payload.SessionId, "session id");
+        var grantId = ParseGuid(payload.GrantId, "grant id");
+        if (payload.TariffQuantity < 1 || payload.DurationMinutes < 1)
+        {
+            throw new InvalidOperationException("V2 guest access duration is invalid");
+        }
+        var minutes = checked((int)payload.DurationMinutes * (int)payload.TariffQuantity);
+        var package = new V2LocalPackage(
+            grantId.ToString(),
+            payload.TariffId,
+            payload.HasWorkstationZoneId ? payload.WorkstationZoneId : null,
+            minutes,
+            V2LocalPackageStatus.Active);
+        return V2LocalSessionLedger.Create(
+            snapshotVersion: 1,
+            clientId: Guid.Empty,
+            sessionId: sessionId,
+            deviceId: payload.DeviceId,
+            zoneId: payload.HasWorkstationZoneId ? payload.WorkstationZoneId : null,
+            balanceCents: 0,
+            debtLimitCents: 0,
+            loginGrantRemainingMinutes: 0,
+            packages: new[] { package },
+            tariffs: Array.Empty<V2LocalTariff>(),
+            snapshotId: grantId,
+            activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime()),
+            guestName: payload.GuestName,
+            guestPaymentId: paymentId);
+    }
+
+    public static byte[] SerializeDeterministic(GuestSessionAccessPayload payload)
+    {
+        using var stream = new MemoryStream();
+        using var output = new CodedOutputStream(stream, leaveOpen: true) { Deterministic = true };
+        payload.WriteTo(output);
+        output.Flush();
+        return stream.ToArray();
+    }
+
     private static V2LocalPackage ToPackage(OfflinePackageSnapshot package) =>
         new(
             package.PackageId,

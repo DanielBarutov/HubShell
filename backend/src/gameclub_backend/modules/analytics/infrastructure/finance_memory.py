@@ -28,6 +28,6 @@ class InMemoryFinanceAnalyticsRepository:
             history_available=history_available,
         )
 
-    async def snapshot(self, filters: FinanceFilters | None = None) -> FinanceFactsSnapshot:
+    async def snapshot(self, filters: FinanceFilters) -> FinanceFactsSnapshot:
         del filters
         return self._snapshot

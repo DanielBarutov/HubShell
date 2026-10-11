@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MapView } from "./MapScreen";
 import type { Workstation } from "../../types";
 
@@ -7,6 +7,8 @@ const workstations: Workstation[] = [
   { id: "pc-online", name: "VIP-01", group: "VIP", groupId: "vip", status: "online", position: 1 },
   { id: "pc-offline", name: "Main-02", group: "Основной зал", groupId: "main", status: "offline", position: 2 },
 ];
+
+afterEach(() => window.localStorage.clear());
 
 describe("Карта игровых мест", () => {
   it("маршрутизирует к продаже свободное место, а недоступное — в карточку ПК", () => {
@@ -20,9 +22,6 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={workstations}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны", "VIP", "Основной зал"]}
       />,
     );
 
@@ -44,9 +43,6 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={workstations}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны"]}
       />,
     );
 
@@ -68,15 +64,117 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={workstations}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны"]}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Продать товар" }));
 
     expect(onSellProduct).toHaveBeenCalledTimes(1);
+  });
+
+  it("показывает пустую ячейку и сохраняет перенос в неё", async () => {
+    const onPositionsChange = vi.fn().mockResolvedValue(undefined);
+    const dataTransfer = {
+      dropEffect: "",
+      effectAllowed: "",
+      getData: vi.fn(() => "pc-offline"),
+      setData: vi.fn(),
+    };
+
+    render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        onPositionsChange={onPositionsChange}
+        pcs={workstations}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Пустая ячейка 3").firstElementChild,
+    ).toBeEmptyDOMElement();
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать карту" }));
+    fireEvent.dragStart(
+      screen.getByRole("button", { name: "Main-02: Не в сети" }),
+      { dataTransfer },
+    );
+    const target = screen.getByLabelText("Пустая ячейка 3");
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    await waitFor(() =>
+      expect(onPositionsChange).toHaveBeenCalledWith([
+        { workstationId: "pc-offline", position: 3 },
+      ]),
+    );
+  });
+
+  it("меняет местами занятые ячейки в одной зоне", async () => {
+    const onPositionsChange = vi.fn().mockResolvedValue(undefined);
+    const dataTransfer = {
+      dropEffect: "",
+      effectAllowed: "",
+      getData: vi.fn(() => "pc-first"),
+      setData: vi.fn(),
+    };
+    const positionedWorkstations: Workstation[] = [
+      { id: "pc-first", name: "PC-01", group: "Основной зал", status: "online", position: 1 },
+      { id: "pc-third", name: "PC-03", group: "Основной зал", status: "online", position: 3 },
+    ];
+
+    render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        onPositionsChange={onPositionsChange}
+        pcs={positionedWorkstations}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать карту" }));
+    fireEvent.dragStart(screen.getByRole("button", { name: "PC-01: Свободен" }), {
+      dataTransfer,
+    });
+    const target = screen
+      .getByRole("button", { name: "PC-03: Свободен" })
+      .closest(".map-slot");
+    if (!target) throw new Error("Не найдена ячейка PC-03");
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    await waitFor(() =>
+      expect(onPositionsChange).toHaveBeenCalledWith([
+        { workstationId: "pc-first", position: 3 },
+        { workstationId: "pc-third", position: 1 },
+      ]),
+    );
+  });
+
+  it("объединяет зоны в одну настраиваемую сетку", () => {
+    render(
+      <MapView
+        onPc={vi.fn()}
+        onSalePc={vi.fn()}
+        onBookPc={vi.fn()}
+        onEditPc={vi.fn()}
+        pcs={workstations}
+      />,
+    );
+
+    expect(screen.queryByText("Обычный зал")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Столбцы карты"), {
+      target: { value: "4" },
+    });
+    fireEvent.change(screen.getByLabelText("Ряды карты"), {
+      target: { value: "2" },
+    });
+
+    expect(window.localStorage.getItem("gameshell.map-grid-columns")).toBe("4");
+    expect(window.localStorage.getItem("gameshell.map-grid-rows")).toBe("2");
   });
 
   it("показывает hover-карточку server snapshot для занятого места", () => {
@@ -104,9 +202,6 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={[busyPc]}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны"]}
       />,
     );
 
@@ -136,9 +231,6 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={[pcAtMinuteFive]}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны"]}
       />,
     );
 
@@ -149,9 +241,6 @@ describe("Карта игровых мест", () => {
         onBookPc={vi.fn()}
         onEditPc={vi.fn()}
         pcs={[busyWorkstationSnapshot("2026-09-17T12:06:00Z", 3)]}
-        group="Все зоны"
-        setGroup={vi.fn()}
-        zoneOptions={["Все зоны"]}
       />,
     );
 

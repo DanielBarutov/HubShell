@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.workstations.application.commands import (
-    V2_ALLOWED_COMMAND_TYPES,
+    DEVICE_COMMAND_TYPES,
     WorkstationCommandService,
 )
 from gameclub_backend.modules.workstations.domain_commands import WorkstationCommand
@@ -17,12 +17,12 @@ from gameclub_backend.presentation.http.auth import require_permissions
 Operator = typing.Annotated[Principal, Depends(require_permissions("workstations.manage"))]
 
 
-class V2DeviceCommandRequest(BaseModel):
+class DeviceCommandRequest(BaseModel):
     command_type: str = Field(min_length=1, max_length=64)
     payload: dict[str, typing.Any] = Field(default_factory=dict)
 
 
-class V2DeviceCommandResponse(BaseModel):
+class DeviceCommandResponse(BaseModel):
     id: uuid.UUID
     workstation_id: uuid.UUID
     command_type: str
@@ -30,7 +30,7 @@ class V2DeviceCommandResponse(BaseModel):
     expires_at: str
 
     @classmethod
-    def from_domain(cls, command: WorkstationCommand) -> "V2DeviceCommandResponse":
+    def from_domain(cls, command: WorkstationCommand) -> "DeviceCommandResponse":
         return cls(
             id=command.id,
             workstation_id=command.workstation_id,
@@ -40,25 +40,25 @@ class V2DeviceCommandResponse(BaseModel):
         )
 
 
-def create_v2_router(command_service: WorkstationCommandService) -> APIRouter:
-    router = APIRouter(prefix="/api/v2/workstations", tags=["v2-workstations"])
+def create_router(command_service: WorkstationCommandService) -> APIRouter:
+    router = APIRouter(prefix="/api/workstations", tags=["workstations"])
 
     @router.post(
         "/{workstation_id}/device-commands",
-        response_model=V2DeviceCommandResponse,
+        response_model=DeviceCommandResponse,
         status_code=status.HTTP_202_ACCEPTED,
     )
     async def dispatch_device_command(
         workstation_id: uuid.UUID,
-        body: V2DeviceCommandRequest,
+        body: DeviceCommandRequest,
         principal: Operator,
         idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
-    ) -> V2DeviceCommandResponse:
+    ) -> DeviceCommandResponse:
         del principal
-        if body.command_type not in V2_ALLOWED_COMMAND_TYPES:
+        if body.command_type not in DEVICE_COMMAND_TYPES:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
-                "Unsupported V2 device command",
+                "Unsupported device command",
             )
         command = await command_service.dispatch(
             workstation_id=workstation_id,
@@ -66,6 +66,6 @@ def create_v2_router(command_service: WorkstationCommandService) -> APIRouter:
             payload_json=json.dumps(body.payload),
             idempotency_key=idempotency_key,
         )
-        return V2DeviceCommandResponse.from_domain(command)
+        return DeviceCommandResponse.from_domain(command)
 
     return router

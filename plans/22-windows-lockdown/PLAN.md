@@ -62,7 +62,7 @@
 - версия политики и время последнего применения.
 
 Семантика этих полей, граница применения и правила manager maintenance описаны в
-[`POLICY.md`](POLICY.md). Backend policy является desired state; обычный client
+[`POLICY.md`](POLICY.md). Backend policy хранит желаемое состояние; обычный client
 runtime не получает права молча менять Windows registry, shell или kiosk profile.
 
 Сервер хранит декларативную policy, а клиент применяет только известные ключи.

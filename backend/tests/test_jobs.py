@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import uuid
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,11 @@ from dramatiq.brokers.stub import StubBroker
 from gameclub_backend.config import Settings
 from gameclub_backend.infrastructure.broker import create_broker
 from gameclub_backend.jobs import scheduler
-from gameclub_backend.jobs.billing import meter_active_sessions, reconcile_billing_charges
+from gameclub_backend.jobs.billing import (
+    meter_active_sessions,
+    meter_sessions_once,
+    reconcile_billing_charges,
+)
 from gameclub_backend.jobs.cash_shifts import run_cash_shift_schedule
 from gameclub_backend.jobs.reports import (
     backfill_v2_confirmed_per_minute_debits,
@@ -16,6 +21,7 @@ from gameclub_backend.jobs.reports import (
 )
 from gameclub_backend.jobs.reservations import _parse_sweep_time, sweep_reservation_no_shows
 from gameclub_backend.jobs.scheduler import dispatch_periodic_jobs, run
+from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
 def test_broker_uses_stub_without_redis_and_enables_asyncio_middleware() -> None:
@@ -111,6 +117,48 @@ def test_metering_worker_loads_client_group_debt_policy() -> None:
 
     assert "PostgresClientGroupRepository" in worker_source
     assert "groups=PostgresClientGroupRepository(engine_provider)" in worker_source
+
+
+@pytest.mark.asyncio
+async def test_metering_worker_ignores_local_ledger_sessions() -> None:
+    """Проверяет, что серверный метр не изменяет автономную сессию клиента."""
+
+    session = Session(
+        id=uuid.uuid4(),
+        workstation_id=uuid.uuid4(),
+        client_id=uuid.uuid4(),
+        guest_name=None,
+        status=SessionStatus.ACTIVE,
+        started_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        ended_at=None,
+        source="local_ledger",
+        created_by="device",
+        created_at=datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+    )
+
+    class Reader:
+        async def list(self, **kwargs):
+            del kwargs
+            return [session]
+
+    class Billing:
+        calls = 0
+
+        async def meter_session(self, session_id):
+            del session_id
+            self.calls += 1
+
+    class Stopper:
+        async def stop(self, session_id):
+            raise AssertionError(session_id)
+
+    class Commands:
+        async def dispatch(self, *args):
+            raise AssertionError(args)
+
+    billing = Billing()
+    assert await meter_sessions_once(billing, Reader(), Stopper(), Commands()) == 0
+    assert billing.calls == 0
 
 
 def test_scheduler_requires_redis() -> None:

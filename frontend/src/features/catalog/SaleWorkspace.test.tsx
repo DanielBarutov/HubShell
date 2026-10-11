@@ -88,6 +88,26 @@ describe("Окно продажи", () => {
     expect(screen.getByRole("button", { name: /Оформить продажу/ })).toBeEnabled();
   });
 
+  it("показывает демо-тарифы для места без groupId", () => {
+    const demoPc = { ...pc, groupId: undefined, group: "Обычный зал" };
+    render(
+      <SaleWorkspace
+        api={undefined}
+        pc={demoPc}
+        initialClient={null}
+        initialProduct={null}
+        clients={[]}
+        cashShifts={[]}
+        tariffs={[]}
+        products={products}
+        categories={categories}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Пакет 3 часа/ })).toBeVisible();
+  });
+
   it("переключает покупателя на гостя без регистрации и сохраняет modal accessibility", () => {
     renderSale();
 
@@ -99,10 +119,11 @@ describe("Окно продажи", () => {
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
   });
 
-  it("запускает гостевую сессию только после подтверждённой оплаты", async () => {
+  it("выдаёт гостевой допуск только после подтверждённой оплаты", async () => {
     const confirmGuestSessionPayment = vi.fn().mockResolvedValue({ id: "payment-1", status: "confirmed" });
+    const prepareGuestSessionAccess = vi.fn().mockResolvedValue({ payment_id: "payment-1", status: "pending" });
     const startSession = vi.fn().mockResolvedValue({ id: "session-1" });
-    const api = { confirmGuestSessionPayment, startSession } as unknown as GameClubApi;
+    const api = { confirmGuestSessionPayment, prepareGuestSessionAccess, startSession } as unknown as GameClubApi;
     const onSaved = vi.fn();
     vi.stubGlobal("crypto", { randomUUID: () => "sale-key-test" });
 
@@ -143,11 +164,56 @@ describe("Окно продажи", () => {
       tariff_id: "global-hour",
       guest_name: "Гость",
     }), "guest-payment-sale-session-sale-key-test");
-    expect(startSession).toHaveBeenCalledWith(expect.objectContaining({
-      workstation_id: pc.id,
-      guest_name: "Гость",
-      guest_payment_id: "payment-1",
-    }), "sale-session-sale-key-test");
+    expect(prepareGuestSessionAccess).toHaveBeenCalledWith("payment-1");
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
+  it("после оплаты выдаёт V2 guest access и не вызывает V1 session.start", async () => {
+    const confirmGuestSessionPayment = vi.fn().mockResolvedValue({ id: "payment-1", status: "confirmed" });
+    const prepareGuestSessionAccess = vi.fn().mockResolvedValue({
+      payment_id: "payment-1",
+      grant_id: "grant-1",
+      status: "pending",
+      expires_at: "2026-10-03T18:00:00Z",
+    });
+    const startSession = vi.fn();
+    const api = { confirmGuestSessionPayment, prepareGuestSessionAccess, startSession } as unknown as GameClubApi;
+    const v2Pc: Workstation = { ...pc };
+
+    render(
+      <SaleWorkspace
+        api={api}
+        pc={v2Pc}
+        initialClient={null}
+        initialProduct={null}
+        clients={[]}
+        cashShifts={[{
+          id: "shift-1",
+          register_id: "cash-1",
+          opened_by: "operator-1",
+          opened_at: "2026-09-16T08:00:00Z",
+          opening_balance_cents: 0,
+          expected_close_cents: 0,
+          status: "open",
+          closed_by: null,
+          closed_at: null,
+          actual_close_cents: null,
+          difference_cents: null,
+        }]}
+        tariffs={tariffs}
+        products={products}
+        categories={categories}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Общий час/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+
+    await waitFor(() => expect(prepareGuestSessionAccess).toHaveBeenCalledWith("payment-1"));
+    expect(confirmGuestSessionPayment).toHaveBeenCalled();
+    expect(startSession).not.toHaveBeenCalled();
   });
 
   it("останавливает подтверждение продажи, если settlement гостя требует сверки", async () => {

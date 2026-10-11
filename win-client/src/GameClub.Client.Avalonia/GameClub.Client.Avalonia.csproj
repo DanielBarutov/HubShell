@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" GlobalPropertiesToRemove="GameClubV2Only" />
-    <ProjectReference Include="..\GameClub.Client.Transport.V2.Grpc\GameClub.Client.Transport.V2.Grpc.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
     <Compile Remove="obj\**\*.cs;obj-v2\**\*.cs" />
   </ItemGroup>
 

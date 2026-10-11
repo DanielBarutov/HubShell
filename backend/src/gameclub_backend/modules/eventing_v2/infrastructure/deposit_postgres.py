@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy import DateTime, Integer, String, or_, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -80,6 +80,22 @@ class PostgresV2DepositCreditRepository:
 
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
+
+    async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
+        async with open_session(self._engine_provider) as session:
+            lease_id = await session.scalar(
+                select(V2SessionLeaseModel.session_id)
+                .where(
+                    V2SessionLeaseModel.client_id == client_id,
+                    V2SessionLeaseModel.status == "active",
+                    or_(
+                        V2SessionLeaseModel.expires_at.is_(None),
+                        V2SessionLeaseModel.expires_at >= datetime.datetime.now(datetime.UTC),
+                    ),
+                )
+                .limit(1)
+            )
+            return lease_id is not None
 
     async def apply(
         self,

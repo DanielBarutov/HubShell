@@ -21,6 +21,7 @@ describe("MetricCard info hint", () => {
     );
 
     const infoButton = screen.getByRole("button", { name: /Описание метрики: Общая выручка/ });
+    expect(infoButton.closest(".card")).toHaveClass("overflow-visible");
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     fireEvent.focus(infoButton);

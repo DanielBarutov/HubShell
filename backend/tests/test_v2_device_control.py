@@ -4,13 +4,16 @@ import grpc
 import pytest
 
 from gameclub.v2 import device_control_service_pb2, device_control_service_pb2_grpc
-from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
-from gameclub_backend.modules.workstations.domain import LockdownDeploymentMode, LockdownPolicy
+from gameclub_backend.modules.workstations.domain import (
+    LockdownDeploymentMode,
+    LockdownPolicy,
+    WorkstationSessionMode,
+)
 from gameclub_backend.modules.workstations.infrastructure.commands_memory import (
     InMemoryCommandNotifier,
     InMemoryWorkstationCommandRepository,
@@ -194,36 +197,25 @@ async def test_v2_device_heartbeat_marks_disabled_workstation_as_conflict() -> N
 
 
 async def test_v2_command_stream_delivers_only_v2_commands_and_acknowledges_them() -> None:
-    """Проверяет изоляцию V2 command stream от старой V1 команды и безопасный ack."""
+    """Проверяет доставку команд устройству и безопасный ack."""
     workstation_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstation_repository)
-    workstation = await workstations.register("v2-command-device", "V2 commands PC")
+    workstation = await workstations.register(
+        "v2-command-device",
+        "Device commands PC",
+        session_mode=WorkstationSessionMode.LOCAL_LEDGER,
+    )
     command_service = WorkstationCommandService(
         InMemoryWorkstationCommandRepository(),
         workstation_repository,
         InMemoryCommandNotifier(),
     )
-    legacy_command = await command_service.dispatch(
-        workstation.id,
-        "session.stop",
-        "{}",
-        "legacy-session-stop-must-not-reach-v2",
-    )
-    await workstations.migrate_all_to_v2_for_cutover()
     v2_command = await command_service.dispatch(
         workstation.id,
-        "v2.display.lock",
+        "display.lock",
         '{"reason":"operator"}',
         "v2-lock-command",
     )
-    with pytest.raises(ApplicationError) as error:
-        await command_service.dispatch(
-            workstation.id,
-            "session.stop",
-            "{}",
-            "v1-command-after-v2-cutover",
-        )
-    assert error.value.code is ErrorCode.CONFLICT
     token_service = JwtTokenService(Settings(jwt_secret="test-secret-with-at-least-32-bytes-long"))
     access_token, _ = token_service.issue_access_token(
         Principal(
@@ -251,21 +243,9 @@ async def test_v2_command_stream_delivers_only_v2_commands_and_acknowledges_them
         )
         delivered = await stream.read()
         assert delivered.id == str(v2_command.id)
-        assert delivered.command_type == "v2.display.lock"
+        assert delivered.command_type == "display.lock"
         assert delivered.payload_json == '{"reason":"operator"}'
         assert "workstation_id" not in delivered.DESCRIPTOR.fields_by_name
-
-        with pytest.raises(grpc.aio.AioRpcError) as error:
-            await client.AcknowledgeCommand(
-                device_control_service_pb2.DeviceCommandAcknowledgementRequest(
-                    command_id=str(legacy_command.id),
-                    device_id="v2-command-device",
-                    success=True,
-                    message="must not acknowledge a V1 command",
-                ),
-                metadata=(("authorization", f"Bearer {access_token}"),),
-            )
-        assert error.value.code() is grpc.StatusCode.PERMISSION_DENIED
 
         acknowledged = await client.AcknowledgeCommand(
             device_control_service_pb2.DeviceCommandAcknowledgementRequest(
@@ -279,7 +259,7 @@ async def test_v2_command_stream_delivers_only_v2_commands_and_acknowledges_them
         assert acknowledged.status == "acknowledged"
         assert acknowledged.acknowledgement_message == "locked"
         pending = await command_service.pending_for_device("v2-command-device")
-        assert [command.id for command in pending] == [legacy_command.id]
+        assert pending == []
         stream.cancel()
     finally:
         await channel.close()

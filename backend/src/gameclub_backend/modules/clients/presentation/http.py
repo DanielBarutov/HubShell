@@ -254,6 +254,19 @@ def create_router(
         principal: Operator,
         idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
     ) -> TopUpResponse:
+        if (
+            v2_deposit_credits is not None
+            and await v2_deposit_credits.has_active_lease_for_client(client_id)
+        ):
+            logger.warning(
+                "client_top_up_rejected_active_v2 client_id=%s actor_id=%s",
+                client_id,
+                principal.subject_id,
+            )
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "У клиента активна V2-сессия; используйте пополнение V2-сессии.",
+            )
         client, operation = await service.top_up(
             client_id=client_id,
             actor_id=principal.subject_id,

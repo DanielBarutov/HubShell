@@ -97,6 +97,8 @@ async def meter_sessions_once(
     """Meter active sessions and queue stop commands when their paid time ends."""
     stopped = 0
     for session in await session_reader.list(active_only=True):
+        if session.source in SessionService.LOCAL_SOURCES:
+            continue
         try:
             await billing.meter_session(session.id)
         except ApplicationError as error:

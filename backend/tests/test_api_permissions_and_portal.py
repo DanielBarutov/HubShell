@@ -84,7 +84,7 @@ async def test_operator_can_use_persisted_guest_for_reservation_and_session() ->
             legacy_workstation = await application.state.workstations.register(
                 "guest-api-legacy-device",
                 "Guest API legacy PC",
-                session_mode=WorkstationSessionMode.V1_SERVER_OWNED,
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             workstation_id = str(legacy_workstation.id)
             start_at = datetime.datetime(2035, 1, 1, 12, tzinfo=datetime.UTC)

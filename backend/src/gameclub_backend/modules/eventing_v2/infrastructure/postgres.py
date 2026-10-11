@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, Text, select, update
+from sqlalchemy import DateTime, Integer, String, Text, select, text, update
 from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -312,10 +312,25 @@ class PostgresV2ServerOutboxRepository:
         limit: int,
     ) -> tuple[V2OutgoingServerEvent, ...]:
         async with open_session(self._engine_provider) as session:
+            active_session_id = await session.scalar(
+                text("""
+                    SELECT session_id
+                    FROM v2_session_leases
+                    WHERE device_id = :device_id AND status = 'active'
+                    ORDER BY issued_at DESC
+                    LIMIT 1
+                """),
+                {"device_id": device_id},
+            )
+            if active_session_id is None:
+                return ()
             items = await session.scalars(
                 select(V2ServerOutboxModel)
                 .where(
                     V2ServerOutboxModel.device_id == device_id,
+                    V2ServerOutboxModel.session_id == active_session_id,
+                    V2ServerOutboxModel.topic == "v2.server-events",
+                    V2ServerOutboxModel.event_type == V2EventType.BALANCE_CREDIT_APPLIED.value,
                     V2ServerOutboxModel.status == V2OutgoingEventStatus.PUBLISHED.value,
                 )
                 .order_by(V2ServerOutboxModel.created_at, V2ServerOutboxModel.event_id)

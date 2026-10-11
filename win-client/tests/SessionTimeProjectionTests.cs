@@ -111,6 +111,36 @@ public sealed class SessionTimeProjectionTests
         Assert.Equal(8, projection.GetRemainingMinutes(nextAt));
     }
 
+    [Fact]
+    public void ShowsQueuedPackagesAndPerMinuteBalanceAsOneSessionRemainder()
+    {
+        var projection = new SessionTimeProjection();
+        var now = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+        var active = new SessionPackageSnapshot("first", "hour", null, 60, 60, 1, "active", 0, 0, null);
+        var queued = new SessionPackageSnapshot("second", "hour", null, 60, 60, 2, "queued", 0, 0, null);
+
+        projection.Apply(new SessionSnapshot(
+            "session-1", "workstation-1", "client-1", null, "active", "2026-01-01T12:00:00Z",
+            null, "device", string.Empty, ActivePackage: active, PackageQueue: [queued],
+            BalanceRemainingMinutes: 150), now);
+
+        Assert.Equal(270, projection.GetRemainingMinutes(now));
+    }
+
+    [Fact]
+    public void StopsForecastAtTheCloseOfAnActiveNightPackage()
+    {
+        var projection = new SessionTimeProjection();
+        var now = new DateTimeOffset(2026, 1, 1, 7, 0, 0, TimeSpan.Zero);
+        var night = new SessionPackageSnapshot("night", "night", null, 660, 660, 1, "active", 22 * 60, 8 * 60, "Etc/UTC");
+
+        projection.Apply(new SessionSnapshot(
+            "session-1", "workstation-1", "client-1", null, "active", "2026-01-01T07:00:00Z",
+            null, "device", string.Empty, ActivePackage: night, BalanceRemainingMinutes: 150), now);
+
+        Assert.Equal(60, projection.GetRemainingMinutes(now));
+    }
+
     private static SessionSnapshot Snapshot(
         int remainingMinutes,
         long balanceCents,

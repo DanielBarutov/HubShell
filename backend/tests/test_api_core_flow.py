@@ -52,7 +52,7 @@ async def test_operator_can_complete_core_api_flow() -> None:
                 "legacy-device-01",
                 "Legacy VIP-01",
                 group_id="vip",
-                session_mode=WorkstationSessionMode.V1_SERVER_OWNED,
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             client_response = await client.post(
                 "/api/v1/clients",

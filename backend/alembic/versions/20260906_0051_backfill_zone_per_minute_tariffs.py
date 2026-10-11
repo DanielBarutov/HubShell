@@ -113,8 +113,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The migration can update an existing tariff history and does not persist
-    # which rows it created. A broad DELETE would destroy operator data during
-    # downgrade, so keep the data and require an explicit operator migration
-    # if a rollback of these snapshots is ever needed.
+    # Миграция может обновить историю существующего тарифа и не сохраняет список
+    # созданных строк. Массовое DELETE при downgrade удалит данные оператора,
+    # поэтому оставляем записи и требуем отдельную миграцию для отката snapshot-ов.
     pass

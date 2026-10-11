@@ -3,7 +3,7 @@ import type { BackendCashMovement, BackendWorkstationGroup } from "../api";
 import type { PcStatus, Section } from "../types";
 
 export const navItems: { id: Section; label: string; icon: LucideIcon }[] = [
-  { id: "dashboard", label: "Дашборд", icon: LayoutDashboard },
+  { id: "dashboard", label: "Главная", icon: LayoutDashboard },
   { id: "map", label: "Карта мест", icon: LayoutGrid },
   { id: "bookings", label: "Бронирования", icon: CalendarDays },
   { id: "clients", label: "Клиенты", icon: Users },

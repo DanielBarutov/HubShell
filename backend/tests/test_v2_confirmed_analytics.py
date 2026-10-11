@@ -90,6 +90,7 @@ def confirmed_per_minute_debit_event() -> V2Event:
 
 @pytest.mark.asyncio
 async def test_confirmed_deposit_is_split_by_payment_method_and_replay_is_idempotent() -> None:
+    """Проверяет заявленное поведение backend."""
     projection = AnalyticsProjectionService(InMemoryAnalyticsHeavyRepository())
     service = V2ConfirmedAnalyticsInboxService(
         V2InboxService(InMemoryV2InboxRepository(), "confirmed_analytics"),
@@ -108,6 +109,7 @@ async def test_confirmed_deposit_is_split_by_payment_method_and_replay_is_idempo
 
 @pytest.mark.asyncio
 async def test_client_event_cannot_enter_confirmed_analytics() -> None:
+    """Проверяет заявленное поведение backend."""
     projection = AnalyticsProjectionService(InMemoryAnalyticsHeavyRepository())
     service = V2ConfirmedEventAnalyticsService(projection)
     event = confirmed_deposit_event()
@@ -129,6 +131,7 @@ async def test_client_event_cannot_enter_confirmed_analytics() -> None:
 
 @pytest.mark.asyncio
 async def test_confirmed_per_minute_debit_is_deposit_spending_not_new_revenue() -> None:
+    """Проверяет заявленное поведение backend."""
     projection = AnalyticsProjectionService(InMemoryAnalyticsHeavyRepository())
     event = confirmed_per_minute_debit_event()
 
@@ -142,6 +145,7 @@ async def test_confirmed_per_minute_debit_is_deposit_spending_not_new_revenue() 
 
 
 def test_confirmed_per_minute_debit_does_not_expose_client_balance() -> None:
+    """Проверяет заявленное поведение backend."""
     event = confirmed_per_minute_debit_event()
 
     assert "balance_after_cents" not in event.payload_json
@@ -208,6 +212,7 @@ async def test_confirmed_analytics_consumer_moves_conflict_to_dlq() -> None:
 
 @pytest.mark.asyncio
 async def test_postgres_confirmed_analytics_inbox_and_outbox_commit_together() -> None:
+    """Проверяет заявленное поведение backend."""
     postgres_dsn = os.getenv("GAMECLUB_TEST_POSTGRES_DSN")
     if not postgres_dsn:
         pytest.skip("Set GAMECLUB_TEST_POSTGRES_DSN for confirmed analytics PostgreSQL test")
@@ -245,6 +250,7 @@ async def test_postgres_confirmed_analytics_inbox_and_outbox_commit_together() -
 
 @pytest.mark.asyncio
 async def test_backfill_rebuilds_analytics_only_from_confirmed_current_debit_fact() -> None:
+    """Проверяет заявленное поведение backend."""
     postgres_dsn = os.getenv("GAMECLUB_TEST_POSTGRES_DSN")
     if not postgres_dsn:
         pytest.skip("Set GAMECLUB_TEST_POSTGRES_DSN for V2 analytics backfill test")

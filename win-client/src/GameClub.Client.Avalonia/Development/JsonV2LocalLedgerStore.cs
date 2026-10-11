@@ -5,9 +5,9 @@ using GameClub.Client.Domain;
 namespace GameClub.Client.Avalonia.Development;
 
 /// <summary>
-/// Plaintext Linux-only store for manual V2 testing. Production Windows uses
-/// ProtectedV2LocalLedgerStore with DPAPI; this adapter must not be shipped as
-/// the Windows persistence boundary.
+/// Хранилище в открытом виде только для ручной проверки V2 в Linux. Production
+/// Windows использует ProtectedV2LocalLedgerStore с DPAPI. Этот адаптер нельзя
+/// поставлять как границу хранения Windows-клиента.
 /// </summary>
 public sealed class JsonV2LocalLedgerStore : IV2LocalLedgerStore
 {

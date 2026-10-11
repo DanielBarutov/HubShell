@@ -3,11 +3,17 @@ using GameClub.Client.Domain;
 namespace GameClub.Client.Application.Ports;
 
 /// <summary>
-/// V2 client portal operations. This contract deliberately contains no V1
-/// authentication or session methods.
+/// Операции личного кабинета V2. В контракте нет методов аутентификации
+/// и управления сессиями V1.
 /// </summary>
 public interface IV2ClientPortalGateway
 {
+    Task<ClientPortalSnapshot> ResumePortalAsync(
+        string deviceId,
+        string sessionId,
+        string clientId,
+        CancellationToken cancellationToken = default);
+
     Task<ClientPortalSnapshot> RefreshAsync(
         string deviceId,
         int limit = 50,

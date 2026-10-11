@@ -1,18 +1,13 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Computer, Receipt, ShoppingCart, Settings, WalletCards } from "lucide-react";
+import { ChevronRight, Computer, Receipt, Settings, WalletCards } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
-import type { BackendSessionMeter, BackendSessionSnapshot, BackendTariff, BackendTransferOffer } from "../../api";
-import { toUiClient } from "../../adapters";
-import { getSearchField } from "../../shared/formatters";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import { statusMeta } from "../../shared/constants";
 import type { Client, Workstation } from "../../types";
-import type { V2DepositTarget } from "../workspace/uiSlice";
+import type { DepositTarget } from "../workspace/uiSlice";
 
 export function PcPanel({
   pc,
-  workstations,
-  tariffs,
   onClose,
   onEdit,
   onBook,
@@ -23,12 +18,10 @@ export function PcPanel({
   api,
 }: {
   pc: Workstation;
-  workstations: Workstation[];
-  tariffs: BackendTariff[];
   onClose: () => void;
   onEdit: () => void;
   onBook: () => void;
-  onDeposit: (client?: Client, bonusOnly?: boolean, v2Target?: V2DepositTarget) => void;
+  onDeposit: (client?: Client, bonusOnly?: boolean, target?: DepositTarget) => void;
   onOpenSale: () => void;
   onSessionChanged: () => void;
   client?: Client;
@@ -37,144 +30,34 @@ export function PcPanel({
   const meta = statusMeta[pc.status];
   const [operationState, setOperationState] = useState<string | null>(null);
   const [operationSuccess, setOperationSuccess] = useState(false);
-  const [clientQuery] = useState("");
-  const [clientCandidate, setClientCandidate] = useState<Client | undefined>();
-  const [tariffId, setTariffId] = useState<string>("");
-  const [tariffQuantity] = useState("1");
-  const [meter, setMeter] = useState<BackendSessionMeter | null>(null);
-  const [sessionSnapshot, setSessionSnapshot] = useState<BackendSessionSnapshot | null>(null);
-  const [stoppedSessionId, setStoppedSessionId] = useState<string | undefined>();
+  // Во время активной сессии владелец не меняется. Запоздалый polling не должен
+  // подменять доступные действия.
+  const [sessionSnapshotState, setSessionSnapshotState] = useState(() => ({
+    workstationId: pc.id,
+    sessionId: pc.sessionId,
+  }));
   const [submitting, setSubmitting] = useState(false);
-  const [transferTargetId, setTransferTargetId] = useState("");
-  const [transferOffer, setTransferOffer] = useState<BackendTransferOffer | null>(null);
-  const clientField = getSearchField(clientQuery);
-  const isV2 = pc.sessionMode === "v2_local_ledger";
+  const hasActiveSession = pc.status === "busy";
+  const snapshotChanged = sessionSnapshotState.workstationId !== pc.id
+    || sessionSnapshotState.sessionId !== pc.sessionId;
+  const sessionSnapshot = pc.sessionSnapshot ?? null;
 
   useEffect(() => {
-    const workstationGroupId = pc.groupId?.trim().toLowerCase();
-    const availableTariffs = tariffs.filter((item) => Boolean(workstationGroupId) && item.lifecycle === "published" && item.active && item.billing_mode === "block" && (item.sale_channel ?? "both") !== "self_service" && (item.group_id === null || item.group_id.trim().toLowerCase() === workstationGroupId));
-    setTariffId((current) => availableTariffs.some((item) => item.id === current) ? current : availableTariffs[0]?.id || "");
-  }, [pc.groupId, tariffs]);
-
-  useEffect(() => {
-    if (!api || isV2 || pc.status !== "busy" || !pc.sessionId) {
-      setMeter(null);
-      setSessionSnapshot(null);
-      return undefined;
-    }
-    let active = true;
-    const refreshSnapshot = () => {
-      void api.getSessionSnapshot(pc.sessionId!).then((value) => {
-        if (active) {
-          setSessionSnapshot(value);
-          setMeter(value.meter);
-        }
-      }).catch(() => {
-        if (active) {
-          setSessionSnapshot(null);
-          setMeter(null);
-        }
+    if (!hasActiveSession || snapshotChanged) {
+      setSessionSnapshotState({
+        workstationId: pc.id,
+        sessionId: pc.sessionId,
       });
-    };
-    refreshSnapshot();
-    const timer = window.setInterval(refreshSnapshot, 10_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [api, isV2, pc.sessionId, pc.status]);
+    }
+  }, [hasActiveSession, pc.id, pc.sessionId, snapshotChanged]);
 
-  useEffect(() => {
-    if (!api || !clientField) {
-      setClientCandidate(undefined);
-      return undefined;
-    }
-    let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        const found = await api.searchClients(clientQuery, clientField);
-        if (active) {
-          setClientCandidate(found[0] ? toUiClient(found[0]) : undefined);
-        }
-      } catch {
-        if (active) {
-          setClientCandidate(undefined);
-        }
-      }
-    }, 250);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [api, clientField, clientQuery, pc.status]);
-
-  const startOrStop = async () => {
-    if (isV2) {
-      setOperationSuccess(false);
-      setOperationState("V2-сессией управляет локальный журнал на игровом ПК");
-      return;
-    }
-    if (!api) {
-      setOperationSuccess(false);
-      setOperationState("Mock-режим: сессия не отправлялась");
-      return;
-    }
-    setSubmitting(true);
-    setOperationSuccess(false);
-    setOperationState(null);
-    try {
-      if (pc.status === "busy") {
-        if (!pc.sessionId) {
-          setOperationState("Не найден ID активной сессии");
-          return;
-        }
-        if (!window.confirm(`Прервать сессию на «${pc.name}»? Время будет рассчитано по фактическому окончанию.`)) {
-          return;
-        }
-        const session = await api.interruptSession(
-          pc.sessionId,
-          "Клиент завершил сессию раньше",
-          crypto.randomUUID(),
-        );
-        setStoppedSessionId(session.id);
-        setOperationSuccess(true);
-        setOperationState("Сессия прервана. Проверьте итог и выполните списание.");
-      } else {
-        const entry = await api.checkEntry(pc.id, clientCandidate?.id);
-        if (!entry.allowed) {
-          setOperationState(`Вход запрещён: ${entry.reason}`);
-          return;
-        }
-        await api.startSession(
-          {
-            workstation_id: pc.id,
-            client_id: clientCandidate?.id,
-            guest_name: clientCandidate ? undefined : "Гость",
-            source: "operator",
-            tariff_id: tariffId || undefined,
-            tariff_quantity: Math.max(1, Math.min(100, Number(tariffQuantity) || 1)),
-          },
-          crypto.randomUUID(),
-        );
-        setOperationSuccess(true);
-        setOperationState("Сессия открыта");
-      }
-      onSessionChanged();
-    } catch (error) {
-      setOperationSuccess(false);
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось изменить сессию");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const dispatchV2DeviceCommand = async (
-    commandType: "v2.display.lock" | "v2.system.restart",
+  const dispatchDeviceCommand = async (
+    commandType: "display.lock" | "system.restart",
   ) => {
-    if (!api || !isV2 || pc.status === "maintenance" || pc.status === "offline") {
+    if (!api || pc.status === "maintenance" || pc.status === "offline") {
       return;
     }
-    const confirmation = commandType === "v2.system.restart"
+    const confirmation = commandType === "system.restart"
       ? `Перезапустить «${pc.name}»? Клиент сначала будет заблокирован.`
       : `Заблокировать клиент на «${pc.name}»?`;
     if (!window.confirm(confirmation)) {
@@ -184,10 +67,10 @@ export function PcPanel({
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      await api.dispatchV2DeviceCommand(pc.id, commandType, crypto.randomUUID());
+      await api.dispatchDeviceCommand(pc.id, commandType, crypto.randomUUID());
       setOperationSuccess(true);
       setOperationState(
-        commandType === "v2.system.restart"
+        commandType === "system.restart"
           ? "Команда перезапуска поставлена в очередь"
           : "Команда блокировки поставлена в очередь",
       );
@@ -198,82 +81,27 @@ export function PcPanel({
     }
   };
 
-  const activatePackage = async (entitlementId: string) => {
-    if (!api || !sessionSnapshot?.client_id) {
+  const interruptSession = async () => {
+    if (!api || !hasActiveSession || !pc.sessionId) {
+      return;
+    }
+    if (!window.confirm(`Прервать сессию на «${pc.name}»? Неиспользованный остаток активного пакета сгорит.`)) {
       return;
     }
     setSubmitting(true);
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      await api.activateEntitlement(sessionSnapshot.client_id, entitlementId);
-      const refreshed = await api.getSessionSnapshot(sessionSnapshot.session.id);
-      setSessionSnapshot(refreshed);
-      setMeter(refreshed.meter);
-      setOperationSuccess(true);
-      setOperationState("Пакет активирован на сервере");
-    } catch (error) {
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось активировать пакет");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  const charge = async () => {
-    if (!api || !stoppedSessionId) {
-      return;
-    }
-    if (!window.confirm("Списать стоимость завершённой сессии по действующему тарифу?")) {
-      return;
-    }
-    setSubmitting(true);
-    setOperationSuccess(false);
-    setOperationState(null);
-    try {
-      const result = await api.chargeSession(stoppedSessionId, crypto.randomUUID());
-      setOperationSuccess(true);
-      setOperationState(
-        `Списано ${(result.amount_cents / 100).toLocaleString("ru-RU")} ₽. Баланс: ${(result.client_balance_cents / 100).toLocaleString("ru-RU")} ₽`,
-      );
-      onSessionChanged();
-    } catch (error) {
-      setOperationSuccess(false);
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось списать с баланса");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const transferSession = async () => {
-    if (!api || !pc.sessionId || !transferTargetId) {
-      setOperationState("Выберите свободное место для переноса");
-      return;
-    }
-    setSubmitting(true);
-    setOperationSuccess(false);
-    setOperationState(null);
-    try {
-      const offer = await api.createTransferOffer(
+      await api.interruptSession(
         pc.sessionId,
-        transferTargetId,
-        `transfer-offer-${crypto.randomUUID()}`,
-      );
-      setTransferOffer(offer);
-      const confirmation = offer.warning
-        ? `${offer.warning}\n\nПодтвердить перенос?`
-        : "Подтвердить перенос активной сессии на выбранный ПК?";
-      if (!window.confirm(confirmation)) {
-        setOperationState("Перенос не подтверждён");
-        return;
-      }
-      const result = await api.confirmTransfer(
-        offer.id,
-        `transfer-confirm-${crypto.randomUUID()}`,
+        "Оператор прервал сессию из панели ПК",
+        crypto.randomUUID(),
       );
       setOperationSuccess(true);
-      setOperationState(`Сессия перенесена на ${workstations.find((item) => item.id === result.workstation_id)?.name ?? "новое место"}`);
+      setOperationState("Сессия завершена");
       onSessionChanged();
     } catch (error) {
-      setOperationState(error instanceof ApiError ? error.message : "Не удалось перенести сессию");
+      setOperationState(error instanceof ApiError ? error.message : "Не удалось прервать сессию");
     } finally {
       setSubmitting(false);
     }
@@ -303,48 +131,79 @@ export function PcPanel({
     }
   };
 
-  return <div className="panel-inner">
+  const deleteWorkstation = async () => {
+    if (!api || !window.confirm(`Удалить «${pc.name}» из активной карты?`)) {
+      return;
+    }
+    setSubmitting(true);
+    setOperationSuccess(false);
+    setOperationState(null);
+    try {
+      await api.deleteWorkstation(pc.id);
+      onSessionChanged();
+      onClose();
+    } catch (error) {
+      setOperationState(error instanceof ApiError ? error.message : "Не удалось удалить место");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return <div className="panel-inner pc-panel flex flex-col gap-4 p-5">
     <PanelHeader title={pc.name} subtitle={pc.group} onClose={onClose} />
-    <div className="panel-pc-hero">
-      <div className={"large-pc-icon " + pc.status}><Computer size={50} strokeWidth={1.2} /></div>
-      <div><span className={"pill-status " + meta.className}><i /> {meta.label}</span><h2>{pc.client || "Место свободно"}</h2><p>{pc.session ? "Сессия началась " + pc.session + " назад" : pc.status === "offline" ? "Нет связи; новые операции заблокированы" : pc.lastSeen || "Готово к новой сессии"}</p>{meter && <small className="meter-status">{meter.package_minutes > 0 ? `Пакет · использовано ${meter.package_minutes} мин` : "Поминутно"} · списано ${(meter.billed_cents / 100).toLocaleString("ru-RU")} ₽ · {meter.billed_minutes} мин · {meter.status === "exhausted" ? "баланс исчерпан" : "активно"}</small>}</div>
+    <div className="panel-pc-hero flex items-center gap-3 rounded-xl border border-primary/20! bg-base-200/70! p-4 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
+      <div className={`large-pc-icon grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-primary/15! text-primary! ${pc.status}`}><Computer size={50} strokeWidth={1.2} /></div>
+      <div className="min-w-0">
+        <span className="pill-status badge badge-soft badge-success gap-1"><i className="h-1.5 w-1.5 rounded-full bg-current" /> {meta.label}</span>
+        <h2 className="mt-2 text-lg font-bold">{pc.client || "Место свободно"}</h2>
+        <p className="text-xs text-base-content/60!">{pc.session ? `Сессия началась ${pc.session} назад` : pc.status === "offline" ? "Нет связи; новые операции заблокированы" : pc.lastSeen || "Готово к новой сессии"}</p>
+        {sessionSnapshot?.meter && <small className="meter-status mt-2 block text-xs text-primary!">
+          {sessionSnapshot.meter.package_minutes > 0 ? `Пакет · использовано ${sessionSnapshot.meter.package_minutes} мин` : "Поминутно"}
+          {" · "}списано {(sessionSnapshot.meter.billed_cents / 100).toLocaleString("ru-RU")} ₽
+          {" · "}{sessionSnapshot.meter.billed_minutes} мин
+          {" · "}{sessionSnapshot.meter.status === "exhausted" ? "баланс исчерпан" : "активно"}
+        </small>}
+      </div>
     </div>
-    <div className="panel-section">
-      <div className="detail-row"><span>Группа</span><strong>{pc.group}</strong></div>
-      <div className="detail-row"><span>Позиция на карте</span><strong>{pc.position ?? "—"}</strong></div>
-      <div className="detail-row"><span>Устройство</span><strong>{pc.name}</strong></div>
-      {sessionSnapshot?.active_entitlement && <div className="detail-row"><span>Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
+    <div className="panel-section rounded-xl border border-primary/15! bg-base-100/35! p-4">
+      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Группа</span><strong>{pc.group}</strong></div>
+      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Позиция на карте</span><strong>{pc.position ?? "—"}</strong></div>
+      <div className="detail-row flex items-center justify-between gap-3 border-b border-primary/10! py-2 text-sm"><span className="text-base-content/60!">Устройство</span><strong>{pc.name}</strong></div>
+      {sessionSnapshot?.active_entitlement && <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm"><span className="text-base-content/60!">Активный пакет</span><strong>{sessionSnapshot.active_entitlement.remaining_minutes} мин осталось</strong></div>}
     </div>
-    {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="panel-section"><div className="card-heading"><div><h3>Очередь пакетов</h3><p>Следующие пакеты активируются по порядку</p></div></div>{sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="detail-row" key={item.id}><span>#{item.queue_position} · {item.remaining_minutes} мин</span><button className="text-button" onClick={() => void activatePackage(item.id)} disabled={submitting || Boolean(sessionSnapshot.active_entitlement)}>Активировать</button></div>)}</div>}
-    {(pc.status === "online" || pc.status === "busy") && <button type="button" className="sale-entry-card" onClick={onOpenSale}>
-      <div className="sale-entry-icon"><Receipt size={20} /></div>
-      <div><strong>Оформить продажу</strong><span>Время, товары и покупатель — в одном окне</span></div>
+    {sessionSnapshot && sessionSnapshot.entitlements.some((item) => item.status === "queued") && <div className="rounded-xl border border-primary/15! bg-base-100/35! p-4">
+      <div className="mb-3"><h3 className="font-semibold">Очередь пакетов</h3><p className="text-xs text-base-content/60!">Следующие пакеты активируются по порядку</p></div>
+      <div className="flex flex-col gap-1">
+      {sessionSnapshot.entitlements.filter((item) => item.status === "queued").map((item) => <div className="flex items-center justify-between gap-3 border-t border-primary/10! py-2 text-sm" key={item.id}>
+        <span className="text-base-content/70!">#{item.queue_position} · {item.remaining_minutes} мин</span>
+        <strong className="text-primary!">В очереди</strong>
+      </div>)}
+      </div>
+    </div>}
+    {(pc.status === "online" || pc.status === "busy") && <button type="button" className="sale-entry-card btn btn-ghost flex w-full items-center gap-3 rounded-xl border border-primary/30! bg-primary/10! p-3 text-left" onClick={onOpenSale}>
+      <div className="sale-entry-icon grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary! text-primary-content!"><Receipt size={20} /></div>
+      <div className="min-w-0 grow"><strong className="block">Оформить продажу</strong><span className="block text-xs text-base-content/60!">Время, товары и покупатель — в одном окне</span></div>
       <ChevronRight size={17} />
     </button>}
-    <div className="panel-actions">
-      {pc.status === "busy" && client && <button className="secondary-button wide" onClick={() => onDeposit(
+    <div className="panel-actions pc-panel-actions flex flex-col gap-2">
+      {pc.status === "busy" && client && <button className="secondary-button wide btn btn-outline" onClick={() => onDeposit(
         client,
         false,
-        pc.sessionMode === "v2_local_ledger" && pc.sessionId && pc.deviceId
+        pc.sessionId && pc.deviceId
           ? { sessionId: pc.sessionId, deviceId: pc.deviceId, workstationName: pc.name }
           : undefined,
       )}><WalletCards size={15} /> Пополнить депозит</button>}
-      <button className="secondary-button wide" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
-      {pc.status === "busy" ? isV2 ? <><p className="subheading">V2-сессия ведётся локальным журналом игрового ПК.</p><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <><button className="primary-button wide" onClick={() => void startOrStop()} disabled={submitting || Boolean(stoppedSessionId)}>{submitting ? "Сохраняем..." : "Прервать сессию"}</button><button className="secondary-button wide" onClick={onOpenSale} disabled={submitting}><ShoppingCart size={15} /> Продать товар</button></> : <button className="primary-button wide" onClick={onOpenSale} disabled={pc.status !== "online"}><ShoppingCart size={15} /> Открыть продажи</button>}
-      {!isV2 && stoppedSessionId && api && <button className="primary-button wide" onClick={() => void charge()} disabled={submitting}>Списать по тарифу</button>}
-      {!isV2 && pc.status === "busy" && api && <>
-        <label>Перенести на место<select value={transferTargetId} onChange={(event) => setTransferTargetId(event.target.value)} disabled={submitting}>
-          <option value="">Выберите свободный ПК</option>
-          {workstations.filter((item) => item.id !== pc.id && item.status === "online").map((item) => <option value={item.id} key={item.id}>{item.name} · {item.group}</option>)}
-        </select></label>
-        <button className="secondary-button wide" onClick={() => void transferSession()} disabled={submitting || !transferTargetId}>Перенести сессию</button>
-        {transferOffer && <small className="muted">Перенос создан · действует до {new Date(transferOffer.expires_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</small>}
-      </>}
-      {isV2 && <><button className="secondary-button wide" onClick={() => void dispatchV2DeviceCommand("v2.display.lock")} disabled={submitting || pc.status === "maintenance" || pc.status === "offline"}>Заблокировать клиент</button><button className="danger-button wide" onClick={() => void dispatchV2DeviceCommand("v2.system.restart")} disabled={submitting || pc.status === "maintenance" || pc.status === "offline"}>Перезапустить ПК</button></>}
-      <button className="secondary-button wide" onClick={onBook} disabled={pc.status !== "online"}>Забронировать место</button>
-      {operationState && <div className={`${operationSuccess ? "form-success" : "form-error"} command-result`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
+      <button className="secondary-button wide btn btn-outline" onClick={onEdit}><Settings size={15} /> Редактировать ПК</button>
+      <div className="pc-session-actions flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/45! p-3">
+        {hasActiveSession && <p className="pc-session-note m-0 text-xs text-base-content/60!">Активная сессия управляется игровым ПК.</p>}
+        {hasActiveSession && pc.sessionId && <button className="danger-button wide btn btn-error btn-outline" onClick={() => void interruptSession()} disabled={submitting || !api}>Прервать сессию</button>}
+        <button className="secondary-button wide btn btn-outline" onClick={() => void dispatchDeviceCommand("display.lock")} disabled={submitting || !api || pc.status === "maintenance" || pc.status === "offline"}>Заблокировать клиент</button>
+        <button className="danger-button wide btn btn-error btn-outline" onClick={() => void dispatchDeviceCommand("system.restart")} disabled={submitting || !api || pc.status === "maintenance" || pc.status === "offline"}>Перезапустить ПК</button>
+      </div>
+      <button className="secondary-button wide btn btn-outline" onClick={onBook} disabled={pc.status !== "online"}>Забронировать место</button>
+      {operationState && <div className={`${operationSuccess ? "form-success border-success/40! bg-success/10! text-success-content!" : "form-error border-error/40! bg-error/10! text-error-content!"} command-result rounded-lg border p-3 text-sm`} role={operationSuccess ? "status" : "alert"} aria-live="polite">{operationState}</div>}
     </div>
-    <button className="danger-button" onClick={() => void toggleAvailability()} disabled={!api || submitting} aria-disabled={!api}>{pc.status === "maintenance" ? "Включить место" : "Отключить место"} <ChevronRight size={15} /></button>
-    <button className="danger-button" onClick={async () => { if (!api || !window.confirm("Удалить «" + pc.name + "» из активной карты?")) return; setSubmitting(true); try { await api.deleteWorkstation(pc.id); onSessionChanged(); onClose(); } catch (error) { setOperationSuccess(false); setOperationState(error instanceof ApiError ? error.message : "Не удалось удалить место"); } finally { setSubmitting(false); } }}>Удалить из карты</button>
+    <button className="danger-button btn btn-error btn-outline" onClick={() => void toggleAvailability()} disabled={!api || submitting} aria-disabled={!api}>{pc.status === "maintenance" ? "Включить место" : "Отключить место"} <ChevronRight size={15} /></button>
+    <button className="danger-button btn btn-error btn-outline" onClick={() => void deleteWorkstation()} disabled={!api || submitting}>Удалить из карты</button>
   </div>;
 }

@@ -20,6 +20,7 @@ from gameclub_backend.modules.sessions.application.ports import (
     SessionRepository,
     TariffLookup,
     TimeNotificationLookup,
+    V2SessionLeaseRevoker,
     WorkstationLookup,
 )
 from gameclub_backend.modules.sessions.domain import (
@@ -44,7 +45,9 @@ class UtcClock:
 class SessionService:
     # Временно уменьшено для проверки поминутного списания; после проверки вернуть 5.
     LOGIN_GRANT_MINUTES = 1
-    V2_LOCAL_LEDGER_SOURCE = "v2_local_ledger"
+    LOCAL_LEDGER_SOURCE = "local_ledger"
+    GUEST_LOCAL_LEDGER_SOURCE = "guest_local_ledger"
+    LOCAL_SOURCES = frozenset({LOCAL_LEDGER_SOURCE, GUEST_LOCAL_LEDGER_SOURCE})
 
     def __init__(
         self,
@@ -59,6 +62,7 @@ class SessionService:
         meters: MeterLookup | None = None,
         tariffs: TariffLookup | None = None,
         notifications: TimeNotificationLookup | None = None,
+        v2_session_leases: V2SessionLeaseRevoker | None = None,
     ) -> None:
         self._repository = repository
         self._workstations = workstations
@@ -70,6 +74,7 @@ class SessionService:
         self._meters = meters
         self._tariffs = tariffs
         self._notifications = notifications
+        self._v2_session_leases = v2_session_leases
         self._clock = clock or UtcClock()
 
     async def start(
@@ -100,7 +105,9 @@ class SessionService:
         normalized_guest_name = guest_name.strip() if guest_name else None
         normalized_source = source.strip() or "operator"
         login_grant_minutes = (
-            self.LOGIN_GRANT_MINUTES if normalized_source in {"device", "v2_local_ledger"} else 0
+            self.LOGIN_GRANT_MINUTES
+            if normalized_source in {"device"} | self.LOCAL_SOURCES
+            else 0
         )
         if tariff_quantity <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff quantity must be positive")
@@ -110,20 +117,20 @@ class SessionService:
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
         if (
-            workstation.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
-            and normalized_source != self.V2_LOCAL_LEDGER_SOURCE
+            workstation.session_mode is WorkstationSessionMode.LOCAL_LEDGER
+            and normalized_source not in self.LOCAL_SOURCES
         ):
             raise ApplicationError(
                 ErrorCode.CONFLICT,
-                "V2 workstation does not accept V1 session creation",
+                "Local-ledger workstation requires a local ledger source",
             )
         if (
-            workstation.session_mode is WorkstationSessionMode.V1_SERVER_OWNED
-            and normalized_source == self.V2_LOCAL_LEDGER_SOURCE
+            workstation.session_mode is WorkstationSessionMode.SERVER_OWNED
+            and normalized_source == self.LOCAL_LEDGER_SOURCE
         ):
             raise ApplicationError(
                 ErrorCode.CONFLICT,
-                "V1 workstation does not accept V2 local ledger sessions",
+                "Server-owned workstation does not accept local ledger sessions",
             )
         effective_group_id = effective_workstation_group_id(workstation.group_id)
         if device_id is not None and workstation.device_id != device_id:
@@ -557,29 +564,29 @@ class SessionService:
                     ErrorCode.PERMISSION_DENIED,
                     "Device identity does not match workstation",
                 )
+        if (
+            session.status is SessionStatus.COMPLETED
+            and session.source in self.LOCAL_SOURCES
+        ):
+            if self._v2_session_leases is not None:
+                await self._v2_session_leases.revoke(
+                    session.id,
+                    session.ended_at or self._clock.now(),
+                )
+            return session
+        now = self._clock.now()
         try:
-            saved = await self._repository.save(session.stop(self._clock.now()))
+            saved = await self._repository.save(session.stop(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        if (
+            saved.source in self.LOCAL_SOURCES
+            and self._v2_session_leases is not None
+        ):
+            await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, "session_stop")
         return saved
-
-    async def terminate_active_v1_sessions_for_cutover(self) -> list[Session]:
-        """Finish every current V1 session before the one-time V2 cutover.
-
-        The operation deliberately uses the ordinary stop lifecycle, so a
-        legacy package is finalized consistently with a manual stop. Repeating
-        it is safe: completed sessions are no longer returned by ``list``.
-        V2 local-ledger sessions are outside this operation.
-        """
-        active_sessions = await self._repository.list(active_only=True)
-        terminated: list[Session] = []
-        for session in active_sessions:
-            if session.source == self.V2_LOCAL_LEDGER_SOURCE:
-                continue
-            terminated.append(await self.stop(session.id))
-        return terminated
 
     async def interrupt(
         self,
@@ -599,10 +606,16 @@ class SessionService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Idempotency key is required")
 
         session = await self.get(session_id)
+        now = self._clock.now()
         try:
-            saved = await self._repository.save(session.interrupt(self._clock.now()))
+            saved = await self._repository.save(session.interrupt(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        if (
+            saved.source == self.LOCAL_LEDGER_SOURCE
+            and self._v2_session_leases is not None
+        ):
+            await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, normalized_reason)
         return saved

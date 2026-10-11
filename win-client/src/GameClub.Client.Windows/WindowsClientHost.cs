@@ -9,9 +9,8 @@ using System.Runtime.Versioning;
 namespace GameClub.Client.Windows;
 
 /// <summary>
-/// Production-only composition for the shared Avalonia window. This is the
-/// only place where DPAPI journal, Windows restart and the device command loop
-/// are wired; the Linux developer host deliberately does not emulate them.
+/// Production-сборка общего окна Avalonia. Только здесь подключаются журнал DPAPI,
+/// перезапуск Windows и цикл команд устройства. Linux developer-host их не имитирует.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsClientHost : IClientHost
@@ -45,7 +44,7 @@ public sealed class WindowsClientHost : IClientHost
                         _v2EventsHttpClient,
                         eventsAddress,
                         _enrollment)));
-            v2ServerEventsEndpoint = new Uri(eventsAddress, "/api/v2/events/server");
+            v2ServerEventsEndpoint = new Uri(eventsAddress, "/api/events/server");
         }
         var v2Login = new V2OfflineLoginCoordinator(backend, v2Ledger);
         var v2Verifier = new V2Ed25519OfflineSnapshotSignatureVerifier(
@@ -62,7 +61,8 @@ public sealed class WindowsClientHost : IClientHost
             v2OfflineLogin: v2Login,
             v2Ledger: v2Ledger,
             v2MinuteRunner: new V2MinuteLedgerRunner(v2Ledger),
-            v2SignatureVerifier: v2Verifier);
+            v2SignatureVerifier: v2Verifier,
+            v2GuestSession: backend);
         if (v2ServerEventsEndpoint is not null)
         {
             _v2ServerEventWorker = new V2ServerEventWorker(

@@ -4,6 +4,19 @@ import type { GameClubApi } from "../../api";
 import { CashScheduleEditor } from "./CashScreen";
 
 describe("Настройка автоматической смены", () => {
+  it("открывает выбор времени автозакрытия вверх", () => {
+    const api = { saveCashShiftSchedule: vi.fn() } as unknown as GameClubApi;
+
+    render(<CashScheduleEditor api={api} onSaved={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Автозакрытие/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Время автозакрытия" }));
+
+    expect(
+      screen.getByRole("dialog", { name: /Время автозакрытия/ }),
+    ).toHaveClass("bottom-full");
+  });
+
   it("позволяет выбрать время автооткрытия, не выключая правило", async () => {
     const saveCashShiftSchedule = vi.fn().mockResolvedValue({
       register_id: "front-desk",

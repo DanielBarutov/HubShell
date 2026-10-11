@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import uuid
 
 from sqlalchemy import select, text
@@ -25,6 +26,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import V
 from gameclub_backend.modules.eventing_v2.infrastructure.postgres import V2ServerOutboxModel
 from gameclub_backend.modules.sessions.application.ports import SessionTransactionWriter
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
+from gameclub_backend.modules.sessions.infrastructure.postgres import SessionModel
 
 
 class PostgresV2SnapshotIssueRepository:
@@ -37,6 +39,25 @@ class PostgresV2SnapshotIssueRepository:
     ) -> None:
         self._engine_provider = engine_provider
         self._session_writer = session_writer
+
+    async def has_active_lease(
+        self,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+        device_id: str,
+    ) -> bool:
+        async with open_session(self._engine_provider) as session:
+            lease = await session.get(V2SessionLeaseModel, session_id)
+            return bool(
+                lease is not None
+                and lease.status == "active"
+                and lease.client_id == client_id
+                and lease.device_id == device_id
+                and (
+                    lease.expires_at is None
+                    or lease.expires_at >= datetime.datetime.now(datetime.UTC)
+                )
+            )
 
     async def issue(self, value: V2SignedSnapshotIssue) -> V2SnapshotIssueResult:
         return await self._issue(value)
@@ -102,7 +123,26 @@ class PostgresV2SnapshotIssueRepository:
                     )
                     .with_for_update()
                 )
-                if any(True for _ in active):
+                has_live_lease = False
+                for active_lease in active:
+                    previous_session = await session.get(
+                        SessionModel,
+                        active_lease.session_id,
+                        with_for_update=True,
+                    )
+                    if previous_session is None or (
+                        previous_session.source == "local_ledger"
+                        and previous_session.status == SessionStatus.COMPLETED.value
+                    ):
+                        active_lease.status = "revoked"
+                        active_lease.revoked_at = (
+                            previous_session.ended_at
+                            if previous_session is not None
+                            else None
+                        ) or lease.issued_at
+                    else:
+                        has_live_lease = True
+                if has_live_lease:
                     raise ValueError("Client or device already has an active V2 lease")
 
                 lease_model = V2SessionLeaseModel.from_domain(lease)
@@ -158,7 +198,7 @@ class PostgresV2SnapshotIssueRepository:
             session.id != lease.session_id
             or session.client_id != lease.client_id
             or session.status is not SessionStatus.ACTIVE
-            or session.source != "v2_local_ledger"
+            or session.source != "local_ledger"
         ):
             raise ValueError("New V2 session does not match its signed snapshot lease")
 

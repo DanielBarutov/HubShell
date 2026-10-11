@@ -28,7 +28,7 @@ if _version_not_supported:
 
 
 class OfflineSessionServiceStub:
-    """Выдаёт единственный подписанный входной снимок V2-сессии. Минуты не подтверждает.
+    """Управляет границей входа V2 и завершением локальной сессии. Минуты не подтверждает.
     """
 
     def __init__(self, channel):
@@ -46,6 +46,26 @@ class OfflineSessionServiceStub:
                 '/gameclub.events.v2.OfflineSessionService/Register',
                 request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.RegisterOfflineSessionRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedOfflineSessionSnapshot.FromString,
+                _registered_method=True)
+        self.ResumePortal = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/ResumePortal',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalResponse.FromString,
+                _registered_method=True)
+        self.StopSession = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/StopSession',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.StopOfflineSessionRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
+        self.RedeemGuestAccess = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/RedeemGuestAccess',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.RedeemGuestAccessRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedGuestSessionAccess.FromString,
+                _registered_method=True)
+        self.StopGuestAccess = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/StopGuestAccess',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.StopGuestAccessRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.ChangePassword = channel.unary_unary(
                 '/gameclub.events.v2.OfflineSessionService/ChangePassword',
@@ -70,7 +90,7 @@ class OfflineSessionServiceStub:
 
 
 class OfflineSessionServiceServicer:
-    """Выдаёт единственный подписанный входной снимок V2-сессии. Минуты не подтверждает.
+    """Управляет границей входа V2 и завершением локальной сессии. Минуты не подтверждает.
     """
 
     def Login(self, request, context):
@@ -80,6 +100,30 @@ class OfflineSessionServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Register(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumePortal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StopSession(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RedeemGuestAccess(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StopGuestAccess(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -122,6 +166,26 @@ def add_OfflineSessionServiceServicer_to_server(servicer, server):
                     request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.RegisterOfflineSessionRequest.FromString,
                     response_serializer=gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedOfflineSessionSnapshot.SerializeToString,
             ),
+            'ResumePortal': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumePortal,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalRequest.FromString,
+                    response_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalResponse.SerializeToString,
+            ),
+            'StopSession': grpc.unary_unary_rpc_method_handler(
+                    servicer.StopSession,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.StopOfflineSessionRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'RedeemGuestAccess': grpc.unary_unary_rpc_method_handler(
+                    servicer.RedeemGuestAccess,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.RedeemGuestAccessRequest.FromString,
+                    response_serializer=gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedGuestSessionAccess.SerializeToString,
+            ),
+            'StopGuestAccess': grpc.unary_unary_rpc_method_handler(
+                    servicer.StopGuestAccess,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.StopGuestAccessRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
             'ChangePassword': grpc.unary_unary_rpc_method_handler(
                     servicer.ChangePassword,
                     request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.ChangeOfflinePasswordRequest.FromString,
@@ -151,7 +215,7 @@ def add_OfflineSessionServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class OfflineSessionService:
-    """Выдаёт единственный подписанный входной снимок V2-сессии. Минуты не подтверждает.
+    """Управляет границей входа V2 и завершением локальной сессии. Минуты не подтверждает.
     """
 
     @staticmethod
@@ -198,6 +262,114 @@ class OfflineSessionService:
             '/gameclub.events.v2.OfflineSessionService/Register',
             gameclub_dot_v2_dot_offline__session__service__pb2.RegisterOfflineSessionRequest.SerializeToString,
             gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedOfflineSessionSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumePortal(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/ResumePortal',
+            gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalRequest.SerializeToString,
+            gameclub_dot_v2_dot_offline__session__service__pb2.ResumeOfflinePortalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StopSession(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/StopSession',
+            gameclub_dot_v2_dot_offline__session__service__pb2.StopOfflineSessionRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RedeemGuestAccess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/RedeemGuestAccess',
+            gameclub_dot_v2_dot_offline__session__service__pb2.RedeemGuestAccessRequest.SerializeToString,
+            gameclub_dot_v2_dot_offline__session__snapshot__pb2.SignedGuestSessionAccess.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StopGuestAccess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/StopGuestAccess',
+            gameclub_dot_v2_dot_offline__session__service__pb2.StopGuestAccessRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,

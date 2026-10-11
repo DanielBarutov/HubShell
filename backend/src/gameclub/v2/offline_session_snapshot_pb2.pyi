@@ -110,3 +110,43 @@ class SignedOfflineSessionSnapshot(_message.Message):
     portal_access_token: str
     portal_access_expires_in: int
     def __init__(self, payload: _Optional[_Union[OfflineSessionSnapshotPayload, _Mapping]] = ..., signing_key_id: _Optional[str] = ..., signature: _Optional[bytes] = ..., password_reset_required: _Optional[bool] = ..., password_reset_token: _Optional[str] = ..., portal_access_token: _Optional[str] = ..., portal_access_expires_in: _Optional[int] = ...) -> None: ...
+
+class GuestSessionAccessPayload(_message.Message):
+    __slots__ = ("grant_id", "schema_version", "issued_at", "expires_at", "payment_id", "session_id", "device_id", "workstation_zone_id", "guest_name", "tariff_id", "tariff_name", "duration_minutes", "tariff_quantity")
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_AT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    WORKSTATION_ZONE_ID_FIELD_NUMBER: _ClassVar[int]
+    GUEST_NAME_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_NAME_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    grant_id: str
+    schema_version: int
+    issued_at: _timestamp_pb2.Timestamp
+    expires_at: _timestamp_pb2.Timestamp
+    payment_id: str
+    session_id: str
+    device_id: str
+    workstation_zone_id: str
+    guest_name: str
+    tariff_id: str
+    tariff_name: str
+    duration_minutes: int
+    tariff_quantity: int
+    def __init__(self, grant_id: _Optional[str] = ..., schema_version: _Optional[int] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., payment_id: _Optional[str] = ..., session_id: _Optional[str] = ..., device_id: _Optional[str] = ..., workstation_zone_id: _Optional[str] = ..., guest_name: _Optional[str] = ..., tariff_id: _Optional[str] = ..., tariff_name: _Optional[str] = ..., duration_minutes: _Optional[int] = ..., tariff_quantity: _Optional[int] = ...) -> None: ...
+
+class SignedGuestSessionAccess(_message.Message):
+    __slots__ = ("payload", "signing_key_id", "signature")
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    SIGNING_KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    payload: GuestSessionAccessPayload
+    signing_key_id: str
+    signature: bytes
+    def __init__(self, payload: _Optional[_Union[GuestSessionAccessPayload, _Mapping]] = ..., signing_key_id: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...

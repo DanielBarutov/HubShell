@@ -16,6 +16,7 @@ from gameclub_backend.modules.analytics.finance import (
     MetricComparison,
     MetricResult,
     PeriodComparison,
+    aggregate_daily_finance_facts,
     aggregate_finance_facts,
     aggregate_payment_methods,
     build_period_comparison,
@@ -32,7 +33,7 @@ class FinanceAnalyticsService:
         filters: FinanceFilters,
         now: datetime.datetime | None = None,
     ) -> FinanceReport:
-        snapshot = await self._repository.snapshot()
+        snapshot = await self._repository.snapshot(filters)
         observed_at = now or datetime.datetime.now(datetime.UTC)
         comparison_period = build_period_comparison(filters, observed_at)
         previous_filters = dataclasses.replace(
@@ -91,6 +92,11 @@ class FinanceAnalyticsService:
             metrics=metrics,
             sources=sources,
             payment_methods=aggregate_payment_methods(
+                snapshot.financial_facts,
+                snapshot.wallet_facts,
+                filters,
+            ),
+            daily=aggregate_daily_finance_facts(
                 snapshot.financial_facts,
                 snapshot.wallet_facts,
                 filters,

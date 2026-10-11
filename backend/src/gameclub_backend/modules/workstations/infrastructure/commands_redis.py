@@ -23,8 +23,8 @@ class RedisCommandNotifier:
         try:
             await client.publish(self._channel(device_id), "ready")
         except Exception:
-            # PostgreSQL remains the source of truth. A Redis outage only turns
-            # this into the bounded polling fallback in WorkstationCommandService.
+            # Источником истины остаётся PostgreSQL. При сбое Redis сервис переходит
+            # на ограниченный polling fallback в WorkstationCommandService.
             return
 
     async def wait(self, device_id: str, timeout_seconds: float = 15.0) -> None:

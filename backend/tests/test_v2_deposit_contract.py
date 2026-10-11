@@ -29,6 +29,7 @@ def create_command(**changes: object) -> V2DepositCreditCommand:
 
 
 def test_deposit_request_hash_is_stable_and_changes_with_semantic_request() -> None:
+    """Проверяет заявленное поведение backend."""
     command = create_command()
 
     assert command.currency == "RUB"
@@ -37,11 +38,13 @@ def test_deposit_request_hash_is_stable_and_changes_with_semantic_request() -> N
 
 
 def test_cash_deposit_requires_cash_shift() -> None:
+    """Проверяет заявленное поведение backend."""
     with pytest.raises(ValueError, match="cash shift"):
         create_command(payment_parts=(PaymentPart("cash", 500),))
 
 
 def test_client_credit_event_contains_only_delta_and_no_payment_reference() -> None:
+    """Проверяет заявленное поведение backend."""
     command = create_command()
     occurred_at = datetime.datetime(2026, 9, 27, tzinfo=datetime.UTC)
 
@@ -60,6 +63,7 @@ def test_client_credit_event_contains_only_delta_and_no_payment_reference() -> N
 
 
 def test_deposit_creates_separate_client_and_confirmed_domain_events() -> None:
+    """Проверяет заявленное поведение backend."""
     command = create_command()
     occurred_at = datetime.datetime(2026, 9, 27, tzinfo=datetime.UTC)
 

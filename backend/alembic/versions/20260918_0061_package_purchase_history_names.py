@@ -23,5 +23,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The prior technical text cannot be reconstructed safely after renaming a tariff.
+    # Старый технический текст нельзя безопасно восстановить после переименования тарифа.
     pass

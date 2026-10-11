@@ -1,8 +1,8 @@
 namespace GameClub.Client.Domain;
 
 /// <summary>
-/// Projects a server-authoritative remaining-minute value between snapshots.
-/// It never performs billing and only controls presentation.
+/// Показывает серверный прогноз до остановки сессии между snapshot-ами.
+/// Расчёт не списывает деньги и не меняет порядок пакетов на сервере.
 /// </summary>
 public sealed class SessionTimeProjection
 {
@@ -23,7 +23,7 @@ public sealed class SessionTimeProjection
 
     public void Apply(SessionSnapshot snapshot, DateTimeOffset receivedAt)
     {
-        var input = ProjectionInput.From(snapshot);
+        var input = ProjectionInput.From(snapshot, receivedAt);
         if (input is null)
         {
             Reset();
@@ -32,19 +32,13 @@ public sealed class SessionTimeProjection
 
         var sourceChanged = !_initialized
             || !string.Equals(_sourceKey, input.SourceKey, StringComparison.Ordinal);
-        var balanceIncreased = input.SourceKey == "per-minute-balance"
-            && input.BalanceCents is not null
+        var balanceIncreased = input.BalanceCents is not null
             && _anchorBalanceCents is not null
             && input.BalanceCents > _anchorBalanceCents;
         var current = GetRemainingMinutes(receivedAt);
 
         if (!sourceChanged && !balanceIncreased && current is not null)
         {
-            // Сервер отвечает каждые несколько секунд, а списанные минуты хранит
-            // целыми. Если заново закреплять одинаковый снимок, локальный отсчёт
-            // будет начинаться сначала после каждого ответа и зависнет. Меньший
-            // серверный остаток обязателен, равный или запоздалый больший не
-            // возвращает пользователю уже ушедшее время.
             if (input.RemainingMinutes < current.Value)
             {
                 _anchorMinutes = Math.Max(0, input.RemainingMinutes);
@@ -75,44 +69,116 @@ public sealed class SessionTimeProjection
         return Math.Max(0, _anchorMinutes - elapsedMinutes);
     }
 
-    private sealed record ProjectionInput(
-        string SourceKey,
-        int RemainingMinutes,
-        long? BalanceCents)
+    private sealed record ProjectionInput(string SourceKey, int RemainingMinutes, long? BalanceCents)
     {
-        public static ProjectionInput? From(SessionSnapshot snapshot)
+        public static ProjectionInput? From(SessionSnapshot snapshot, DateTimeOffset now)
         {
-            if (snapshot.LoginGrantRemainingMinutes > 0)
+            var packages = new[] { snapshot.ActivePackage }
+                .Concat(snapshot.PackageQueue ?? Array.Empty<SessionPackageSnapshot>())
+                .Where(item => item is not null && item.RemainingMinutes > 0)
+                .Select(item => item!)
+                .ToArray();
+            if (snapshot.LoginGrantRemainingMinutes <= 0 && packages.Length == 0
+                && snapshot.BalanceRemainingMinutes is not > 0)
             {
-                return new("login-grant", snapshot.LoginGrantRemainingMinutes, snapshot.BalanceCents);
+                return null;
             }
 
-            if (snapshot.ActivePackage is not null)
-            {
-                return new(
-                    $"package:{snapshot.ActivePackage.Id}",
-                    snapshot.ActivePackage.RemainingMinutes,
-                    snapshot.BalanceCents);
-            }
+            var queueKey = string.Join(',', packages.Select(item => $"{item.Id}:{item.Status}"));
+            return new(
+                $"{snapshot.Id}:{queueKey}:{snapshot.LoginGrantRemainingMinutes}",
+                Calculate(snapshot.LoginGrantRemainingMinutes, packages, snapshot.BalanceRemainingMinutes, now),
+                snapshot.BalanceCents);
+        }
 
-            if (snapshot.ActiveTariff is not null
-                && snapshot.ActiveTariff.BillingMode == "block")
+        private static int Calculate(
+            int grantMinutes,
+            IReadOnlyList<SessionPackageSnapshot> packages,
+            long? balanceMinutes,
+            DateTimeOffset now)
+        {
+            var grant = Math.Max(0, grantMinutes);
+            if (grant > 0)
             {
-                return new(
-                    $"tariff:{snapshot.ActiveTariff.Id}",
-                    snapshot.ActiveTariff.RemainingMinutes,
-                    snapshot.BalanceCents);
+                return grant;
             }
+            var balance = checked((int)Math.Clamp(balanceMinutes ?? 0, 0, int.MaxValue));
+            var pending = packages.Select(item => item with { }).ToList();
+            var active = pending.FirstOrDefault(item => item.Status.Equals("active", StringComparison.OrdinalIgnoreCase));
+            var minutes = 0;
 
-            if (snapshot.BalanceRemainingMinutes is not null)
+            while (grant > 0 || active is not null || pending.Count > 0 || balance > 0)
             {
-                return new(
-                    "per-minute-balance",
-                    checked((int)Math.Max(0, snapshot.BalanceRemainingMinutes.Value)),
-                    snapshot.BalanceCents);
+                var at = now.AddMinutes(minutes);
+                if (grant > 0)
+                {
+                    grant--;
+                }
+                else if (active is not null)
+                {
+                    if (!CanUse(active, at))
+                    {
+                        break;
+                    }
+                    active = Consume(active, pending);
+                }
+                else
+                {
+                    active = pending.FirstOrDefault(item => CanUse(item, at));
+                    if (active is not null)
+                    {
+                        active = Consume(active, pending);
+                    }
+                    else if (balance > 0)
+                    {
+                        balance--;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                minutes++;
             }
+            return minutes;
+        }
 
-            return null;
+        private static SessionPackageSnapshot? Consume(
+            SessionPackageSnapshot package,
+            ICollection<SessionPackageSnapshot> pending)
+        {
+            pending.Remove(package);
+            if (package.RemainingMinutes == 1)
+            {
+                return null;
+            }
+            var next = package with { RemainingMinutes = package.RemainingMinutes - 1, Status = "active" };
+            pending.Add(next);
+            return next;
+        }
+
+        private static bool CanUse(SessionPackageSnapshot package, DateTimeOffset at)
+        {
+            if (package.UsageWindowStartMinute == 0 && package.UsageWindowEndMinute == 0)
+            {
+                return true;
+            }
+            if (string.IsNullOrWhiteSpace(package.WindowTimezone))
+            {
+                return false;
+            }
+            try
+            {
+                var local = TimeZoneInfo.ConvertTime(at, TimeZoneInfo.FindSystemTimeZoneById(package.WindowTimezone));
+                var minute = local.Hour * 60 + local.Minute;
+                return package.UsageWindowStartMinute < package.UsageWindowEndMinute
+                    ? minute >= package.UsageWindowStartMinute && minute < package.UsageWindowEndMinute
+                    : minute >= package.UsageWindowStartMinute || minute < package.UsageWindowEndMinute;
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return false;
+            }
         }
     }
 }

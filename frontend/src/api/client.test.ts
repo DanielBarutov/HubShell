@@ -97,7 +97,7 @@ describe("GameClubApi", () => {
 
     expect(result.api_version).toBe("v2");
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "http://backend/api/v2/analytics/finance?start_at=2026-09-20T21%3A00%3A00.000Z&end_at=2026-09-21T21%3A00%3A00.000Z&zone_key=vip&payment_method_key=cash",
+      "http://backend/api/analytics/finance?start_at=2026-09-20T21%3A00%3A00.000Z&end_at=2026-09-21T21%3A00%3A00.000Z&zone_key=vip&payment_method_key=cash",
     );
   });
 
@@ -106,22 +106,22 @@ describe("GameClubApi", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       id: "command-1",
       workstation_id: "pc-1",
-      command_type: "v2.display.lock",
+      command_type: "display.lock",
       status: "queued",
       expires_at: "2026-09-28T12:00:00Z",
     }, 202));
 
-    await new GameClubApi("http://backend/api/v1").dispatchV2DeviceCommand(
+    await new GameClubApi("http://backend/api/v1").dispatchDeviceCommand(
       "pc-1",
-      "v2.display.lock",
+      "display.lock",
       "v2-command-key",
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://backend/api/v2/workstations/pc-1/device-commands",
+      "http://backend/api/workstations/pc-1/device-commands",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ command_type: "v2.display.lock", payload: {} }),
+        body: JSON.stringify({ command_type: "display.lock", payload: {} }),
       }),
     );
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Idempotency-Key")).toBe(

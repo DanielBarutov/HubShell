@@ -31,7 +31,7 @@ class AnalyticsRepository(typing.Protocol):
 
 
 class FinanceAnalyticsRepository(typing.Protocol):
-    async def snapshot(self, filters: FinanceFilters | None = None) -> FinanceFactsSnapshot:
+    async def snapshot(self, filters: FinanceFilters) -> FinanceFactsSnapshot:
         """Return analytics-owned immutable facts or None for unavailable sources."""
         ...
 

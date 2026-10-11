@@ -3,7 +3,6 @@ export type BackendWorkstation = {
   device_id: string;
   mac_address: string | null;
   installation_bound: boolean;
-  session_mode: "v1_server_owned" | "v2_local_ledger";
   name: string;
   group_id: string | null;
   position: number | null;
@@ -145,6 +144,13 @@ export type BackendGuestSessionPayment = {
   settlement_error: string | null;
 };
 
+export type BackendGuestV2Access = {
+  payment_id: string;
+  grant_id: string;
+  status: "pending" | "redeemed";
+  expires_at: string;
+};
+
 export type BackendAuditEvent = {
   id: string;
   actor_id: string | null;
@@ -169,10 +175,10 @@ export type BackendCommand = {
   acknowledgement_message: string | null;
 };
 
-export type BackendV2DeviceCommand = {
+export type BackendDeviceCommand = {
   id: string;
   workstation_id: string;
-  command_type: "v2.display.lock" | "v2.system.restart";
+  command_type: "display.lock" | "system.restart";
   status: "queued" | "acknowledged" | "failed" | "expired";
   expires_at: string;
 };
@@ -347,7 +353,7 @@ export type BackendAnalyticsComparison = {
   is_partial: boolean;
 };
 
-/** Generic additive read shape; the concrete finance response is typed below. */
+/** Общая расширяемая форма чтения; ниже описан конкретный финансовый ответ. */
 export type BackendAnalyticsReadQueryV2 = {
   start_at: string;
   end_at: string;
@@ -363,7 +369,7 @@ export type BackendAnalyticsReadMetric<T> = {
   coverage?: number;
 };
 
-/** Generic additive DTO shape for future read families; finance uses the concrete DTO below. */
+/** Общая расширяемая форма DTO; финансовый раздел использует тип ниже. */
 export type BackendAnalyticsReadV2 = {
   version: "v2";
   start_at: string;
@@ -440,6 +446,12 @@ export type BackendAnalyticsPaymentMethodAggregate = {
   refunds_cents: number;
 };
 
+export type BackendAnalyticsFinanceDailyBucket = {
+  key: string;
+  label: string;
+  recognized_revenue_cents: number;
+};
+
 export type BackendAnalyticsFinanceResponse = {
   api_version: "v2";
   period: BackendAnalyticsFinanceFilters;
@@ -448,6 +460,7 @@ export type BackendAnalyticsFinanceResponse = {
   metrics: Record<string, BackendAnalyticsFinanceMetric>;
   sources: Record<string, { state: BackendAnalyticsDataState }>;
   payment_methods: BackendAnalyticsPaymentMethodAggregate[];
+  daily: BackendAnalyticsFinanceDailyBucket[];
 };
 
 export type BackendAnalyticsV2Filter = {

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import time
 import typing
 
@@ -26,6 +25,7 @@ from prometheus_client import CollectorRegistry, start_http_server
 
 from gameclub_backend.config import Settings, get_settings
 from gameclub_backend.infrastructure.resources import InfrastructureResources, create_resources
+from gameclub_backend.logging_setup import configure_stdout_logger
 from gameclub_backend.modules.eventing_v2.application.outbox import V2ServerOutboxService
 from gameclub_backend.modules.eventing_v2.infrastructure.faststream import (
     FastStreamV2EventPublisher,
@@ -35,8 +35,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
     PostgresV2ServerOutboxRepository,
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = configure_stdout_logger(__name__)
 POLL_INTERVAL_SECONDS = 0.5
 SERVICE_NAME = "gameclub-v2-server-outbox"
 
@@ -214,5 +213,5 @@ async def stop_server_outbox_delivery() -> None:
 
 
 if typing.TYPE_CHECKING:
-    # FastStream CLI discovers the module-level `app` above.
+    # FastStream CLI находит расположенный выше объект `app` на уровне модуля.
     assert app is not None

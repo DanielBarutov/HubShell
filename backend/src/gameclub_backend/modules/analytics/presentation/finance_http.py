@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from gameclub_backend.modules.analytics.application.finance import FinanceAnalyticsService
 from gameclub_backend.modules.analytics.finance import (
     AnalyticsDataState,
+    FinanceDailyBucket,
     FinanceFilters,
     FinanceFlow,
     FinanceReport,
@@ -98,6 +99,16 @@ class PaymentMethodAggregateResponse(BaseModel):
     refunds_cents: int
 
 
+class FinanceDailyBucketResponse(BaseModel):
+    key: str
+    label: str
+    recognized_revenue_cents: int
+
+    @classmethod
+    def from_domain(cls, item: FinanceDailyBucket) -> FinanceDailyBucketResponse:
+        return cls.model_validate(item, from_attributes=True)
+
+
 class PeriodComparisonResponse(BaseModel):
     current_start_at: datetime.datetime
     current_end_at: datetime.datetime
@@ -118,6 +129,7 @@ class FinanceResponse(BaseModel):
     metrics: dict[str, FinanceMetricResponse]
     sources: dict[str, FinanceSourceResponse]
     payment_methods: list[PaymentMethodAggregateResponse]
+    daily: list[FinanceDailyBucketResponse]
 
     @classmethod
     def from_domain(cls, item: FinanceReport) -> FinanceResponse:
@@ -136,11 +148,12 @@ class FinanceResponse(BaseModel):
                 PaymentMethodAggregateResponse.model_validate(value, from_attributes=True)
                 for value in item.payment_methods
             ],
+            daily=[FinanceDailyBucketResponse.from_domain(value) for value in item.daily],
         )
 
 
 def create_v2_router(service: FinanceAnalyticsService) -> APIRouter:
-    router = APIRouter(prefix="/api/v2/analytics", tags=["analytics-v2"])
+    router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
     @router.get("/finance", response_model=FinanceResponse)
     async def finance(
