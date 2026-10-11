@@ -52,12 +52,13 @@ def make_event(
     *,
     operation_id: uuid.UUID | None = None,
     sequence: int = 1,
+    event_type: V2EventType = V2EventType.PER_MINUTE_DEBIT,
     payload: dict[str, object] | None = None,
     previous_hash: str | None = None,
 ) -> V2Event:
     return V2Event.create(
         operation_id=operation_id or uuid.uuid4(),
-        event_type=V2EventType.PER_MINUTE_DEBIT,
+        event_type=event_type,
         producer_id="workstation:vip-01",
         client_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         session_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
@@ -69,10 +70,14 @@ def make_event(
     )
 
 
-def make_outgoing(event: V2Event | None = None) -> V2OutgoingServerEvent:
+def make_outgoing(
+    event: V2Event | None = None,
+    *,
+    topic: str = "v2.server-events",
+) -> V2OutgoingServerEvent:
     return V2OutgoingServerEvent(
         event=event or make_event(),
-        topic="v2.server-events",
+        topic=topic,
         partition_key="client-session:00000000-0000-0000-0000-000000000002",
         created_at=datetime.datetime(2026, 9, 27, 12, tzinfo=datetime.UTC),
     )
@@ -111,6 +116,7 @@ def test_v2_event_rejects_tampered_payload_hash() -> None:
 
 
 def test_v2_session_chain_accepts_contiguous_events_with_matching_hash() -> None:
+    """Проверяет заявленное поведение backend."""
     first = make_event()
     second = make_event(sequence=2, previous_hash=first.payload_hash)
 
@@ -124,6 +130,7 @@ def test_v2_session_chain_accepts_contiguous_events_with_matching_hash() -> None
 
 
 def test_v2_session_chain_rejects_gap_and_previous_hash_conflict() -> None:
+    """Проверяет заявленное поведение backend."""
     first = make_event()
     chain = V2SessionChain.from_first_event(first)
 
@@ -206,6 +213,7 @@ async def test_v2_event_is_processed_once_for_each_logical_consumer() -> None:
 
 @pytest.mark.asyncio
 async def test_v2_session_chain_service_persists_only_contiguous_facts() -> None:
+    """Проверяет заявленное поведение backend."""
     service = V2SessionChainService(InMemoryV2SessionChainRepository())
     first = make_event()
     second = make_event(sequence=2, previous_hash=first.payload_hash)
@@ -243,7 +251,14 @@ async def test_v2_server_event_ack_is_device_scoped_and_idempotent() -> None:
     """Клиентский ack завершает доставку только для адресованного устройства."""
     repository = InMemoryV2ServerOutboxRepository()
     outbox = V2ServerOutboxService(repository)
-    outgoing = await outbox.enqueue(make_outgoing())
+    outgoing = await outbox.enqueue(
+        make_outgoing(
+            make_event(
+                event_type=V2EventType.BALANCE_CREDIT_APPLIED,
+                payload={"amount_delta_cents": 200, "currency": "RUB"},
+            )
+        )
+    )
     published = await outbox.mark_published(
         outgoing,
         datetime.datetime(2026, 9, 27, 12, 1, tzinfo=datetime.UTC),
@@ -258,6 +273,37 @@ async def test_v2_server_event_ack_is_device_scoped_and_idempotent() -> None:
     assert acknowledged.status is V2OutgoingEventStatus.ACKNOWLEDGED
     assert repeated == acknowledged
     assert await outbox.published_for_device(published.event.device_id) == ()
+
+
+@pytest.mark.asyncio
+async def test_v2_server_event_poll_returns_only_client_balance_credits() -> None:
+    """Скрывает из client poll внутренние reconciliation и analytics events."""
+    repository = InMemoryV2ServerOutboxRepository()
+    outbox = V2ServerOutboxService(repository)
+    outgoing_events = (
+        make_outgoing(
+            make_event(event_type=V2EventType.BALANCE_CREDIT_APPLIED),
+        ),
+        make_outgoing(
+            make_event(event_type=V2EventType.RECONCILIATION_COMPLETED),
+        ),
+        make_outgoing(
+            make_event(event_type=V2EventType.BALANCE_CREDIT_APPLIED),
+            topic="v2.confirmed-domain-events",
+        ),
+    )
+    for event in outgoing_events:
+        pending = await outbox.enqueue(event)
+        await outbox.mark_published(
+            pending,
+            datetime.datetime(2026, 9, 27, 12, 1, tzinfo=datetime.UTC),
+        )
+
+    published = await outbox.published_for_device("vip-01-device")
+
+    assert len(published) == 1
+    assert published[0].event.event_type is V2EventType.BALANCE_CREDIT_APPLIED
+    assert published[0].topic == "v2.server-events"
 
 
 @pytest.mark.asyncio
@@ -344,6 +390,7 @@ async def test_client_facts_consumer_confirms_offset_only_after_transaction_or_d
 
 
 def test_v2_transport_payload_keeps_immutable_event_envelope() -> None:
+    """Проверяет заявленное поведение backend."""
     event = make_event()
 
     assert event_to_transport_payload(event) == {
@@ -367,6 +414,7 @@ def test_v2_transport_payload_keeps_immutable_event_envelope() -> None:
 
 
 def test_v2_transport_payload_round_trip_validates_the_same_event() -> None:
+    """Проверяет заявленное поведение backend."""
     event = make_event()
 
     restored = V2Event.from_transport_payload(event_to_transport_payload(event))
@@ -375,6 +423,7 @@ def test_v2_transport_payload_round_trip_validates_the_same_event() -> None:
 
 
 def test_v2_transport_payload_rejects_missing_traceparent() -> None:
+    """Проверяет заявленное поведение backend."""
     message = event_to_transport_payload(make_event())
     message.pop("traceparent")
 
@@ -383,6 +432,7 @@ def test_v2_transport_payload_rejects_missing_traceparent() -> None:
 
 
 def test_v2_transport_payload_rejects_tampered_payload_hash() -> None:
+    """Проверяет заявленное поведение backend."""
     message = event_to_transport_payload(make_event())
     message["payload"] = {"amount_cents": 999, "tariff_id": "per-minute-test"}
 
@@ -391,6 +441,7 @@ def test_v2_transport_payload_rejects_tampered_payload_hash() -> None:
 
 
 def test_v2_protobuf_round_trip_keeps_the_same_event() -> None:
+    """Проверяет заявленное поведение backend."""
     event = make_event()
 
     restored = event_from_protobuf_bytes(event_to_protobuf(event).SerializeToString())
@@ -399,6 +450,7 @@ def test_v2_protobuf_round_trip_keeps_the_same_event() -> None:
 
 
 def test_v2_protobuf_rejects_tampered_payload_hash() -> None:
+    """Проверяет заявленное поведение backend."""
     message = event_to_protobuf(make_event())
     message.payload_json = '{"amount_cents":999,"tariff_id":"per-minute-test"}'
 
@@ -407,6 +459,7 @@ def test_v2_protobuf_rejects_tampered_payload_hash() -> None:
 
 
 def test_v2_snapshot_payload_has_cross_language_deterministic_bytes() -> None:
+    """Проверяет заявленное поведение backend."""
     payload = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload(
         snapshot_id="00000000-0000-0000-0000-000000000010",
         schema_version=1,
@@ -437,6 +490,7 @@ def test_v2_snapshot_payload_has_cross_language_deterministic_bytes() -> None:
 
 
 def test_v2_snapshot_signer_receives_only_deterministic_payload_bytes() -> None:
+    """Проверяет заявленное поведение backend."""
     payload = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload(
         snapshot_id="00000000-0000-0000-0000-000000000010",
         schema_version=1,
@@ -473,6 +527,7 @@ class _RecordingPublisher:
 
 @pytest.mark.asyncio
 async def test_faststream_outbox_publisher_marks_only_confirmed_event_published() -> None:
+    """Проверяет заявленное поведение backend."""
     repository = InMemoryV2ServerOutboxRepository()
     outbox = V2ServerOutboxService(repository)
     event = await outbox.enqueue(make_outgoing())
@@ -487,6 +542,7 @@ async def test_faststream_outbox_publisher_marks_only_confirmed_event_published(
 
 @pytest.mark.asyncio
 async def test_faststream_outbox_publisher_keeps_event_after_transport_error() -> None:
+    """Проверяет заявленное поведение backend."""
     repository = InMemoryV2ServerOutboxRepository()
     outbox = V2ServerOutboxService(repository)
     event = await outbox.enqueue(make_outgoing())
@@ -527,6 +583,7 @@ class _RecordingBroker:
 
 @pytest.mark.asyncio
 async def test_faststream_adapter_publishes_protobuf_envelope_and_trace_context() -> None:
+    """Проверяет заявленное поведение backend."""
     broker = _RecordingBroker()
     outgoing = make_outgoing()
 

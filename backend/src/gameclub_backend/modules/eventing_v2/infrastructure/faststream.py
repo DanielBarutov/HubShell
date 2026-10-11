@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import typing
 
 from faststream.kafka import KafkaBroker
 
+from gameclub_backend.logging_setup import configure_stdout_logger
 from gameclub_backend.modules.eventing_v2.application.outbox import V2ServerOutboxService
 from gameclub_backend.modules.eventing_v2.application.reconciliation import (
     V2ClientFactResult,
@@ -22,8 +22,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.protobuf import (
     event_to_protobuf,
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = configure_stdout_logger(__name__)
 
 
 class V2EventPublisher(typing.Protocol):

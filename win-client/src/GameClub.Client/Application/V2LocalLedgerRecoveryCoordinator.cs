@@ -17,6 +17,13 @@ public sealed class V2LocalLedgerRecoveryCoordinator
         string deviceId,
         CancellationToken cancellationToken = default)
     {
+        var resolvedIssues = await _ledger.ResolveNonClientServerEventIssuesAsync(cancellationToken);
+        if (resolvedIssues > 0)
+        {
+            ClientLog.Info(
+                "v2.recovery",
+                $"resolved_non_client_server_event_issues={resolvedIssues}");
+        }
         var snapshot = await _ledger.ReadSnapshotAsync(cancellationToken);
         if (snapshot is null)
         {

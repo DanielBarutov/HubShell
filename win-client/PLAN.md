@@ -30,7 +30,7 @@ access-gate. После авторизации не заменяет Windows she
 Windows Desktop и показывает компактный borderless-виджет сессии, который можно
 скрыть в трей. Manager maintenance остаётся отдельным режимом.
 
-Avalonia-host является Linux-first developer host: обычная разработка должна
+Avalonia-host используется как Linux-first developer host: обычная разработка должна
 включать Linux restore/build/test и запуск окна здесь. Это не меняет целевой
 Windows-продукт и не делает Linux-версию kiosk-клиентом. Windows остаётся
 обязательной финальной проверкой publish, tray, DPAPI, window placement,
@@ -167,6 +167,10 @@ smoke прошёл, diagnostic окно запускалось в GUI-сеанс
     passwordless-вход только для сброшенного аккаунта, обязательная форма нового
     пароля с повтором в Avalonia implementation и блокировка действий портала до подтверждения.
     Native Windows publish/smoke остаётся отдельной проверкой на Windows.
+27. [x] Показывать единый прогноз остатка сессии: активный и queued пакетные
+    тарифы плюс доступные минуты поминутного баланса. Закрытый ночной пакет не
+    добавляется, а закрытие окна активного пакета завершает прогноз; это не
+    меняет server-owned списание.
 
 Декомпозиция оставшегося runtime: entitlement/meter и snapshot принадлежат
 планам [`30`](../plans/30-entitlements-meter/PLAN.md) и

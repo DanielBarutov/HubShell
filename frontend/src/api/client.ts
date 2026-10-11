@@ -10,9 +10,11 @@ import type {
   BackendV2Deposit,
   BackendEntitlement,
   BackendGuestSessionPayment,
+  BackendGuestV2Access,
+  BackendSession,
   BackendAuditEvent,
   BackendCommand,
-  BackendV2DeviceCommand,
+  BackendDeviceCommand,
   BackendTariff,
   BackendDiscountRule,
   BackendQuote,
@@ -31,20 +33,14 @@ import type {
   Reservation,
   ReservationWritePayload,
   ReservationAvailability,
-  BackendSession,
-  BackendSessionSnapshot,
   TokenResponse,
-  BackendSessionMeter,
   BackendTransferOffer,
   BackendTransferResult,
-  BackendSessionCharge,
   BackendRevenueSummary,
   BackendCashShift,
   BackendCashMovement,
   BackendCashApproval,
   BackendCashShiftSchedule,
-  StartSessionPayload,
-  BackendEntryDecision,
 } from "./types";
 
 export class ApiError extends Error {
@@ -61,8 +57,7 @@ export class ApiError extends Error {
 
 export class GameClubApi {
   private readonly baseUrl: string;
-  private readonly analyticsV2BaseUrl: string;
-  private readonly v2BaseUrl: string;
+  private readonly analyticsBaseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private refreshInFlight: Promise<boolean> | null = null;
@@ -71,8 +66,7 @@ export class GameClubApi {
 
   constructor(baseUrl = import.meta.env.VITE_API_URL ?? "/api/v1") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
-    this.analyticsV2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
-    this.v2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
+    this.analyticsBaseUrl = `${this.baseUrl.replace(/\/api\/v1$/, "")}/api`;
   }
 
   async login(username: string, password: string): Promise<void> {
@@ -108,7 +102,7 @@ export class GameClubApi {
     try {
       window.localStorage.removeItem(GameClubApi.refreshStorageKey);
     } catch {
-      // Storage can be disabled by browser privacy settings.
+      // Браузер может отключить хранилище настройками приватности.
     }
     if (notify) {
       for (const listener of this.sessionExpiredListeners) {
@@ -123,7 +117,7 @@ export class GameClubApi {
         window.localStorage.setItem(GameClubApi.refreshStorageKey, this.refreshToken);
       }
     } catch {
-      // The in-memory session still works when persistent storage is unavailable.
+      // Сессия в памяти продолжает работать, если постоянное хранилище недоступно.
     }
   }
 
@@ -215,18 +209,6 @@ export class GameClubApi {
     });
   }
 
-  async listSessions(activeOnly = false, workstationId?: string): Promise<BackendSession[]> {
-    const params = new URLSearchParams({ active_only: String(activeOnly) });
-    if (workstationId) {
-      params.set("workstation_id", workstationId);
-    }
-    return this.request<BackendSession[]>(`/sessions?${params}`);
-  }
-
-  async getSessionSnapshot(sessionId: string): Promise<BackendSessionSnapshot> {
-    return this.request<BackendSessionSnapshot>(`/sessions/${sessionId}/snapshot`);
-  }
-
   async createTransferOffer(
     sessionId: string,
     targetWorkstationId: string,
@@ -239,6 +221,18 @@ export class GameClubApi {
         session_id: sessionId,
         target_workstation_id: targetWorkstationId,
       }),
+    });
+  }
+
+  async interruptSession(
+    sessionId: string,
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<BackendSession> {
+    return this.request<BackendSession>(`/sessions/${sessionId}/interrupt`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ reason }),
     });
   }
 
@@ -255,59 +249,6 @@ export class GameClubApi {
 
   async getTransferRestartStatus(offerId: string): Promise<BackendCommand> {
     return this.request<BackendCommand>(`/session-transfers/offers/${offerId}/restart`);
-  }
-
-  async checkEntry(
-    workstationId: string,
-    clientId?: string,
-    guestId?: string,
-  ): Promise<BackendEntryDecision> {
-    const params = new URLSearchParams({ workstation_id: workstationId });
-    if (clientId) params.set("client_id", clientId);
-    if (guestId) params.set("guest_id", guestId);
-    return this.request<BackendEntryDecision>(`/reservations/entry-decision?${params}`);
-  }
-
-  async chargeSession(sessionId: string, idempotencyKey: string): Promise<BackendSessionCharge> {
-    return this.request<BackendSessionCharge>(`/billing/sessions/${sessionId}/charge`, {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-    });
-  }
-
-  async startSession(
-    payload: StartSessionPayload,
-    idempotencyKey: string,
-  ): Promise<BackendSession> {
-    return this.request<BackendSession>("/sessions", {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify(payload),
-    });
-  }
-
-  async stopSession(sessionId: string): Promise<BackendSession> {
-    return this.request<BackendSession>(`/sessions/${sessionId}/stop`, { method: "POST" });
-  }
-
-  async interruptSession(
-    sessionId: string,
-    reason: string,
-    idempotencyKey: string,
-  ): Promise<BackendSession> {
-    return this.request<BackendSession>(`/sessions/${sessionId}/interrupt`, {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async getSessionCharge(sessionId: string): Promise<BackendSessionCharge> {
-    return this.request<BackendSessionCharge>(`/billing/sessions/${sessionId}/charge`);
-  }
-
-  async getSessionMeter(sessionId: string): Promise<BackendSessionMeter> {
-    return this.request<BackendSessionMeter>(`/billing/sessions/${sessionId}/meter`);
   }
 
   async getRevenue(startAt: string, endAt: string): Promise<BackendRevenueSummary> {
@@ -397,12 +338,12 @@ export class GameClubApi {
     return this.request<BackendCommand>(`/workstations/${workstationId}/commands/${commandId}`);
   }
 
-  async dispatchV2DeviceCommand(
+  async dispatchDeviceCommand(
     workstationId: string,
-    commandType: BackendV2DeviceCommand["command_type"],
+    commandType: BackendDeviceCommand["command_type"],
     idempotencyKey: string,
-  ): Promise<BackendV2DeviceCommand> {
-    return this.request<BackendV2DeviceCommand>(
+  ): Promise<BackendDeviceCommand> {
+    return this.request<BackendDeviceCommand>(
       `/workstations/${workstationId}/device-commands`,
       {
         method: "POST",
@@ -410,7 +351,7 @@ export class GameClubApi {
         body: JSON.stringify({ command_type: commandType, payload: {} }),
       },
       true,
-      this.v2BaseUrl,
+      `${this.baseUrl.replace(/\/api\/v1$/, "")}/api`,
     );
   }
 
@@ -518,6 +459,7 @@ export class GameClubApi {
       currency: string;
       reason: string;
       payment_parts: BackendPaymentPart[];
+      cash_shift_id?: string;
     },
     idempotencyKey: string,
   ): Promise<BackendV2Deposit> {
@@ -576,6 +518,12 @@ export class GameClubApi {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
+    });
+  }
+
+  async prepareGuestSessionAccess(paymentId: string): Promise<BackendGuestV2Access> {
+    return this.request<BackendGuestV2Access>(`/guest-payments/${paymentId}/v2-access`, {
+      method: "POST",
     });
   }
 
@@ -729,7 +677,7 @@ export class GameClubApi {
       `/analytics/finance?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
@@ -753,7 +701,7 @@ export class GameClubApi {
       `/analytics/dashboard?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
@@ -777,7 +725,7 @@ export class GameClubApi {
       `/analytics/drill-down?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
@@ -1109,7 +1057,7 @@ export class GameClubApi {
           this.persistRefreshToken();
           return true;
         } catch {
-          // A temporary network/backend outage must not destroy a valid long-lived session.
+          // Временный сбой сети или backend не должен завершать действующую сессию.
           return false;
         }
       })().finally(() => {

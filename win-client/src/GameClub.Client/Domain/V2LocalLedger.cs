@@ -78,8 +78,12 @@ public sealed record V2LocalSessionLedger(
     IReadOnlyList<Guid> AppliedClientActionIds,
     IReadOnlyList<Guid> AppliedServerOperationIds,
     DateTimeOffset? ActivatedAtUtc,
-    DateTimeOffset? LastConsumedMinuteUtc)
+    DateTimeOffset? LastConsumedMinuteUtc,
+    string? GuestName = null,
+    Guid? GuestPaymentId = null)
 {
+    public bool IsGuest => GuestPaymentId is not null;
+
     public static V2LocalSessionLedger Create(
         int snapshotVersion,
         Guid clientId,
@@ -92,7 +96,9 @@ public sealed record V2LocalSessionLedger(
         IReadOnlyList<V2LocalPackage> packages,
         IReadOnlyList<V2LocalTariff> tariffs,
         Guid? snapshotId = null,
-        DateTimeOffset? activatedAtUtc = null)
+        DateTimeOffset? activatedAtUtc = null,
+        string? guestName = null,
+        Guid? guestPaymentId = null)
     {
         if (snapshotVersion < 1)
         {
@@ -143,7 +149,9 @@ public sealed record V2LocalSessionLedger(
             Array.Empty<Guid>(),
             Array.Empty<Guid>(),
             activatedAtUtc?.ToUniversalTime(),
-            null);
+            null,
+            guestName?.Trim(),
+            guestPaymentId);
     }
 
     public static bool IsZoneCompatible(string? tariffZoneId, string? workstationZoneId) =>
@@ -160,7 +168,13 @@ public sealed record V2LocalLedgerStorageSnapshot(
     V2LocalSessionLedger Ledger,
     IReadOnlyList<V2LocalFact> PendingOutbox,
     IReadOnlyList<V2ClientInboxEntry> ClientInbox,
-    IReadOnlyList<V2ServerEventIssue>? ServerEventIssues = null);
+    IReadOnlyList<V2ServerEventIssue>? ServerEventIssues = null,
+    V2PendingPortalPackagePurchase? PendingPortalPackagePurchase = null);
+
+public sealed record V2PendingPortalPackagePurchase(
+    Guid ActionId,
+    string IdempotencyKey,
+    string TariffId);
 
 public sealed record V2ClientInboxEntry(
     Guid EventId,
@@ -300,20 +314,16 @@ public static class V2LocalLedgerEngine
         V2LocalSessionLedger ledger,
         Guid actionId,
         string tariffId,
-        DateTimeOffset occurredAt)
+        DateTimeOffset occurredAt,
+        bool serverConfirmed = false)
     {
         if (IsDuplicate(ledger, actionId))
         {
             return new(ledger, Array.Empty<V2LocalFact>(), Locks(ledger), IsDuplicate: true);
         }
-        EnsureActive(ledger);
-        var tariff = ledger.Tariffs.SingleOrDefault(item => item.Id == tariffId)
-            ?? throw new InvalidOperationException("Package tariff is not present in the signed snapshot");
-        if (!tariff.IsPurchasable || tariff.PackageMinutes <= 0 || !V2LocalSessionLedger.IsZoneCompatible(tariff.ZoneId, ledger.ZoneId))
-        {
-            throw new InvalidOperationException("Package tariff is not available on this workstation");
-        }
-        if (ledger.BalanceCents - tariff.PackagePriceCents < -ledger.DebtLimitCents)
+        var tariff = RequirePurchasablePackageTariff(ledger, tariffId);
+        if (!serverConfirmed
+            && ledger.BalanceCents - tariff.PackagePriceCents < -ledger.DebtLimitCents)
         {
             throw new InvalidOperationException("Known balance is insufficient for package purchase");
         }
@@ -338,6 +348,33 @@ public static class V2LocalLedgerEngine
                 ("tariff_id", tariff.Id),
                 ("tariff_name", tariff.Name),
                 ("total_minutes", tariff.PackageMinutes)))]);
+    }
+
+    public static void ValidatePackagePurchase(
+        V2LocalSessionLedger ledger,
+        string tariffId)
+    {
+        var tariff = RequirePurchasablePackageTariff(ledger, tariffId);
+        if (ledger.BalanceCents - tariff.PackagePriceCents < -ledger.DebtLimitCents)
+        {
+            throw new InvalidOperationException("Known balance is insufficient for package purchase");
+        }
+    }
+
+    private static V2LocalTariff RequirePurchasablePackageTariff(
+        V2LocalSessionLedger ledger,
+        string tariffId)
+    {
+        EnsureActive(ledger);
+        var tariff = ledger.Tariffs.SingleOrDefault(item => item.Id == tariffId)
+            ?? throw new InvalidOperationException("Package tariff is not present in the signed snapshot");
+        if (!tariff.IsPurchasable
+            || tariff.PackageMinutes <= 0
+            || !V2LocalSessionLedger.IsZoneCompatible(tariff.ZoneId, ledger.ZoneId))
+        {
+            throw new InvalidOperationException("Package tariff is not available on this workstation");
+        }
+        return tariff;
     }
 
     public static V2LocalLedgerTransition StopEarly(
@@ -382,6 +419,28 @@ public static class V2LocalLedgerEngine
             lockWorkstation: true);
     }
 
+    public static V2LocalLedgerTransition ApplyServerStop(V2LocalSessionLedger ledger)
+    {
+        if (ledger.Status != V2LocalSessionStatus.Active)
+        {
+            return new(ledger, Array.Empty<V2LocalFact>(), Locks(ledger), IsDuplicate: true);
+        }
+
+        return new(
+            ledger with
+            {
+                Status = V2LocalSessionStatus.Stopped,
+                LoginGrantRemainingMinutes = 0,
+                Packages = ledger.Packages
+                    .Select(item => item.Status == V2LocalPackageStatus.Active
+                        ? item with { RemainingMinutes = 0, Status = V2LocalPackageStatus.Burned }
+                        : item)
+                    .ToArray(),
+            },
+            Array.Empty<V2LocalFact>(),
+            LockWorkstation: true);
+    }
+
     public static V2LocalLedgerTransition ApplyBalanceCredit(
         V2LocalSessionLedger ledger,
         Guid depositOperationId,
@@ -412,6 +471,16 @@ public static class V2LocalLedgerEngine
         IReadOnlyList<(string EventType, string Payload)> pendingFacts,
         bool lockWorkstation = false)
     {
+        if (ledger.IsGuest)
+        {
+            return new(
+                ledger with
+                {
+                    AppliedClientActionIds = ledger.AppliedClientActionIds.Append(actionId).ToArray(),
+                },
+                Array.Empty<V2LocalFact>(),
+                lockWorkstation);
+        }
         var nextSequence = ledger.NextSequence;
         var previousHash = ledger.PreviousPayloadHash;
         var facts = new List<V2LocalFact>(pendingFacts.Count);

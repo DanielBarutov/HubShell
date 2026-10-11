@@ -8,6 +8,52 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class ResumeOfflinePortalRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "client_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    client_id: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., client_id: _Optional[str] = ...) -> None: ...
+
+class ResumeOfflinePortalResponse(_message.Message):
+    __slots__ = ("client_id", "portal_access_token", "portal_access_expires_in")
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    PORTAL_ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    PORTAL_ACCESS_EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    client_id: str
+    portal_access_token: str
+    portal_access_expires_in: int
+    def __init__(self, client_id: _Optional[str] = ..., portal_access_token: _Optional[str] = ..., portal_access_expires_in: _Optional[int] = ...) -> None: ...
+
+class StopOfflineSessionRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "client_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    client_id: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., client_id: _Optional[str] = ...) -> None: ...
+
+class RedeemGuestAccessRequest(_message.Message):
+    __slots__ = ("device_id",)
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    def __init__(self, device_id: _Optional[str] = ...) -> None: ...
+
+class StopGuestAccessRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "payment_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    payment_id: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., payment_id: _Optional[str] = ...) -> None: ...
+
 class LoginOfflineSessionRequest(_message.Message):
     __slots__ = ("device_id", "identifier", "password", "idempotency_key")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]

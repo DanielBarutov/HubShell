@@ -96,6 +96,9 @@ class V2DepositCreditResult:
 
 
 class V2DepositCreditRepository(typing.Protocol):
+    async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
+        """Return whether a client currently requires V2-aware deposit delivery."""
+
     async def apply(
         self,
         command: V2DepositCreditCommand,
@@ -124,6 +127,9 @@ class V2DepositCreditService:
     ) -> None:
         self._repository = repository
         self._clock = clock or UtcClock()
+
+    async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
+        return await self._repository.has_active_lease_for_client(client_id)
 
     async def apply(self, command: V2DepositCreditCommand) -> V2DepositCreditResult:
         return await self._repository.apply(command, self._clock.now())

@@ -25,6 +25,7 @@ pytestmark = pytest.mark.api
 
 @pytest.mark.asyncio
 async def test_device_polls_own_server_event_and_acknowledges_it() -> None:
+    """Проверяет заявленное поведение backend."""
     service = V2ServerOutboxService(InMemoryV2ServerOutboxRepository())
     event = V2Event.create(
         operation_id=uuid.uuid4(),
@@ -66,13 +67,13 @@ async def test_device_polls_own_server_event_and_acknowledges_it() -> None:
 
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v2/events/server")
+        response = await client.get("/api/events/server")
         assert response.status_code == 200
         body = response.json()
         assert len(body["events"]) == 1
         event_id = body["events"][0]["event_id"]
 
-        acknowledged = await client.post(f"/api/v2/events/server/{event_id}/acknowledge")
+        acknowledged = await client.post(f"/api/events/server/{event_id}/acknowledge")
         assert acknowledged.status_code == 200
         assert acknowledged.json()["status"] == "acknowledged"
-        assert (await client.get("/api/v2/events/server")).json()["events"] == []
+        assert (await client.get("/api/events/server")).json()["events"] == []

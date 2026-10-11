@@ -385,8 +385,8 @@ class EntitlementService:
                 zone_id,
             )
         except ValueError as error:
-            # Another meter/portal request can activate the same client's
-            # package first. Its active result is the correct state here.
+            # Другой запрос meter или кабинета мог первым активировать пакет
+            # клиента. В таком случае нужно вернуть уже активное состояние.
             active = await self._repository.get_active_for_client(client_id)
             if active is not None:
                 return active

@@ -15,6 +15,7 @@ from gameclub_backend.modules.sessions.application.ports import (
     SessionTransferRepository,
     WorkstationLookup,
 )
+from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.domain import (
     Session,
     SessionTransferOffer,
@@ -304,15 +305,20 @@ class SessionTransferService:
                 )
             if self._commands is not None:
                 try:
+                    restart_command = (
+                        "system.restart"
+                        if saved_session.source in SessionService.LOCAL_SOURCES
+                        else "system.restart"
+                    )
                     await self._commands.dispatch(
                         offer.source_workstation_id,
-                        "system.restart",
+                        restart_command,
                         '{"reason":"session_transfer"}',
                         f"transfer-restart:{offer.id}",
                     )
                 except ApplicationError:
-                    # Transfer ownership is committed; the old device can retry
-                    # the duplicate-safe restart command independently.
+                    # Владелец переноса сохранён. Старое устройство может отдельно
+                    # повторить безопасную при повторе команду restart.
                     pass
             return confirmed, saved_session
 

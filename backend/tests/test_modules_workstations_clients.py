@@ -76,43 +76,17 @@ async def test_workstation_lifecycle_and_duplicate_device_are_guarded() -> None:
     assert error.value.code is ErrorCode.CONFLICT
 
 
-async def test_workstation_session_mode_defaults_to_v1_and_can_be_explicitly_switched() -> None:
+async def test_workstation_registration_defaults_to_local_ledger() -> None:
+    """Проверяет, что новый ПК получает канонический локальный журнал."""
     repository = InMemoryWorkstationRepository()
     service = WorkstationService(repository)
 
-    workstation = await service.register("mode-device", "Mode PC")
-    updated = await service.update(
-        workstation.id,
+    workstation = await service.register(
+        "mode-device",
         "Mode PC",
-        None,
-        None,
-        session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
+        session_mode=WorkstationSessionMode.LOCAL_LEDGER,
     )
-
-    assert workstation.session_mode is WorkstationSessionMode.V1_SERVER_OWNED
-    assert updated.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
-
-
-async def test_workstation_session_mode_cannot_change_during_an_active_session() -> None:
-    class ActiveSessions:
-        async def get_active_for_workstation(self, workstation_id):
-            del workstation_id
-            return object()
-
-    repository = InMemoryWorkstationRepository()
-    service = WorkstationService(repository, active_sessions=ActiveSessions())
-    workstation = await service.register("mode-lock-device", "Mode lock PC")
-
-    with pytest.raises(ApplicationError) as error:
-        await service.update(
-            workstation.id,
-            "Mode lock PC",
-            None,
-            None,
-            session_mode=WorkstationSessionMode.V2_LOCAL_LEDGER,
-        )
-
-    assert error.value.code is ErrorCode.CONFLICT
+    assert workstation.session_mode is WorkstationSessionMode.LOCAL_LEDGER
 
 
 async def test_legacy_group_can_be_repositioned_without_saved_group_configuration() -> None:
@@ -307,6 +281,7 @@ async def test_guest_tariff_requires_confirmed_direct_payment_before_session_sta
         "guest-payment-device",
         "Guest payment PC",
         group_id="main",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
@@ -375,6 +350,7 @@ async def test_guest_tariff_is_rejected_on_workstation_with_registered_session()
         "guest-busy-device",
         "Busy guest PC",
         group_id="main",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     clients = InMemoryClientRepository()
     client = await ClientService(clients).create("RegisteredFox")
@@ -538,6 +514,7 @@ async def test_guest_profile_search_and_booking_session_links() -> None:
     workstation = await WorkstationService(workstation_repository).register(
         "guest-device",
         "Guest PC",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     reservation = await ReservationService(
         InMemoryReservationRepository(),
@@ -624,8 +601,12 @@ async def test_guest_mode_management_and_catalog_categories() -> None:
     await workstation_service.archive(workstation.id)
     assert await workstation_service.list() == []
 
-    # A separate workstation is needed because the archived one must not start a session.
-    session_workstation = await workstation_service.register("device-management-02", "PC 02")
+    # Нужен отдельный ПК: архивное рабочее место не должно запускать сессию.
+    session_workstation = await workstation_service.register(
+        "device-management-02",
+        "PC 02",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
+    )
     session = await SessionService(
         InMemorySessionRepository(),
         workstations=workstation_repository,

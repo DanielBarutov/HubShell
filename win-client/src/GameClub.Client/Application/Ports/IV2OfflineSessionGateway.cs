@@ -3,8 +3,8 @@ using GameClub.Client.Domain;
 namespace GameClub.Client.Application.Ports;
 
 /// <summary>
-/// Получает единственный подписанный снимок входа V2. Реализация не создаёт
-/// V1 portal-сессию и не запрашивает серверный timer.
+/// Транспорт V2 входа и явного завершения сессии. Он не создаёт V1
+/// portal-сессию и не запрашивает server-side timer.
 /// </summary>
 public interface IV2OfflineSessionGateway
 {
@@ -29,5 +29,11 @@ public interface IV2OfflineSessionGateway
         string newPassword,
         string deviceId,
         string resetToken,
+        CancellationToken cancellationToken = default);
+
+    Task StopSessionAsync(
+        string deviceId,
+        string sessionId,
+        string clientId,
         CancellationToken cancellationToken = default);
 }

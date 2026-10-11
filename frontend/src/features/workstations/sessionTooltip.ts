@@ -167,8 +167,11 @@ export function getSessionTooltipDetails(
   };
 }
 
-export function sessionTooltip(pc: Workstation): string | undefined {
-  const details = getSessionTooltipDetails(pc);
+export function sessionTooltip(
+  pc: Workstation,
+  endingProjection?: SessionEndingProjection,
+): string | undefined {
+  const details = getSessionTooltipDetails(pc, endingProjection);
   if (!details) return pc.status === "stale" ? "Связь нестабильна" : undefined;
   const lines = [`Пользователь: ${details.clientName}`];
   if (details.balanceCents != null) lines.push(`Баланс: ${(details.balanceCents / 100).toLocaleString("ru-RU")} ₽`);

@@ -24,8 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="WindowsCommandExecutorTests.cs" />
-    <Compile Remove="V2HttpServerEventConsumerTests.cs" />
+    <Compile Remove="ServerEventConsumerTests.cs" />
     <Compile Include="..\src\GameClub.Client.Windows\V2WindowsCommandExecutor.cs" Link="V2WindowsCommandExecutor.cs" />
   </ItemGroup>
 </Project>

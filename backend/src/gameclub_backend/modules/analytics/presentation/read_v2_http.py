@@ -214,7 +214,7 @@ def _filters(
 
 
 def create_v2_read_router(service: AnalyticsReadService) -> APIRouter:
-    router = APIRouter(prefix="/api/v2/analytics", tags=["analytics-v2"])
+    router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
     @router.get("/dashboard", response_model=V2DashboardResponse)
     async def dashboard(

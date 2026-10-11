@@ -3,7 +3,7 @@
 ## Назначение
 
 Этот документ фиксирует продуктовые правила backend для MVP игрового клуба.
-Backend является источником истины для идентичности, денег, тарифных прав,
+Backend хранит и подтверждает идентичность, деньги, тарифные права,
 бронирований, сессий и решений о доступе. Не добавлять новые сущности или
 правила по аналогии с другими клубными системами: отсутствующее правило сначала
 уточняется.
@@ -287,12 +287,12 @@ use case. Backend сначала фиксирует остановку сесс�
 - Отключённое оператором место отвечает на V2 heartbeat controlled conflict.
   Это revocation access-gate, а не сетевой reconnect: клиент обязан закрыть
   доступ, но сохранить локальный ledger до reconciliation.
-- Операторские V2 device-команды доступны только по отдельному HTTP маршруту
-  `/api/v2/workstations/{workstation_id}/device-commands` и доставляются через
+- Операторские device-команды доступны только по отдельному HTTP маршруту
+  `/api/workstations/{workstation_id}/device-commands` и доставляются через
   `DeviceControlService.WatchCommands/AcknowledgeCommand`. Разрешены строго
-  `v2.display.lock` и `v2.system.restart`; `session.start`, `session.stop`,
-  server meter и произвольные shell-команды не имеют V2 command form. Поток и
-  acknowledgement фильтруют V1-команды, даже если старые записи сохранены в
+  `display.lock` и `system.restart`; `session.start`, `session.stop`, server
+  meter и произвольные shell-команды не имеют device command form. Поток и
+  acknowledgement фильтруют старые команды, даже если записи сохранены в
   той же PostgreSQL.
 - После device-authenticated входа backend выдаёт подписанный
   `OfflineSessionSnapshot`: client/device/session id, balance и limit долга,
@@ -302,6 +302,13 @@ use case. Backend сначала фиксирует остановку сесс�
   позднее неизменяемые V2 facts через Kafka; сервер принимает их по
   `operation_id`, sequence, payload hash и device/session scope либо возвращает
   явный `needs_review`.
+- Анонимная гостевая продажа на V2-месте не вызывает V1 `/sessions`: после
+  подтверждённой прямой оплаты backend создаёт одноразовый, привязанный к
+  workstation signed guest access grant. Device-authenticated V2 RPC принимает
+  grant ровно один раз, создаёт session с source `v2_guest_local_ledger` и
+  выдаёт гостевой signed snapshot для локального ledger. Повтор redemption
+  возвращает тот же активный snapshot, а stop проходит через отдельный guest
+  RPC; клиентский профиль и баланс при этом не создаются.
 - ServerInbox, подтверждённый financial/session факт, audit, projection и
   ServerOutbox сохраняются одной PostgreSQL-транзакцией. Повтор Kafka delivery
   не создаёт второй debit, package, stop или audit fact.

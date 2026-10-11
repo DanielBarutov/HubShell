@@ -15,6 +15,7 @@ _AUDITED_OPERATIONS = frozenset(
     {
         "Register",
         "Login",
+        "ResumePortal",
         "Heartbeat",
         "Disable",
         "DispatchCommand",

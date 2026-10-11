@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import dataclasses
 import datetime
 import os
@@ -53,8 +54,10 @@ from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_protobuf impor
     sign_offline_session_snapshot,
 )
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
+from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 from gameclub_backend.modules.sessions.infrastructure.postgres import (
+    PostgresSessionRepository,
     PostgresSessionTransactionWriter,
 )
 
@@ -73,6 +76,7 @@ def make_event(
     *,
     client_id: uuid.UUID,
     session_id: uuid.UUID,
+    occurred_at: datetime.datetime | None = None,
     operation_id: uuid.UUID | None = None,
     sequence: int = 1,
     previous_hash: str | None = None,
@@ -87,7 +91,7 @@ def make_event(
         session_id=session_id,
         device_id="v2-postgres-test-device",
         sequence=sequence,
-        occurred_at=datetime.datetime.now(datetime.UTC),
+        occurred_at=occurred_at or datetime.datetime.now(datetime.UTC),
         payload={
             "amount_cents": 100,
             "tariff_id": "per-minute-test",
@@ -102,10 +106,23 @@ def make_event(
 async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
     postgres_dsn: str,
 ) -> None:
+    """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     client_id = uuid.uuid4()
     session_id = uuid.uuid4()
     snapshot_id = uuid.uuid4()
+    server_session = Session(
+        id=session_id,
+        workstation_id=uuid.uuid4(),
+        client_id=client_id,
+        guest_name=None,
+        status=SessionStatus.ACTIVE,
+        started_at=datetime.datetime.now(datetime.UTC),
+        ended_at=None,
+        source="local_ledger",
+        created_by="v2-postgres-test",
+        created_at=datetime.datetime.now(datetime.UTC),
+    )
     first = make_event(client_id=client_id, session_id=session_id, snapshot_id=snapshot_id)
     second = make_event(
         client_id=client_id,
@@ -114,7 +131,24 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         previous_hash=first.payload_hash,
         snapshot_id=snapshot_id,
     )
-    operation_ids = (first.operation_id, second.operation_id)
+    stopped_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=1)
+    before_stop = make_event(
+        client_id=client_id,
+        session_id=session_id,
+        occurred_at=stopped_at - datetime.timedelta(seconds=1),
+        sequence=3,
+        previous_hash=second.payload_hash,
+        snapshot_id=snapshot_id,
+    )
+    after_stop = make_event(
+        client_id=client_id,
+        session_id=session_id,
+        occurred_at=stopped_at + datetime.timedelta(seconds=1),
+        sequence=4,
+        previous_hash=before_stop.payload_hash,
+        snapshot_id=snapshot_id,
+    )
+    operation_ids = (first.operation_id, second.operation_id, before_stop.operation_id)
     try:
         now = datetime.datetime.now(datetime.UTC)
         await PostgresClientRepository(lambda: engine).save(
@@ -129,6 +163,7 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 updated_at=now,
             )
         )
+        await PostgresSessionRepository(lambda: engine).save(server_session)
         async with engine.begin() as connection:
             await connection.execute(
                 text("""
@@ -181,6 +216,11 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         accepted = await service.accept(first)
         duplicate = await service.accept(first)
         accepted_next = await service.accept(second)
+        await PostgresSessionRepository(lambda: engine).save(
+            server_session.stop(stopped_at)
+        )
+        accepted_before_stop = await service.accept(before_stop)
+        rejected_after_stop = await service.accept(after_stop)
         analytics = await V2InboxService(
             PostgresV2InboxRepository(lambda: engine),
             "analytics_projection",
@@ -194,6 +234,8 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         assert accepted.result_event_id is not None
         assert duplicate.status is V2ClientFactStatus.DUPLICATE
         assert accepted_next.status is V2ClientFactStatus.ACCEPTED
+        assert accepted_before_stop.status is V2ClientFactStatus.ACCEPTED
+        assert rejected_after_stop.status is V2ClientFactStatus.CONFLICT
         assert analytics.status is V2InboxStatus.ACCEPTED
 
         async with engine.connect() as connection:
@@ -235,14 +277,14 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 .one()
             )
 
-        assert balance == 300
-        assert debit_count == 2
+        assert balance == 200
+        assert debit_count == 3
         assert dict(counts) == {
-            "inbox_rows": 3,
-            "confirmed_rows": 2,
-            "outbox_rows": 4,
-            "audit_rows": 2,
-            "last_sequence": 2,
+            "inbox_rows": 4,
+            "confirmed_rows": 3,
+            "outbox_rows": 6,
+            "audit_rows": 3,
+            "last_sequence": 3,
         }
     finally:
         async with engine.begin() as connection:
@@ -268,6 +310,10 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
             )
             await connection.execute(
                 text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :session_id"),
                 {"session_id": session_id},
             )
             await connection.execute(
@@ -482,6 +528,7 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
 
 @pytest.mark.asyncio
 async def test_postgres_v2_deposit_requires_matching_active_lease(postgres_dsn: str) -> None:
+    """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     now = datetime.datetime.now(datetime.UTC)
     client_id = uuid.uuid4()
@@ -599,6 +646,7 @@ async def test_postgres_v2_deposit_requires_matching_active_lease(postgres_dsn: 
 
 @pytest.mark.asyncio
 async def test_postgres_v2_lease_issuer_is_exclusive_and_idempotent(postgres_dsn: str) -> None:
+    """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     now = datetime.datetime.now(datetime.UTC)
     lease = V2SessionLease(
@@ -656,6 +704,7 @@ async def test_postgres_v2_lease_issuer_is_exclusive_and_idempotent(postgres_dsn
 async def test_postgres_v2_snapshot_issue_persists_exact_snapshot_lease_and_outbox(
     postgres_dsn: str,
 ) -> None:
+    """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     now = datetime.datetime.now(datetime.UTC)
     lease = V2SessionLease(
@@ -764,9 +813,229 @@ async def test_postgres_v2_snapshot_issue_persists_exact_snapshot_lease_and_outb
 
 
 @pytest.mark.asyncio
+async def test_postgres_v2_snapshot_issue_cleans_lease_for_completed_session(
+    postgres_dsn: str,
+) -> None:
+    """Проверяет повторный вход после завершения V2-сессии с устаревшим lease."""
+    engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
+    now = datetime.datetime.now(datetime.UTC)
+    client_id = uuid.uuid4()
+    device_id = "v2-stale-lease-device"
+    ended_at = now - datetime.timedelta(minutes=1)
+    previous_session = Session(
+        id=uuid.uuid4(),
+        workstation_id=uuid.uuid4(),
+        client_id=client_id,
+        guest_name=None,
+        status=SessionStatus.COMPLETED,
+        started_at=ended_at - datetime.timedelta(minutes=10),
+        ended_at=ended_at,
+        source="local_ledger",
+        created_by="v2-stale-lease-test",
+        created_at=ended_at - datetime.timedelta(minutes=10),
+    )
+    previous_lease = V2SessionLease(
+        session_id=previous_session.id,
+        client_id=client_id,
+        device_id=device_id,
+        snapshot_id=uuid.uuid4(),
+        snapshot_version=1,
+        policy_version="test-policy",
+        issued_at=previous_session.started_at,
+    )
+    next_lease = V2SessionLease(
+        session_id=uuid.uuid4(),
+        client_id=client_id,
+        device_id=device_id,
+        snapshot_id=uuid.uuid4(),
+        snapshot_version=1,
+        policy_version="test-policy",
+        issued_at=now,
+    )
+    try:
+        await PostgresSessionRepository(lambda: engine).save(previous_session)
+        await PostgresV2SessionLeaseRepository(lambda: engine).issue_exclusively(previous_lease)
+        payload = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload(
+            snapshot_id=str(next_lease.snapshot_id),
+            schema_version=1,
+            snapshot_version=next_lease.snapshot_version,
+            client_id=str(client_id),
+            session_id=str(next_lease.session_id),
+            device_id=device_id,
+            balance_cents=1_000,
+            debt_limit_cents=0,
+            login_grant_remaining_minutes=0,
+            policy_version=next_lease.policy_version,
+        )
+        issued_at = Timestamp()
+        issued_at.FromDatetime(now)
+        payload.issued_at.CopyFrom(issued_at)
+        signed_snapshot = sign_offline_session_snapshot(
+            payload,
+            "test-key-2026-09",
+            V2Ed25519SnapshotSigner(base64.b64encode(bytes(range(32))).decode("ascii")),
+        )
+
+        result = await V2SnapshotIssueService(
+            PostgresV2SnapshotIssueRepository(lambda: engine)
+        ).issue(V2SignedSnapshotIssue(next_lease, signed_snapshot))
+
+        assert not result.is_duplicate
+        async with engine.connect() as connection:
+            lease_statuses = dict(
+                (
+                    await connection.execute(
+                        text("""
+                            SELECT session_id, status FROM v2_session_leases
+                            WHERE session_id = ANY(:session_ids)
+                        """),
+                        {"session_ids": [previous_session.id, next_lease.session_id]},
+                    )
+                ).all()
+            )
+        assert lease_statuses == {
+            previous_session.id: "revoked",
+            next_lease.session_id: "active",
+        }
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM audit_events WHERE request_id = :request_id"),
+                {"request_id": str(next_lease.snapshot_id)},
+            )
+            await connection.execute(
+                text("DELETE FROM v2_server_outbox WHERE event_id = :event_id"),
+                {"event_id": next_lease.snapshot_id},
+            )
+            await connection.execute(
+                text("DELETE FROM v2_session_leases WHERE session_id = ANY(:session_ids)"),
+                {"session_ids": [previous_session.id, next_lease.session_id]},
+            )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :session_id"),
+                {"session_id": previous_session.id},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_v2_interruption_revokes_session_lease(
+    postgres_dsn: str,
+) -> None:
+    """Проверяет, что досрочное завершение в серверной БД освобождает V2 lease."""
+    engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
+    now = datetime.datetime.now(datetime.UTC)
+    client_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    session = Session(
+        id=session_id,
+        workstation_id=uuid.uuid4(),
+        client_id=client_id,
+        guest_name=None,
+        status=SessionStatus.ACTIVE,
+        started_at=now - datetime.timedelta(minutes=2),
+        ended_at=None,
+        source="local_ledger",
+        created_by="v2-interruption-test",
+        created_at=now - datetime.timedelta(minutes=2),
+    )
+    lease = V2SessionLease(
+        session_id=session_id,
+        client_id=client_id,
+        device_id="v2-interruption-device",
+        snapshot_id=uuid.uuid4(),
+        snapshot_version=1,
+        policy_version="test-policy",
+        issued_at=session.started_at,
+    )
+    try:
+        sessions = PostgresSessionRepository(lambda: engine)
+        leases = PostgresV2SessionLeaseRepository(lambda: engine)
+        await sessions.save(session)
+        await leases.issue_exclusively(lease)
+        service = SessionService(
+            sessions,
+            workstations=None,
+            clients=None,
+            v2_session_leases=leases,
+        )
+
+        stopped = await service.interrupt(
+            session_id,
+            interrupted_by="v2-interruption-test",
+            reason="test early stop",
+            idempotency_key=f"v2-interruption-{uuid.uuid4()}",
+        )
+
+        assert stopped.status is SessionStatus.COMPLETED
+        async with engine.connect() as connection:
+            lease_status = await connection.scalar(
+                text("SELECT status FROM v2_session_leases WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+        assert lease_status == "revoked"
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
+                {"session_id": session_id},
+            )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :session_id"),
+                {"session_id": session_id},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_v2_deposit_lease_lookup_ignores_expired_active_status(
+    postgres_dsn: str,
+) -> None:
+    """Просроченный lease не должен блокировать обычное пополнение баланса."""
+    engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
+    now = datetime.datetime.now(datetime.UTC)
+    expired_lease = V2SessionLease(
+        session_id=uuid.uuid4(),
+        client_id=uuid.uuid4(),
+        device_id="v2-expired-deposit-lease",
+        snapshot_id=uuid.uuid4(),
+        snapshot_version=1,
+        policy_version="test-policy",
+        issued_at=now - datetime.timedelta(minutes=2),
+        expires_at=now - datetime.timedelta(minutes=1),
+    )
+    active_lease = V2SessionLease(
+        session_id=uuid.uuid4(),
+        client_id=uuid.uuid4(),
+        device_id="v2-current-deposit-lease",
+        snapshot_id=uuid.uuid4(),
+        snapshot_version=1,
+        policy_version="test-policy",
+        issued_at=now - datetime.timedelta(minutes=1),
+        expires_at=now + datetime.timedelta(minutes=1),
+    )
+    try:
+        leases = PostgresV2SessionLeaseRepository(lambda: engine)
+        await leases.issue_exclusively(expired_lease)
+        await leases.issue_exclusively(active_lease)
+        deposits = PostgresV2DepositCreditRepository(lambda: engine)
+
+        assert not await deposits.has_active_lease_for_client(expired_lease.client_id)
+        assert await deposits.has_active_lease_for_client(active_lease.client_id)
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM v2_session_leases WHERE session_id = ANY(:session_ids)"),
+                {"session_ids": [expired_lease.session_id, active_lease.session_id]},
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_postgres_v2_login_rolls_back_new_session_when_lease_cannot_be_issued(
     postgres_dsn: str,
 ) -> None:
+    """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     now = datetime.datetime.now(datetime.UTC)
     client_id = uuid.uuid4()
@@ -789,7 +1058,7 @@ async def test_postgres_v2_login_rolls_back_new_session_when_lease_cannot_be_iss
         status=SessionStatus.ACTIVE,
         started_at=now,
         ended_at=None,
-        source="v2_local_ledger",
+        source="local_ledger",
         created_by=f"client:{client_id}",
         created_at=now,
         idempotency_key="v2-atomic-login-rollback",

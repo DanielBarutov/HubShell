@@ -9,20 +9,20 @@ from gameclub_backend.modules.workstations.application.ports import (
     WorkstationCommandRepository,
     WorkstationRepository,
 )
-from gameclub_backend.modules.workstations.domain import WorkstationSessionMode, WorkstationStatus
+from gameclub_backend.modules.workstations.domain import WorkstationStatus
 from gameclub_backend.modules.workstations.domain_commands import (
     WorkstationCommand,
     WorkstationCommandStatus,
 )
 
-V2_ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
+DEVICE_COMMAND_TYPES: frozenset[str] = frozenset(
     {
-        "v2.display.lock",
-        "v2.system.restart",
+        "display.lock",
+        "system.restart",
     }
 )
 
-ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
+LEGACY_COMMAND_TYPES: frozenset[str] = frozenset(
     {
         "session.start",
         "session.stop",
@@ -30,7 +30,8 @@ ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
         "theme.apply",
         "system.restart",
     }
-) | V2_ALLOWED_COMMAND_TYPES
+)
+ALLOWED_COMMAND_TYPES = LEGACY_COMMAND_TYPES | DEVICE_COMMAND_TYPES
 
 
 class UtcClock:
@@ -82,17 +83,6 @@ class WorkstationCommandService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
-        is_v2_command = command_type in V2_ALLOWED_COMMAND_TYPES
-        if (
-            workstation.session_mode is WorkstationSessionMode.V2_LOCAL_LEDGER
-            and not is_v2_command
-        ):
-            raise ApplicationError(ErrorCode.CONFLICT, "V2 workstation does not accept V1 commands")
-        if (
-            workstation.session_mode is WorkstationSessionMode.V1_SERVER_OWNED
-            and is_v2_command
-        ):
-            raise ApplicationError(ErrorCode.CONFLICT, "V1 workstation does not accept V2 commands")
 
         existing = await self._repository.get_by_idempotency_key(normalized_key)
         if existing is not None:
@@ -146,7 +136,7 @@ class WorkstationCommandService:
         command = await self._repository.get(command_id)
         if command is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation command not found")
-        if command.command_type not in V2_ALLOWED_COMMAND_TYPES:
+        if command.command_type not in DEVICE_COMMAND_TYPES:
             raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Command is not available to V2")
         return await self.acknowledge(command_id, device_id, success, message)
 
@@ -181,7 +171,7 @@ class WorkstationCommandService:
         return [
             command
             for command in await self.pending_for_device(device_id)
-            if command.command_type in V2_ALLOWED_COMMAND_TYPES
+            if command.command_type in DEVICE_COMMAND_TYPES
         ]
 
     async def wait_for_commands(self, device_id: str, wait_seconds: float = 15.0) -> None:

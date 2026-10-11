@@ -8,14 +8,50 @@ import "google/protobuf/empty.proto";
 option csharp_namespace = "GameClub.Client.Contracts.Events.V2";
 option java_multiple_files = true;
 
-// Выдаёт единственный подписанный входной снимок V2-сессии. Минуты не подтверждает.
+// Управляет границей входа V2 и завершением локальной сессии. Минуты не подтверждает.
 service OfflineSessionService {
   rpc Login(LoginOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
   rpc Register(RegisterOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
+  rpc ResumePortal(ResumeOfflinePortalRequest) returns (ResumeOfflinePortalResponse);
+  rpc StopSession(StopOfflineSessionRequest) returns (google.protobuf.Empty);
+  rpc RedeemGuestAccess(RedeemGuestAccessRequest) returns (SignedGuestSessionAccess);
+  rpc StopGuestAccess(StopGuestAccessRequest) returns (google.protobuf.Empty);
   rpc ChangePassword(ChangeOfflinePasswordRequest) returns (google.protobuf.Empty);
   rpc GetPortalSnapshot(GetOfflinePortalSnapshotRequest) returns (OfflinePortalSnapshot);
   rpc ActivateEntitlement(ActivateOfflineEntitlementRequest) returns (OfflinePortalSnapshot);
   rpc PurchaseEntitlement(PurchaseOfflineEntitlementRequest) returns (OfflinePortalSnapshot);
+}
+
+message ResumeOfflinePortalRequest {
+  string device_id = 1;
+  string session_id = 2;
+  string client_id = 3;
+}
+
+message ResumeOfflinePortalResponse {
+  string client_id = 1;
+  string portal_access_token = 2;
+  int64 portal_access_expires_in = 3;
+}
+
+message StopOfflineSessionRequest {
+  string device_id = 1;
+  string session_id = 2;
+  string client_id = 3;
+
+  reserved 4 to 15;
+}
+
+message RedeemGuestAccessRequest {
+  string device_id = 1;
+  reserved 2 to 15;
+}
+
+message StopGuestAccessRequest {
+  string device_id = 1;
+  string session_id = 2;
+  string payment_id = 3;
+  reserved 4 to 15;
 }
 
 message LoginOfflineSessionRequest {

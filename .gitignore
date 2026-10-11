@@ -37,3 +37,4 @@ output/
 steam-guest/.runtime/
 .delta/
 graphify-out/
+ref/

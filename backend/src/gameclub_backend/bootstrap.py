@@ -109,10 +109,20 @@ from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
 )
 from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCreditService
+from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import V2SnapshotIssueService
 from gameclub_backend.modules.eventing_v2.infrastructure.deposit_postgres import (
     PostgresV2DepositCreditRepository,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.guest_access_memory import (
+    InMemoryGuestAccessGrantRepository,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.guest_access_postgres import (
+    PostgresGuestAccessGrantRepository,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import (
+    PostgresV2SessionLeaseRepository,
 )
 from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_ed25519 import (
     create_v2_snapshot_signer,
@@ -233,6 +243,7 @@ class ApplicationServices:
     session_transfers: SessionTransferService
     client_portal: ClientPortalService
     v2_offline_login: V2OfflineLoginService | None
+    v2_guest_access: V2GuestAccessService | None
     v2_deposit_credits: V2DepositCreditService | None
     command_service: WorkstationCommandService
     audit_repository: AuditRepository
@@ -271,6 +282,7 @@ def build_application_services(
             postgres_engine_provider
         )
         session_repository: SessionRepository = PostgresSessionRepository(postgres_engine_provider)
+        v2_session_leases = PostgresV2SessionLeaseRepository(postgres_engine_provider)
         billing_repository: ChargeRepository = PostgresChargeRepository(postgres_engine_provider)
         billing_reconciliation_repository: ChargeReconciliationRepository = (
             PostgresChargeReconciliationRepository(postgres_engine_provider)
@@ -294,6 +306,7 @@ def build_application_services(
         guest_payment_repository: GuestSessionPaymentRepository = (
             PostgresGuestSessionPaymentRepository(postgres_engine_provider)
         )
+        guest_access_repository = PostgresGuestAccessGrantRepository(postgres_engine_provider)
         transfer_repository: SessionTransferRepository = PostgresSessionTransferRepository(
             postgres_engine_provider
         )
@@ -320,6 +333,7 @@ def build_application_services(
         reservation_repository = InMemoryReservationRepository()
         command_repository = InMemoryWorkstationCommandRepository()
         session_repository = InMemorySessionRepository()
+        v2_session_leases = None
         billing_repository = InMemoryChargeRepository()
         billing_reconciliation_repository = InMemoryChargeReconciliationRepository()
         meter_repository = InMemoryMeterRepository()
@@ -329,6 +343,7 @@ def build_application_services(
         payment_method_repository = InMemoryPaymentMethodRepository()
         entitlement_repository = InMemoryEntitlementRepository()
         guest_payment_repository = InMemoryGuestSessionPaymentRepository()
+        guest_access_repository = InMemoryGuestAccessGrantRepository()
         transfer_repository = InMemorySessionTransferRepository()
         offline_repository = InMemoryOfflineReplayRepository()
         analytics_repository = InMemoryAnalyticsRepository()
@@ -354,7 +369,6 @@ def build_application_services(
         groups=workstation_group_repository,
         cache=workstation_cache,
         cache_ttl_seconds=20,
-        active_sessions=session_repository,
     )
     client_groups = ClientGroupService(client_group_repository, audit=audit_repository)
     notifications = NotificationRuleService(notification_repository)
@@ -411,6 +425,7 @@ def build_application_services(
         meters=meter_repository,
         tariffs=catalog,
         notifications=session_notifications,
+        v2_session_leases=v2_session_leases,
     )
     offline = OfflineReplayService(
         offline_repository,
@@ -459,6 +474,7 @@ def build_application_services(
         reservations=reservation_repository,
     )
     v2_offline_login = None
+    v2_guest_access = None
     v2_token_service = JwtTokenService(settings) if settings.jwt_secret else None
     v2_deposit_credits = (
         V2DepositCreditService(PostgresV2DepositCreditRepository(postgres_engine_provider))
@@ -482,6 +498,14 @@ def build_application_services(
             signer=signer,
             policy_version=settings.v2_snapshot_policy_version,
             token_service=v2_token_service,
+        )
+        v2_guest_access = V2GuestAccessService(
+            payments=guest_payments,
+            workstations=workstations,
+            sessions=sessions,
+            grants=guest_access_repository,
+            signing_key_id=signing_key_id,
+            signer=signer,
         )
     return ApplicationServices(
         workstations=workstations,
@@ -509,6 +533,7 @@ def build_application_services(
         session_transfers=session_transfers,
         client_portal=client_portal,
         v2_offline_login=v2_offline_login,
+        v2_guest_access=v2_guest_access,
         v2_deposit_credits=v2_deposit_credits,
         command_service=command_service,
         audit_repository=audit_repository,

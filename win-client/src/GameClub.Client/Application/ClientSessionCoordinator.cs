@@ -24,8 +24,8 @@ public sealed class ClientSessionCoordinator
     public IClientPortalGateway ClientPortal => _backendClient;
 
     /// <summary>
-    /// Доступен только в V2-совместимой transport composition. Он не является
-    /// fallback к V1 portal API.
+    /// Доступен только в V2-совместимой transport composition. К V1 portal API
+    /// этот путь не обращается.
     /// </summary>
     public IV2OfflineSessionGateway? V2OfflineSession => _backendClient as IV2OfflineSessionGateway;
 
@@ -248,13 +248,13 @@ public sealed class ClientSessionCoordinator
         {
             try
             {
-                await foreach (var command in _backendClient.WatchCommandsAsync(
+                await foreach (var command in _backendClient.WatchDeviceCommandsAsync(
                     deviceId,
                     cancellationToken))
                 {
                     if (command.IsExpired(DateTimeOffset.UtcNow))
                     {
-                        await _backendClient.AcknowledgeCommandAsync(
+                        await _backendClient.AcknowledgeDeviceCommandAsync(
                             command.Id,
                             deviceId,
                             success: false,
@@ -278,13 +278,13 @@ public sealed class ClientSessionCoordinator
                             result = new CommandExecutionResult(false, "Выполнение команды завершилось ошибкой");
                         }
 
-                        // If the acknowledgement response is lost, the server may redeliver
-                        // this command after reconnect. Reuse the result instead of running
-                        // a side effect twice; the server still remains authoritative.
+                        // Если ответ на подтверждение потерян, сервер может повторить
+                        // команду после reconnect. Возвращаем сохранённый результат,
+                        // чтобы не выполнить побочный эффект дважды.
                         RememberPendingAcknowledgement(command.Id, result);
                     }
 
-                    await _backendClient.AcknowledgeCommandAsync(
+                    await _backendClient.AcknowledgeDeviceCommandAsync(
                         command.Id,
                         deviceId,
                         result.Success,

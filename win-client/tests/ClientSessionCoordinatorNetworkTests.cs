@@ -35,7 +35,7 @@ public sealed class ClientSessionCoordinatorNetworkTests
         }
         catch (OperationCanceledException)
         {
-            // The test cancels the reconnect loop after observing the network failure.
+            // После сбоя сети тест отменяет цикл reconnect.
         }
 
         Assert.Equal(new[] { ClientConnectionState.Reconnecting }, states);
@@ -137,7 +137,7 @@ public sealed class ClientSessionCoordinatorNetworkTests
                 ? SendHeartbeat(cancellationToken)
                 : throw new NotSupportedException();
 
-        public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
+        public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchDeviceCommandsAsync(
             string deviceId,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -149,7 +149,7 @@ public sealed class ClientSessionCoordinatorNetworkTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         }
 
-        public Task<WorkstationCommandSnapshot> AcknowledgeCommandAsync(
+        public Task<WorkstationCommandSnapshot> AcknowledgeDeviceCommandAsync(
             string commandId,
             string deviceId,
             bool success,

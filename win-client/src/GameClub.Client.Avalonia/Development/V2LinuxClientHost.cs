@@ -7,13 +7,13 @@ using GameClub.Client.Presentation;
 namespace GameClub.Client.Avalonia.Development;
 
 /// <summary>
-/// Linux V2 composition for manual testing. It uses the real V2 gRPC/HTTP
-/// contracts and a plaintext dev ledger instead of Windows-only DPAPI.
+/// Linux-сборка V2 для ручной проверки. Она использует настоящие V2 gRPC/HTTP
+/// контракты и открытый dev-ledger вместо доступного только в Windows DPAPI.
 /// </summary>
 public sealed class V2LinuxClientHost : IClientHost
 {
     private const string DefaultGrpcAddress = "http://127.0.0.1:51051";
-    private const string DefaultEventsAddress = "http://127.0.0.1:8100/api/v2/events/client-facts";
+    private const string DefaultEventsAddress = "http://127.0.0.1:8100/api/events/client-facts";
     private const string DefaultDevPublicKeyRing =
         "test-contour=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=";
 
@@ -60,11 +60,12 @@ public sealed class V2LinuxClientHost : IClientHost
             v2OfflineLogin: new V2OfflineLoginCoordinator(backend, ledger),
             v2Ledger: ledger,
             v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
-            v2SignatureVerifier: verifier);
+            v2SignatureVerifier: verifier,
+            v2GuestSession: backend);
         _serverEventWorker = new V2ServerEventWorker(
             new V2HttpServerEventConsumer(
                 _eventsHttpClient,
-                new Uri(eventsAddress, "/api/v2/events/server"),
+                new Uri(eventsAddress, "/api/events/server"),
                 _enrollment,
                 new V2ServerEventProcessor(ledger)),
             onFailure: ViewModel.ApplyV2ServerEventTransportFailure,
@@ -73,10 +74,10 @@ public sealed class V2LinuxClientHost : IClientHost
 
     public MainViewModel ViewModel { get; }
 
-    public string WindowTitle => "HubShell V2 client — Linux developer host";
+    public string WindowTitle => "HubShell, Linux developer host";
 
     public string HostDisclaimer =>
-        "Linux V2 developer host: plaintext test ledger, без DPAPI и kiosk enforcement.";
+        "Linux V2 developer-host: тестовый ledger в открытом виде, без DPAPI и kiosk enforcement.";
 
     public IClientWindowAdapter? WindowAdapter => null;
 

@@ -5,7 +5,7 @@ import type { RootState } from "../../app/store";
 
 export type Panel = "pc" | "client" | "new-client" | "deposit" | "booking" | "booking-edit" | "tariff" | "product" | "sale" | "discount" | "workstation" | "group" | "payment-method" | "cash-open" | "cash-movement" | "cash-close" | null;
 
-export type V2DepositTarget = {
+export type DepositTarget = {
   sessionId: string;
   deviceId: string;
   workstationName: string;
@@ -26,7 +26,7 @@ type UiState = {
   panel: Panel;
   bookingWorkstationId: string | undefined;
   depositBonusOnly: boolean;
-  depositV2Target: V2DepositTarget | null;
+  depositTarget: DepositTarget | null;
   search: string;
   bookingRefreshKey: number;
 };
@@ -46,7 +46,7 @@ const initialState: UiState = {
   panel: null,
   bookingWorkstationId: undefined,
   depositBonusOnly: false,
-  depositV2Target: null,
+  depositTarget: null,
   search: "",
   bookingRefreshKey: 0,
 };
@@ -59,11 +59,11 @@ const uiSlice = createSlice({
     setGroup(state, action: PayloadAction<string>) { state.group = action.payload; },
     setSearch(state, action: PayloadAction<string>) { state.search = action.payload; },
     openPanel(state, action: PayloadAction<Panel>) { state.panel = action.payload; },
-    closePanel(state) { state.panel = null; state.depositV2Target = null; },
+    closePanel(state) { state.panel = null; state.depositTarget = null; },
     openPc(state, action: PayloadAction<string>) { state.selectedPcId = action.payload; state.selectedClientId = null; state.panel = "pc"; },
     openClient(state, action: PayloadAction<string>) { state.selectedClientId = action.payload; state.selectedPcId = null; state.selectedBooking = null; state.panel = "client"; },
     openNewClient(state) { state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.panel = "new-client"; },
-    openDeposit(state, action: PayloadAction<{ clientId?: string | null; bonusOnly?: boolean; v2Target?: V2DepositTarget } | undefined>) { state.panel = "deposit"; state.selectedPcId = null; state.selectedClientId = action.payload?.clientId ?? null; state.depositBonusOnly = Boolean(action.payload?.bonusOnly); state.depositV2Target = action.payload?.v2Target ?? null; },
+    openDeposit(state, action: PayloadAction<{ clientId?: string | null; bonusOnly?: boolean; target?: DepositTarget } | undefined>) { state.panel = "deposit"; state.selectedPcId = null; state.selectedClientId = action.payload?.clientId ?? null; state.depositBonusOnly = Boolean(action.payload?.bonusOnly); state.depositTarget = action.payload?.target ?? null; },
     openBooking(state, action: PayloadAction<string | undefined>) { state.panel = "booking"; state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.bookingWorkstationId = action.payload; },
     openSale(state, action: PayloadAction<{ pcId?: string | null; clientId?: string | null; product?: BackendProduct | null; initialTab?: "time" | "products" } | undefined>) { state.selectedPcId = action.payload?.pcId ?? null; state.selectedClientId = action.payload?.clientId ?? null; state.saleInitialProduct = action.payload?.product ?? null; state.saleInitialTab = action.payload?.initialTab ?? "time"; state.panel = "sale"; },
     openWorkstationEditor(state) { state.panel = "workstation"; },

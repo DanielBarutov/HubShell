@@ -256,9 +256,7 @@ class PostgresFinanceAnalyticsRepository(FinanceAnalyticsRepository):
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
 
-    async def snapshot(self, filters: FinanceFilters | None = None) -> FinanceFactsSnapshot:
-        if filters is None:
-            raise ValueError("Finance snapshot requires a period")
+    async def snapshot(self, filters: FinanceFilters) -> FinanceFactsSnapshot:
         async with open_session(self._engine_provider) as session:
             balance_rows = await self._rows(
                 session,

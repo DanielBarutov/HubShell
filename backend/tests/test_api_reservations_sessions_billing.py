@@ -38,7 +38,7 @@ async def test_workstation_list_includes_snapshot_for_active_session_over_http()
             legacy_workstation = await application.state.workstations.register(
                 "map-hover-legacy-device",
                 "Map hover legacy PC",
-                session_mode=WorkstationSessionMode.V1_SERVER_OWNED,
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             client_response = await client.post(
                 "/api/v1/clients",
@@ -176,7 +176,7 @@ async def test_operator_can_start_and_stop_session_over_http() -> None:
             legacy_workstation = await application.state.workstations.register(
                 "device-session-http-legacy",
                 "PC-Session legacy",
-                session_mode=WorkstationSessionMode.V1_SERVER_OWNED,
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             workstation_id = str(legacy_workstation.id)
             payload = {
@@ -268,7 +268,7 @@ async def test_operator_can_charge_completed_session_over_http() -> None:
             legacy_workstation = await application.state.workstations.register(
                 "device-billing-http-legacy",
                 "Billing legacy PC",
-                session_mode=WorkstationSessionMode.V1_SERVER_OWNED,
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             client_response = await client.post(
                 "/api/v1/clients",

@@ -56,7 +56,6 @@ from gameclub_backend.modules.workstations.infrastructure.groups_memory import (
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
-from gameclub_backend.presentation.grpc.services import to_session_snapshot_proto
 
 pytestmark = [pytest.mark.unit, pytest.mark.concurrency]
 
@@ -1069,34 +1068,37 @@ async def test_regular_package_starts_after_login_grant_and_returns_win_snapshot
         "operator",
         "regular-package-purchase",
     )
-    just_purchased = to_session_snapshot_proto(await sessions.snapshot(session.id))
+    just_purchased = await sessions.snapshot(session.id)
 
     assert just_purchased.login_grant_remaining_minutes == 1
-    assert just_purchased.active_package.id == str(purchased.id)
-    assert just_purchased.active_package.tariff_name == "VIP package"
-    assert just_purchased.active_package.remaining_minutes == 300
+    assert just_purchased.active_entitlement is not None
+    assert just_purchased.active_entitlement.id == purchased.id
+    assert just_purchased.tariff_names[purchased.tariff_id] == "VIP package"
+    assert just_purchased.active_entitlement.remaining_minutes == 300
 
     clock.current += datetime.timedelta(minutes=1)
     at_grant_boundary = await billing.meter_session(session.id)
-    boundary_snapshot = to_session_snapshot_proto(await sessions.snapshot(session.id))
+    boundary_snapshot = await sessions.snapshot(session.id)
 
     assert at_grant_boundary is None
     assert boundary_snapshot.login_grant_remaining_minutes == 0
-    assert boundary_snapshot.active_package.remaining_minutes == 300
+    assert boundary_snapshot.active_entitlement is not None
+    assert boundary_snapshot.active_entitlement.remaining_minutes == 300
     assert boundary_snapshot.meter.package_minutes == 0
     assert boundary_snapshot.meter.billed_cents == 0
 
     clock.current += datetime.timedelta(minutes=1)
     after_grant = await billing.meter_session(session.id)
-    after_grant_snapshot = to_session_snapshot_proto(await sessions.snapshot(session.id))
+    after_grant_snapshot = await sessions.snapshot(session.id)
 
     assert after_grant is not None
     assert after_grant.package_minutes == 1
     assert after_grant.billed_cents == 0
     assert after_grant_snapshot.login_grant_remaining_minutes == 0
-    assert after_grant_snapshot.active_package.remaining_minutes == 299
+    assert after_grant_snapshot.active_entitlement is not None
+    assert after_grant_snapshot.active_entitlement.remaining_minutes == 299
     assert after_grant_snapshot.meter.package_minutes == 1
-    assert after_grant_snapshot.meter.active_entitlement_id == str(purchased.id)
+    assert after_grant_snapshot.meter.active_entitlement_id == purchased.id
 
 
 @pytest.mark.asyncio
@@ -2095,9 +2097,8 @@ async def test_session_snapshot_exposes_server_time_package_queue_and_meter() ->
     assert snapshot.active_entitlement.id == package.id
     assert snapshot.tariff_names[tariff.id] == "VIP package"
     http_snapshot = SessionSnapshotResponse.from_domain(snapshot).model_dump(mode="json")
-    grpc_snapshot = to_session_snapshot_proto(snapshot)
     assert http_snapshot["entitlements"][0]["tariff_name"] == "VIP package"
-    assert grpc_snapshot.active_package.tariff_name == "VIP package"
+    assert snapshot.tariff_names[tariff.id] == "VIP package"
     assert snapshot.meter is not None
     assert snapshot.meter.package_minutes == 1
     assert snapshot.allowed_actions == ("stop",)

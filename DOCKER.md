@@ -13,13 +13,14 @@
 - `scheduler` — постановка периодических задач;
 - `kafka` и `kafka-v2-topics` — локальный Kafka KRaft и создание V2 topics;
 - `v2-client-facts`, `v2-server-outbox`, `v2-confirmed-analytics` — приём и доставка V2 Kafka-событий;
-- `otel-collector`, `prometheus`, `loki`, `tempo`, `alloy`, `grafana` — локальная наблюдаемость;
+- `otel-collector`, `prometheus`, `loki`, `tempo`, `pyroscope`, `alloy`, `grafana` — локальная наблюдаемость;
 - `frontend` — production Vite build, который nginx отдаёт на host-порту `3100` и
   проксирует `/api` в `backend-http`.
 
 Для локального подключения host-порты по умолчанию такие: PostgreSQL `55432`,
-Redis `56379`, HTTP `8100`, gRPC `51051`, frontend `3100`. Внутри Docker-сети
-PostgreSQL и Redis остаются на `5432` и `6379`, а backend — на `8100` и `51051`.
+Redis `56379`, HTTP `8100`, gRPC `51051`, frontend `3100`, Pyroscope `4040`.
+Внутри Docker-сети PostgreSQL и Redis остаются на `5432` и `6379`, backend — на
+`8100` и `51051`, Pyroscope — на `4040`.
 
 ## Запуск
 
@@ -34,7 +35,15 @@ docker compose ps
 
 - web: <http://127.0.0.1:3100>;
 - HTTP health: <http://127.0.0.1:8100/health/ready>;
+- Grafana: <http://127.0.0.1:3300> (Explore → Pyroscope);
+- Pyroscope UI: <http://127.0.0.1:4040>;
 - gRPC: `127.0.0.1:51051`.
+
+`backend-http` непрерывно отправляет CPU-профили в локальный Pyroscope. Имя
+приложения по умолчанию — `gameclub-backend-http`, частота — 100 samples/s;
+профили памяти выключены. Параметры можно переопределить через
+`GAMECLUB_PYROSCOPE_APPLICATION_NAME` и `GAMECLUB_PYROSCOPE_SAMPLE_RATE`.
+Pyroscope хранит данные в named volume `gameclub-pyroscope-data`.
 
 Для Windows-клиентов из private LAN backend публикуется на LAN-интерфейсах.
 При необходимости ограничить его только loopback укажите в `.env`
@@ -88,4 +97,5 @@ TLS/reverse proxy обязательны только при внешнем до
 Windows-клиент подключается к опубликованному host-порту gRPC `51051`, а не к
 имени `backend-grpc` из Docker-сети. Host-порты можно переопределить через
 `GAMECLUB_FRONTEND_PORT`, `GAMECLUB_BIND_HOST`, `GAMECLUB_HTTP_PORT`, `GAMECLUB_GRPC_PORT`,
-`GAMECLUB_POSTGRES_PORT` и `GAMECLUB_REDIS_PORT` в `.env`.
+`GAMECLUB_POSTGRES_PORT`, `GAMECLUB_REDIS_PORT` и `GAMECLUB_PYROSCOPE_PORT` в
+`.env`.

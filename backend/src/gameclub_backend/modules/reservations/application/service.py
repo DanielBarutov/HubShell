@@ -122,8 +122,8 @@ class ReservationService:
                     else "reservation_client_required"
                 )
             else:
-                # Guest reservations are intentionally anonymous. No guest identity
-                # may bypass the protection window.
+                # Бронь гостя остаётся анонимной. Нельзя обходить защитное окно
+                # через идентификатор гостя.
                 reason = "guest_reservation_protected"
             return EntryDecision(
                 allowed=False,

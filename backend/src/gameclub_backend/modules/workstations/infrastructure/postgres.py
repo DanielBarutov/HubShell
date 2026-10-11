@@ -27,7 +27,10 @@ class WorkstationModel(WorkstationBase):
     )
     installation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     session_mode: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=WorkstationSessionMode.V1_SERVER_OWNED.value
+        String(32),
+        nullable=False,
+        default=WorkstationSessionMode.LOCAL_LEDGER.value,
+        server_default=WorkstationSessionMode.LOCAL_LEDGER.value,
     )
     name: Mapped[str] = mapped_column(String(128))
     group_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)

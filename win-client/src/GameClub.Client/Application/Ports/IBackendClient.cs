@@ -13,11 +13,11 @@ public interface IBackendClient : IAsyncDisposable, IWorkstationSessionGateway, 
         IReadOnlyCollection<string> capabilities,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
+    IAsyncEnumerable<WorkstationCommandSnapshot> WatchDeviceCommandsAsync(
         string deviceId,
         CancellationToken cancellationToken = default);
 
-    Task<WorkstationCommandSnapshot> AcknowledgeCommandAsync(
+    Task<WorkstationCommandSnapshot> AcknowledgeDeviceCommandAsync(
         string commandId,
         string deviceId,
         bool success,

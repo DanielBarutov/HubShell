@@ -1,0 +1,89 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 20, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true,
+        "sortBy": [{"desc": true, "displayName": "Time"}]
+      },
+      "targets": [
+        {
+          "expr": "{container=~\"gameshell-.*\", container!~\"gameshell-(alloy|prometheus|grafana|loki|tempo|pyroscope)-.*\"} | regexp \"(?:\\\\[|level=)(?P<level>WARN(?:ING)?|ERROR|warn(?:ing)?|error)(?:\\\\]|\\\\s|$)\" | level=~\"WARN|WARNING|ERROR|warn|warning|error\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Warning и error всех сервисов",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 20, "w": 24, "x": 0, "y": 20},
+      "id": 2,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true,
+        "sortBy": [{"desc": true, "displayName": "Time"}]
+      },
+      "targets": [
+        {
+          "expr": "{container=~\"gameshell-.*\", container!~\"gameshell-(alloy|prometheus|grafana|loki|tempo|pyroscope)-.*\"} |~ \"HTTP/[0-9.]+\\\" 4[0-9]{2} \"",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP 4xx всех сервисов",
+      "type": "table"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 20, "w": 24, "x": 0, "y": 40},
+      "id": 3,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true,
+        "sortBy": [{"desc": true, "displayName": "Time"}]
+      },
+      "targets": [
+        {
+          "expr": "{container=~\"gameshell-.*\", container!~\"gameshell-(alloy|prometheus|grafana|loki|tempo|pyroscope)-.*\"} |~ \"HTTP/[0-9.]+\\\" 5[0-9]{2} \"",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP 5xx всех сервисов",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["logs", "warning", "error"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "title": "GameClub — проблемные логи сервисов",
+  "uid": "gameclub-service-warnings-errors",
+  "version": 1
+}

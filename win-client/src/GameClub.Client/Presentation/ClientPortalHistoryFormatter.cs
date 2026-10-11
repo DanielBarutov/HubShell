@@ -4,8 +4,8 @@ using GameClub.Client.Domain;
 namespace GameClub.Client.Presentation;
 
 /// <summary>
-/// Turns the server-backed portal ledger into customer-facing history lines.
-/// Technical identifiers and transport enum values are intentionally never shown here.
+/// Преобразует журнал личного кабинета от сервера в строки истории для клиента.
+/// Технические идентификаторы и значения транспортных enum здесь не показываются.
 /// </summary>
 public static class ClientPortalHistoryFormatter
 {

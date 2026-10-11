@@ -28,7 +28,7 @@ class V2ServerOutboxService:
         device_id: str,
         limit: int = 100,
     ) -> tuple[V2OutgoingServerEvent, ...]:
-        """Получить адресованные устройству события до их client ack."""
+        """Получить client-applicable события активной V2-сессии до ack."""
         if not device_id.strip():
             raise ValueError("V2 server event device id is required")
         if limit < 1 or limit > 1_000:

@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     reservation_sweep_interval_seconds: int = 60
     billing_reconciliation_interval_seconds: int = 60
     kafka_bootstrap_servers: str | None = None
+    pyroscope_server_address: str | None = None
+    pyroscope_application_name: str = "gameclub-backend-http"
+    pyroscope_sample_rate: int = 100
     v2_snapshot_signing_key_id: str | None = None
     v2_snapshot_signing_private_key_b64: str | None = None
     v2_snapshot_policy_version: str = "v2-local-ledger-1"

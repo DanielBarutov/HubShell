@@ -11,6 +11,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_ed25519 import
 
 
 def test_v2_ed25519_snapshot_signer_matches_standard_test_vector() -> None:
+    """Проверяет заявленное поведение backend."""
     signer = V2Ed25519SnapshotSigner("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A=")
 
     signature = signer.sign(b"")
@@ -26,6 +27,7 @@ def test_v2_ed25519_snapshot_signer_matches_standard_test_vector() -> None:
 
 
 def test_v2_snapshot_signer_loads_only_configured_private_key() -> None:
+    """Проверяет заявленное поведение backend."""
     signing_key_id, signer = create_v2_snapshot_signer(
         Settings(
             v2_snapshot_signing_key_id="club-key-2026-01",
@@ -39,5 +41,6 @@ def test_v2_snapshot_signer_loads_only_configured_private_key() -> None:
 
 @pytest.mark.parametrize("private_key", ["not-base64", base64.b64encode(b"short").decode()])
 def test_v2_snapshot_signer_rejects_invalid_private_key(private_key: str) -> None:
+    """Проверяет заявленное поведение backend."""
     with pytest.raises(ValueError, match="V2 snapshot"):
         V2Ed25519SnapshotSigner(private_key)

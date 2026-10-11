@@ -1,6 +1,6 @@
 # Verification matrix
 
-Дата последней проверки: `2026-09-21`.
+Дата последней проверки: `2026-10-03`.
 
 Документ разделяет фактически проверенное поведение и то, что пока подтверждено
 только исходниками или требует другой платформы.
@@ -14,7 +14,10 @@
 | Guest persistence | Guest CRUD/search и ссылки `guest_id` в Reservation/Session | успешно | Memory/API contract checks; PostgreSQL concurrency matrix пропущена без DSN |
 | Cash producer/approval boundary | provider-neutral producers, approvals, HTTP/gRPC contracts | успешно | Unit/API/contract suite; реальные provider webhook не подключены |
 | gRPC | generated protobuf, client portal entitlement queue/explicit activation, analytics/workstation/business registration, auth/audit и optional TLS policy; `SessionSnapshot.active_tariff` с названием/количеством/elapsed/remaining; внешний `SystemService/GetHealth` и авторизованный `SessionService/GetSnapshot` через `:51051` | generated contract и mapping-тесты успешно; Compose rebuild/health успешно | external TLS deployment и full gRPC flow matrix не проверялись; private-LAN insecure transport допускается |
-| Frontend | TypeScript typecheck и Vite production build; единый тёмный shell, topbar, dashboard/map/catalog/panel visual system | успешно | Headed snapshot smoke карты с фиксированной карточкой и отдельным scroll-frame; полный browser matrix и realtime transport ещё не проверялись |
+| Frontend | `76` тестов Vitest, проверка типов TypeScript, lint и production-сборка Vite; четыре вида отчёта аналитики | успешно; frontend и backend в Docker Compose готовы, оба health endpoint вернули HTTP `200`; четыре отчёта просмотрены в Chromium на Linux с данными локальной базы | Проверена ширина экрана `1600px`; нужно проверить мобильную раскладку и остальные сценарии в браузере |
+| Analytics recognized revenue | Finance service передаёт период в PostgreSQL snapshot; v2 Finance API считает пополнения один раз и не прибавляет списания баланса | `21 passed, 4 skipped`; Ruff прошёл; Compose Finance API вернул HTTP `200` и данные пополнений после backend fix | Четыре теста PostgreSQL/Kafka пропущены без настроек тестовых зависимостей; Compose smoke прошёл на локальной базе |
+| Device panel V2 refresh regression | Одинаковый набор команд в активной сессии, старые V1-сессии только для чтения, одна кнопка продажи | `2` целевых теста прошли; проверка типов и production-сборка прошли; все тесты фронтенда — `76 passed` | Нужно вручную проверить панель ПК в браузере |
+| Workstation session-mode cache/cutover | Redis round-trip сохраняет `session_mode`; ключ кэша обновлён; migration `20261002_0071` переводит сохранённые места в V2 и блокирует запуск при активной V1-сессии | `17` целевых backend tests прошли; Ruff прошёл; full backend suite: `325 passed, 35 skipped`, один failure в общей проверке отсутствующих русских docstring | Миграция не применялась к рабочей БД; при активной V1-сессии сначала нужен подтверждённый `POST /api/v1/sessions/cutover/terminate-v1`; PostgreSQL migration не проверена на живой БД |
 | Frontend test foundation | Vitest API-boundary tests: phone normalization, transfer idempotency header/JSON, bearer refresh + retry и public API error mapping; React component/accessibility slice для login, map, sale, booking, offline-routing и confirmation | `19 passed` (`npm run test`) | `fetch` контролируется только на HTTP boundary; browser visual/realtime matrix ещё не проверялась |
 | HTTP/gRPC contract fixtures | authorized ASGI context, stable workstation/reservation HTTP DTO factories and shared snapshot expectation for HTTP/gRPC adapters | reservation API smoke and snapshot transport contract pass | real PostgreSQL/Redis adapters and native Windows transport remain separate evidence |
 | Coverage guardrail | V8 frontend and pytest-cov backend reports with explicit thresholds | frontend `17.18%` lines / `17%` guardrail; backend `70.10%` lines / `70%` guardrail | first measured baseline; DSN/native/browser coverage remains unproven |
@@ -89,6 +92,8 @@ Windows native:
 Set-Location "C:\Git\HubShell"
 .\win-client\scripts\verify-windows.ps1 -Architecture x64 -Configuration Debug
 ```
+
+| V2 anonymous guest launch | Backend one-time grant, signed guest payload, V2 client redemption and stop path | focused backend guest-access test, frontend SaleWorkspace 8-test slice and Linux client build/test passed | PostgreSQL migration/concurrency and native Windows runtime remain unverified |
 
 ## Правило обновления
 

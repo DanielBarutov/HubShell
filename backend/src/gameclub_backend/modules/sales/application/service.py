@@ -156,9 +156,9 @@ class ProductSaleService:
         try:
             pending = await self._repository.create_pending(sale)
             if pending.id != sale.id:
-                # Another request with the same key won the reservation lock.
-                # The first lookup can race with that request, so never settle
-                # a pending row that this invocation did not create.
+                # Другой запрос с тем же ключом уже получил блокировку резерва.
+                # Первый lookup мог пересечься с ним, поэтому этот вызов не должен
+                # проводить чужую pending-запись.
                 if not self._matches_request(
                     pending,
                     product_id=product_id,
@@ -193,9 +193,9 @@ class ProductSaleService:
                         idempotency_key=f"product-sale-balance:{key}:{index}",
                     )
                 elif part.method == ProductPaymentMethod.TRANSFER.value:
-                    # A transfer is a manual, already-confirmed non-cash
-                    # settlement. The payment part remains the accounting fact;
-                    # there is no external provider call in this slice.
+                    # Перевод подтверждает оператор, это безналичный settlement.
+                    # PaymentPart остаётся бухгалтерским фактом, внешнего вызова
+                    # провайдера в этом срезе нет.
                     settled_any = True
                     continue
                 else:
@@ -279,8 +279,8 @@ class ProductSaleService:
             if sale.status is ProductSaleStatus.PENDING:
                 await self._repository.cancel(sale)
         except Exception:
-            # The pending row is intentionally retained for reconciliation if the
-            # compensating stock update cannot be completed immediately.
+            # Pending-запись оставляем для сверки, если компенсирующее изменение
+            # остатка нельзя выполнить сразу.
             return
 
     async def _mark_needs_review(
@@ -292,8 +292,8 @@ class ProductSaleService:
         try:
             await self._repository.mark_needs_review(sale, error, now)
         except Exception:
-            # Preserve the settlement failure; an operator can still inspect the
-            # durable pending row if the review transition itself is unavailable.
+            # Сохраняем ошибку settlement. Оператор всё ещё может открыть
+            # постоянную pending-запись, если переход в review недоступен.
             return
 
     async def _mark_retryable(
@@ -305,8 +305,8 @@ class ProductSaleService:
         try:
             await self._repository.mark_retryable(sale, error, now)
         except Exception:
-            # Keep the original settlement failure visible. The durable pending
-            # row remains available for the next reconciliation sweep.
+            # Оставляем исходную ошибку settlement. Постоянная pending-запись
+            # будет доступна следующему проходу сверки.
             return
 
     async def reconcile(self, sale_id: uuid.UUID) -> ProductSale:

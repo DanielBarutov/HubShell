@@ -79,6 +79,11 @@
   состояние `up` у `v2-client-facts`;
 - реальный факт Kafka дал два спана в Collector, одну трассу в Tempo и логи
   `Received`/`Processed` второго V2 worker в Loki.
+- dashboard `GameClub — проблемные логи сервисов` содержит отдельные таблицы
+  warning/error, HTTP 4xx и HTTP 5xx прикладных контейнеров `gameshell-*`,
+  исключая Alloy, Prometheus, Grafana, Loki, Tempo и Pyroscope; уровень и
+  HTTP-статус фильтруются в LogQL, поэтому видны и накопленные логи без нового
+  label в Alloy.
 
 Осталось:
 

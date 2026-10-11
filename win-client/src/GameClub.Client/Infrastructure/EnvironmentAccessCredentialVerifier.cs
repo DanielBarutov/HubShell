@@ -4,8 +4,8 @@ namespace GameClub.Client.Infrastructure;
 
 public sealed class EnvironmentAccessCredentialVerifier : IAccessCredentialVerifier
 {
-    // Offline/bootstrap fallback for every environment. This is a PBKDF2 hash,
-    // not the plaintext password; a valid server verifier replaces it in memory.
+    // Offline/bootstrap fallback для любого окружения. Здесь хранится PBKDF2-хеш,
+    // а не пароль; корректный verifier сервера заменяет его только в памяти.
     private const string DefaultManagerPasswordHash =
         "pbkdf2-sha256$210000$Z2FtZXNoZWxsLWRldi1tYW5hZ2VyLXNhbHQ=$gAOXzB5w2LpyQ+gSNlpVEHQ3YoeYycTTHbWVqzthfAk=";
     private readonly string? _userAccessHash;
@@ -19,8 +19,8 @@ public sealed class EnvironmentAccessCredentialVerifier : IAccessCredentialVerif
             ? configuredManagerHash!.Trim()
             : DefaultManagerPasswordHash;
 
-        // Hashes are read from the deployment environment only. Plaintext values
-        // are intentionally not supported, including in dev.
+        // Хеши читаются только из окружения развёртывания. Открытые пароли
+        // не поддерживаются даже в dev-режиме.
         EnvironmentName = environment;
     }
 

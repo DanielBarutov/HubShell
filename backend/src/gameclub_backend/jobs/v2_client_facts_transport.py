@@ -8,8 +8,6 @@ Kafka DLQ, и только после этого consumer подтверждае
 
 from __future__ import annotations
 
-import logging
-
 from faststream import FastStream
 from faststream.kafka import KafkaBroker
 from faststream.kafka.opentelemetry import KafkaTelemetryMiddleware
@@ -23,6 +21,7 @@ from prometheus_client import CollectorRegistry, start_http_server
 
 from gameclub_backend.config import Settings, get_settings
 from gameclub_backend.infrastructure.resources import InfrastructureResources, create_resources
+from gameclub_backend.logging_setup import configure_stdout_logger
 from gameclub_backend.modules.eventing_v2.application.reconciliation import (
     V2ClientFactReconciliationService,
 )
@@ -37,8 +36,7 @@ from gameclub_backend.modules.sessions.infrastructure.postgres import (
     PostgresSessionTransactionWriter,
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = configure_stdout_logger(__name__)
 SERVICE_NAME = "gameclub-v2-client-facts"
 
 

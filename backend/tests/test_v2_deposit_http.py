@@ -21,6 +21,10 @@ pytestmark = pytest.mark.api
 class DepositServiceStub:
     def __init__(self) -> None:
         self.command = None
+        self.active_clients: set[uuid.UUID] = set()
+
+    async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
+        return client_id in self.active_clients
 
     async def apply(self, command):
         self.command = command
@@ -36,6 +40,7 @@ class DepositServiceStub:
 
 
 async def test_operator_v2_deposit_uses_header_key_and_returns_pending_delivery() -> None:
+    """Проверяет заявленное поведение backend."""
     clients = ClientService(InMemoryClientRepository())
     client = await clients.create("V2 Deposit Player", None)
     deposits = DepositServiceStub()

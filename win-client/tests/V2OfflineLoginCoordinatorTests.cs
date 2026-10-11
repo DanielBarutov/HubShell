@@ -103,24 +103,30 @@ public sealed class V2OfflineLoginCoordinatorTests
         Assert.Empty(store.Snapshot.PendingOutbox);
     }
 
-    [Fact]
-    public async Task LoginNeverReplacesAnActiveLedger()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AuthenticationNeverCreatesAServerSessionWhileLocalLedgerIsActive(bool register)
     {
+        // Проверяет, что активный ledger блокирует вход и регистрацию до создания серверной сессии.
         var store = new RecordingStore();
         var ledger = new V2LocalLedgerCoordinator(store);
         await ledger.InitializeAsync(CreateLedger("device-01"));
+        var gateway = new SnapshotGateway(CreateLedger("device-01"));
         var coordinator = new V2OfflineLoginCoordinator(
-            new SnapshotGateway(CreateLedger("device-01")),
+            gateway,
             ledger);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.LoginAndInitializeAsync(
-            "NightFox",
-            "safe-password",
-            "device-01",
-            "v2-login-002",
-            new AcceptingVerifier()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => register
+            ? coordinator.RegisterAndInitializeAsync(
+                "NightFox", "79990000000", "safe-password", "device-01",
+                "v2-register-002", new AcceptingVerifier())
+            : coordinator.LoginAndInitializeAsync(
+                "NightFox", "safe-password", "device-01",
+                "v2-login-002", new AcceptingVerifier()));
 
         Assert.Equal(V2LocalSessionStatus.Active, store.Snapshot!.Ledger.Status);
+        Assert.False(gateway.AuthenticationRequested);
     }
 
     [Fact]
@@ -137,17 +143,23 @@ public sealed class V2OfflineLoginCoordinatorTests
             stopped.Ledger,
             stopped.OutboxFacts,
             Array.Empty<V2ClientInboxEntry>()));
+        var nextSession = CreateLedger("device-01") with
+        {
+            SnapshotId = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+        };
         var coordinator = new V2OfflineLoginCoordinator(
-            new SnapshotGateway(CreateLedger("device-01")),
+            new SnapshotGateway(nextSession),
             ledger);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.LoginAndInitializeAsync(
+        await coordinator.LoginAndInitializeAsync(
             "NightFox",
             "safe-password",
             "device-01",
             "v2-login-002",
-            new AcceptingVerifier()));
+            new AcceptingVerifier());
 
+        Assert.Equal(nextSession.SessionId, store.Snapshot!.Ledger.SessionId);
         Assert.Equal(stopped.OutboxFacts, store.Snapshot!.PendingOutbox);
     }
 
@@ -167,6 +179,8 @@ public sealed class V2OfflineLoginCoordinatorTests
 
     private sealed class SnapshotGateway(V2LocalSessionLedger ledger) : IV2OfflineSessionGateway
     {
+        public bool AuthenticationRequested { get; private set; }
+
         public Task<V2OfflineLoginResult> RegisterAsync(
             string nickname,
             string phone,
@@ -174,8 +188,11 @@ public sealed class V2OfflineLoginCoordinatorTests
             string deviceId,
             string idempotencyKey,
             IOfflineSnapshotSignatureVerifier signatureVerifier,
-            CancellationToken cancellationToken = default) => Task.FromResult(
-                new V2OfflineLoginResult(ledger, false, null));
+            CancellationToken cancellationToken = default)
+        {
+            AuthenticationRequested = true;
+            return Task.FromResult(new V2OfflineLoginResult(ledger, false, null));
+        }
 
         public Task<V2OfflineLoginResult> LoginAsync(
             string identifier,
@@ -183,13 +200,22 @@ public sealed class V2OfflineLoginCoordinatorTests
             string deviceId,
             string idempotencyKey,
             IOfflineSnapshotSignatureVerifier signatureVerifier,
-            CancellationToken cancellationToken = default) => Task.FromResult(
-                new V2OfflineLoginResult(ledger, false, null));
+            CancellationToken cancellationToken = default)
+        {
+            AuthenticationRequested = true;
+            return Task.FromResult(new V2OfflineLoginResult(ledger, false, null));
+        }
 
         public Task ChangePasswordAsync(
             string newPassword,
             string deviceId,
             string resetToken,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task StopSessionAsync(
+            string deviceId,
+            string sessionId,
+            string clientId,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
@@ -225,6 +251,12 @@ public sealed class V2OfflineLoginCoordinatorTests
             NewPassword = newPassword;
             return Task.CompletedTask;
         }
+
+        public Task StopSessionAsync(
+            string deviceId,
+            string sessionId,
+            string clientId,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class RecordingStore : IV2LocalLedgerStore

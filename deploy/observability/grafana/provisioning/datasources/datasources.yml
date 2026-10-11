@@ -28,3 +28,10 @@ datasources:
         tags: ["service.name"]
         spanStartTimeShift: "-1m"
         spanEndTimeShift: "1m"
+
+  - name: Pyroscope
+    type: grafana-pyroscope-datasource
+    uid: pyroscope
+    access: proxy
+    url: http://pyroscope:4040
+    editable: false

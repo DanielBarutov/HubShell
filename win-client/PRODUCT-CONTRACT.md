@@ -48,6 +48,12 @@
 - Поле «Остаток по балансу» приходит готовым из server snapshot и означает
   только число минут по действующей поминутной ставке зоны. Win-клиент не
   пересчитывает его через цену или длительность пакетных тарифов.
+- Главный таймер активной сессии показывает единый прогноз до принудительного
+  выхода: оставшиеся минуты активного и доступных к моменту перехода queued
+  пакетов, затем server-provided минуты поминутного баланса. Закрытый ночной
+  пакет не добавляется; закрытие окна активного ночного пакета обрывает прогноз
+  и сжигает его остаток. Это только отображение snapshot, а не локальное
+  решение о списании или доступности.
 - Во время активного пакета поле времени, рассчитанного по балансу, скрывается;
   оно появляется только после перехода на поминутный источник. Завершённые
   `exhausted` и `burned` пакеты в пользовательском списке не показываются.
@@ -189,7 +195,7 @@
 - После последней минуты пакета при невозможности оплатить следующую минуту
   локальный V2 ledger атомарно записывает `SESSION_STOP`, закрывает доступ и
   блокирует application shell; V2 operator command может отдельно подтвердить
-  `v2.display.lock`. Активный виджет не остаётся на экране с нулём минут.
+  `display.lock`. Активный виджет не остаётся на экране с нулём минут.
 - На карте оператора офлайн-ПК остаётся виден с последним клиентом, временем и
   статусом отсутствия связи.
 
@@ -228,21 +234,29 @@
 - V2 access-gate вызывает только `OfflineSessionService.Login/Register`,
   создаёт ledger после проверки подписи и ведёт minute timer локально. Он не
   запускает V1 command-loop, который способен создать server-owned session.
+- Анонимный гостевой V2-доступ получает только через
+  `OfflineSessionService.RedeemGuestAccess`: клиент проверяет отдельную signed
+  guest payload, сохраняет guest ledger до открытия access-gate и завершает его
+  через `StopGuestAccess`. V1 `session.start/stop` и guest facts для client
+  profile в этом потоке не используются.
+- При восстановлении гостевого ledger клиент не вызывает кабинет аккаунта.
+  Новый вход или регистрация при активном local ledger отклоняются до запроса
+  серверного snapshot, чтобы отказ локального хранения не создавал новую сессию.
 - До входа Windows V2 host использует только V2 `DeviceControlService`: health,
   enrollment по MAC/`installation_id` и device-authenticated heartbeat. Полученный
   heartbeat содержит policy/тему места, но не V1 session snapshot; локальный ledger
   остаётся единственным источником активной V2-сессии.
-- Windows publish собирается через отдельные `GameClub.Client.Avalonia.V2` и
-  `GameClub.Client.Transport.V2.Grpc`: их dependency manifest не содержит V1
-  protobuf transport. Linux developer host также использует V2 transport и
-  local ledger для ручного тестирования; plaintext store остаётся только
-  manual-dev boundary и не является production security proof.
+- Windows publish собирается через общие `GameClub.Client.Avalonia` и
+  `GameClub.Client.Transport.Grpc`; их dependency manifest не содержит старый
+  protobuf transport. Linux developer host использует тот же transport и local
+  ledger для ручного тестирования; plaintext store остаётся только manual-dev
+  boundary и не является production security proof.
 - Операторское отключение места — это V2 revocation: следующий heartbeat
   возвращает controlled conflict, Windows немедленно блокирует access-gate и
   прекращает reconnect loop. Durable V2 ledger не удаляется, чтобы факты можно
   было сверить после повторного допуска или вручную разобрать конфликт.
 - V2 Windows host подключает только `DeviceControlService` command stream.
-  Исполнитель принимает строго `v2.display.lock` и `v2.system.restart`; оба
+  Исполнитель принимает строго `display.lock` и `system.restart`; оба
   сначала блокируют application shell. В нём нет session gateway, поэтому
   operator command не может создать, завершить или meter-ить V1-сессию.
 

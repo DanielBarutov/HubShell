@@ -1,7 +1,7 @@
 namespace GameClub.Client.Avalonia.Hosting;
 
 /// <summary>
-/// Process startup selects the composition before Avalonia creates App.
+/// При запуске процесса composition выбирается до создания App в Avalonia.
 /// </summary>
 public static class AvaloniaClientHostFactory
 {

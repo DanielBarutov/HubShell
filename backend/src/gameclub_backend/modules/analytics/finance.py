@@ -204,6 +204,13 @@ class FinanceTotals:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class FinanceDailyBucket:
+    key: str
+    label: str
+    recognized_revenue_cents: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class FinanceFactsSnapshot:
     financial_facts: tuple[FinancialFact, ...] | None
     wallet_facts: tuple[WalletFact, ...] | None
@@ -244,6 +251,7 @@ class FinanceReport:
     metrics: dict[str, MetricResult]
     sources: dict[str, AnalyticsDataState]
     payment_methods: tuple[PaymentMethodAggregate, ...] = ()
+    daily: tuple[FinanceDailyBucket, ...] = ()
 
 
 FINANCE_METRIC_INFO: dict[str, MetricInfo] = {
@@ -381,6 +389,25 @@ def aggregate_payment_methods(
             refunds_cents=refunds.get(method, 0),
         )
         for method in sorted(amounts)
+    )
+
+
+def aggregate_daily_finance_facts(
+    financial_facts: typing.Iterable[FinancialFact] | None,
+    wallet_facts: typing.Iterable[WalletFact] | None,
+    filters: FinanceFilters,
+) -> tuple[FinanceDailyBucket, ...]:
+    return tuple(
+        FinanceDailyBucket(
+            key=bucket.key,
+            label=bucket.label,
+            recognized_revenue_cents=aggregate_finance_facts(
+                financial_facts,
+                wallet_facts,
+                dataclasses.replace(filters, start_at=bucket.start_at, end_at=bucket.end_at),
+            ).recognized_revenue_cents,
+        )
+        for bucket in moscow_day_boundaries(filters.start_at, filters.end_at)
     )
 
 

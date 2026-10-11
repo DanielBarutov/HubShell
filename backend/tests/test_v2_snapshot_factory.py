@@ -17,6 +17,7 @@ from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
 def test_v2_snapshot_factory_uses_server_owned_client_session_and_tariff_snapshots() -> None:
+    """Проверяет заявленное поведение backend."""
     now = datetime.datetime(2026, 9, 27, 18, tzinfo=datetime.UTC)
     client_id = uuid.UUID("00000000-0000-0000-0000-000000000401")
     session_id = uuid.UUID("00000000-0000-0000-0000-000000000402")
@@ -98,6 +99,7 @@ def test_v2_snapshot_factory_uses_server_owned_client_session_and_tariff_snapsho
 
 
 def test_v2_snapshot_factory_rejects_negative_debt_limit() -> None:
+    """Проверяет заявленное поведение backend."""
     now = datetime.datetime(2026, 9, 27, 18, tzinfo=datetime.UTC)
     client_id = uuid.UUID("00000000-0000-0000-0000-000000000501")
     client = Client(

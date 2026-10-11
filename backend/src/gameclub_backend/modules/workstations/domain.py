@@ -33,8 +33,8 @@ class WorkstationStatus(enum.StrEnum):
 class WorkstationSessionMode(enum.StrEnum):
     """Defines which side owns billing decisions for a workstation session."""
 
-    V1_SERVER_OWNED = "v1_server_owned"
-    V2_LOCAL_LEDGER = "v2_local_ledger"
+    SERVER_OWNED = "server_owned"
+    LOCAL_LEDGER = "local_ledger"
 
 
 class LockdownDeploymentMode(enum.StrEnum):
@@ -117,7 +117,7 @@ class Workstation:
     lockdown_policy: LockdownPolicy = dataclasses.field(default_factory=LockdownPolicy)
     mac_address: str | None = None
     installation_id: str | None = None
-    session_mode: WorkstationSessionMode = WorkstationSessionMode.V1_SERVER_OWNED
+    session_mode: WorkstationSessionMode = WorkstationSessionMode.LOCAL_LEDGER
 
     def __post_init__(self) -> None:
         if not self.device_id.strip():

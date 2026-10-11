@@ -251,6 +251,15 @@ services:
       - gameclub-tempo-data:/var/tempo
     restart: unless-stopped
 
+  pyroscope:
+    image: grafana/pyroscope:2.2.1
+    command: ["-pyroscopedb.data-path=/var/lib/pyroscope"]
+    ports:
+      - "127.0.0.1:${GAMECLUB_PYROSCOPE_PORT:-4040}:4040"
+    volumes:
+      - gameclub-pyroscope-data:/var/lib/pyroscope
+    restart: unless-stopped
+
   alloy:
     image: grafana/alloy:v1.7.5
     command: ["run", "/etc/alloy/config.river", "--server.http.listen-addr=0.0.0.0:12345"]
@@ -281,6 +290,8 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+      pyroscope:
+        condition: service_started
     restart: unless-stopped
 
   backend-http:
@@ -290,6 +301,11 @@ services:
     command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "gameclub_backend.presentation.http.app:app"]
     environment:
       <<: *backend-environment
+      GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID: ${GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID:-}
+      GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64: ${GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64:-}
+      GAMECLUB_PYROSCOPE_SERVER_ADDRESS: ${GAMECLUB_PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
+      GAMECLUB_PYROSCOPE_APPLICATION_NAME: ${GAMECLUB_PYROSCOPE_APPLICATION_NAME:-gameclub-backend-http}
+      GAMECLUB_PYROSCOPE_SAMPLE_RATE: ${GAMECLUB_PYROSCOPE_SAMPLE_RATE:-100}
     ports:
       - "${GAMECLUB_BIND_HOST:-0.0.0.0}:${GAMECLUB_HTTP_PORT:-8100}:8100"
     depends_on:
@@ -301,6 +317,8 @@ services:
         condition: service_healthy
       kafka-v2-topics:
         condition: service_completed_successfully
+      pyroscope:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live', timeout=2)"]
       interval: 5s
@@ -424,6 +442,7 @@ volumes:
   gameclub-kafka-data:
   gameclub-loki-data:
   gameclub-postgres-data:
+  gameclub-pyroscope-data:
   gameclub-prometheus-data:
   gameclub-redis-data:
   steam-guest-postgres-data:

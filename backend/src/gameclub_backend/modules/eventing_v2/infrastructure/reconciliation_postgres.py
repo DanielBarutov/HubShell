@@ -38,6 +38,8 @@ from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
     V2SessionChainModel,
 )
 from gameclub_backend.modules.sessions.application.ports import SessionTransactionWriter
+from gameclub_backend.modules.sessions.domain import SessionStatus
+from gameclub_backend.modules.sessions.infrastructure.postgres import SessionModel
 
 CONSUMER_NAME = "client_session_facts"
 ALLOWED_CLIENT_FACT_TYPES = frozenset(
@@ -221,7 +223,7 @@ class PostgresV2ClientFactReconciliationRepository:
                         if (
                             closed_session is None
                             or closed_session.client_id != event.client_id
-                            or closed_session.source != "v2_local_ledger"
+                            or closed_session.source != "local_ledger"
                         ):
                             return V2ClientFactResult(
                                 V2ClientFactStatus.CONFLICT,
@@ -331,13 +333,36 @@ class PostgresV2ClientFactReconciliationRepository:
             .where(V2SessionLeaseModel.session_id == event.session_id)
             .with_for_update()
         )
+        server_session = await session.get(SessionModel, event.session_id)
         now = datetime.datetime.now(datetime.UTC)
+        lease_matches = (
+            lease is not None
+            and lease.client_id == event.client_id
+            and lease.device_id == event.device_id
+        )
+        session_matches = (
+            server_session is not None
+            and server_session.source == "local_ledger"
+            and server_session.client_id == event.client_id
+        )
+        active_session_lease = (
+            lease_matches
+            and session_matches
+            and lease.status == "active"
+            and (lease.expires_at is None or lease.expires_at >= now)
+            and server_session.status == SessionStatus.ACTIVE.value
+        )
+        fact_occurred_before_stop = (
+            lease_matches
+            and session_matches
+            and server_session.status == SessionStatus.COMPLETED.value
+            and server_session.ended_at is not None
+            and event.occurred_at <= server_session.ended_at
+        )
         if (
-            lease is None
-            or lease.status != "active"
-            or lease.client_id != event.client_id
-            or lease.device_id != event.device_id
-            or (lease.expires_at is not None and lease.expires_at < now)
+            not lease_matches
+            or not session_matches
+            or not (active_session_lease or fact_occurred_before_stop)
         ):
             return None
         return lease

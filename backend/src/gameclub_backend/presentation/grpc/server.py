@@ -6,11 +6,8 @@ import grpc
 
 from gameclub.v1 import (
     clients_pb2_grpc,
-    reservations_pb2_grpc,
-    sessions_pb2_grpc,
     system_pb2,
     system_pb2_grpc,
-    workstations_pb2_grpc,
 )
 from gameclub.v2 import device_control_service_pb2_grpc, offline_session_service_pb2_grpc
 from gameclub_backend.bootstrap import ApplicationServices, build_application_services
@@ -22,9 +19,6 @@ from gameclub_backend.presentation.grpc.services import (
     ClientPortalGrpcService,
     DeviceControlGrpcService,
     OfflineSessionGrpcService,
-    ReservationGrpcService,
-    SessionGrpcService,
-    WorkstationGrpcService,
 )
 
 
@@ -46,9 +40,8 @@ def create_grpc_server_credentials(settings: Settings) -> grpc.ServerCredentials
     cert_file = settings.grpc_tls_cert_file
     key_file = settings.grpc_tls_key_file
     if not cert_file and not key_file:
-        # A closed-club deployment may keep the backend on a private LAN and
-        # use insecure gRPC. TLS remains available when the service is exposed
-        # outside that trusted network.
+        # В закрытом клубе backend может работать в private LAN без TLS.
+        # При выходе за пределы доверенной сети остаётся доступен TLS.
         return None
     if not cert_file or not key_file:
         raise ValueError("gRPC TLS certificate and key must be configured together")
@@ -85,26 +78,22 @@ def create_server(
         interceptors=[GrpcAuditInterceptor(current_services.audit_repository, token_service)]
     )
 
-    # gRPC is the device/native-client boundary. Operator CRUD stays on the
-    # HTTP BFF; the protobuf messages remain generated for compatibility and
-    # can be exposed by a separately secured internal server if needed.
+    # gRPC служит границей для устройств и нативного клиента. Операторский CRUD
+    # остаётся в HTTP BFF; protobuf-сообщения сохраняются для совместимости и
+    # при необходимости могут быть опубликованы отдельным защищённым сервером.
     system_pb2_grpc.add_SystemServiceServicer_to_server(SystemService(), server)
-    workstations_pb2_grpc.add_WorkstationServiceServicer_to_server(
-        WorkstationGrpcService(
-            current_services.workstations,
-            token_service,
-            current_services.command_service,
-            current_services.workstation_groups,
-            current_services.sessions,
-        ),
-        server,
-    )
+    # Для устройств предусмотрены только бизнес-сервисы DeviceControl и OfflineSession.
+    # Старые RPC Workstation/Session V1 не регистрируются в поставляемом сервере.
     clients_pb2_grpc.add_ClientPortalServiceServicer_to_server(
         ClientPortalGrpcService(current_services.client_portal, token_service),
         server,
     )
     offline_session_service_pb2_grpc.add_OfflineSessionServiceServicer_to_server(
-        OfflineSessionGrpcService(current_services.v2_offline_login, token_service),
+        OfflineSessionGrpcService(
+            current_services.v2_offline_login,
+            token_service,
+            current_services.v2_guest_access,
+        ),
         server,
     )
     device_control_service_pb2_grpc.add_DeviceControlServiceServicer_to_server(
@@ -112,19 +101,6 @@ def create_server(
             current_services.workstations,
             token_service,
             current_services.command_service,
-        ),
-        server,
-    )
-    reservations_pb2_grpc.add_ReservationServiceServicer_to_server(
-        ReservationGrpcService(current_services.reservations, token_service),
-        server,
-    )
-    sessions_pb2_grpc.add_SessionServiceServicer_to_server(
-        SessionGrpcService(
-            current_services.sessions,
-            token_service,
-            current_services.session_transfers,
-            current_services.offline,
         ),
         server,
     )

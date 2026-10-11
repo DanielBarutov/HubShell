@@ -9,7 +9,7 @@ from gameclub_backend.modules.auth.domain import Principal, SubjectType
 async def test_report_api_creates_job_and_downloads_protected_csv(api_context) -> None:
     """Проверяет постановку отчёта в очередь и скачивание защищённого CSV."""
     response = await api_context.client.post(
-        "/api/v2/analytics/reports",
+        "/api/analytics/reports",
         headers=api_context.headers,
         json={
             "report_name": "daily",
@@ -53,7 +53,7 @@ async def test_report_api_rejects_pii_without_special_permission(api_context) ->
     )
     token, _ = token_service.issue_access_token(limited)
     response = await api_context.client.post(
-        "/api/v2/analytics/reports",
+        "/api/analytics/reports",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "report_name": "clients",
@@ -69,7 +69,7 @@ async def test_report_api_rejects_pii_without_special_permission(api_context) ->
 async def test_report_api_returns_404_for_unknown_artifact(api_context) -> None:
     """Проверяет, что неизвестная ссылка на артефакт не раскрывает детали."""
     response = await api_context.client.get(
-        "/api/v2/analytics/reports/00000000-0000-0000-0000-000000000000/artifact?token=bad",
+        "/api/analytics/reports/00000000-0000-0000-0000-000000000000/artifact?token=bad",
         headers=api_context.headers,
     )
     assert response.status_code == 404

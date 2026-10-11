@@ -65,6 +65,14 @@ class V2SnapshotIssueResult:
 
 
 class V2SnapshotIssueRepository(typing.Protocol):
+    async def has_active_lease(
+        self,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+        device_id: str,
+    ) -> bool:
+        """Check the active server-owned lease for a client/device/session tuple."""
+
     async def issue(self, value: V2SignedSnapshotIssue) -> V2SnapshotIssueResult:
         """Atomically save snapshot bytes, exclusive lease, audit and server outbox."""
 
@@ -79,6 +87,14 @@ class V2SnapshotIssueRepository(typing.Protocol):
 class V2SnapshotIssueService:
     def __init__(self, repository: V2SnapshotIssueRepository) -> None:
         self._repository = repository
+
+    async def has_active_lease(
+        self,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+        device_id: str,
+    ) -> bool:
+        return await self._repository.has_active_lease(session_id, client_id, device_id)
 
     async def issue(self, value: V2SignedSnapshotIssue) -> V2SnapshotIssueResult:
         return await self._repository.issue(value)

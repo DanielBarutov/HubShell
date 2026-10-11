@@ -4,8 +4,8 @@ using Avalonia.Controls;
 namespace GameClub.Client.Avalonia.Hosting;
 
 /// <summary>
-/// Owns one client composition. The Avalonia window stays platform-neutral;
-/// developer and Windows production hosts supply their own transports/adapters.
+/// Владеет одной сборкой клиента. Окно Avalonia остаётся независимым от платформы,
+/// host разработки и production-host передают собственные транспорты и адаптеры.
 /// </summary>
 public interface IClientHost : IAsyncDisposable
 {
@@ -16,8 +16,8 @@ public interface IClientHost : IAsyncDisposable
     string HostDisclaimer { get; }
 
     /// <summary>
-    /// Optional native desktop behavior owned by the selected host. The Linux
-    /// developer host deliberately leaves this null.
+    /// Необязательное нативное поведение рабочего стола, за которое отвечает выбранный host.
+    /// Linux developer-host намеренно оставляет это свойство пустым.
     /// </summary>
     IClientWindowAdapter? WindowAdapter { get; }
 
@@ -25,15 +25,15 @@ public interface IClientHost : IAsyncDisposable
 }
 
 /// <summary>
-/// Keeps platform-specific window and tray behavior out of the shared
-/// access-gate/portal view. Implementations are attached only after Avalonia
-/// creates a native window handle.
+/// Изолирует платформенное поведение окна и трея от общего представления
+/// access-gate и личного кабинета. Реализация подключается только после того,
+/// как Avalonia создаст нативный дескриптор окна.
 /// </summary>
 public interface IClientWindowAdapter : IDisposable
 {
     /// <summary>
-    /// Requests a transparent native surface before the window opens. This is
-    /// needed only when a platform adapter renders rounded outer corners.
+    /// Запрашивает прозрачную нативную поверхность до открытия окна. Это нужно
+    /// только адаптерам, которые рисуют скруглённые внешние углы.
     /// </summary>
     bool UsesTransparentWindow { get; }
 

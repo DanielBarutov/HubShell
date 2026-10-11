@@ -4,8 +4,8 @@ package gameclub.devices.v2;
 
 option csharp_namespace = "GameClub.Client.Contracts.Devices.V2";
 
-// V2 device boundary. It deliberately carries workstation configuration only:
-// V2 session state and charging remain in the signed local ledger.
+// Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
+// состояние сессии V2 и списания остаются в подписанном локальном ledger.
 service DeviceControlService {
   rpc GetHealth(DeviceHealthRequest) returns (DeviceHealthResponse);
   rpc Enroll(DeviceEnrollmentRequest) returns (DeviceEnrollmentResponse);
@@ -52,8 +52,8 @@ message DeviceHeartbeatResponse {
   WorkstationLockdownPolicy lockdown_policy = 7;
 }
 
-// Operator commands that are safe for the V2 client shell. Session creation,
-// session termination, and metering intentionally have no V2 command form.
+// Безопасные команды оператора для оболочки клиента V2. Для создания и
+// завершения сессии, а также для meter нет формы команды V2.
 message DeviceCommandWatchRequest {
   string device_id = 1;
 }

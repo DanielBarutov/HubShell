@@ -217,7 +217,8 @@ async def test_postgres_transfer_confirms_once_and_rejects_other_key(
                 offer_key,
             ),
         )
-        # Offer creation must converge before confirmations race.
+        # Сначала создание предложения должно прийти к одному состоянию,
+        # только потом могут одновременно начаться подтверждения.
         if offer_results[0].id != offer_results[1].id:
             raise AssertionError("Concurrent offer creation did not converge")
         offer = offer_results[0]
@@ -396,7 +397,7 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
             "applied",
             "duplicate",
         }
-        # Device sessions receive the five-minute login grant; only two of the
+        # Сессии устройства получают login grant на пять минут, но только две из
         # seven elapsed minutes are billable.
         assert (await clients.get(client.id)).balance_cents == 480
         meter = await BillingService(

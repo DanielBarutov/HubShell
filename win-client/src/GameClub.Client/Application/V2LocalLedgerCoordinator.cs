@@ -9,6 +9,9 @@ namespace GameClub.Client.Application;
 /// </summary>
 public sealed class V2LocalLedgerCoordinator
 {
+    private const string NonClientServerEventMessage =
+        "Для локального баланса разрешён только BalanceCreditApplied.";
+
     private readonly IV2LocalLedgerStore _store;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -40,7 +43,8 @@ public sealed class V2LocalLedgerCoordinator
 
     /// <summary>
     /// Начинает следующую signed V2-сессию на том же ПК. Активный ledger нельзя
-    /// перезаписать: сначала он должен завершиться локальным фактом.
+    /// перезаписать; незавершённые outbox-факты и dedupe-состояние сохраняются
+    /// для последующей доставки и защиты от повторного применения.
     /// </summary>
     public async Task InitializeNextSessionAsync(
         V2LocalSessionLedger ledger,
@@ -64,10 +68,6 @@ public sealed class V2LocalLedgerCoordinator
             {
                 throw new InvalidOperationException("An active V2 local ledger cannot be replaced");
             }
-            if (existing.PendingOutbox.Count != 0)
-            {
-                throw new InvalidOperationException("V2 local facts must be delivered before the next session");
-            }
             if (!string.Equals(existing.Ledger.DeviceId, ledger.DeviceId, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("V2 local ledger belongs to another device");
@@ -75,8 +75,9 @@ public sealed class V2LocalLedgerCoordinator
             await _store.WriteAsync(
                 new V2LocalLedgerStorageSnapshot(
                     ledger,
-                    Array.Empty<V2LocalFact>(),
-                    Array.Empty<V2ClientInboxEntry>()),
+                    existing.PendingOutbox,
+                    existing.ClientInbox,
+                    existing.ServerEventIssues),
                 cancellationToken);
         }
         finally
@@ -113,12 +114,124 @@ public sealed class V2LocalLedgerCoordinator
             ledger => V2LocalLedgerEngine.PurchasePackage(ledger, actionId, tariffId, occurredAt),
             cancellationToken);
 
+    public async Task<V2PendingPortalPackagePurchase> BeginPortalPackagePurchaseAsync(
+        string tariffId,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingPortalPackagePurchase is { } pending)
+            {
+                if (!string.Equals(pending.TariffId, tariffId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "A previous portal package purchase must be resolved before starting another");
+                }
+                return pending;
+            }
+
+            V2LocalLedgerEngine.ValidatePackagePurchase(current.Ledger, tariffId);
+            var purchase = new V2PendingPortalPackagePurchase(
+                Guid.NewGuid(),
+                $"win-portal-tariff-{Guid.NewGuid():N}",
+                tariffId);
+            await _store.WriteAsync(
+                current with { PendingPortalPackagePurchase = purchase },
+                cancellationToken);
+            return purchase;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<V2LocalLedgerTransition> CompletePortalPackagePurchaseAsync(
+        string tariffId,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            var pending = current.PendingPortalPackagePurchase
+                ?? throw new InvalidOperationException("No portal package purchase is pending");
+            if (!string.Equals(pending.TariffId, tariffId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Portal package purchase tariff does not match");
+            }
+
+            var transition = V2LocalLedgerEngine.PurchasePackage(
+                current.Ledger,
+                pending.ActionId,
+                pending.TariffId,
+                occurredAt,
+                serverConfirmed: true);
+            await _store.WriteAsync(
+                current with
+                {
+                    Ledger = transition.Ledger,
+                    PendingOutbox = current.PendingOutbox.Concat(transition.OutboxFacts).ToArray(),
+                    PendingPortalPackagePurchase = null,
+                },
+                cancellationToken);
+            return transition;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task AbandonPendingPortalPackagePurchaseAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingPortalPackagePurchase is not null)
+            {
+                await _store.WriteAsync(
+                    current with { PendingPortalPackagePurchase = null },
+                    cancellationToken);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<V2PendingPortalPackagePurchase?> ReadPendingPortalPackagePurchaseAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return (await RequireSnapshotAsync(cancellationToken)).PendingPortalPackagePurchase;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public Task<V2LocalLedgerTransition> StopEarlyAsync(
         Guid actionId,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken = default) =>
         ApplyClientActionAsync(
             ledger => V2LocalLedgerEngine.StopEarly(ledger, actionId, occurredAt),
+            cancellationToken);
+
+    public Task<V2LocalLedgerTransition> ApplyServerStopAsync(
+        CancellationToken cancellationToken = default) =>
+        ApplyClientActionAsync(
+            V2LocalLedgerEngine.ApplyServerStop,
             cancellationToken);
 
     public async Task<V2LocalLedgerTransition> ApplyBalanceCreditAsync(
@@ -240,6 +353,38 @@ public sealed class V2LocalLedgerCoordinator
         try
         {
             return await _store.ReadAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<int> ResolveNonClientServerEventIssuesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await _store.ReadAsync(cancellationToken);
+            if (current is null || current.ServerEventIssues is not { Count: > 0 } issues)
+            {
+                return 0;
+            }
+
+            var retained = issues
+                .Where(issue =>
+                    issue.ReasonCode != "invalid_server_event"
+                    || issue.Message != NonClientServerEventMessage)
+                .ToArray();
+            var resolvedCount = issues.Count - retained.Length;
+            if (resolvedCount > 0)
+            {
+                await _store.WriteAsync(
+                    current with { ServerEventIssues = retained },
+                    cancellationToken);
+            }
+            return resolvedCount;
         }
         finally
         {

@@ -76,6 +76,23 @@ class PostgresV2SessionLeaseRepository:
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
 
+    async def revoke(
+        self,
+        session_id: uuid.UUID,
+        revoked_at: datetime.datetime,
+    ) -> None:
+        async with open_session(self._engine_provider) as session:
+            async with session.begin():
+                lease = await session.get(
+                    V2SessionLeaseModel,
+                    session_id,
+                    with_for_update=True,
+                )
+                if lease is None or lease.status != "active":
+                    return
+                lease.status = "revoked"
+                lease.revoked_at = revoked_at
+
     async def issue_exclusively(self, lease: V2SessionLease) -> tuple[V2SessionLease, bool]:
         async with open_session(self._engine_provider) as session:
             async with session.begin():

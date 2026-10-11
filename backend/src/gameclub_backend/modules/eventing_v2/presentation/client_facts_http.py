@@ -56,7 +56,7 @@ class V2ClientFactIngress:
 
 
 def create_v2_client_facts_router() -> APIRouter:
-    router = APIRouter(prefix="/api/v2/events", tags=["v2-events"])
+    router = APIRouter(prefix="/api/events", tags=["events"])
 
     @router.post(
         "/client-facts",

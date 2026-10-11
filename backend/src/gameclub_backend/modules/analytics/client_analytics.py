@@ -641,8 +641,8 @@ def build_client_analytics_report(
     )
 
 
-# Read-only adapters from existing domain facts. They copy facts into analytics DTOs;
-# no producer object is mutated and no current balance is used for historical revenue.
+# Адаптеры только читают существующие доменные факты и копируют их в analytics DTO.
+# Объекты-источники не меняются, а текущий баланс не используется для исторической выручки.
 def entitlement_from_domain(entitlement: typing.Any) -> EntitlementAnalyticsFact:
     return EntitlementAnalyticsFact(
         entitlement_id=str(entitlement.id),

@@ -30,6 +30,29 @@ public sealed class V2LocalLedgerTests
     }
 
     [Fact]
+    public void GuestLedgerConsumesLocallyWithoutClientProfileFacts()
+    {
+        var ledger = CreateLedger(
+            balanceCents: 0,
+            packages: [new V2LocalPackage("guest-package", "guest", null, 1, V2LocalPackageStatus.Active)])
+            with
+        {
+            ClientId = Guid.Empty,
+            GuestName = "Гость",
+            GuestPaymentId = Guid.NewGuid(),
+        };
+
+        var transition = V2LocalLedgerEngine.ConsumeOneMinute(
+            ledger,
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Empty(transition.OutboxFacts);
+        Assert.Equal(0, Assert.Single(transition.Ledger.Packages).RemainingMinutes);
+        Assert.Equal(V2LocalSessionStatus.Active, transition.Ledger.Status);
+    }
+
+    [Fact]
     public void ActivatesQueuedPackageAndConsumesItBeforePerMinuteDebit()
     {
         var ledger = CreateLedger(
@@ -90,6 +113,79 @@ public sealed class V2LocalLedgerTests
         Assert.Equal(30, package.RemainingMinutes);
         Assert.Equal(V2LocalPackageStatus.Queued, package.Status);
         Assert.Equal("package_purchased", Assert.Single(transition.OutboxFacts).EventType);
+    }
+
+    [Fact]
+    public void ServerStopStopsBillingAndBurnsTheActivePackageWithoutClientStopFact()
+    {
+        var ledger = CreateLedger(
+            packages:
+            [
+                new V2LocalPackage("active", "package", null, 12, V2LocalPackageStatus.Active),
+                new V2LocalPackage("queued", "package", null, 30, V2LocalPackageStatus.Queued),
+            ]);
+
+        var transition = V2LocalLedgerEngine.ApplyServerStop(ledger);
+        var repeated = V2LocalLedgerEngine.ApplyServerStop(transition.Ledger);
+
+        Assert.Equal(V2LocalSessionStatus.Stopped, transition.Ledger.Status);
+        Assert.True(transition.LockWorkstation);
+        Assert.Empty(transition.OutboxFacts);
+        Assert.Equal(V2LocalPackageStatus.Burned,
+            transition.Ledger.Packages.Single(item => item.Id == "active").Status);
+        Assert.Equal(V2LocalPackageStatus.Queued,
+            transition.Ledger.Packages.Single(item => item.Id == "queued").Status);
+        Assert.True(repeated.IsDuplicate);
+        Assert.Equal(transition.Ledger, repeated.Ledger);
+    }
+
+    [Fact]
+    public async Task NextSessionPreservesPendingFactsFromTheCompletedSession()
+    {
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        var previous = CreateLedger();
+        var next = CreateLedger() with
+        {
+            SnapshotId = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+        };
+        await coordinator.InitializeAsync(previous);
+        await coordinator.StopEarlyAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var pending = await coordinator.ReadPendingOutboxAsync();
+
+        await coordinator.InitializeNextSessionAsync(next);
+
+        var snapshot = Assert.IsType<V2LocalLedgerStorageSnapshot>(await store.ReadAsync());
+        Assert.Equal(next.SessionId, snapshot.Ledger.SessionId);
+        Assert.Equal(pending, snapshot.PendingOutbox);
+    }
+
+    [Fact]
+    public async Task PortalPackagePurchaseKeepsOneIdempotencyKeyUntilLocalCompletion()
+    {
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        await ledger.InitializeAsync(CreateLedger(balanceCents: 310));
+
+        var pending = await ledger.BeginPortalPackagePurchaseAsync("package");
+        await ledger.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var recoveredCoordinator = new V2LocalLedgerCoordinator(store);
+        var retried = await recoveredCoordinator.BeginPortalPackagePurchaseAsync("package");
+        Assert.Equal(pending, retried);
+
+        var transition = await recoveredCoordinator.CompletePortalPackagePurchaseAsync(
+            "package",
+            DateTimeOffset.UtcNow);
+        var snapshot = Assert.IsType<V2LocalLedgerStorageSnapshot>(await store.ReadAsync());
+
+        Assert.Equal(-50, transition.Ledger.BalanceCents);
+        Assert.Equal(-50, snapshot.Ledger.BalanceCents);
+        Assert.Single(snapshot.Ledger.Packages);
+        Assert.Equal(
+            ["per_minute_debit", "package_purchased"],
+            snapshot.PendingOutbox.Select(fact => fact.EventType));
+        Assert.Null(snapshot.PendingPortalPackagePurchase);
     }
 
     [Fact]
@@ -377,6 +473,44 @@ public sealed class V2LocalLedgerTests
     }
 
     [Fact]
+    public async Task RecoveryClearsOnlyKnownServerEventsThatHaveNoClientHandler()
+    {
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(CreateLedger(loginGrantMinutes: 1));
+        var snapshot = Assert.IsType<V2LocalLedgerStorageSnapshot>(await store.ReadAsync());
+        await store.WriteAsync(snapshot with
+        {
+            ServerEventIssues =
+            [
+                new(
+                    Guid.NewGuid().ToString(),
+                    Guid.NewGuid().ToString(),
+                    "invalid_server_event",
+                    "Для локального баланса разрешён только BalanceCreditApplied.",
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    1),
+                new(
+                    Guid.NewGuid().ToString(),
+                    Guid.NewGuid().ToString(),
+                    "target_mismatch",
+                    "Сообщение предназначено другой V2-сессии.",
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    1),
+            ],
+        });
+
+        var recovery = await new V2LocalLedgerRecoveryCoordinator(coordinator)
+            .RecoverAsync("device-01");
+        var remainingIssues = (await coordinator.ReadSnapshotAsync())!.ServerEventIssues!;
+
+        Assert.Equal(1, recovery.ServerEventIssueCount);
+        Assert.Equal("target_mismatch", Assert.Single(remainingIssues).ReasonCode);
+    }
+
+    [Fact]
     public void SerializerPreservesFullImmutableV2Envelope()
     {
         var fact = Assert.Single(V2LocalLedgerEngine.ConsumeOneMinute(
@@ -445,9 +579,45 @@ public sealed class V2LocalLedgerTests
     }
 
     [Fact]
+    public void GuestAccessSnapshotCreatesGuestLedgerWithoutClientBalance()
+    {
+        var payload = new GuestSessionAccessPayload
+        {
+            GrantId = Guid.NewGuid().ToString(),
+            SchemaVersion = 1,
+            IssuedAt = Timestamp.FromDateTime(DateTime.UtcNow),
+            ExpiresAt = Timestamp.FromDateTime(DateTime.UtcNow.AddMinutes(10)),
+            PaymentId = Guid.NewGuid().ToString(),
+            SessionId = Guid.NewGuid().ToString(),
+            DeviceId = "guest-device",
+            GuestName = "Гость",
+            TariffId = Guid.NewGuid().ToString(),
+            DurationMinutes = 60,
+            TariffQuantity = 2,
+        };
+        var signingBytes = V2OfflineSessionSnapshotReader.SerializeDeterministic(payload);
+        var signed = new SignedGuestSessionAccess
+        {
+            Payload = payload,
+            SigningKeyId = "club-key-1",
+            Signature = ByteString.CopyFrom([1, 2, 3]),
+        };
+
+        var ledger = V2OfflineSessionSnapshotReader.VerifyAndCreateGuestLedger(
+            signed,
+            new SnapshotVerifier(signingBytes, accepts: true),
+            "guest-device");
+
+        Assert.True(ledger.IsGuest);
+        Assert.Equal(Guid.Parse(payload.PaymentId), ledger.GuestPaymentId);
+        Assert.Equal(120, Assert.Single(ledger.Packages).RemainingMinutes);
+        Assert.Equal(0, ledger.BalanceCents);
+    }
+
+    [Fact]
     public void Ed25519VerifierAcceptsKnownClubKeyAndRejectsUnknownOrChangedData()
     {
-        var verifier = new Ed25519OfflineSnapshotSignatureVerifier(
+        var verifier = new V2Ed25519OfflineSnapshotSignatureVerifier(
             new Dictionary<string, string>
             {
                 ["club-key-1"] = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
@@ -495,7 +665,7 @@ public sealed class V2LocalLedgerTests
         });
         var signature = Convert.FromBase64String(
             "yeGZhZjunhzh3O7U5tUv2ZDdXfdZLb0J8fPn7cBKM7IhiiAYatnUeiCQ0cHTzuvIbCNGPFcNXEpVF/mYLj5cCQ==");
-        var verifier = new Ed25519OfflineSnapshotSignatureVerifier(
+        var verifier = new V2Ed25519OfflineSnapshotSignatureVerifier(
             new Dictionary<string, string>
             {
                 ["club-key-1"] = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",

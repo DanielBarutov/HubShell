@@ -66,3 +66,26 @@ message SignedOfflineSessionSnapshot {
   string portal_access_token = 6;
   uint32 portal_access_expires_in = 7;
 }
+
+message GuestSessionAccessPayload {
+  string grant_id = 1;
+  uint32 schema_version = 2;
+  google.protobuf.Timestamp issued_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  string payment_id = 5;
+  string session_id = 6;
+  string device_id = 7;
+  optional string workstation_zone_id = 8;
+  string guest_name = 9;
+  string tariff_id = 10;
+  string tariff_name = 11;
+  uint32 duration_minutes = 12;
+  uint32 tariff_quantity = 13;
+  reserved 14 to 31;
+}
+
+message SignedGuestSessionAccess {
+  GuestSessionAccessPayload payload = 1;
+  string signing_key_id = 2;
+  bytes signature = 3;
+}

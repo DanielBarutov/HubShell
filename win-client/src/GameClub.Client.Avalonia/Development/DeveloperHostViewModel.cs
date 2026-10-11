@@ -9,8 +9,8 @@ public sealed class DeveloperHostViewModel
         new EnvironmentAccessCredentialVerifier("dev"));
 
     public string Status =>
-        $"Core loaded. Initial access state: {_accessGate.Snapshot.Mode}. No backend connection was started.";
+        $"Ядро загружено. Начальное состояние доступа: {_accessGate.Snapshot.Mode}. Подключение к backend не запускалось.";
 
     public string EvidenceBoundary =>
-        "This Linux window proves only the Avalonia developer host. It does not prove Windows tray, DPAPI, restart, autostart, kiosk policy, or Windows runtime.";
+        "Это окно Linux подтверждает только работу Avalonia developer-host. Оно не подтверждает работу трея, DPAPI, перезапуска, автозапуска, kiosk policy и Windows runtime.";
 }

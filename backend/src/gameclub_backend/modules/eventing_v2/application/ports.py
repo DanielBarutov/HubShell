@@ -39,7 +39,7 @@ class V2ServerOutboxRepository(typing.Protocol):
         device_id: str,
         limit: int,
     ) -> tuple[V2OutgoingServerEvent, ...]:
-        """Вернуть опубликованные, но ещё не подтверждённые события устройства."""
+        """Вернуть только применимые клиентом события активной V2-сессии."""
 
     async def acknowledge(
         self,

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <OutputPath>bin\Transport.Tests\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\src\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="ServerEventConsumerTests.cs" />
+  </ItemGroup>
+</Project>

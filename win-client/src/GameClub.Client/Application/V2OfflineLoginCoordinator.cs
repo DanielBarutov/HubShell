@@ -54,6 +54,7 @@ public sealed class V2OfflineLoginCoordinator
         IOfflineSnapshotSignatureVerifier signatureVerifier,
         CancellationToken cancellationToken = default)
     {
+        await EnsureNoActiveLedgerAsync(cancellationToken);
         var result = await _gateway.LoginAsync(
             identifier,
             password,
@@ -93,6 +94,7 @@ public sealed class V2OfflineLoginCoordinator
         IOfflineSnapshotSignatureVerifier signatureVerifier,
         CancellationToken cancellationToken = default)
     {
+        await EnsureNoActiveLedgerAsync(cancellationToken);
         var result = await _gateway.RegisterAsync(
             nickname,
             phone,
@@ -112,6 +114,15 @@ public sealed class V2OfflineLoginCoordinator
         }
         await _ledger.InitializeNextSessionAsync(snapshot, cancellationToken);
         return snapshot;
+    }
+
+    private async Task EnsureNoActiveLedgerAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await _ledger.ReadSnapshotAsync(cancellationToken);
+        if (snapshot?.Ledger.Status == V2LocalSessionStatus.Active)
+        {
+            throw new InvalidOperationException("An active V2 local ledger cannot be replaced");
+        }
     }
 
     public async Task ChangePasswordAsync(

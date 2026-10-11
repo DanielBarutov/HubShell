@@ -10,9 +10,9 @@ using GameClub.Client.Infrastructure;
 namespace GameClub.Client.Windows;
 
 /// <summary>
-/// Native desktop behavior for the Windows deployment only. Avalonia owns the
-/// shared view while this adapter restores the previous access-gate/widget
-/// modes and makes the compact widget recoverable through the Windows tray.
+/// Нативное поведение рабочего стола только для Windows-развёртывания. Avalonia
+/// владеет общим представлением, а адаптер восстанавливает режимы access-gate и
+/// виджета и позволяет вернуть компактное окно через трей Windows.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNotificationPresenter
@@ -56,8 +56,8 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
         }
         catch (Exception error)
         {
-            // A tray failure must not prevent the access gate from protecting
-            // the station. Native Windows smoke validates the tray separately.
+            // Ошибка трея не должна лишить станцию защиты access-gate.
+            // Работу трея отдельно проверяют на Windows.
             Trace.TraceError($"HubShell tray initialization failed: {error}");
             StartupDiagnostics.Error("Avalonia Windows tray initialization failed", error);
         }

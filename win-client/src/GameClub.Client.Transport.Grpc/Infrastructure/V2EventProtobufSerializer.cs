@@ -31,8 +31,8 @@ public static class V2EventProtobufSerializer
             PayloadJson = fact.PayloadJson,
         };
 
-        // previous_hash is optional in the shared contract. An empty string is
-        // still a present value in proto3 and makes the first fact invalid.
+        // previous_hash необязателен в общем контракте. Пустая строка всё равно
+        // считается переданным значением в proto3 и делает первый факт недействительным.
         if (!string.IsNullOrWhiteSpace(fact.PreviousHash))
         {
             envelope.PreviousHash = fact.PreviousHash;

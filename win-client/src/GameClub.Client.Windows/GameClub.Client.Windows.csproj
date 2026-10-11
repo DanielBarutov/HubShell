@@ -28,9 +28,9 @@
     <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />
     <AssemblyMetadata Include="GameClubV2EventsHttpAddress" Value="$(GameClubV2EventsHttpAddress)" />
     <AssemblyMetadata Include="GameClubV2SnapshotPublicKeys" Value="$(GameClubV2SnapshotPublicKeys)" />
-    <ProjectReference Include="..\GameClub.Client.Avalonia\GameClub.Client.Avalonia.V2.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
-    <ProjectReference Include="..\GameClub.Client.Transport.V2.Grpc\GameClub.Client.Transport.V2.Grpc.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
@@ -40,7 +40,6 @@
     <Compile Include="..\GameClub.Client\Infrastructure\ProtectedV2LocalLedgerStore.cs" Link="Infrastructure\ProtectedV2LocalLedgerStore.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\NativeTrayIcon.cs" Link="Infrastructure\NativeTrayIcon.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\StartupDiagnostics.cs" Link="Infrastructure\StartupDiagnostics.cs" />
-    <Compile Include="..\GameClub.Client\Infrastructure\WindowsCommandExecutor.cs" Link="Infrastructure\WindowsCommandExecutor.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\WindowsWorkstationPowerController.cs" Link="Infrastructure\WindowsWorkstationPowerController.cs" />
   </ItemGroup>
 </Project>

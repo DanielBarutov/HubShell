@@ -3,11 +3,11 @@ import type { Client, Workstation } from "./types";
 
 export function toUiWorkstation(
   workstation: BackendWorkstation,
-  activeSession?: BackendSession,
   groupName?: string,
   clientName?: string,
   tariffName?: string,
 ): Workstation {
+  const activeSession: BackendSession | undefined = workstation.session_snapshot?.session;
   const technicalStatus = {
     online: "online",
     stale: "stale",
@@ -37,7 +37,6 @@ export function toUiWorkstation(
     deviceId: workstation.device_id,
     macAddress: workstation.mac_address,
     installationBound: workstation.installation_bound,
-    sessionMode: workstation.session_mode,
     sessionSnapshot: workstation.session_snapshot ?? null,
   };
 }

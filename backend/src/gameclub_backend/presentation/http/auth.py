@@ -271,9 +271,9 @@ async def refresh_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
     principal = record.principal
-    # Dev operators are issued from the local configuration rather than a user
-    # directory. Refresh must pick up newly added permissions, otherwise a
-    # long-lived refresh token can keep returning an obsolete access scope.
+    # Dev-операторы берутся из локальной конфигурации, а не из каталога пользователей.
+    # При refresh нужно перечитать права, иначе долгоживущий refresh token будет
+    # продолжать выдавать устаревший scope доступа.
     if (
         request.app.state.settings.environment == "dev"
         and principal.subject_type is SubjectType.OPERATOR

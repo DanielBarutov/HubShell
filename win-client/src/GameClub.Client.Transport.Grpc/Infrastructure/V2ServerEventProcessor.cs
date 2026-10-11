@@ -95,8 +95,8 @@ public sealed class V2ServerEventProcessor
         }
         catch (Exception)
         {
-            // Preserve the reject result even when the local diagnostic write
-            // cannot complete during a damaged-store recovery.
+            // Сохраняем результат отказа, даже если запись локальной диагностики
+            // не завершилась во время восстановления повреждённого хранилища.
         }
 
         return Rejected(envelope, reasonCode, message);

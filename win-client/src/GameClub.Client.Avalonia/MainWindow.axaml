@@ -21,7 +21,7 @@
             KeyDown="RecordKeyActivity"
             PointerPressed="RecordPointerActivity"
         >
-    <!-- Device-enrolled fallback when the portal has not yet supplied a snapshot. -->
+    <!-- Резервный экран для назначенного устройства, пока кабинет не передал snapshot. -->
     <Grid IsVisible="{Binding IsSecuredContentVisible}" Margin="24">
       <StackPanel MaxWidth="740" HorizontalAlignment="Center" Spacing="14">
         <TextBlock
@@ -114,7 +114,7 @@
       </StackPanel>
     </Grid>
 
-    <!-- The first visible frame is always the dark access-gate. -->
+    <!-- Первый видимый кадр всегда показывает тёмный access-gate. -->
     <Grid IsVisible="{Binding IsAccessGateVisible}" Background="#E607090D">
       <Border
                     MaxWidth="1080"
@@ -239,7 +239,7 @@
               <TextBlock
                                     Name="HostDisclaimer"
                                     Margin="0,8,0,0"
-                                    Text="Linux developer host: backend доступен только через loopback."
+                                    Text="Linux developer-host: backend доступен только через loopback."
                                     Foreground="{DynamicResource MutedTextBrush}"
                                     FontSize="10"
                                     TextWrapping="Wrap"
@@ -542,7 +542,7 @@
       </Border>
     </Grid>
 
-    <!-- User portal. Native compact-window/tray behavior is intentionally outside the Linux host. -->
+    <!-- Личный кабинет. Нативное компактное окно и трей намеренно остаются за пределами Linux-host. -->
     <ScrollViewer
                 IsVisible="{Binding IsPortalContentVisible}"
                 Margin="12"

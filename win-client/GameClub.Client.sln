@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Avalonia", "src\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj", "{AFAFD3B2-28F9-44E3-9460-A95F02C4D943}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Tests", "tests\GameClub.Client.Tests.csproj", "{AFD7F0A3-3279-4A7B-ACD6-7A7C4CEEDCA8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transport.Tests", "tests\Transport.Tests.csproj", "{EF8DD001-9CFC-4D78-A760-9FB6E4260336}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,6 +34,10 @@ Global
 		{AFD7F0A3-3279-4A7B-ACD6-7A7C4CEEDCA8}.Debug|x64.Build.0 = Debug|x64
 		{AFD7F0A3-3279-4A7B-ACD6-7A7C4CEEDCA8}.Release|x64.ActiveCfg = Release|x64
 		{AFD7F0A3-3279-4A7B-ACD6-7A7C4CEEDCA8}.Release|x64.Build.0 = Release|x64
+		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Debug|x64.Build.0 = Debug|Any CPU
+		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Release|x64.ActiveCfg = Release|Any CPU
+		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

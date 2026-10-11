@@ -16,6 +16,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly IWorkstationPowerController? _powerController;
     private readonly IClientPortalGateway _clientPortal;
     private readonly IV2ClientPortalGateway? _v2ClientPortal;
+    private readonly IV2OfflineSessionGateway? _v2OfflineSession;
+    private readonly IV2GuestSessionGateway? _v2GuestSession;
     private readonly V2OfflineLoginCoordinator? _v2OfflineLogin;
     private readonly V2LocalLedgerCoordinator? _v2Ledger;
     private readonly V2MinuteLedgerRunner? _v2MinuteRunner;
@@ -61,6 +63,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private bool _isTransferExpanded;
     private bool _isTransferWaiting;
     private bool _v2ServerEventTransportFailed;
+    private bool _isV2ServerStopPending;
     private int _v2ServerEventIssueCount;
     private string? _portalSessionIdempotencyKey;
     private CancellationTokenSource? _sessionNotificationLifetime;
@@ -77,13 +80,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         V2OfflineLoginCoordinator? v2OfflineLogin = null,
         V2LocalLedgerCoordinator? v2Ledger = null,
         V2MinuteLedgerRunner? v2MinuteRunner = null,
-        IOfflineSnapshotSignatureVerifier? v2SignatureVerifier = null)
+        IOfflineSnapshotSignatureVerifier? v2SignatureVerifier = null,
+        IV2OfflineSessionGateway? v2OfflineSession = null,
+        IV2GuestSessionGateway? v2GuestSession = null,
+        IV2ClientPortalGateway? v2ClientPortal = null)
     {
         _session = session;
         _accessCredentials = accessCredentials;
         _accessGate = new AccessGateCoordinator(_accessCredentials);
         _clientPortal = session.ClientPortal;
-        _v2ClientPortal = session.V2ClientPortal;
+        _v2ClientPortal = v2ClientPortal ?? session.V2ClientPortal;
+        _v2OfflineSession = v2OfflineSession ?? session.V2OfflineSession;
+        _v2GuestSession = v2GuestSession ?? session.BackendClient as IV2GuestSessionGateway;
         _powerController = powerController;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _timeNotificationDispatcher = new TimeNotificationDispatcher(timeNotificationPresenter);
@@ -399,7 +407,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !IsAccessLocked
         && !IsMaintenanceMode;
     public string ActiveSessionDescription => _activeV2Ledger is not null
-        ? $"Игрок · V2 local ledger · {CurrentWorkstationLabel}"
+        ? $"{(_activeV2Ledger.IsGuest ? "Гость" : "Игрок")} · V2 local ledger · {CurrentWorkstationLabel}"
         : _activeSession is null
             ? string.Empty
             : $"{_activeSession.GuestName ?? _activeSession.ClientId ?? "Гость"} · с {_activeSession.StartedAt}";
@@ -677,7 +685,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             _activeSession = null;
             _activeV2Ledger = result.Ledger;
             _sessionTimeProjection.Reset();
-            _accessGate.OpenUserSession("V2-сессия восстановлена после перезапуска");
+            if (!result.Ledger.IsGuest && _v2ClientPortal is not null)
+            {
+                try
+                {
+                    SetPortalSnapshot(
+                        await ResumeV2PortalSnapshotAsync(cancellationToken));
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (RpcException error) when (
+                    error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded)
+                {
+                    ClientLog.RpcFailure("v2.portal", error, "resume portal after restart");
+                    _portalMessage = "Профиль недоступен без сервера; локальная сессия восстановлена.";
+                }
+                catch (DeviceAuthenticationRequiredException error)
+                {
+                    ClientLog.Exception("v2.portal", error, "device identity unavailable during resume");
+                    _portalMessage = "Не удалось восстановить профиль; локальная сессия сохранена.";
+                }
+            }
+            if (await StopV2SessionIfServerCompletedAsync())
+            {
+                return;
+            }
+            await RetryPendingV2PackagePurchaseAsync(cancellationToken);
+            _accessGate.OpenUserSession("Сессия восстановлена после перезапуска");
             PublishSessionState();
             PublishAccessState();
             PublishPortalState();
@@ -686,11 +722,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception error)
         {
+            ClientLog.Exception("v2.recovery", error, "restore local V2 session");
             _activeV2Ledger = null;
             _accessGate.LockSession("V2 ledger требует проверки после перезапуска");
-            _portalMessage = "Локальная V2-сессия требует проверки. Доступ заблокирован.";
+            _portalMessage = "Локальная сессия требует проверки. Доступ заблокирован.";
             PublishSessionState();
             PublishAccessState();
             OnPropertyChanged(nameof(AccessMessage));
@@ -721,6 +758,40 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             await RefreshConnectionAsync(_lifetime.Token);
             await RefreshPortalAsync();
+            await PollGuestAccessAsync();
+        }
+    }
+
+    private async Task PollGuestAccessAsync()
+    {
+        if (_v2GuestSession is null || _v2SignatureVerifier is null || string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return;
+        }
+        if (_activeV2Ledger is not null)
+        {
+            return;
+        }
+        try
+        {
+            var ledger = await _v2GuestSession.RedeemPendingGuestAccessAsync(
+                DeviceId,
+                _v2SignatureVerifier,
+                _lifetime.Token);
+            if (ledger is not null)
+            {
+                await _v2Ledger!.InitializeNextSessionAsync(ledger, _lifetime.Token);
+                OpenV2Session(ledger, "Гостевая сессия открыта");
+            }
+        }
+        catch (RpcException error) when (
+            error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.AlreadyExists)
+        {
+            ClientLog.RpcFailure("v2.guest", error, "guest access poll");
+        }
+        catch (Exception error)
+        {
+            ClientLog.Exception("v2.guest", error, "guest access poll");
         }
     }
 
@@ -746,7 +817,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         while (await timer.WaitForNextTickAsync(_lifetime.Token))
         {
-            if (_activeV2Ledger is not null)
+            if (_activeV2Ledger is not null && !_isV2ServerStopPending)
             {
                 await ConsumeV2DueMinutesAsync();
             }
@@ -940,7 +1011,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 var loggedIn = await LoginV2Async();
                 if (loggedIn)
                 {
-                    ShowSessionNotification("Пароль обновлён. V2-сессия открыта.");
+                    ShowSessionNotification("Пароль обновлён. Сессия открыта.");
                     return true;
                 }
                 _portalPasswordResetRequired = false;
@@ -1091,14 +1162,42 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task RefreshPortalAsync()
     {
-        if (_portalSnapshot is null || string.IsNullOrWhiteSpace(DeviceId) || IsAccessLocked)
+        if (_activeV2Ledger?.IsGuest == true
+            || (_portalSnapshot is null && _activeV2Ledger is null)
+            || string.IsNullOrWhiteSpace(DeviceId)
+            || (IsAccessLocked && !_isV2ServerStopPending))
         {
             return;
         }
 
         try
         {
-            SetPortalSnapshot(await RefreshPortalSnapshotAsync(DeviceId, _lifetime.Token));
+            if (_activeV2Ledger is not null && _v2ClientPortal is not null)
+            {
+                try
+                {
+                    SetPortalSnapshot(_portalSnapshot is null
+                        ? await ResumeV2PortalSnapshotAsync(_lifetime.Token)
+                        : await _v2ClientPortal.RefreshAsync(DeviceId, cancellationToken: _lifetime.Token));
+                }
+                catch (RpcException error) when (error.StatusCode == StatusCode.Unauthenticated)
+                {
+                    SetPortalSnapshot(await ResumeV2PortalSnapshotAsync(_lifetime.Token));
+                }
+            }
+            else
+            {
+                if (_portalSnapshot is null)
+                {
+                    return;
+                }
+                SetPortalSnapshot(await RefreshPortalSnapshotAsync(DeviceId, _lifetime.Token));
+            }
+            if (await StopV2SessionIfServerCompletedAsync())
+            {
+                return;
+            }
+            await RetryPendingV2PackagePurchaseAsync(_lifetime.Token);
             if (_activeSession is not null && _activeSession.ActivePackage is null)
             {
                 await ActivateQueuedPortalEntitlementQuietlyAsync();
@@ -1107,8 +1206,34 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
+        catch (RpcException error) when (
+            _activeV2Ledger is not null
+            && error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded)
+        {
+            ClientLog.RpcFailure("v2.portal", error, "refresh or resume portal");
+            _portalMessage = "Портал временно недоступен; локальная сессия продолжает работать.";
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+        catch (RpcException error) when (
+            _activeV2Ledger is not null
+            && error.StatusCode is StatusCode.AlreadyExists or StatusCode.NotFound or StatusCode.PermissionDenied)
+        {
+            ClientLog.RpcFailure("v2.portal", error, "resume active V2 session");
+            _activeV2Ledger = null;
+            _accessGate.LockSession("Сессия не подтверждена сервером; требуется оператор");
+            _portalMessage = "Сервер не подтвердил активную сессию. Обратитесь к оператору.";
+            PublishSessionState();
+            PublishAccessState();
+            PublishPortalState();
+        }
         catch (DeviceAuthenticationRequiredException)
         {
+            if (_activeV2Ledger is not null)
+            {
+            _portalMessage = "Не удалось восстановить portal-доступ; локальная сессия сохранена.";
+                OnPropertyChanged(nameof(AccessMessage));
+                return;
+            }
             if (_activeSession?.ClientId is not null && !IsAccessLocked)
             {
                 await ResumePortalSessionQuietlyAsync(_activeSession.Id);
@@ -1121,6 +1246,48 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
     }
 
+    private async Task<bool> StopV2SessionIfServerCompletedAsync()
+    {
+        var ledger = _activeV2Ledger;
+        if (ledger is null)
+        {
+            return false;
+        }
+
+        var serverSession = _portalSnapshot?.Sessions.FirstOrDefault(item =>
+            Guid.TryParse(item.Id, out var sessionId) && sessionId == ledger.SessionId);
+        if (serverSession is null
+            || !serverSession.Status.Equals("completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            var transition = await _v2Ledger!.ApplyServerStopAsync(_lifetime.Token);
+            _activeV2Ledger = transition.Ledger;
+        }
+        catch (Exception error)
+        {
+            ClientLog.Exception("v2.ledger", error, "persist operator session stop");
+            _portalMessage = "Сервер завершил сеанс; клиент заблокирован до проверки локального ledger.";
+            _isV2ServerStopPending = true;
+            _accessGate.LockSession("Требуется сохранить завершение сессии");
+            OnPropertyChanged(nameof(AccessMessage));
+            PublishSessionState();
+            PublishAccessState();
+            return true;
+        }
+        _activeV2Ledger = null;
+        _isV2ServerStopPending = false;
+        _portalMessage ??= "Сеанс завершён оператором.";
+        _accessGate.LockSession("Сеанс завершён оператором");
+        ApplySessionStopPolicy(clearV1PortalState: false);
+        PublishSessionState();
+        PublishAccessState();
+        return true;
+    }
+
     private Task<ClientPortalSnapshot> RefreshPortalSnapshotAsync(
         string deviceId,
         CancellationToken cancellationToken)
@@ -1129,10 +1296,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return _v2ClientPortal is null
                 ? Task.FromException<ClientPortalSnapshot>(
-                    new InvalidOperationException("V2 client portal transport is not configured."))
+                    new InvalidOperationException("Client portal transport is not configured."))
                 : _v2ClientPortal.RefreshAsync(deviceId, cancellationToken: cancellationToken);
         }
         return _clientPortal.RefreshAsync(deviceId, cancellationToken: cancellationToken);
+    }
+
+    private Task<ClientPortalSnapshot> ResumeV2PortalSnapshotAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_v2ClientPortal is null
+            || string.IsNullOrWhiteSpace(DeviceId)
+            || _activeV2Ledger is null)
+        {
+            return Task.FromException<ClientPortalSnapshot>(
+                new InvalidOperationException("V2 portal recovery requires a device and active local ledger"));
+        }
+        return _v2ClientPortal.ResumePortalAsync(
+            DeviceId,
+            _activeV2Ledger.SessionId.ToString(),
+            _activeV2Ledger.ClientId.ToString(),
+            cancellationToken);
     }
 
     private Task<ClientPortalSnapshot> ActivatePortalEntitlementAsync(
@@ -1144,7 +1328,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return _v2ClientPortal is null
                 ? Task.FromException<ClientPortalSnapshot>(
-                    new InvalidOperationException("V2 client portal transport is not configured."))
+                    new InvalidOperationException("Client portal transport is not configured."))
                 : _v2ClientPortal.ActivateEntitlementAsync(deviceId, entitlementId, cancellationToken);
         }
         return _clientPortal.ActivateEntitlementAsync(deviceId, entitlementId, cancellationToken);
@@ -1160,7 +1344,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         {
             return _v2ClientPortal is null
                 ? Task.FromException<ClientPortalSnapshot>(
-                    new InvalidOperationException("V2 client portal transport is not configured."))
+                    new InvalidOperationException("Client portal transport is not configured."))
                 : _v2ClientPortal.PurchaseEntitlementAsync(
                     deviceId, tariffId, idempotencyKey, cancellationToken);
         }
@@ -1191,8 +1375,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            // A queued package can be outside its time window or incompatible
-            // with the zone. The session can still start in its normal mode.
+            // Пакет может быть вне временного окна или не подходить для зоны.
+            // В этом случае сессия всё равно запускается в обычном режиме.
         }
     }
 
@@ -1227,19 +1411,58 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         string tariffId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(DeviceId) || FindPortalTariff(tariffId) is null)
+        if (string.IsNullOrWhiteSpace(DeviceId))
         {
             return;
         }
 
+        V2PendingPortalPackagePurchase? pendingPurchase = null;
         try
         {
-            SetPortalSnapshot(await PurchasePortalEntitlementAsync(
+            if (_activeV2Ledger is not null)
+            {
+                pendingPurchase = await _v2Ledger!.ReadPendingPortalPackagePurchaseAsync(
+                    cancellationToken);
+                if (pendingPurchase is not null
+                    && !string.Equals(pendingPurchase.TariffId, tariffId, StringComparison.Ordinal))
+                {
+                    ShowSessionNotification(
+                        "Сначала завершите синхронизацию предыдущей покупки пакета.");
+                    return;
+                }
+                if (pendingPurchase is null)
+                {
+                    if (FindPortalTariff(tariffId) is null)
+                    {
+                        return;
+                    }
+                    pendingPurchase = await _v2Ledger.BeginPortalPackagePurchaseAsync(
+                        tariffId,
+                        cancellationToken);
+                }
+            }
+            else if (FindPortalTariff(tariffId) is null)
+            {
+                return;
+            }
+            var snapshot = await PurchasePortalEntitlementAsync(
                 DeviceId,
                 tariffId,
-                $"win-portal-tariff-{Guid.NewGuid():N}",
-                cancellationToken));
-            if (_activeSession is not null && _activeSession.ActivePackage is null)
+                pendingPurchase?.IdempotencyKey ?? $"win-portal-tariff-{Guid.NewGuid():N}",
+                cancellationToken);
+            if (pendingPurchase is not null)
+            {
+                var transition = await _v2Ledger!.CompletePortalPackagePurchaseAsync(
+                    tariffId,
+                    _clock(),
+                    cancellationToken);
+                _activeV2Ledger = transition.Ledger;
+                PublishSessionState();
+            }
+            SetPortalSnapshot(snapshot);
+            if (pendingPurchase is null
+                && _activeSession is not null
+                && _activeSession.ActivePackage is null)
             {
                 await ActivateQueuedPortalEntitlementQuietlyAsync();
             }
@@ -1251,11 +1474,72 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (RpcException error) when (IsInsufficientBalance(error))
         {
+            await AbandonPendingV2PortalPackagePurchaseQuietlyAsync(pendingPurchase);
             ShowSessionNotification("Недостаточно средств на балансе. Пополните депозит и повторите покупку.");
+        }
+        catch (RpcException error)
+        {
+            if (pendingPurchase is not null
+                && error.StatusCode is StatusCode.InvalidArgument
+                    or StatusCode.PermissionDenied
+                    or StatusCode.FailedPrecondition
+                    or StatusCode.NotFound)
+            {
+                await AbandonPendingV2PortalPackagePurchaseQuietlyAsync(pendingPurchase);
+            }
+            ShowSessionNotification(error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded
+                ? "Покупка ожидает синхронизации; повтор не спишет средства ещё раз."
+                : "Не удалось купить тариф. Проверьте баланс и повторите.");
         }
         catch (Exception)
         {
-            ShowSessionNotification("Не удалось купить тариф. Проверьте баланс и повторите.");
+            ShowSessionNotification(pendingPurchase is null
+                ? "Не удалось купить тариф. Проверьте баланс и повторите."
+                : "Покупка ожидает синхронизации; повтор не спишет средства ещё раз.");
+        }
+    }
+
+    private async Task RetryPendingV2PackagePurchaseAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_activeV2Ledger is null || _v2Ledger is null)
+        {
+            return;
+        }
+        try
+        {
+            var pending = await _v2Ledger.ReadPendingPortalPackagePurchaseAsync(cancellationToken);
+            if (pending is not null)
+            {
+                await PurchasePortalTariffAsync(pending.TariffId, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            ClientLog.Exception("v2.ledger", error, "retry pending portal package purchase");
+            _portalMessage = "Покупка пакета ожидает синхронизации; повтор не спишет средства ещё раз.";
+            OnPropertyChanged(nameof(AccessMessage));
+        }
+    }
+
+    private async Task AbandonPendingV2PortalPackagePurchaseQuietlyAsync(
+        V2PendingPortalPackagePurchase? pendingPurchase)
+    {
+        if (pendingPurchase is null || _v2Ledger is null)
+        {
+            return;
+        }
+        try
+        {
+            await _v2Ledger.AbandonPendingPortalPackagePurchaseAsync(_lifetime.Token);
+        }
+        catch (Exception error)
+        {
+            ClientLog.Exception("v2.ledger", error, "clear rejected portal package purchase");
         }
     }
 
@@ -1411,7 +1695,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 _clock(),
                 cancellationToken);
             _activeV2Ledger = transition.Ledger;
-            _accessGate.LockSession("V2-сессия завершена");
+            var serverStopConfirmed = false;
+            if (_v2OfflineSession is not null || _v2GuestSession is not null)
+            {
+                try
+                {
+                    serverStopConfirmed = await StopV2OnServerAsync(
+                        transition.Ledger,
+                        cancellationToken);
+                }
+                catch (Exception error)
+                {
+                    ClientLog.Exception("v2.session", error, "server stop failed; retaining stop fact");
+                }
+            }
+            _portalMessage = serverStopConfirmed
+                ? "Сеанс завершён."
+                : "Сеанс остановлен локально; сервер завершит его после доставки события.";
+            _accessGate.LockSession("Сессия завершена");
             _activeV2Ledger = null;
             ApplySessionStopPolicy(clearV1PortalState: false);
             PublishSessionState();
@@ -1424,10 +1725,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            _portalMessage = "Не удалось безопасно завершить V2-сессию. Повторите после восстановления связи/ledger.";
+            _portalMessage = "Не удалось безопасно завершить сессию. Повторите после восстановления связи/журнала.";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
+    }
+
+    private async Task<bool> StopV2OnServerAsync(
+        V2LocalSessionLedger ledger,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return false;
+        }
+        if (ledger.IsGuest && _v2GuestSession is not null)
+        {
+            await _v2GuestSession.StopGuestSessionAsync(
+                DeviceId,
+                ledger.SessionId.ToString(),
+                ledger.GuestPaymentId!.Value.ToString(),
+                cancellationToken);
+            return true;
+        }
+        if (_v2OfflineSession is null)
+        {
+            return false;
+        }
+        await _v2OfflineSession.StopSessionAsync(
+            DeviceId,
+            ledger.SessionId.ToString(),
+            ledger.ClientId.ToString(),
+            cancellationToken);
+        return true;
     }
 
     public async Task<bool> CreateTransferOfferAsync(CancellationToken cancellationToken = default)
@@ -1494,8 +1824,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            // A failed claim must not block an ordinary login. The next login
-            // attempt can claim the still-pending offer.
+            // Ошибка claim не должна блокировать обычный вход. Следующая попытка
+            // входа сможет забрать оставшееся предложение.
             return null;
         }
     }
@@ -1542,8 +1872,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 }
                 catch (Exception)
                 {
-                    // The source remains in the waiting state until the server
-                    // confirms or expires the offer.
+                    // Источник остаётся в состоянии ожидания, пока сервер
+                    // не подтвердит предложение или не завершит его срок.
                 }
             }
         }
@@ -1782,8 +2112,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
         catch (Exception)
         {
-            // The purchase/activation result is already server-confirmed. The
-            // next heartbeat will refresh the session snapshot independently.
+            // Покупка и активация уже подтверждены сервером. Следующий heartbeat
+            // отдельно обновит snapshot сессии.
         }
     }
 
@@ -1810,11 +2140,63 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         ApplyActiveSessionSnapshot(snapshot);
     }
 
+    private async Task StopPreviouslyTerminatedV2SessionAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_v2Ledger is null
+            || _v2OfflineSession is null
+            || string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return;
+        }
+
+        var previous = (await _v2Ledger.ReadSnapshotAsync(cancellationToken))?.Ledger;
+        if (previous is null
+            || previous.Status is not (V2LocalSessionStatus.Stopped or V2LocalSessionStatus.Exhausted))
+        {
+            return;
+        }
+        if (!string.Equals(previous.DeviceId, DeviceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Completed V2 ledger belongs to another device");
+        }
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await _v2OfflineSession.StopSessionAsync(
+                    DeviceId,
+                    previous.SessionId.ToString(),
+                    previous.ClientId.ToString(),
+                    cancellationToken);
+                return;
+            }
+            catch (RpcException error) when (error.StatusCode == StatusCode.NotFound)
+            {
+                ClientLog.Info(
+                    "v2.session",
+                    $"previous session missing on server; login will clean its orphaned lease session_id={previous.SessionId}");
+                return;
+            }
+            catch (RpcException error) when (
+                error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded)
+            {
+                if (attempt >= 2)
+                {
+                    throw;
+                }
+                await Task.Delay(TimeSpan.FromMilliseconds(250 * (attempt + 1)), cancellationToken);
+            }
+        }
+    }
+
     private async Task<bool> LoginV2Async()
     {
         ClientLog.Info("auth", $"v2 login started identifierLength={PortalIdentifier.Length}");
         try
         {
+            await StopPreviouslyTerminatedV2SessionAsync(_lifetime.Token);
             var result = await _v2OfflineLogin!.LoginAndInitializeResultAsync(
                 PortalIdentifier,
                 PortalPassword,
@@ -1832,7 +2214,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             var portalSnapshot = _v2ClientPortal is null
                 ? null
                 : await _v2ClientPortal.RefreshAsync(DeviceId!, cancellationToken: _lifetime.Token);
-            OpenV2Session(result.Ledger!, "V2-сессия открыта");
+            OpenV2Session(result.Ledger!, "Сессия открыта");
             ClientLog.Info("auth", "v2 login succeeded");
             if (portalSnapshot is not null)
             {
@@ -1862,7 +2244,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                     StatusCode.AlreadyExists when error.Status.Detail.Contains(
                         "active V2 lease",
                         StringComparison.OrdinalIgnoreCase)
-                        => "Предыдущая V2-сессия ещё не завершена. Повторите вход после обновления состояния.",
+                        => "Предыдущая сессия ещё не завершена. Повторите вход после обновления состояния.",
                     StatusCode.PermissionDenied => "V2-вход запрещён для этого игрового места.",
                     _ => "Не удалось войти в V2. Проверьте данные и состояние места",
                 };
@@ -1879,7 +2261,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         catch (Exception error)
         {
             ClientLog.Exception("auth", error, "v2 login failed");
-            _portalMessage = "Не удалось войти. Проверьте данные и состояние V2-сессии";
+            _portalMessage = "Не удалось войти. Проверьте данные и состояние сессии";
             OnPropertyChanged(nameof(AccessMessage));
             return false;
         }
@@ -1900,7 +2282,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             var portalSnapshot = _v2ClientPortal is null
                 ? null
                 : await _v2ClientPortal.RefreshAsync(DeviceId!, cancellationToken: _lifetime.Token);
-            OpenV2Session(ledger, "Аккаунт создан, V2-сессия открыта");
+            OpenV2Session(ledger, "Аккаунт создан, сессия открыта");
             if (portalSnapshot is not null)
             {
                 SetPortalSnapshot(portalSnapshot);
@@ -1962,8 +2344,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             PublishSessionState();
             if (last.LockWorkstation)
             {
+                await StopV2OnServerAsync(last.Ledger, _lifetime.Token);
                 _activeV2Ledger = null;
-                _accessGate.LockSession("Время или доступный баланс V2-сессии закончились");
+                _accessGate.LockSession("Время или доступный баланс сессии закончились");
                 ApplySessionStopPolicy(clearV1PortalState: false);
                 PublishSessionState();
                 PublishAccessState();
@@ -2133,7 +2516,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             V2TimeSource.Package => ledger.Packages.FirstOrDefault(item =>
                 item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued)
                 is { } package
-                    ? $"Пакет «{package.TariffId}» · {package.RemainingMinutes} мин"
+                    ? $"Пакет «{V2PackageName(ledger, package)}» · {package.RemainingMinutes} мин"
                     : "Пакет завершён",
             V2TimeSource.PerMinute => ledger.Tariffs.FirstOrDefault(item =>
                 item.PerMinutePriceCents > 0
@@ -2143,6 +2526,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                     : "Поминутный тариф недоступен",
             _ => "Тариф завершён",
         };
+
+    private static string V2PackageName(
+        V2LocalSessionLedger ledger,
+        V2LocalPackage package) =>
+        ledger.Tariffs.FirstOrDefault(item =>
+                string.Equals(item.Id, package.TariffId, StringComparison.Ordinal))
+            is { Name: var name }
+            && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : "Тариф времени";
 
     private static string FormatMoney(long cents) =>
         (cents / 100m).ToString("N2", CultureInfo.GetCultureInfo("ru-RU")) + " ₽";
