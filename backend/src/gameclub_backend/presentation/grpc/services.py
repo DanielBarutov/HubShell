@@ -1124,13 +1124,15 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
                 principal.subject_id,
                 request.device_id,
             )
-            snapshot = await self._service.purchase_entitlement(
+            purchase = await self._service.purchase_entitlement(
                 client_id=parse_uuid(principal.subject_id, "client_id"),
                 device_id=request.device_id,
                 tariff_id=parse_uuid(request.tariff_id, "tariff_id"),
                 idempotency_key=request.idempotency_key,
             )
-            return to_v2_portal_snapshot_proto(snapshot)
+            response = to_v2_portal_snapshot_proto(purchase.portal)
+            response.purchased_package.CopyFrom(purchase.purchased_package)
+            return response
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:

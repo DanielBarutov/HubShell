@@ -20,7 +20,8 @@ public sealed record ClientPortalSnapshot(
     IReadOnlyList<ClientPortalEntitlement> Entitlements,
     IReadOnlyList<ClientPortalTariff> Tariffs,
     IReadOnlyList<ClientPortalReservation> Reservations,
-    IReadOnlyList<ClientPortalPaymentMethod>? PaymentMethods = null);
+    IReadOnlyList<ClientPortalPaymentMethod>? PaymentMethods = null,
+    V2LocalSessionLedger? PurchasedPackage = null);
 
 public sealed record ClientPortalPaymentMethod(string Key, string Name);
 

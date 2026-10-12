@@ -374,6 +374,7 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
         string deviceId,
         string tariffId,
         string idempotencyKey,
+        IOfflineSnapshotSignatureVerifier signatureVerifier,
         CancellationToken cancellationToken = default)
     {
         var response = await _offlineSessionClient.PurchaseEntitlementAsync(
@@ -386,8 +387,22 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
             headers: CreateClientPortalMetadata(),
             deadline: DateTime.UtcNow.AddSeconds(10),
             cancellationToken: cancellationToken);
-        return V2PortalSnapshotMapper.ToDomain(response);
+        if (response.PurchasedPackage?.Payload?.PurchaseIdempotencyKey != idempotencyKey)
+        {
+            throw new InvalidOperationException("V2 package purchase receipt does not match the request");
+        }
+        return V2PortalSnapshotMapper.ToDomain(response) with
+        {
+            PurchasedPackage = V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(
+                response.PurchasedPackage, signatureVerifier),
+        };
     }
+
+    Task<ClientPortalSnapshot> IClientPortalGateway.PurchaseEntitlementAsync(
+        string deviceId,
+        string tariffId,
+        string idempotencyKey,
+        CancellationToken cancellationToken) => Unsupported<ClientPortalSnapshot>();
 
     public void Logout() => _clientPortalAccessToken = null;
     public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchDeviceCommandsAsync(

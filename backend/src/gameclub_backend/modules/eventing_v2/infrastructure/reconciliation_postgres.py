@@ -10,6 +10,7 @@ from sqlalchemy import DateTime, Integer, String, Text, select, text
 from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.orm import Mapped, mapped_column
 
+from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.application.audit import AuditEvent
 from gameclub_backend.infrastructure.audit_postgres import AuditEventModel
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -18,6 +19,7 @@ from gameclub_backend.modules.clients.infrastructure.postgres import (
     BalanceOperationModel,
     ClientModel,
 )
+from gameclub_backend.modules.entitlements.application.ports import EntitlementTransactionWriter
 from gameclub_backend.modules.eventing_v2.application.reconciliation import (
     V2ClientFactResult,
     V2ClientFactStatus,
@@ -132,9 +134,11 @@ class PostgresV2ClientFactReconciliationRepository:
         self,
         engine_provider: EngineProvider,
         session_writer: SessionTransactionWriter | None = None,
+        entitlement_writer: EntitlementTransactionWriter | None = None,
     ) -> None:
         self._engine_provider = engine_provider
         self._session_writer = session_writer
+        self._entitlement_writer = entitlement_writer
 
     async def accept(self, event: V2Event) -> V2ClientFactResult:
         if event.event_type not in ALLOWED_CLIENT_FACT_TYPES:
@@ -205,8 +209,51 @@ class PostgresV2ClientFactReconciliationRepository:
                     )
 
                 now = datetime.datetime.now(datetime.UTC)
+                if (
+                    event.event_type in (V2EventType.PACKAGE_CONSUMED, V2EventType.PACKAGE_BURNED)
+                    and self._entitlement_writer is not None
+                ):
+                    payload = json.loads(event.payload_json)
+                    purchases = await session.scalars(
+                        select(V2ConfirmedClientFactModel).where(
+                            V2ConfirmedClientFactModel.session_id == event.session_id,
+                            V2ConfirmedClientFactModel.event_type
+                            == V2EventType.PACKAGE_PURCHASED.value,
+                        )
+                    )
+                    purchase_key = next(
+                        (
+                            json.loads(item.payload_json).get("purchase_idempotency_key")
+                            for item in purchases
+                            if json.loads(item.payload_json).get("package_id")
+                            == payload["package_id"]
+                        ),
+                        None,
+                    )
+                    if not await self._entitlement_writer.apply_local_usage(
+                        session,
+                        event.client_id,
+                        uuid.UUID(payload["package_id"]),
+                        uuid.UUID(payload["tariff_id"]),
+                        payload["remaining_minutes"],
+                        event.occurred_at,
+                        burned=event.event_type is V2EventType.PACKAGE_BURNED,
+                        purchase_idempotency_key=purchase_key,
+                        purchased_since=lease.issued_at,
+                    ):
+                        return V2ClientFactResult(
+                            V2ClientFactStatus.CONFLICT,
+                            event.event_id,
+                            event.operation_id,
+                            "Package fact does not match its settled server entitlement",
+                        )
                 if event.event_type is V2EventType.PER_MINUTE_DEBIT:
-                    if not await self._apply_per_minute_debit(session, event, now):
+                    snapshot = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload()
+                    if lease.snapshot_payload:
+                        snapshot.ParseFromString(lease.snapshot_payload)
+                    if not await self._apply_per_minute_debit(
+                        session, event, now, minimum_balance_cents=-snapshot.debt_limit_cents
+                    ):
                         return V2ClientFactResult(
                             V2ClientFactStatus.CONFLICT,
                             event.event_id,
@@ -386,7 +433,11 @@ class PostgresV2ClientFactReconciliationRepository:
     @staticmethod
     def _has_valid_fact_payload(event: V2Event) -> bool:
         """Проверить только уже утверждённую форму факта до его подтверждения."""
-        if event.event_type is not V2EventType.PER_MINUTE_DEBIT:
+        if event.event_type not in (
+            V2EventType.PER_MINUTE_DEBIT,
+            V2EventType.PACKAGE_CONSUMED,
+            V2EventType.PACKAGE_BURNED,
+        ):
             return True
         try:
             payload = json.loads(event.payload_json)
@@ -394,6 +445,14 @@ class PostgresV2ClientFactReconciliationRepository:
             return False
         if not isinstance(payload, dict):
             return False
+        if event.event_type in (V2EventType.PACKAGE_CONSUMED, V2EventType.PACKAGE_BURNED):
+            try:
+                uuid.UUID(payload.get("package_id", ""))
+                uuid.UUID(payload.get("tariff_id", ""))
+            except (TypeError, ValueError, AttributeError):
+                return False
+            remaining = payload.get("remaining_minutes")
+            return isinstance(remaining, int) and not isinstance(remaining, bool) and remaining >= 0
         amount_cents = payload.get("amount_cents")
         tariff_id = payload.get("tariff_id")
         return (
@@ -409,16 +468,15 @@ class PostgresV2ClientFactReconciliationRepository:
         session,
         event: V2Event,
         occurred_at: datetime.datetime,
+        minimum_balance_cents: int = 0,
     ) -> bool:
         """Списать минуту с серверного баланса в той же транзакции, что и подтверждение факта."""
         payload = json.loads(event.payload_json)
         amount_cents = payload["amount_cents"]
         client = await session.scalar(
-            select(ClientModel)
-            .where(ClientModel.id == event.client_id)
-            .with_for_update()
+            select(ClientModel).where(ClientModel.id == event.client_id).with_for_update()
         )
-        if client is None or client.balance_cents < amount_cents:
+        if client is None or client.balance_cents - amount_cents < minimum_balance_cents:
             return False
 
         operation = BalanceOperation(

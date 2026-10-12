@@ -1,5 +1,27 @@
 # Verification matrix
 
+### 2026-10-12 — отрицательный баланс и пакетные V2-проекции
+
+- Поминутная reconciliation использует сохранённый signed debt limit; debit
+  и подтверждение остаются одной транзакцией. Повтор не списывает деньги вновь.
+- Package consume/burn обновляет entitlement через публичный transaction writer
+  владельца пакетов. Проверяются клиент, тариф, settlement, текущий остаток и
+  единственный active пакет; неоднозначный legacy UUID возвращает conflict.
+- Поле баланса активной клиентской сессии читает локальный ledger и обновляется
+  после minute commit, не дожидаясь portal snapshot.
+- Онлайн-покупка выдаёт подписанный пакет с реальным entitlement ID и ключом
+  покупки, поэтому тариф, созданный после входа, можно применить без замены
+  ledger. Protobuf расширен: `OfflinePortalSnapshot.purchased_package = 15`,
+  `OfflineSessionSnapshotPayload.purchase_idempotency_key = 32`.
+- Linux: 49 backend checks с настоящей временной PostgreSQL, 72 C# checks;
+  один live Kafka test пропущен. Windows host Release build на Linux: 0 ошибок,
+  0 предупреждений. Ruff, format и diff checks проходят.
+- Rollout: сначала backend-gRPC и v2-client-facts, затем клиент. Production
+  data, старые confirmed facts/DLQ и активные ledger не переписывались. Их
+  расхождения требуют отдельной сверки исходных событий; эти тесты не
+  подтверждают восстановление прежней продовой цепочки или Windows runtime.
+
+
 2026-10-12: `RequestedThemeVariant="Dark"` в Avalonia-клиенте устраняет зависимость
 Fluent-полей от светлой темы ОС. Linux: `dotnet test win-client/tests/GameClub.Client.Tests.csproj
 -p:Platform=x64 --filter FullyQualifiedName~AvaloniaHostSmokeTests --no-restore`
@@ -302,3 +324,5 @@ passed. Windows runtime и сравнение одинакового snapshot н
 успешные minute commits без логирования пустых ticks. Проверено на Linux:
 39 V2 access-gate/billing тестов, сборка и `git diff --check`.
 Windows-запись client.log на реальном стенде ещё не проверена.
+
+2026-10-12 — operator guest interrupt: backend guest access 2 passed / 1 PostgreSQL test skipped (DSN absent); V2AccessGate/V2LocalLedger/V2BillingLogic 76 passed on Linux. Windows host Release x64 build: 0 warnings/errors. Focused Ruff and git diff --check passed; graphify updated. Live admin→RPC→PC scenario and native Windows not checked.

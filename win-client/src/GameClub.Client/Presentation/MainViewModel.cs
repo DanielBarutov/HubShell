@@ -347,9 +347,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string CurrentWorkstationLabel => string.IsNullOrWhiteSpace(WorkstationName)
         ? "Игровое место"
         : WorkstationName;
-    public string PortalBalanceAmountSummary => _portalSnapshot is null
-        ? string.Empty
-        : FormatMoney(_portalSnapshot.BalanceCents);
+    private long? CurrentPortalBalanceCents => _activeV2Ledger is { IsGuest: false } ledger
+        ? ledger.BalanceCents
+        : _portalSnapshot?.BalanceCents;
+    public string PortalBalanceAmountSummary => CurrentPortalBalanceCents is { } balance
+        ? FormatMoney(balance)
+        : string.Empty;
     public string PortalBonusSummary => _portalSnapshot is null
         ? string.Empty
         : $"Бонусы: {_portalSnapshot.BalanceBonus}";
@@ -358,7 +361,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         : FormatDuration(_portalSnapshot.AvailableTimeMinutes);
     public string PortalBalanceSummary => _portalSnapshot is null
         ? string.Empty
-        : $"Баланс: {FormatMoney(_portalSnapshot.BalanceCents)} · Бонусы: {_portalSnapshot.BalanceBonus}";
+        : $"Баланс: {PortalBalanceAmountSummary} · Бонусы: {_portalSnapshot.BalanceBonus}";
     public string PortalAvailableTimeSummary => _portalSnapshot is null
         ? string.Empty
         : $"Осталось примерно {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
@@ -406,7 +409,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool HasPortalTariffs => PortalTariffs.Count > 0;
     public bool IsTariffsVisible => HasPortalTariffs && !_portalPasswordResetRequired
         && _activeV2Ledger?.IsGuest != true;
-    public bool HasPortalBalance => _portalSnapshot?.BalanceCents > 0;
+    public bool HasPortalBalance => CurrentPortalBalanceCents > 0;
     public ClientPortalTariff? FindPortalTariff(string tariffId) =>
         _portalSnapshot?.Tariffs.FirstOrDefault(item => item.Id == tariffId);
     public bool IsUpcomingBookingVisible => _activeV2Ledger?.IsGuest != true
@@ -835,6 +838,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                     OpenV2Session(ledger, "Гостевая сессия открыта");
                 }
             }
+        }
+        catch (RpcException error) when (
+            _activeV2Ledger is { IsGuest: true }
+            && error.StatusCode == StatusCode.AlreadyExists
+            && error.Status.Detail == "Guest session is no longer active")
+        {
+            await ApplyV2ServerStopAsync();
         }
         catch (RpcException error) when (
             error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.AlreadyExists)
@@ -1316,6 +1326,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             return false;
         }
 
+        return await ApplyV2ServerStopAsync();
+    }
+
+    private async Task<bool> ApplyV2ServerStopAsync()
+    {
         try
         {
             var transition = await _v2Ledger!.ApplyServerStopAsync(_lifetime.Token);
@@ -1400,7 +1415,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ? Task.FromException<ClientPortalSnapshot>(
                     new InvalidOperationException("Client portal transport is not configured."))
                 : _v2ClientPortal.PurchaseEntitlementAsync(
-                    deviceId, tariffId, idempotencyKey, cancellationToken);
+                    deviceId, tariffId, idempotencyKey, _v2SignatureVerifier!, cancellationToken);
         }
         return _clientPortal.PurchaseEntitlementAsync(
             deviceId, tariffId, idempotencyKey, cancellationToken);
@@ -1509,7 +1524,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 var transition = await _v2Ledger!.CompletePortalPackagePurchaseAsync(
                     tariffId,
                     _clock(),
-                    cancellationToken);
+                    cancellationToken,
+                    snapshot.PurchasedPackage);
                 _activeV2Ledger = transition.Ledger;
                 PublishSessionState();
             }
@@ -2648,6 +2664,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void PublishSessionState()
     {
+        OnPropertyChanged(nameof(PortalBalanceAmountSummary));
+        OnPropertyChanged(nameof(PortalBalanceSummary));
+        OnPropertyChanged(nameof(HasPortalBalance));
         OnPropertyChanged(nameof(IsGuestWidgetVisible));
         OnPropertyChanged(nameof(IsWidgetContentVisible));
         OnPropertyChanged(nameof(IsAccountWidgetReadyVisible));

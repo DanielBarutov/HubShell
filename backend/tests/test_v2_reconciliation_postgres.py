@@ -103,8 +103,11 @@ def make_event(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("starting_balance", "debt_limit"), [(500, 0), (-500, 800)])
 async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
     postgres_dsn: str,
+    starting_balance: int,
+    debt_limit: int,
 ) -> None:
     """Проверяет заявленное поведение backend."""
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
@@ -157,7 +160,7 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 nickname=f"V2Reconcile{client_id.hex[:10]}",
                 phone=None,
                 discount_category=None,
-                balance_cents=500,
+                balance_cents=starting_balance,
                 balance_bonus=0,
                 created_at=now,
                 updated_at=now,
@@ -187,6 +190,19 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         service = V2ClientFactReconciliationService(
             PostgresV2ClientFactReconciliationRepository(lambda: engine)
         )
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE v2_session_leases SET snapshot_payload = :payload "
+                    "WHERE session_id = :id"
+                ),
+                {
+                    "id": session_id,
+                    "payload": offline_session_snapshot_pb2.OfflineSessionSnapshotPayload(
+                        debt_limit_cents=debt_limit,
+                    ).SerializeToString(),
+                },
+            )
 
         wrong_snapshot = await service.accept(
             make_event(
@@ -216,11 +232,19 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
         accepted = await service.accept(first)
         duplicate = await service.accept(first)
         accepted_next = await service.accept(second)
-        await PostgresSessionRepository(lambda: engine).save(
-            server_session.stop(stopped_at)
-        )
+        await PostgresSessionRepository(lambda: engine).save(server_session.stop(stopped_at))
         accepted_before_stop = await service.accept(before_stop)
         rejected_after_stop = await service.accept(after_stop)
+        if debt_limit:
+            over_limit = make_event(
+                client_id=client_id,
+                session_id=session_id,
+                snapshot_id=snapshot_id,
+                sequence=4,
+                previous_hash=before_stop.payload_hash,
+                occurred_at=stopped_at - datetime.timedelta(milliseconds=1),
+            )
+            assert (await service.accept(over_limit)).status is V2ClientFactStatus.CONFLICT
         analytics = await V2InboxService(
             PostgresV2InboxRepository(lambda: engine),
             "analytics_projection",
@@ -277,7 +301,7 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 .one()
             )
 
-        assert balance == 200
+        assert balance == starting_balance - 300
         assert debit_count == 3
         assert dict(counts) == {
             "inbox_rows": 4,
@@ -1082,7 +1106,15 @@ async def test_postgres_v2_login_rolls_back_new_session_when_lease_cannot_be_iss
         "test-key-2026-09",
         V2Ed25519SnapshotSigner("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="),
     )
+    blocked_session = dataclasses.replace(
+        session_to_start,
+        id=blocked_lease_session_id,
+        client_id=uuid.uuid4(),
+        workstation_id=uuid.uuid4(),
+        idempotency_key=None,
+    )
     try:
+        await PostgresSessionRepository(lambda: engine).save(blocked_session)
         async with engine.begin() as connection:
             await connection.execute(
                 text("""
@@ -1096,8 +1128,8 @@ async def test_postgres_v2_login_rolls_back_new_session_when_lease_cannot_be_iss
                 """),
                 {
                     "session_id": blocked_lease_session_id,
-                    "client_id": client_id,
-                    "device_id": "another-device",
+                    "client_id": blocked_session.client_id,
+                    "device_id": lease.device_id,
                     "snapshot_id": uuid.uuid4(),
                     "issued_at": now,
                 },
@@ -1129,4 +1161,192 @@ async def test_postgres_v2_login_rolls_back_new_session_when_lease_cannot_be_iss
                 text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
                 {"session_id": blocked_lease_session_id},
             )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :id"), {"id": blocked_lease_session_id}
+            )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("legacy_package_id", "total_minutes", "burn_after"),
+    [(False, 180, False), (True, 180, False), (False, 5, False), (False, 180, True)],
+)
+async def test_confirmed_package_minutes_reduce_operator_snapshot_once(
+    postgres_dsn: str,
+    legacy_package_id: bool,
+    total_minutes: int,
+    burn_after: bool,
+) -> None:
+    """Уменьшает остаток пакета на пять минут, сохраняя окончание и идемпотентность."""
+    from types import SimpleNamespace
+
+    from gameclub_backend.modules.entitlements.application.service import EntitlementService
+    from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
+    from gameclub_backend.modules.entitlements.infrastructure.postgres import (
+        PostgresEntitlementRepository,
+        PostgresEntitlementTransactionWriter,
+    )
+
+    engine = create_async_engine(postgres_dsn)
+    now = datetime.datetime.now(datetime.UTC).replace(second=0, microsecond=0)
+    client_id, session_id, snapshot_id, package_id, tariff_id = [uuid.uuid4() for _ in range(5)]
+    local_package_id = uuid.uuid4() if legacy_package_id else package_id
+    client_repo = PostgresClientRepository(lambda: engine)
+    session_repo = PostgresSessionRepository(lambda: engine)
+    packages = PostgresEntitlementRepository(lambda: engine)
+    server_session = Session(
+        id=session_id,
+        workstation_id=uuid.uuid4(),
+        client_id=client_id,
+        guest_name=None,
+        status=SessionStatus.ACTIVE,
+        started_at=now,
+        ended_at=None,
+        source="local_ledger",
+        created_by="test",
+        created_at=now,
+    )
+    event = make_event(client_id=client_id, session_id=session_id, snapshot_id=snapshot_id)
+    try:
+        await client_repo.save(
+            Client(
+                id=client_id,
+                nickname=f"Package{client_id.hex[:10]}",
+                phone=None,
+                discount_category=None,
+                balance_cents=-500,
+                balance_bonus=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session_repo.save(server_session)
+        await packages.create(
+            Entitlement(
+                id=package_id,
+                client_id=client_id,
+                tariff_id=tariff_id,
+                zone_id=None,
+                duration_minutes=total_minutes,
+                remaining_minutes=total_minutes,
+                price_cents=100,
+                queue_position=1,
+                status=EntitlementStatus.ACTIVE,
+                idempotency_key=str(package_id),
+                purchased_at=now + datetime.timedelta(seconds=1),
+                activated_at=now,
+            )
+        )
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("""INSERT INTO v2_session_leases
+                (session_id, client_id, device_id, snapshot_id, snapshot_version,
+                 policy_version, status, issued_at)
+                VALUES (:session, :client, :device, :snapshot, 1, 'test', 'active', :now)"""),
+                {
+                    "session": session_id,
+                    "client": client_id,
+                    "device": event.device_id,
+                    "snapshot": snapshot_id,
+                    "now": now,
+                },
+            )
+        reconciliation = V2ClientFactReconciliationService(
+            PostgresV2ClientFactReconciliationRepository(
+                lambda: engine, entitlement_writer=PostgresEntitlementTransactionWriter()
+            )
+        )
+        previous = None
+        for minute in range(1, 6):
+            event = V2Event.create(
+                operation_id=uuid.uuid4(),
+                event_type=V2EventType.PACKAGE_CONSUMED,
+                producer_id="workstation:package-test",
+                client_id=client_id,
+                session_id=session_id,
+                device_id=event.device_id,
+                sequence=minute,
+                previous_hash=previous,
+                occurred_at=now + datetime.timedelta(minutes=minute),
+                payload={
+                    "snapshot_id": str(snapshot_id),
+                    "snapshot_version": 1,
+                    "package_id": str(local_package_id),
+                    "tariff_id": str(tariff_id),
+                    "remaining_minutes": total_minutes - minute,
+                },
+            )
+            assert (await reconciliation.accept(event)).status is V2ClientFactStatus.ACCEPTED
+            assert (await reconciliation.accept(event)).status is V2ClientFactStatus.DUPLICATE
+            previous = event.payload_hash
+
+        if burn_after:
+            event = V2Event.create(
+                operation_id=uuid.uuid4(),
+                event_type=V2EventType.PACKAGE_BURNED,
+                producer_id="workstation:package-test",
+                client_id=client_id,
+                session_id=session_id,
+                device_id=event.device_id,
+                sequence=6,
+                previous_hash=previous,
+                occurred_at=now + datetime.timedelta(minutes=5),
+                payload={
+                    "snapshot_id": str(snapshot_id),
+                    "snapshot_version": 1,
+                    "package_id": str(local_package_id),
+                    "tariff_id": str(tariff_id),
+                    "remaining_minutes": total_minutes - 5,
+                },
+            )
+            assert (await reconciliation.accept(event)).status is V2ClientFactStatus.ACCEPTED
+            assert (await reconciliation.accept(event)).status is V2ClientFactStatus.DUPLICATE
+
+        class Workstations:
+            async def get(self, workstation_id):
+                return SimpleNamespace(id=workstation_id, device_id=event.device_id, group_id=None)
+
+        service = SessionService(
+            session_repo,
+            workstations=Workstations(),
+            clients=client_repo,
+            entitlements=EntitlementService(packages, tariffs=None, clients=None),
+        )
+        snapshot = await service.snapshot(session_id, now=now + datetime.timedelta(minutes=5))
+        if total_minutes == 5 or burn_after:
+            assert snapshot.active_entitlement is None
+            assert snapshot.entitlements[0].remaining_minutes == 0
+            assert snapshot.entitlements[0].status is (
+                EntitlementStatus.BURNED if burn_after else EntitlementStatus.EXHAUSTED
+            )
+        else:
+            assert snapshot.active_entitlement.remaining_minutes == 175
+            assert snapshot.server_time + datetime.timedelta(
+                minutes=175
+            ) == now + datetime.timedelta(minutes=180)
+        assert snapshot.balance_cents == -500
+    finally:
+        async with engine.begin() as connection:
+            for table in (
+                "v2_server_outbox",
+                "v2_confirmed_client_facts",
+                "v2_event_inbox",
+                "v2_session_chains",
+                "v2_session_leases",
+            ):
+                await connection.execute(
+                    text(f"DELETE FROM {table} WHERE session_id = :id"), {"id": session_id}
+                )
+            await connection.execute(
+                text("DELETE FROM audit_events WHERE resource_path LIKE :path"),
+                {"path": f"clients/{client_id}/sessions/{session_id}/operations/%"},
+            )
+            await connection.execute(
+                text("DELETE FROM client_entitlements WHERE client_id = :id"), {"id": client_id}
+            )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :id"), {"id": session_id}
+            )
+            await connection.execute(text("DELETE FROM clients WHERE id = :id"), {"id": client_id})
         await engine.dispose()
