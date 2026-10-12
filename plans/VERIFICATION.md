@@ -302,3 +302,9 @@ passed. Windows runtime и сравнение одинакового snapshot н
 успешные minute commits без логирования пустых ticks. Проверено на Linux:
 39 V2 access-gate/billing тестов, сборка и `git diff --check`.
 Windows-запись client.log на реальном стенде ещё не проверена.
+
+2026-10-12 — Windows desktop widget HWND_BOTTOM / Win+D recovery:
+Windows host build на Linux: 0 warnings, 0 errors; существующие client tests:
+161 passed после переноса поверх origin/V2. Native Win+D, повторный Win+D, HUD и Maintenance/tray на Windows
+не проверены; Linux build/tests не проверяют user32/Explorer.
+Graphify update недоступен: CLI не установлен.
