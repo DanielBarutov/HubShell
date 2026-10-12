@@ -325,4 +325,12 @@ passed. Windows runtime и сравнение одинакового snapshot н
 39 V2 access-gate/billing тестов, сборка и `git diff --check`.
 Windows-запись client.log на реальном стенде ещё не проверена.
 
+<<<<<<< HEAD
 2026-10-12 — operator guest interrupt: backend guest access 2 passed / 1 PostgreSQL test skipped (DSN absent); V2AccessGate/V2LocalLedger/V2BillingLogic 76 passed on Linux. Windows host Release x64 build: 0 warnings/errors. Focused Ruff and git diff --check passed; graphify updated. Live admin→RPC→PC scenario and native Windows not checked.
+=======
+2026-10-12 — Windows desktop widget HWND_BOTTOM / Win+D recovery:
+Windows host build на Linux: 0 warnings, 0 errors; существующие client tests:
+161 passed после переноса поверх origin/V2. Native Win+D, повторный Win+D, HUD и Maintenance/tray на Windows
+не проверены; Linux build/tests не проверяют user32/Explorer.
+Graphify update недоступен: CLI не установлен.
+>>>>>>> 6eff53637abdbff36cfb5824892a9a82fb64b00b

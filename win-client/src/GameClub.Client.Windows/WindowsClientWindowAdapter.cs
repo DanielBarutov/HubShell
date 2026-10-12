@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 using Avalonia.Threading;
 using System.Runtime.Versioning;
 using Avalonia;
@@ -34,11 +33,19 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
     private readonly KeyboardCallback _keyboardCallback;
     private readonly AccessGateKeyboardGuard _keyboardGuard = new();
     private IntPtr _keyboardHook;
+    private readonly DispatcherTimer _desktopVisibilityTimer;
 
     public WindowsClientWindowAdapter()
     {
         _foregroundCallback = OnForegroundChanged;
         _keyboardCallback = OnKeyboardEvent;
+        // Explorer can minimize the widget after the foreground event for Win+D.
+        // Reconcile on the UI thread even when the desktop stays in the foreground.
+        _desktopVisibilityTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        _desktopVisibilityTimer.Tick += OnDesktopVisibilityTick;
     }
 
     public bool UsesTransparentWindow => true;
@@ -96,6 +103,14 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
         _window.CanResize = false;
         _window.Topmost = mode == ClientWindowMode.Locked;
         _windowMode = mode;
+        if (mode == ClientWindowMode.User)
+        {
+            _desktopVisibilityTimer.Start();
+        }
+        else
+        {
+            _desktopVisibilityTimer.Stop();
+        }
         UpdateKeyboardHook();
 
         if (mode == ClientWindowMode.Locked)
@@ -189,6 +204,8 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
             _foregroundHook = IntPtr.Zero;
         }
         RemoveKeyboardHook();
+        _desktopVisibilityTimer.Stop();
+        _desktopVisibilityTimer.Tick -= OnDesktopVisibilityTick;
         _trayIcon?.Dispose();
         _trayIcon = null;
         _windowContentSurface = null;
@@ -269,36 +286,33 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
     private void OnForegroundChanged(IntPtr hook, uint eventType, IntPtr hwnd, int objectId, int childId, uint threadId, uint time) =>
         Dispatcher.UIThread.Post(UpdateDesktopVisibility);
 
+    private void OnDesktopVisibilityTick(object? sender, EventArgs args) =>
+        UpdateDesktopVisibility();
+
     private void UpdateDesktopVisibility()
     {
         if (_disposed || _window is null || _windowMode != ClientWindowMode.User)
         {
             return;
         }
-        var foreground = GetForegroundWindow();
-        if (foreground == IntPtr.Zero)
+        var handle = _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var restoreNativeWindow = handle != IntPtr.Zero
+            && (!IsWindowVisible(handle) || IsIconic(handle));
+        _window.Show();
+        if (_window.WindowState == WindowState.Minimized)
         {
-            return;
+            _window.WindowState = WindowState.Normal;
         }
-        GetWindowThreadProcessId(foreground, out var processId);
-        var className = new StringBuilder(256);
-        GetClassName(foreground, className, className.Capacity);
-        var desktop = className.ToString() is "Progman" or "WorkerW";
-        if (processId == Environment.ProcessId)
+        if (handle != IntPtr.Zero)
         {
-            return;
-        }
-        if (desktop)
-        {
-            _window.Show();
-            if (_window.WindowState == WindowState.Minimized)
+            if (restoreNativeWindow)
             {
-                _window.WindowState = WindowState.Normal;
+                // Restore after Show Desktop without taking keyboard focus.
+                ShowWindow(handle, 4); // SW_SHOWNOACTIVATE
             }
-        }
-        else
-        {
-            _window.Hide();
+            // HWND_BOTTOM: ordinary applications cover the widget. Never activate
+            // it or change the current HUD geometry while reconciling visibility.
+            SetWindowPos(handle, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         }
     }
 
@@ -309,11 +323,13 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
     [DllImport("user32.dll")]
     private static extern bool UnhookWinEvent(IntPtr hook);
     [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    private static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr window, StringBuilder className, int maximum);
+    private static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     private static void PlaceWidgetNearRightEdge(Window window)
     {
