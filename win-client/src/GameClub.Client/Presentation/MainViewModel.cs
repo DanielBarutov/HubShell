@@ -41,6 +41,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         WorkstationLockdownPolicySnapshot.SafeDefault;
     private SessionSnapshot? _activeSession;
     private V2LocalSessionLedger? _activeV2Ledger;
+    private bool _isV2MinuteBillingPaused;
     private int _portalResumeInFlight;
     private ClientPortalSnapshot? _portalSnapshot;
     private bool _isPortalRegistrationRequested;
@@ -432,7 +433,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !_portalPasswordResetRequired;
     public bool CanStopActiveSession => (_activeSession is not null || _activeV2Ledger is not null)
         && !_portalPasswordResetRequired
-        && !IsAccessLocked
+        && (!IsAccessLocked || _activeV2Ledger is not null)
         && !IsMaintenanceMode;
     public string ActiveSessionDescription => _activeV2Ledger is not null
         ? $"{(_activeV2Ledger.IsGuest ? "Гость" : "Игрок")} · V2 local ledger · {CurrentWorkstationLabel}"
@@ -2363,6 +2364,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         _activeSession = null;
         _activeV2Ledger = ledger;
+        _isV2MinuteBillingPaused = false;
         _sessionTimeProjection.Reset();
         _portalPasswordResetRequired = false;
         _portalMessage = string.Empty;
@@ -2388,6 +2390,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task ConsumeV2DueMinutesAsync()
     {
+        if (_isV2MinuteBillingPaused)
+        {
+            return;
+        }
+        var before = _activeV2Ledger;
+        var stage = "consume_minutes";
         try
         {
             var transitions = await _v2MinuteRunner!.ConsumeDueMinutesAsync(_clock(), _lifetime.Token);
@@ -2397,10 +2405,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             }
             var last = transitions[^1];
             _activeV2Ledger = last.Ledger;
+            ClientLog.Info("v2.minute", $"minute commit succeeded session_id={last.Ledger.SessionId} " +
+                $"snapshot_id={last.Ledger.SnapshotId} transitions={transitions.Count} " +
+                $"status={last.Ledger.Status} login_grant_remaining={last.Ledger.LoginGrantRemainingMinutes} " +
+                $"balance_cents={last.Ledger.BalanceCents} last_boundary={last.Ledger.LastConsumedMinuteUtc:O} " +
+                $"lock_workstation={last.LockWorkstation}");
+            stage = "publish_session_state";
             PublishSessionState();
             if (last.LockWorkstation)
             {
+                stage = "stop_on_server";
                 await StopV2OnServerAsync(last.Ledger, _lifetime.Token);
+                stage = "lock_access";
                 _activeV2Ledger = null;
                 _accessGate.LockSession("Время или доступный баланс сессии закончились");
                 ApplySessionStopPolicy(clearV1PortalState: false);
@@ -2411,10 +2427,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
-        catch (Exception)
+        catch (Exception error)
         {
+            ClientLog.Exception("v2.minute", error,
+                $"ConsumeV2DueMinutesAsync failed stage={stage} " +
+                $"session_id={before?.SessionId} snapshot_id={before?.SnapshotId} " +
+                $"snapshot_version={before?.SnapshotVersion} zone_id={before?.ZoneId} " +
+                $"status_before={before?.Status} status_current={_activeV2Ledger?.Status} " +
+                $"login_grant_before={before?.LoginGrantRemainingMinutes} balance_before_cents={before?.BalanceCents} " +
+                $"activated_at={before?.ActivatedAtUtc:O} last_boundary_before={before?.LastConsumedMinuteUtc:O} " +
+                $"per_minute_candidates={before?.Tariffs.Count(item => item.PerMinutePriceCents > 0 && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, before.ZoneId))} " +
+                $"stack={error.StackTrace}");
+            _isV2MinuteBillingPaused = true;
             _portalMessage = "Не удалось безопасно обновить V2 ledger. Доступ заблокирован до проверки";
-            _activeV2Ledger = null;
             _accessGate.LockSession("V2 ledger требует проверки");
             PublishSessionState();
             PublishAccessState();

@@ -65,6 +65,11 @@ class ProductHistoryReader(typing.Protocol):
 
 
 class TariffReader(typing.Protocol):
+    async def find_per_minute_tariff(
+        self, group_id: str | None, moment: datetime.datetime
+    ) -> Tariff | None:
+        """Return the server-selected zone rate."""
+
     async def list_tariffs(self) -> list[Tariff]:
         """Return current tariff versions."""
 
@@ -297,10 +302,16 @@ class ClientPortalService:
             if item.settlement_status is EntitlementSettlementStatus.SETTLED
             and item.status in {EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED}
         )
+        per_minute_tariff = await self._tariffs.find_per_minute_tariff(group_id, now)
         tariffs = tuple(
             tariff
             for tariff in await self._tariffs.list_tariffs()
             if tariff.applies_at(now, group_id, TariffAudience.REGISTERED)
+            and (
+                tariff.billing_mode is BillingMode.BLOCK
+                or per_minute_tariff is not None
+                and tariff.id == per_minute_tariff.id
+            )
         )
         return ClientPortalSnapshot(
             client=client,

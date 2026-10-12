@@ -1,5 +1,9 @@
 # GameClub / HubShell — сводка проекта
 
+2026-10-12: Avalonia-клиент закрепляет тёмную Fluent-тему независимо от темы ОС,
+чтобы вводимый светлый текст оставался виден на тёмных полях. 14 Linux headless
+тестов прошли; ручная Windows-проверка ещё не выполнена. См. план 38.
+
 2026-10-11: переносимая self-contained папка `release/` для Windows x64.
 Адреса/публичные ключи — в `server.ini`, запуск watchdog на месте в `C:\GameClub`
 через `start-service.cmd` от администратора с защитой ACL. Учётные записи не меняются.
@@ -1100,3 +1104,24 @@ dotnet test win-client\GameClub.Client.sln --configuration Debug -p:Platform=x64
 ### 2026-10-11 — стартовые бесплатные минуты
 
 `GAMECLUB_LOGIN_GRANT_MINUTES=1` вынесен в .env и общий backend environment Compose. Целое число от 0; применяется к новым сессиям через сохранённый серверный grant и V2 snapshot. Подробности: [30-entitlements-meter/PLAN.md](30-entitlements-meter/PLAN.md).
+
+### 2026-10-11 — V2 grant → per-minute и ошибка локального ledger
+
+Исправлен состав нового signed snapshot: пакетные тарифы имеют
+`per_minute_price_cents=0`; единственную поминутную ставку выбирает существующий
+`CatalogService.find_per_minute_tariff`. Клиент после ошибки minute commit
+сохраняет ссылку на ledger, приостанавливает новые списания, журналирует исходное
+исключение и разрешает явное завершение даже при закрытом access-gate.
+Защита от замены активного ledger и pending outbox сохранена.
+
+Linux воспроизводит ошибку старого snapshot с двумя положительными ставками:
+grant списывается, следующий debit бросает исключение, ledger остаётся Active.
+Это подтверждает дефект данных, но не устанавливает причину конкретного
+Windows-инцидента без исходного snapshot/исключения. Старый сохранённый snapshot
+не переписывается: завершить прежнюю сессию и получить новый signed snapshot.
+
+2026-10-11: отдельная категория `v2.minute` для диагностики
+`ConsumeV2DueMinutesAsync`: этап ошибки, ledger/snapshot контекст и stack trace;
+успешные minute commits без логирования пустых ticks. Проверено на Linux:
+39 V2 access-gate/billing тестов, сборка и `git diff --check`.
+Windows-запись client.log на реальном стенде ещё не проверена.

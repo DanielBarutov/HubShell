@@ -7,6 +7,32 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2BillingLogicTests
 {
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(20, false)]
+    public void PackageSnapshotRateControlsGrantToPerMinuteTransition(long packageRate, bool validSnapshot)
+    {
+        var ledger = CreateLedger(1, 7_918, 100, tariffs:
+        [
+            new("hour", "Час", "vip", 60, 600, packageRate, true),
+            new("rate", "Поминутный", "vip", 0, 0, 100, false),
+        ]);
+        var grant = V2LocalLedgerEngine.ConsumeOneMinute(ledger, Guid.NewGuid(), Activation);
+        Assert.Equal(0, grant.Ledger.LoginGrantRemainingMinutes);
+        Assert.Equal(7_918, grant.Ledger.BalanceCents);
+        if (!validSnapshot)
+        {
+            Assert.Throws<InvalidOperationException>(() => V2LocalLedgerEngine.ConsumeOneMinute(
+                grant.Ledger, Guid.NewGuid(), Activation.AddMinutes(1)));
+            Assert.Equal(V2LocalSessionStatus.Active, grant.Ledger.Status);
+            return;
+        }
+        var debit = V2LocalLedgerEngine.ConsumeOneMinute(grant.Ledger, Guid.NewGuid(), Activation.AddMinutes(1));
+        Assert.Equal(7_818, debit.Ledger.BalanceCents);
+        Assert.Equal("per_minute_debit", debit.OutboxFacts.Single().EventType);
+        Assert.False(debit.LockWorkstation);
+    }
+
     [Fact]
     public void RemainingTimeIncludesActiveQueuedPackagesAndBalance()
     {

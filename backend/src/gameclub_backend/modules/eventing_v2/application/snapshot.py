@@ -111,7 +111,9 @@ class V2OfflineSnapshotFactory:
             name=value.name,
             package_minutes=value.duration_minutes,
             package_price_cents=value.price_cents,
-            per_minute_price_cents=value.price_per_minute_cents,
+            per_minute_price_cents=(
+                value.price_per_minute_cents if value.billing_mode is BillingMode.PER_MINUTE else 0
+            ),
             is_purchasable=(
                 value.active
                 and value.lifecycle is TariffLifecycle.PUBLISHED

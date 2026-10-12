@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using GameClub.Client.Avalonia;
 using GameClub.Client.Presentation;
 using Xunit;
@@ -24,6 +25,7 @@ public sealed class AvaloniaHostSmokeTests
 
         var window = new MainWindow();
 
+        Assert.Equal(ThemeVariant.Dark, app.RequestedThemeVariant);
         Assert.Equal("HubShell, Linux developer host", window.Title);
         Assert.IsType<MainViewModel>(window.DataContext);
         Assert.True(((MainViewModel)window.DataContext!).IsAccessGateVisible);
