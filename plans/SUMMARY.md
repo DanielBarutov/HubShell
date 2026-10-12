@@ -1148,4 +1148,11 @@ Windows-инцидента без исходного snapshot/исключени
 39 V2 access-gate/billing тестов, сборка и `git diff --check`.
 Windows-запись client.log на реальном стенде ещё не проверена.
 
+<<<<<<< HEAD
 2026-10-12: гостевой operator interrupt теперь закрывает клиент при следующем успешном guest poll; запись server stop и сжигание всей очереди используют общий ledger-путь. Проверено на Linux (76 .NET / 2 backend); production smoke остаётся.
+=======
+2026-10-12: Windows User-виджет постоянно показан под обычными окнами
+(HWND_BOTTOM), вместо Hide/Show при переключении приложений. Проверка каждые
+250 мс восстанавливает окно после Win+D без фокуса, Topmost или смены HUD.
+Maintenance сохраняет ручное скрытие. Native Windows проверка остаётся обязательной.
+>>>>>>> 6eff53637abdbff36cfb5824892a9a82fb64b00b
