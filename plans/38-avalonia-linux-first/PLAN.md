@@ -1,6 +1,11 @@
 # План 38 — Avalonia migration и Linux-first developer host
 
 Статус: `complete`
+
+2026-10-12: в `App.axaml` закреплена тёмная тема Avalonia для всех Fluent-контролов,
+включая поля входа, регистрации, обслуживания и смены пароля. Linux:
+14 `AvaloniaHostSmokeTests` прошли; тема закреплена проверкой в тесте.
+Отображение полей при вводе/фокусе/наведении на Windows ещё требует ручной проверки.
 Владелец: `win-client/`  
 Зависимости: [`win-client/PLAN.md`](../../win-client/PLAN.md),
 [`36-windows-client-contract-consumers`](../36-windows-client-contract-consumers/PLAN.md)

@@ -1,5 +1,11 @@
 # Verification matrix
 
+2026-10-12: `RequestedThemeVariant="Dark"` в Avalonia-клиенте устраняет зависимость
+Fluent-полей от светлой темы ОС. Linux: `dotnet test win-client/tests/GameClub.Client.Tests.csproj
+-p:Platform=x64 --filter FullyQualifiedName~AvaloniaHostSmokeTests --no-restore`
+— 14 passed; сборка успешна, существующее предупреждение xUnit1031 остаётся.
+Ручной ввод, фокус и наведение на Windows со светлой темой ОС не проверены.
+
 2026-10-11: собрана `release/` — self-contained single-file Windows x64 EXE (~104 MiB),
 server.ini и start-service.cmd/ps1 + install/uninstall. 158 .NET тестов прошли:
 разбор INI, ошибка/дубликаты/небезопасный HTTP, чтение рядом с host, env priority.
@@ -271,3 +277,28 @@ Set-Location "C:\Git\HubShell"
 - Unit: `uv run --directory ./backend pytest tests/test_modules_reservations_sessions.py tests/test_metered_billing.py tests/test_v2_offline_login.py -q` — 64 passed. Проверены grant 0/3, отказ для отрицательного/дробного/overflow значения, существующий grant 5 и списания.
 - Ruff check/format изменённых Python-файлов пройдены; Compose config передаёт значение 1 всем backend-сервисам.
 - Приложение не перезапускалось; PostgreSQL integration и native Windows smoke не запускались. Graphify update выполнен с предупреждениями парсера frontend и метаданных графа.
+
+### 2026-10-11 — V2 grant → per-minute и ошибка локального ledger
+
+Исправлен состав нового signed snapshot: пакетные тарифы имеют
+`per_minute_price_cents=0`; единственную поминутную ставку выбирает существующий
+`CatalogService.find_per_minute_tariff`. Клиент после ошибки minute commit
+сохраняет ссылку на ledger, приостанавливает новые списания, журналирует исходное
+исключение и разрешает явное завершение даже при закрытом access-gate.
+Защита от замены активного ledger и pending outbox сохранена.
+
+Linux воспроизводит ошибку старого snapshot с двумя положительными ставками:
+grant списывается, следующий debit бросает исключение, ledger остаётся Active.
+Это подтверждает дефект данных, но не устанавливает причину конкретного
+Windows-инцидента без исходного snapshot/исключения. Старый сохранённый snapshot
+не переписывается: завершить прежнюю сессию и получить новый signed snapshot.
+
+Проверки этого среза: .NET 161 passed; backend snapshot/login/gRPC portal
+12 passed, enrollment/permissions/signature 15 passed; scoped Ruff check/format
+passed. Windows runtime и сравнение одинакового snapshot на двух ОС не выполнены.
+
+2026-10-11: отдельная категория `v2.minute` для диагностики
+`ConsumeV2DueMinutesAsync`: этап ошибки, ledger/snapshot контекст и stack trace;
+успешные minute commits без логирования пустых ticks. Проверено на Linux:
+39 V2 access-gate/billing тестов, сборка и `git diff --check`.
+Windows-запись client.log на реальном стенде ещё не проверена.

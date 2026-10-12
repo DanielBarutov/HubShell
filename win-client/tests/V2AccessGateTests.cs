@@ -11,6 +11,38 @@ namespace GameClub.Client.Tests;
 public sealed class V2AccessGateTests
 {
     [Fact]
+    public async Task MinuteWriteFailureKeepsSessionAvailableForExplicitStop()
+    {
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        var gateway = new V2Gateway(CreateLedger());
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: "device-01",
+            clock: () => DateTimeOffset.Parse("2026-09-28T10:01:20Z"),
+            v2OfflineLogin: new V2OfflineLoginCoordinator(gateway, ledger), v2Ledger: ledger,
+            v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier(), v2OfflineSession: gateway);
+        viewModel.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+        viewModel.PortalIdentifier = "NightFox";
+        viewModel.PortalPassword = "safe-password";
+        Assert.True(await viewModel.LoginPortalAsync());
+        store.FailNextWrite = true;
+
+        var consume = typeof(MainViewModel).GetMethod("ConsumeV2DueMinutesAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await (Task)consume.Invoke(viewModel, [])!;
+
+        Assert.True(viewModel.IsSessionLocked);
+        Assert.True(viewModel.IsActiveSessionVisible);
+        Assert.True(viewModel.CanStopActiveSession);
+        Assert.Equal(V2LocalSessionStatus.Active, (await ledger.ReadLedgerAsync()).Status);
+        await (Task)consume.Invoke(viewModel, [])!;
+        Assert.Equal(CreateLedger().LoginGrantRemainingMinutes, (await ledger.ReadLedgerAsync()).LoginGrantRemainingMinutes);
+        Assert.Empty(await ledger.ReadPendingOutboxAsync());
+        Assert.True(await viewModel.StopActiveSessionAsync());
+        Assert.Equal(V2LocalSessionStatus.Stopped, (await ledger.ReadLedgerAsync()).Status);
+    }
+
+    [Fact]
     public async Task V2LoginAndStopUseOnlyLocalLedgerInsteadOfV1SessionGateway()
     {
         var store = new InMemoryLedgerStore();

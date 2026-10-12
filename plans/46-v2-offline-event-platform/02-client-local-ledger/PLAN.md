@@ -215,3 +215,23 @@
 
 - heartbeat watermarks и серверный delivery-lag мониторинг;
 - native Windows DPAPI, crash/power-loss и reconnect proof.
+
+### 2026-10-11 — V2 grant → per-minute и ошибка локального ledger
+
+Исправлен состав нового signed snapshot: пакетные тарифы имеют
+`per_minute_price_cents=0`; единственную поминутную ставку выбирает существующий
+`CatalogService.find_per_minute_tariff`. Клиент после ошибки minute commit
+сохраняет ссылку на ledger, приостанавливает новые списания, журналирует исходное
+исключение и разрешает явное завершение даже при закрытом access-gate.
+Защита от замены активного ledger и pending outbox сохранена.
+
+Linux воспроизводит ошибку старого snapshot с двумя положительными ставками:
+grant списывается, следующий debit бросает исключение, ledger остаётся Active.
+Это подтверждает дефект данных, но не устанавливает причину конкретного
+Windows-инцидента без исходного snapshot/исключения. Старый сохранённый snapshot
+не переписывается: завершить прежнюю сессию и получить новый signed snapshot.
+
+2026-10-11: `v2.minute` логирует успешные minute commits и ошибку
+`ConsumeV2DueMinutesAsync` с этапом, session/snapshot ID, состоянием до/после,
+grant, балансом, UTC boundaries, числом совместимых ставок и stack trace.
+Нет записей для пустых секундных ticks, токенов, паролей и полного snapshot.

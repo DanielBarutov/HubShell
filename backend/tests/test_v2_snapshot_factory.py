@@ -92,6 +92,7 @@ def test_v2_snapshot_factory_uses_server_owned_client_session_and_tariff_snapsho
     assert payload.balance_cents == 1_200
     assert payload.debt_limit_cents == 500
     assert payload.packages[0].remaining_minutes == 45
+    assert payload.tariffs[0].per_minute_price_cents == 0
     assert payload.tariffs[0].is_purchasable
     assert serialize_snapshot_payload(payload) == serialize_snapshot_payload(
         V2OfflineSnapshotFactory.create_payload(input_value)

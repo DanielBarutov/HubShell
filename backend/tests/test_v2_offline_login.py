@@ -11,6 +11,7 @@ from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.modules.billing.infrastructure.memory import InMemoryChargeRepository
 from gameclub_backend.modules.catalog.application.service import CatalogService
+from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
 from gameclub_backend.modules.client_groups.infrastructure.memory import (
@@ -62,9 +63,7 @@ class SnapshotIssueMemoryRepository:
     ) -> bool:
         lease = self._leases.get(session_id)
         return bool(
-            lease is not None
-            and lease.client_id == client_id
-            and lease.device_id == device_id
+            lease is not None and lease.client_id == client_id and lease.device_id == device_id
         )
 
     async def issue(self, value: V2SignedSnapshotIssue) -> V2SnapshotIssueResult:
@@ -102,6 +101,8 @@ class RecordingV2SessionLeaseRevoker:
 
 async def build_service(
     mode: WorkstationSessionMode,
+    *,
+    competing_rates: bool = False,
 ) -> tuple[V2OfflineLoginService, SessionService, ClientPortalService, ClientService, Client]:
     client_groups = InMemoryClientGroupRepository()
     clients = ClientService(InMemoryClientRepository(), groups=client_groups)
@@ -122,6 +123,18 @@ async def build_service(
         datetime.datetime.now(datetime.UTC),
         None,
     )
+    if competing_rates:
+        for rate in (150, 100):
+            await catalog.create_tariff(
+                f"Rate {rate}",
+                None,
+                1,
+                0,
+                datetime.datetime.now(datetime.UTC),
+                None,
+                billing_mode=BillingMode.PER_MINUTE,
+                price_per_minute_cents=rate,
+            )
     sessions = SessionService(
         session_repository,
         workstations=workstations,
@@ -396,9 +409,7 @@ async def test_v2_grpc_login_requires_the_same_device_identity() -> None:
                 device_id="v2-device-01",
                 limit=50,
             ),
-            metadata=(
-                ("authorization", f"Bearer {snapshot.portal_access_token}"),
-            ),
+            metadata=(("authorization", f"Bearer {snapshot.portal_access_token}"),),
         )
         assert portal_snapshot.client_id == str(registered_client.id)
         assert portal_snapshot.nickname == "V2 Player"
@@ -501,3 +512,19 @@ async def test_v2_grpc_login_requires_the_same_device_identity() -> None:
     finally:
         await channel.close()
         await server.stop(None)
+
+
+async def test_login_snapshot_has_only_server_selected_per_minute_rate() -> None:
+    service, _, _, _, _ = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, competing_rates=True
+    )
+    snapshot = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="v2-login-rates",
+    )
+    rates = [item for item in snapshot.payload.tariffs if item.per_minute_price_cents > 0]
+    assert len(rates) == 1
+    assert rates[0].per_minute_price_cents == 100
+    assert any(item.name == "V2 час" for item in snapshot.payload.tariffs)
