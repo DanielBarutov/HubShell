@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
@@ -15,6 +16,81 @@ from gameclub_backend.modules.entitlements.domain import (
     EntitlementStatus,
 )
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
+
+
+class PostgresEntitlementTransactionWriter:
+    async def apply_local_usage(
+        self,
+        transaction: AsyncSession,
+        client_id: uuid.UUID,
+        package_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        remaining_minutes: int,
+        occurred_at: datetime.datetime,
+        *,
+        burned: bool,
+        purchase_idempotency_key: str | None,
+        purchased_since: datetime.datetime,
+    ) -> bool:
+        items = list(
+            await transaction.scalars(
+                select(EntitlementModel)
+                .where(
+                    EntitlementModel.client_id == client_id,
+                    EntitlementModel.status.in_(
+                        (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
+                    ),
+                )
+                .order_by(EntitlementModel.queue_position)
+                .with_for_update()
+            )
+        )
+        package = next((item for item in items if item.id == package_id), None)
+        if package is None and purchase_idempotency_key:
+            package = next(
+                (item for item in items if item.idempotency_key == purchase_idempotency_key), None
+            )
+        if package is None:
+            # shortcut: старый UUID — только единственный пакет; убрать после обновления клиентов.
+            candidates = [
+                item
+                for item in items
+                if item.tariff_id == tariff_id
+                and item.purchased_at >= purchased_since
+                and item.purchased_at <= occurred_at
+                and item.status in (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
+            ]
+            if len(candidates) != 1:
+                return False
+            package = candidates[0]
+        if (
+            package.tariff_id != tariff_id
+            or package.settlement_status != EntitlementSettlementStatus.SETTLED
+            or package.status not in (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
+            or remaining_minutes != package.remaining_minutes - (0 if burned else 1)
+        ):
+            return False
+        if any(
+            item.id != package.id
+            and item.status == EntitlementStatus.ACTIVE
+            and item.remaining_minutes > 0
+            for item in items
+        ):
+            return False
+        package.remaining_minutes = 0 if burned else remaining_minutes
+        package.status = (
+            EntitlementStatus.BURNED
+            if burned
+            else EntitlementStatus.EXHAUSTED
+            if remaining_minutes == 0
+            else EntitlementStatus.ACTIVE
+        )
+        package.activated_at = package.activated_at or occurred_at
+        if package.remaining_minutes == 0:
+            package.ended_at = occurred_at
+        if burned:
+            package.burn_reason = "client_early_exit"
+        return True
 
 
 class EntitlementBase(DeclarativeBase):

@@ -54,6 +54,8 @@ message OfflineSessionSnapshotPayload {
   string policy_version = 14;
 
   reserved 15 to 31;
+  // Заполнено только в подписанном ответе на покупку пакета текущей сессии.
+  string purchase_idempotency_key = 32;
 }
 
 // Клиент принимает snapshot только после проверки signature выбранным key id.

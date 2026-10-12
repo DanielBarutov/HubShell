@@ -130,14 +130,16 @@ class V2GuestAccessService:
             raise ApplicationError(ErrorCode.CONFLICT, "Guest V2 access requires a V2 workstation")
         now = self._clock()
         if session_id is not None:
-            active_sessions = await self._sessions.list(workstation.id, active_only=True)
-            active = next(iter(active_sessions), None)
+            session = await self._sessions.get(session_id)
             if (
-                active is None
-                or active.id != session_id
-                or active.client_id is not None
-                or active.source != GUEST_SOURCE
+                session.workstation_id != workstation.id
+                or session.client_id is not None
+                or session.source != GUEST_SOURCE
             ):
+                raise ApplicationError(
+                    ErrorCode.PERMISSION_DENIED, "Guest session does not belong to device"
+                )
+            if session.status is SessionStatus.COMPLETED:
                 raise ApplicationError(ErrorCode.CONFLICT, "Guest session is no longer active")
         grant = await self._grants.get_pending_for_workstation(
             workstation.id, now, session_id, applied_grant_ids

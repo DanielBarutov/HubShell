@@ -184,6 +184,19 @@ async def test_guest_v2_access_is_prepared_redeemed_and_idempotent() -> None:
     await service.stop(workstation.device_id, session_id, payment.id)
     assert (await sessions._repository.get(session_id)).status is SessionStatus.COMPLETED
 
+    for _ in range(2):
+        with pytest.raises(ApplicationError) as stopped:
+            await service.redeem(workstation.device_id, session_id, (grant.id,))
+        assert stopped.value.code is ErrorCode.CONFLICT
+        assert stopped.value.message == "Guest session is no longer active"
+
+    sessions._repository.items[session_id] = dataclasses.replace(
+        sessions._repository.items[session_id], workstation_id=uuid.uuid4()
+    )
+    with pytest.raises(ApplicationError) as foreign:
+        await service.redeem(workstation.device_id, session_id)
+    assert foreign.value.code is ErrorCode.PERMISSION_DENIED
+
 
 @pytest.mark.asyncio
 async def test_guest_additions_keep_session_queue_order_and_cannot_survive_exit() -> None:

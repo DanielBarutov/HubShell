@@ -11,6 +11,52 @@ namespace GameClub.Client.Tests;
 public sealed class V2AccessGateTests
 {
     [Fact]
+    public async Task OfflineMinuteUpdatesDisplayedNegativeBalanceFromLocalLedger()
+    {
+        var now = DateTimeOffset.Parse("2026-10-12T12:00:00Z");
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            tariffs: [new("minute", "Minute", null, 0, 0, 100, false)]) with
+        {
+            BalanceCents = -500, DebtLimitCents = 1_000, ActivatedAtUtc = now,
+        };
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        var viewModel = new MainViewModel(new ClientSessionCoordinator(CreateBackend()),
+            new Credentials(), deviceId: saved.DeviceId, clock: () => now,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator),
+            v2Ledger: coordinator, v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier());
+        await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+        Assert.Equal("-5,00 ₽", viewModel.PortalBalanceAmountSummary);
+        var changes = new List<string?>();
+        var balanceUpdated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            changes.Add(args.PropertyName);
+            if (args.PropertyName == nameof(viewModel.PortalBalanceAmountSummary)
+                && viewModel.PortalBalanceAmountSummary == "-6,00 ₽")
+            {
+                balanceUpdated.TrySetResult();
+            }
+        };
+        now = now.AddMinutes(1);
+        var countdown = viewModel.RunSessionCountdownLoopAsync();
+        try
+        {
+            await balanceUpdated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(-600, (await coordinator.ReadLedgerAsync()).BalanceCents);
+            Assert.Equal("-6,00 ₽", viewModel.PortalBalanceAmountSummary);
+            Assert.Contains(nameof(viewModel.PortalBalanceAmountSummary), changes);
+            Assert.False(viewModel.HasPortalBalance);
+        }
+        finally
+        {
+            await viewModel.DisposeAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => countdown);
+        }
+    }
+
+    [Fact]
     public async Task MinuteWriteFailureKeepsSessionAvailableForExplicitStop()
     {
         var store = new InMemoryLedgerStore();
@@ -153,10 +199,12 @@ public sealed class V2AccessGateTests
     {
         public (string DeviceId, string SessionId, string PaymentId)? Stopped { get; private set; }
         public V2LocalSessionLedger? PendingLedger { get; set; }
+        public RpcException? PollError { get; set; }
         public Task<V2LocalSessionLedger?> RedeemPendingGuestAccessAsync(
             string deviceId, IOfflineSnapshotSignatureVerifier signatureVerifier,
             CancellationToken cancellationToken = default, V2LocalSessionLedger? activeGuestLedger = null)
-            => Task.FromResult(PendingLedger);
+            => PollError is null ? Task.FromResult(PendingLedger)
+                : Task.FromException<V2LocalSessionLedger?>(PollError);
         public Task StopGuestSessionAsync(string deviceId, string sessionId, string paymentId,
             CancellationToken cancellationToken = default)
         {
@@ -190,6 +238,53 @@ public sealed class V2AccessGateTests
         Assert.False(viewModel.IsAccessLocked);
         Assert.True(viewModel.IsActiveSessionVisible);
         Assert.Equal("Бесплатное время входа", viewModel.CurrentSessionModeSummary);
+    }
+
+    [Theory]
+    [InlineData(StatusCode.AlreadyExists, "Guest session is no longer active", false, true)]
+    [InlineData(StatusCode.AlreadyExists, "Guest session is no longer active", true, true)]
+    [InlineData(StatusCode.AlreadyExists, "Other conflict", false, false)]
+    [InlineData(StatusCode.Unavailable, "Guest session is no longer active", false, false)]
+    public async Task GuestPollLocksOnlyAfterServerCompletion(
+        StatusCode status, string detail, bool failWrite, bool shouldStop)
+    {
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            packages: [new("guest-package", "guest", null, 3, V2LocalPackageStatus.Active),
+                new("queued-package", "guest", null, 2, V2LocalPackageStatus.Queued)]) with
+        {
+            ClientId = Guid.Empty, GuestName = "Guest", GuestPaymentId = Guid.NewGuid(),
+        };
+        var store = new InMemoryLedgerStore();
+        var ledger = new V2LocalLedgerCoordinator(store);
+        await ledger.InitializeAsync(saved);
+        var gateway = new GuestStopGateway(false)
+        {
+            PollError = new RpcException(new Status(status, detail)),
+        };
+        await using var viewModel = new MainViewModel(
+            new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: saved.DeviceId,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), ledger),
+            v2Ledger: ledger, v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+            v2SignatureVerifier: new AcceptingVerifier(), v2GuestSession: gateway);
+        await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(ledger));
+        store.FailNextWrite = failWrite;
+        var poll = typeof(MainViewModel).GetMethod("PollGuestAccessAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await (Task)poll.Invoke(viewModel, [])!;
+        Assert.Equal(shouldStop, viewModel.IsAccessLocked);
+        if (failWrite)
+        {
+            Assert.Equal(saved, await ledger.ReadLedgerAsync());
+            await (Task)poll.Invoke(viewModel, [])!;
+        }
+        var persisted = await ledger.ReadLedgerAsync();
+        if (shouldStop)
+        {
+            Assert.Equal(V2LocalSessionStatus.Stopped, persisted!.Status);
+            Assert.All(persisted.Packages, package => Assert.Equal(V2LocalPackageStatus.Burned, package.Status));
+            Assert.False(viewModel.IsActiveSessionVisible);
+        }
+        else
+            Assert.Equal(saved, persisted);
     }
 
     [Fact]
@@ -616,6 +711,7 @@ public sealed class V2AccessGateTests
             string deviceId,
             string tariffId,
             string idempotencyKey,
+            IOfflineSnapshotSignatureVerifier signatureVerifier,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

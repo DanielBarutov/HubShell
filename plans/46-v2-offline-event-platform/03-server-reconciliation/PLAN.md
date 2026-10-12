@@ -235,3 +235,24 @@
 - нужен собранный контейнер с этим кодом и ручной V2 gRPC-сценарий на тестовой
   базе; текущая проверка PostgreSQL вызывает application boundary напрямую и
   не доказывает пользовательский контейнерный маршрут.
+
+### 2026-10-12 — отрицательный баланс и пакетные V2-проекции
+
+- Поминутная reconciliation использует сохранённый signed debt limit; debit
+  и подтверждение остаются одной транзакцией. Повтор не списывает деньги вновь.
+- Package consume/burn обновляет entitlement через публичный transaction writer
+  владельца пакетов. Проверяются клиент, тариф, settlement, текущий остаток и
+  единственный active пакет; неоднозначный legacy UUID возвращает conflict.
+- Поле баланса активной клиентской сессии читает локальный ledger и обновляется
+  после minute commit, не дожидаясь portal snapshot.
+- Онлайн-покупка выдаёт подписанный пакет с реальным entitlement ID и ключом
+  покупки, поэтому тариф, созданный после входа, можно применить без замены
+  ledger. Protobuf расширен: `OfflinePortalSnapshot.purchased_package = 15`,
+  `OfflineSessionSnapshotPayload.purchase_idempotency_key = 32`.
+- Linux: 49 backend checks с настоящей временной PostgreSQL, 72 C# checks;
+  один live Kafka test пропущен. Windows host Release build на Linux: 0 ошибок,
+  0 предупреждений. Ruff, format и diff checks проходят.
+- Rollout: сначала backend-gRPC и v2-client-facts, затем клиент. Production
+  data, старые confirmed facts/DLQ и активные ledger не переписывались. Их
+  расхождения требуют отдельной сверки исходных событий; эти тесты не
+  подтверждают восстановление прежней продовой цепочки или Windows runtime.

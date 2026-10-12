@@ -1,8 +1,11 @@
+import base64
 import datetime
 import uuid
 
 import grpc
 import pytest
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from gameclub.v2 import offline_session_service_pb2, offline_session_service_pb2_grpc
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
@@ -14,6 +17,7 @@ from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.domain import BillingMode
 from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.client_groups.domain import ClientGroup
 from gameclub_backend.modules.client_groups.infrastructure.memory import (
     InMemoryClientGroupRepository,
 )
@@ -33,6 +37,9 @@ from gameclub_backend.modules.eventing_v2.application.snapshot_issue import (
 )
 from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_ed25519 import (
     V2Ed25519SnapshotSigner,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_protobuf import (
+    serialize_snapshot_payload,
 )
 from gameclub_backend.modules.sales.application.service import ProductSaleService
 from gameclub_backend.modules.sales.infrastructure.memory import InMemoryProductSaleRepository
@@ -103,8 +110,19 @@ async def build_service(
     mode: WorkstationSessionMode,
     *,
     competing_rates: bool = False,
+    allow_debt: bool = False,
 ) -> tuple[V2OfflineLoginService, SessionService, ClientPortalService, ClientService, Client]:
     client_groups = InMemoryClientGroupRepository()
+    if allow_debt:
+        await client_groups.save(
+            ClientGroup(
+                id="regular",
+                name="Credit",
+                is_default=True,
+                allow_negative_balance=True,
+                negative_balance_limit_cents=1000,
+            )
+        )
     clients = ClientService(InMemoryClientRepository(), groups=client_groups)
     catalog = CatalogService(InMemoryCatalogRepository())
     workstations = InMemoryWorkstationRepository()
@@ -528,3 +546,77 @@ async def test_login_snapshot_has_only_server_selected_per_minute_rate() -> None
     assert len(rates) == 1
     assert rates[0].per_minute_price_cents == 100
     assert any(item.name == "V2 час" for item in snapshot.payload.tariffs)
+
+
+async def test_new_package_after_login_is_signed_and_purchased_with_debt_once() -> None:
+    """Покупает новый тариф в долг и повторяет ответ без второго списания."""
+    service, _, portal, clients, client = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER,
+        allow_debt=True,
+    )
+    await clients.debit(
+        client.id, 500, "Test debt", "test", "test-debt", allow_negative_balance=True
+    )
+    login = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="login-new-package",
+    )
+    tariff = await portal._tariffs.create_tariff(
+        "Test 2 minutes", None, 2, 100, datetime.datetime.now(datetime.UTC), None
+    )
+    assert str(tariff.id) not in {item.tariff_id for item in login.payload.tariffs}
+    server = grpc.aio.server()
+    offline_session_service_pb2_grpc.add_OfflineSessionServiceServicer_to_server(
+        OfflineSessionGrpcService(service, service._token_service),
+        server,
+    )
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+    channel = grpc.aio.insecure_channel(f"127.0.0.1:{port}")
+    try:
+        rpc = offline_session_service_pb2_grpc.OfflineSessionServiceStub(channel)
+        response = await rpc.PurchaseEntitlement(
+            offline_session_service_pb2.PurchaseOfflineEntitlementRequest(
+                device_id="v2-device-01",
+                tariff_id=str(tariff.id),
+                idempotency_key="purchase-new-package",
+            ),
+            metadata=(("authorization", f"Bearer {login.portal_access_token}"),),
+        )
+        assert response.purchased_package.payload.purchase_idempotency_key == "purchase-new-package"
+        assert response.purchased_package.payload.tariffs[0].package_price_cents == 100
+        assert response.purchased_package.signature
+    finally:
+        await channel.close()
+        await server.stop(None)
+    purchase = await service.purchase_entitlement(
+        client_id=client.id,
+        device_id="v2-device-01",
+        tariff_id=tariff.id,
+        idempotency_key="purchase-new-package",
+    )
+    repeated = await service.purchase_entitlement(
+        client_id=client.id,
+        device_id="v2-device-01",
+        tariff_id=tariff.id,
+        idempotency_key="purchase-new-package",
+    )
+    receipt = purchase.purchased_package
+    public_key = Ed25519PublicKey.from_public_bytes(
+        base64.b64decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+    )
+    public_key.verify(receipt.signature, serialize_snapshot_payload(receipt.payload))
+    changed = type(receipt.payload)()
+    changed.CopyFrom(receipt.payload)
+    changed.purchase_idempotency_key = "another-purchase"
+    with pytest.raises(InvalidSignature):
+        public_key.verify(receipt.signature, serialize_snapshot_payload(changed))
+    assert receipt.payload.session_id == login.payload.session_id
+    assert receipt.payload.purchase_idempotency_key == "purchase-new-package"
+    assert receipt.payload.packages[0].package_id == str(purchase.portal.purchased_entitlement.id)
+    assert receipt.payload.packages[0].remaining_minutes == 2
+    assert receipt.payload.tariffs[0].package_price_cents == 100
+    assert repeated.purchased_package.payload.snapshot_id == receipt.payload.snapshot_id
+    assert (await clients.get(client.id)).balance_cents == -600

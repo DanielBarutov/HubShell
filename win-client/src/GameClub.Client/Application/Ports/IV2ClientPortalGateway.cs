@@ -28,5 +28,6 @@ public interface IV2ClientPortalGateway
         string deviceId,
         string tariffId,
         string idempotencyKey,
+        IOfflineSnapshotSignatureVerifier signatureVerifier,
         CancellationToken cancellationToken = default);
 }

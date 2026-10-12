@@ -11,6 +11,7 @@ from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
+from gameclub_backend.modules.catalog.domain import TariffLifecycle
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
 from gameclub_backend.modules.clients.application.portal import (
     ClientPortalService,
@@ -50,6 +51,12 @@ class V2PortalResumeResult:
     client_id: uuid.UUID
     portal_access_token: str
     portal_access_expires_in: int
+
+
+@dataclasses.dataclass(frozen=True)
+class V2PortalPurchaseResult:
+    portal: ClientPortalSnapshot
+    purchased_package: offline_session_snapshot_pb2.SignedOfflineSessionSnapshot
 
 
 class V2OfflineLoginService:
@@ -240,12 +247,58 @@ class V2OfflineLoginService:
         device_id: str,
         tariff_id: uuid.UUID,
         idempotency_key: str,
-    ) -> ClientPortalSnapshot:
-        return await self._client_portal.purchase_entitlement(
+    ) -> V2PortalPurchaseResult:
+        workstation = await self._workstations.get_by_device_id(device_id)
+        active = [
+            item
+            for item in await self._sessions.list_for_client(client_id)
+            if item.status is SessionStatus.ACTIVE
+            and item.source == "local_ledger"
+            and item.workstation_id == workstation.id
+        ]
+        if len(active) != 1 or not await self._snapshot_issues.has_active_lease(
+            active[0].id, client_id, device_id
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "No active V2 session for package purchase")
+        portal = await self._client_portal.purchase_entitlement(
             client_id,
             tariff_id,
             idempotency_key,
             device_id=device_id,
+        )
+        package = portal.purchased_entitlement
+        tariff = portal.purchased_tariff
+        if package is None or tariff is None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Purchased package receipt is unavailable")
+        tariff = dataclasses.replace(
+            tariff,
+            duration_minutes=package.duration_minutes,
+            price_cents=package.price_cents,
+            group_id=package.zone_id,
+            active=True,
+            lifecycle=TariffLifecycle.PUBLISHED,
+        )
+        payload = V2OfflineSnapshotFactory.create_payload(
+            V2OfflineSnapshotInput(
+                snapshot_id=uuid.uuid5(active[0].id, idempotency_key.strip()),
+                snapshot_version=1,
+                issued_at=self._clock.now(),
+                client=portal.client,
+                session=active[0],
+                device_id=device_id,
+                workstation_zone_id=workstation.group_id,
+                debt_limit_cents=0,
+                login_grant_remaining_minutes=0,
+                entitlements=(
+                    dataclasses.replace(package, remaining_minutes=package.duration_minutes),
+                ),
+                tariffs=(tariff,),
+                policy_version=self._policy_version,
+            )
+        )
+        payload.purchase_idempotency_key = idempotency_key.strip()
+        return V2PortalPurchaseResult(
+            portal, sign_offline_session_snapshot(payload, self._signing_key_id, self._signer)
         )
 
     async def activate_entitlement(

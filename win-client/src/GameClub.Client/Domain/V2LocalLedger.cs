@@ -330,7 +330,9 @@ public static class V2LocalLedgerEngine
         Guid actionId,
         string tariffId,
         DateTimeOffset occurredAt,
-        bool serverConfirmed = false)
+        bool serverConfirmed = false,
+        string? packageId = null,
+        string? purchaseIdempotencyKey = null)
     {
         if (IsDuplicate(ledger, actionId))
         {
@@ -344,7 +346,7 @@ public static class V2LocalLedgerEngine
         }
 
         var package = new V2LocalPackage(
-            Guid.NewGuid().ToString(),
+            packageId ?? Guid.NewGuid().ToString(),
             tariff.Id,
             tariff.ZoneId,
             tariff.PackageMinutes,
@@ -362,7 +364,8 @@ public static class V2LocalLedgerEngine
                 ("package_id", package.Id),
                 ("tariff_id", tariff.Id),
                 ("tariff_name", tariff.Name),
-                ("total_minutes", tariff.PackageMinutes)))]);
+                ("total_minutes", tariff.PackageMinutes),
+                ("purchase_idempotency_key", purchaseIdempotencyKey ?? "")))]);
     }
 
     public static void ValidatePackagePurchase(

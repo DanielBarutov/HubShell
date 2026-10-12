@@ -119,7 +119,7 @@ class PurchaseOfflineEntitlementRequest(_message.Message):
     def __init__(self, device_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class OfflinePortalSnapshot(_message.Message):
-    __slots__ = ("client_id", "nickname", "phone", "balance_cents", "balance_bonus", "available_time_minutes", "balance_operations", "sessions", "charges", "purchases", "entitlements", "tariffs", "reservations", "payment_methods")
+    __slots__ = ("client_id", "nickname", "phone", "balance_cents", "balance_bonus", "available_time_minutes", "balance_operations", "sessions", "charges", "purchases", "entitlements", "tariffs", "reservations", "payment_methods", "purchased_package")
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     NICKNAME_FIELD_NUMBER: _ClassVar[int]
     PHONE_FIELD_NUMBER: _ClassVar[int]
@@ -134,6 +134,7 @@ class OfflinePortalSnapshot(_message.Message):
     TARIFFS_FIELD_NUMBER: _ClassVar[int]
     RESERVATIONS_FIELD_NUMBER: _ClassVar[int]
     PAYMENT_METHODS_FIELD_NUMBER: _ClassVar[int]
+    PURCHASED_PACKAGE_FIELD_NUMBER: _ClassVar[int]
     client_id: str
     nickname: str
     phone: str
@@ -148,7 +149,8 @@ class OfflinePortalSnapshot(_message.Message):
     tariffs: _containers.RepeatedCompositeFieldContainer[OfflinePortalTariff]
     reservations: _containers.RepeatedCompositeFieldContainer[OfflinePortalReservation]
     payment_methods: _containers.RepeatedCompositeFieldContainer[OfflinePaymentMethod]
-    def __init__(self, client_id: _Optional[str] = ..., nickname: _Optional[str] = ..., phone: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., available_time_minutes: _Optional[int] = ..., balance_operations: _Optional[_Iterable[_Union[OfflineBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[OfflinePortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[OfflinePortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[OfflinePortalPurchase, _Mapping]]] = ..., entitlements: _Optional[_Iterable[_Union[OfflinePortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflinePortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[OfflinePortalReservation, _Mapping]]] = ..., payment_methods: _Optional[_Iterable[_Union[OfflinePaymentMethod, _Mapping]]] = ...) -> None: ...
+    purchased_package: _offline_session_snapshot_pb2.SignedOfflineSessionSnapshot
+    def __init__(self, client_id: _Optional[str] = ..., nickname: _Optional[str] = ..., phone: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., available_time_minutes: _Optional[int] = ..., balance_operations: _Optional[_Iterable[_Union[OfflineBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[OfflinePortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[OfflinePortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[OfflinePortalPurchase, _Mapping]]] = ..., entitlements: _Optional[_Iterable[_Union[OfflinePortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflinePortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[OfflinePortalReservation, _Mapping]]] = ..., payment_methods: _Optional[_Iterable[_Union[OfflinePaymentMethod, _Mapping]]] = ..., purchased_package: _Optional[_Union[_offline_session_snapshot_pb2.SignedOfflineSessionSnapshot, _Mapping]] = ...) -> None: ...
 
 class OfflinePaymentPart(_message.Message):
     __slots__ = ("method", "amount_cents", "reference")

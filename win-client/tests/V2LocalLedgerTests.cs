@@ -12,6 +12,38 @@ namespace GameClub.Client.Tests;
 public sealed class V2LocalLedgerTests
 {
     [Fact]
+    public async Task SignedPurchaseAddsNewTariffAtNegativeBalanceWithoutReplacingLedger()
+    {
+        var original = CreateLedger(balanceCents: -500, loginGrantMinutes: 0) with { DebtLimitCents = 1_000 };
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(original);
+        var pending = await coordinator.BeginPortalPackagePurchaseAsync("new-tariff");
+        var packageId = Guid.NewGuid().ToString();
+        var receipt = original with
+        {
+            SnapshotId = Guid.NewGuid(), BalanceCents = 99_999,
+            Packages = [new(packageId, "new-tariff", null, 2, V2LocalPackageStatus.Active)],
+            Tariffs = [new("new-tariff", "New 2 minutes", null, 2, 100, 0, true)],
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CompletePortalPackagePurchaseAsync(
+            "new-tariff", DateTimeOffset.UtcNow, purchasedPackage: receipt with { SessionId = Guid.NewGuid() }));
+        Assert.Equal(original, await coordinator.ReadLedgerAsync());
+        var purchase = await coordinator.CompletePortalPackagePurchaseAsync(
+            "new-tariff", DateTimeOffset.UtcNow, purchasedPackage: receipt);
+        Assert.Equal(-600, purchase.Ledger.BalanceCents);
+        Assert.Equal(original.SnapshotId, purchase.Ledger.SnapshotId);
+        Assert.Equal(1_000, purchase.Ledger.DebtLimitCents);
+        Assert.Equal(packageId, Assert.Single(purchase.Ledger.Packages).Id);
+        using var payload = System.Text.Json.JsonDocument.Parse(Assert.Single(purchase.OutboxFacts).PayloadJson);
+        Assert.Equal(pending.IdempotencyKey, payload.RootElement.GetProperty("purchase_idempotency_key").GetString());
+        var minute = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(1, Assert.Single(minute.Ledger.Packages).RemainingMinutes);
+        Assert.Equal(-600, minute.Ledger.BalanceCents);
+        Assert.Null(await coordinator.ReadPendingPortalPackagePurchaseAsync());
+    }
+
+    [Fact]
     public void ConsumesLoginGrantBeforePackageAndBalance()
     {
         var ledger = CreateLedger(loginGrantMinutes: 2);

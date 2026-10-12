@@ -120,6 +120,8 @@ message OfflinePortalSnapshot {
   repeated OfflinePortalTariff tariffs = 12;
   repeated OfflinePortalReservation reservations = 13;
   repeated OfflinePaymentMethod payment_methods = 14;
+  // Подписанное право только на купленный пакет; не заменяет активный ledger.
+  SignedOfflineSessionSnapshot purchased_package = 15;
 }
 
 message OfflinePaymentPart {

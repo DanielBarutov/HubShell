@@ -148,6 +148,8 @@ class ClientPortalSnapshot:
     entitlements: tuple[Entitlement, ...] = ()
     tariffs: tuple[Tariff, ...] = ()
     reservations: tuple[Reservation, ...] = ()
+    purchased_entitlement: Entitlement | None = None
+    purchased_tariff: Tariff | None = None
 
 
 class ClientPortalService:
@@ -399,13 +401,17 @@ class ClientPortalService:
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone",
                 )
-        await self._entitlements.purchase(
+        purchased = await self._entitlements.purchase(
             client_id=client_id,
             tariff_id=tariff_id,
             actor_id=f"client:{client_id}",
             idempotency_key=idempotency_key,
         )
-        return await self.snapshot(client_id, group_id=group_id)
+        return dataclasses.replace(
+            await self.snapshot(client_id, group_id=group_id),
+            purchased_entitlement=purchased,
+            purchased_tariff=await self._tariffs.get_tariff(tariff_id),
+        )
 
     async def activate_entitlement(
         self,

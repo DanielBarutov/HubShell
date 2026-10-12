@@ -132,7 +132,10 @@ public sealed class V2LocalLedgerCoordinator
                 return pending;
             }
 
-            V2LocalLedgerEngine.ValidatePackagePurchase(current.Ledger, tariffId);
+            if (current.Ledger.Status != V2LocalSessionStatus.Active || string.IsNullOrWhiteSpace(tariffId))
+            {
+                throw new InvalidOperationException("Package purchase requires an active V2 session and tariff");
+            }
             var purchase = new V2PendingPortalPackagePurchase(
                 Guid.NewGuid(),
                 $"win-portal-tariff-{Guid.NewGuid():N}",
@@ -151,7 +154,8 @@ public sealed class V2LocalLedgerCoordinator
     public async Task<V2LocalLedgerTransition> CompletePortalPackagePurchaseAsync(
         string tariffId,
         DateTimeOffset occurredAt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        V2LocalSessionLedger? purchasedPackage = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -164,12 +168,36 @@ public sealed class V2LocalLedgerCoordinator
                 throw new InvalidOperationException("Portal package purchase tariff does not match");
             }
 
+            var purchaseLedger = current.Ledger;
+            string? packageId = null;
+            if (purchasedPackage is not null)
+            {
+                var package = purchasedPackage.Packages.Single();
+                var tariff = purchasedPackage.Tariffs.Single();
+                if (purchasedPackage.ClientId != purchaseLedger.ClientId
+                    || purchasedPackage.SessionId != purchaseLedger.SessionId
+                    || purchasedPackage.DeviceId != purchaseLedger.DeviceId
+                    || purchasedPackage.ZoneId != purchaseLedger.ZoneId
+                    || package.TariffId != tariffId || tariff.Id != tariffId
+                    || package.RemainingMinutes != tariff.PackageMinutes
+                    || package.ZoneId != tariff.ZoneId)
+                {
+                    throw new InvalidOperationException("Signed package purchase belongs to another session or tariff");
+                }
+                packageId = package.Id;
+                purchaseLedger = purchaseLedger with
+                {
+                    Tariffs = purchaseLedger.Tariffs.Where(item => item.Id != tariffId).Append(tariff).ToArray(),
+                };
+            }
             var transition = V2LocalLedgerEngine.PurchasePackage(
-                current.Ledger,
+                purchaseLedger,
                 pending.ActionId,
                 pending.TariffId,
                 occurredAt,
-                serverConfirmed: true);
+                serverConfirmed: true,
+                packageId: packageId,
+                purchaseIdempotencyKey: pending.IdempotencyKey);
             await _store.WriteAsync(
                 current with
                 {
