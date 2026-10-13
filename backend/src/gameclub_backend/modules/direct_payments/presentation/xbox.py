@@ -14,6 +14,10 @@ from gameclub_backend.modules.sessions.presentation.http import SessionResponse
 from gameclub_backend.presentation.http.auth import require_permissions
 
 
+class XboxStopResponse(SessionResponse):
+    relay_off_pending: bool = False
+
+
 class XboxSaleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workstation_id: uuid.UUID
@@ -42,11 +46,16 @@ def create_router(service: XboxService) -> APIRouter:
         )
         return GuestSessionPaymentResponse.from_domain(payment)
 
-    @router.post("/sessions/{session_id}/stop", response_model=SessionResponse)
+    @router.post("/sessions/{session_id}/stop", response_model=XboxStopResponse)
     async def stop(
         session_id: uuid.UUID,
         principal: typing.Annotated[Principal, Depends(require_permissions("sessions.manage"))],
-    ) -> SessionResponse:
-        return SessionResponse.from_domain(await service.stop(session_id, principal.subject_id))
+    ) -> XboxStopResponse:
+        session = await service.stop(session_id, principal.subject_id)
+        warnings = await service.relay_warnings()
+        return XboxStopResponse(
+            **SessionResponse.from_domain(session).model_dump(),
+            relay_off_pending=any(item.session_id == session_id for item in warnings),
+        )
 
     return router

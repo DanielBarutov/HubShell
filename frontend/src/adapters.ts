@@ -26,6 +26,7 @@ export function toUiWorkstation(
     name: workstation.name,
     equipmentType: workstation.equipment_type ?? "pc",
     relaySettings: workstation.relay_settings ?? null,
+    relayOffPending: workstation.relay_off_pending ?? false,
     group: groupName ?? (effectiveGroupId === "vip" ? "VIP-зона" : "Обычный зал"),
     status: activeSession ? "busy" : technicalStatus,
     client: activeSession?.guest_name ?? clientName ?? (activeSession?.client_id ? "Клиент" : undefined),

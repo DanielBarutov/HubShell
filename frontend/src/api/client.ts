@@ -537,8 +537,8 @@ export class GameClubApi {
     });
   }
 
-  async stopXboxSession(sessionId: string): Promise<BackendSession> {
-    return this.request<BackendSession>(`/xbox/sessions/${sessionId}/stop`, {method: "POST"});
+  async stopXboxSession(sessionId: string): Promise<BackendSession & {relay_off_pending?: boolean}> {
+    return this.request<BackendSession & {relay_off_pending?: boolean}>(`/xbox/sessions/${sessionId}/stop`, {method: "POST"});
   }
 
   async prepareGuestSessionAccess(paymentId: string): Promise<BackendGuestV2Access> {

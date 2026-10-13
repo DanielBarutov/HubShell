@@ -4,7 +4,7 @@ import asyncio
 import datetime
 import logging
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
@@ -80,6 +80,7 @@ class GuestSessionPaymentService:
         cash_shift_id: uuid.UUID | None = None,
         session_id: uuid.UUID | None = None,
         xbox_sale: bool = False,
+        before_confirm: Callable[[], Awaitable[None]] | None = None,
     ) -> GuestSessionPayment:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -202,6 +203,8 @@ class GuestSessionPaymentService:
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        if before_confirm is not None:
+            await before_confirm()
         try:
             pending = await self._repository.save(payment)
         except ValueError as error:

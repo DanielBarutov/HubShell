@@ -1,6 +1,7 @@
 export type RelaySettings = { ip: string; port: number; deviceid: string };
 
 export type BackendWorkstation = {
+  relay_off_pending?: boolean;
   relay_settings?: RelaySettings | null;
   id: string;
   device_id: string | null;

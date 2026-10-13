@@ -292,10 +292,16 @@ async def meter_active_sessions() -> None:
             entitlements=entitlements,
         )
         from gameclub_backend.modules.direct_payments.application.xbox import XboxService
+        from gameclub_backend.modules.direct_payments.infrastructure.xbox_relay import (
+            PostgresXboxRelayRepository,
+        )
         from gameclub_backend.modules.direct_payments.infrastructure.xbox_transaction import (
             PostgresXboxTransaction,
         )
         from gameclub_backend.modules.workstations.application.service import UtcClock
+        from gameclub_backend.modules.workstations.infrastructure.relay_http import (
+            DiyHttpRelayControl,
+        )
 
         xbox_payments = GuestSessionPaymentService(
             PostgresGuestSessionPaymentRepository(engine_provider),
@@ -311,6 +317,8 @@ async def meter_active_sessions() -> None:
             PostgresXboxTransaction(engine_provider),
             UtcClock(),
             audit=PostgresAuditRepository(engine_provider),
+            relay=DiyHttpRelayControl(),
+            relay_repository=PostgresXboxRelayRepository(engine_provider),
         )
         await xbox.expire()
         stopped = await meter_sessions_once(

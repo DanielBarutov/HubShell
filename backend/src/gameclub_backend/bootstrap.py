@@ -437,6 +437,11 @@ def build_application_services(
         v2_session_leases=v2_session_leases,
         login_grant_minutes=settings.login_grant_minutes,
     )
+    from gameclub_backend.modules.direct_payments.infrastructure.xbox_relay import (
+        MemoryXboxRelayRepository,
+        PostgresXboxRelayRepository,
+    )
+
     xbox = XboxService(
         guest_payments,
         sessions,
@@ -446,6 +451,10 @@ def build_application_services(
         else MemoryXboxTransaction(),
         UtcClock(),
         audit=audit_repository,
+        relay=DiyHttpRelayControl(),
+        relay_repository=PostgresXboxRelayRepository(postgres_engine_provider)
+        if settings.postgres_dsn
+        else MemoryXboxRelayRepository(),
     )
     offline = OfflineReplayService(
         offline_repository,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import logging
 import typing
 import uuid
 
@@ -8,9 +10,14 @@ from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.direct_payments.application.ports import Clock, WorkstationLookup
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
+from gameclub_backend.modules.direct_payments.application.xbox_relay import (
+    XboxRelayObligation,
+    XboxRelayRepository,
+)
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
+from gameclub_backend.modules.workstations.application.ports import RelayControl
 
 
 class XboxSessions(typing.Protocol):
@@ -35,6 +42,8 @@ class XboxService:
         transaction: XboxTransaction,
         clock: Clock,
         audit: AuditRepository | None = None,
+        relay: RelayControl | None = None,
+        relay_repository: XboxRelayRepository | None = None,
     ) -> None:
         self._payments = payments
         self._sessions = sessions
@@ -42,6 +51,8 @@ class XboxService:
         self._transaction = transaction
         self._clock = clock
         self._audit = audit
+        self._relay = relay
+        self._relay_repository = relay_repository
 
     async def sell(
         self,
@@ -75,6 +86,26 @@ class XboxService:
                 # happens before the immutable session application returns the old result.
                 if session.workstation_id != workstation_id or session.source != "xbox":
                     raise ApplicationError(ErrorCode.CONFLICT, "Xbox session does not match place")
+
+            async def turn_on() -> None:
+                if workstation.relay_settings is not None:
+                    if self._relay is None or self._relay_repository is None:
+                        raise ApplicationError(
+                            ErrorCode.DEPENDENCY_UNAVAILABLE, "Xbox relay control is unavailable"
+                        )
+                    try:
+                        state = await self._relay.set_state(workstation.relay_settings, True)
+                        if state != "on":
+                            raise ApplicationError(
+                                ErrorCode.DEPENDENCY_UNAVAILABLE, "ON not confirmed"
+                            )
+                    except ApplicationError as error:
+                        raise ApplicationError(
+                            ErrorCode.DEPENDENCY_UNAVAILABLE,
+                            "Реле не подтвердило включение: продажа и старт не подтверждены",
+                        ) from error
+
+            existing = await self._payments.get_by_idempotency_key(idempotency_key)
             payment = await self._payments.confirm(
                 workstation_id=workstation_id,
                 tariff_id=tariff_id,
@@ -86,8 +117,15 @@ class XboxService:
                 cash_shift_id=cash_shift_id,
                 session_id=session_id,
                 xbox_sale=True,
+                before_confirm=turn_on,
             )
-            await self._sessions.apply_xbox_payment(payment)
+            session = await self._sessions.apply_xbox_payment(payment)
+            if existing is None and self._relay_repository is not None:
+                await self._relay_repository.supersede(workstation_id, session.id)
+                if workstation.relay_settings is not None:
+                    await self._relay_repository.save(
+                        XboxRelayObligation(session.id, workstation_id, workstation.relay_settings)
+                    )
             return payment
 
     async def stop(self, session_id: uuid.UUID, actor_id: str = "system") -> Session:
@@ -96,8 +134,10 @@ class XboxService:
             before = await self._sessions.get(session_id)
             result = await self._sessions.stop_xbox(session_id)
             if before.status is SessionStatus.ACTIVE:
+                await self._queue_off(result)
                 await self._record_completion(result, actor_id, "operator_stop")
-            return result
+        await self._retry_off(session_id)
+        return result
 
     async def expire(self) -> int:
         count = 0
@@ -114,9 +154,64 @@ class XboxService:
                         before.status is SessionStatus.ACTIVE
                         and updated.status is SessionStatus.COMPLETED
                     ):
+                        await self._queue_off(updated)
                         await self._record_completion(updated, "system", "time_expired")
                         count += 1
+        if self._relay_repository is not None:
+            for obligation in await self._relay_repository.list_pending():
+                await self._retry_off(obligation.session_id)
         return count
+
+    async def pending_relay_workstations(self) -> set[uuid.UUID]:
+        return {item.workstation_id for item in await self.relay_warnings()}
+
+    async def relay_warnings(self) -> list[XboxRelayObligation]:
+        if self._relay_repository is None:
+            return []
+        return await self._relay_repository.list_pending()
+
+    async def _queue_off(self, session: Session) -> None:
+        if self._relay_repository is None:
+            return
+        obligation = await self._relay_repository.get(session.id)
+        if obligation is None:
+            workstation = await self._workstations.get(session.workstation_id)
+            if workstation is None or workstation.relay_settings is None:
+                return
+            obligation = XboxRelayObligation(
+                session.id, session.workstation_id, workstation.relay_settings
+            )
+        await self._relay_repository.save(dataclasses.replace(obligation, pending=True))
+
+    async def _retry_off(self, session_id: uuid.UUID) -> None:
+        if self._relay_repository is None:
+            return
+        obligation = await self._relay_repository.get(session_id)
+        if obligation is None or not obligation.pending:
+            return
+        # Re-read after acquiring the same lock as sell. A captured worker item
+        # may already have been superseded by a new session.
+        async with self._transaction(obligation.workstation_id):
+            obligation = await self._relay_repository.get(session_id)
+            if obligation is None or not obligation.pending:
+                return
+            active = await self._sessions.list(obligation.workstation_id, active_only=True)
+            if active:
+                await self._relay_repository.delete(session_id)
+                return
+            try:
+                if self._relay is None:
+                    raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "Relay unavailable")
+                if await self._relay.set_state(obligation.settings, False) != "off":
+                    raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "OFF not confirmed")
+            except ApplicationError:
+                logging.getLogger(__name__).warning(
+                    "xbox_relay_off_pending workstation_id=%s session_id=%s",
+                    obligation.workstation_id,
+                    session_id,
+                )
+                return
+            await self._relay_repository.delete(session_id)
 
     async def _record_completion(self, session: Session, actor_id: str, reason: str) -> None:
         if self._audit is not None:

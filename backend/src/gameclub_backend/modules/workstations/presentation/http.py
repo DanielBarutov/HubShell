@@ -107,6 +107,7 @@ class WorkstationCommandResponse(BaseModel):
 
 
 class WorkstationResponse(BaseModel):
+    relay_off_pending: bool = False
     relay_settings: RelaySettingsRequest | None = None
     id: uuid.UUID
     device_id: str | None
@@ -133,8 +134,10 @@ class WorkstationResponse(BaseModel):
         cls,
         workstation: Workstation,
         session_snapshot: SessionSnapshot | None = None,
+        relay_off_pending: bool = False,
     ) -> "WorkstationResponse":
         return cls(
+            relay_off_pending=relay_off_pending,
             relay_settings=(
                 RelaySettingsRequest(
                     ip=workstation.relay_settings.ip,
@@ -176,6 +179,7 @@ def create_router(
     service: WorkstationService,
     command_service: WorkstationCommandService | None = None,
     session_service: SessionService | None = None,
+    pending_relay_workstations: typing.Callable[[], typing.Awaitable[set[uuid.UUID]]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/workstations", tags=["workstations"])
     operator = Depends(require_permissions("workstations.manage"))
@@ -183,6 +187,7 @@ def create_router(
     @router.get("", response_model=list[WorkstationResponse], dependencies=[operator])
     async def list_workstations() -> list[WorkstationResponse]:
         workstations = await service.list()
+        pending = await pending_relay_workstations() if pending_relay_workstations else set()
         snapshots_by_workstation_id: dict[uuid.UUID, SessionSnapshot] = {}
         if session_service is not None:
             for active_session in await session_service.list(active_only=True):
@@ -193,6 +198,7 @@ def create_router(
             WorkstationResponse.from_domain(
                 item,
                 snapshots_by_workstation_id.get(item.id),
+                relay_off_pending=item.id in pending,
             )
             for item in workstations
         ]

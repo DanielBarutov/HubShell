@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkstationPanel } from "./WorkstationPanel";
 import { PcPanel } from "./PcPanel";
+import { MapView } from "./MapScreen";
+import { ApiError } from "../../api";
 import { TariffPanel } from "../catalog/CatalogScreen";
 import { SaleWorkspace } from "../catalog/SaleWorkspace";
 import type { BackendTariff, GameClubApi } from "../../api";
@@ -11,6 +13,34 @@ const xbox: Workstation = {id: "xbox-1", name: "Xbox 1", equipmentType: "xbox", 
 const tariff: BackendTariff = {id: "xbox-hour", name: "Xbox час", equipment_type: "xbox", group_id: null, duration_minutes: 60, price_cents: 10000, valid_from: "2026-01-01T00:00:00Z", valid_to: null, active: true, tariff_key: "xbox-hour", version: 1, lifecycle: "published", billing_mode: "block", price_per_minute_cents: 0, free_minutes: 0, audience: "guest", sale_channel: "operator"};
 
 describe("Xbox", () => {
+  it("показывает сохранённый отказ OFF на карте и в панели свободного Xbox", () => {
+    const pending = {...xbox, relayOffPending: true};
+    render(<MapView pcs={[pending]} onPc={vi.fn()} onSalePc={vi.fn()} onBookPc={vi.fn()} onEditPc={vi.fn()} />);
+    expect(screen.getByText("OFF не подтверждён")).toBeVisible();
+    render(<PcPanel pc={pending} onClose={vi.fn()} onEdit={vi.fn()} onBook={vi.fn()} onDeposit={vi.fn()} onOpenSale={vi.fn()} onSessionChanged={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("сервер повторит OFF");
+  });
+
+  it("предупреждает об отказе OFF после успешного завершения", async () => {
+    const stopXboxSession = vi.fn().mockResolvedValue({status: "completed", relay_off_pending: true});
+    const onSessionChanged = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PcPanel pc={{...xbox, status: "busy", sessionId: "session-1"}} api={{stopXboxSession} as unknown as GameClubApi} onClose={vi.fn()} onEdit={vi.fn()} onBook={vi.fn()} onDeposit={vi.fn()} onOpenSale={vi.fn()} onSessionChanged={onSessionChanged} />);
+    fireEvent.click(screen.getByRole("button", {name: "Прервать сессию"}));
+    await screen.findByText(/Реле не подтвердило выключение; сервер повторит OFF/);
+    expect(onSessionChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("показывает ошибку ON и не объявляет продажу успешной", async () => {
+    const confirmXboxSale = vi.fn().mockRejectedValue(new ApiError(503, "Реле не подтвердило включение"));
+    const onSaved = vi.fn();
+    render(<SaleWorkspace api={{confirmXboxSale} as unknown as GameClubApi} pc={xbox} initialClient={null} initialProduct={null} clients={[]} cashShifts={[]} tariffs={[tariff]} products={[]} categories={[]} onClose={vi.fn()} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", {name: /Xbox час/}));
+    fireEvent.click(screen.getByRole("button", {name: /Перевод/}));
+    fireEvent.click(screen.getByRole("button", {name: /Оформить продажу/}));
+    await screen.findByText("Реле не подтвердило включение");
+    expect(onSaved).not.toHaveBeenCalled();
+  });
   it("проверяет сохранённое реле и блокирует тест после изменения адреса", async () => {
     const testWorkstationRelay = vi.fn().mockResolvedValue({state: "on"});
     render(<WorkstationPanel workstation={{...xbox, relaySettings: {ip: "192.168.3.10", port: 8081, deviceid: "1001ee63f1"}}} api={{testWorkstationRelay} as unknown as GameClubApi} groups={[]} onClose={vi.fn()} onSaved={vi.fn()} />);
