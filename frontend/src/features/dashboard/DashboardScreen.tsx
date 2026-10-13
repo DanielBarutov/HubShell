@@ -72,6 +72,7 @@ type DashboardProps = {
 };
 type AnalyticsTab = "overview" | "finance" | "occupancy" | "customers";
 type AnalyticsFilterValues = {
+  equipmentType?: "pc" | "xbox";
   zoneKey?: string;
   workstationKey?: string;
   tariffKey?: string;
@@ -982,6 +983,12 @@ export function AnalyticsView({
             className="analytics-filter-bar mt-4 grid grid-cols-1 gap-3 border-t border-primary/15! pt-4 sm:grid-cols-2 lg:grid-cols-3 [&>label]:flex [&>label]:flex-col [&>label]:gap-1 [&>label]:text-xs [&>label]:text-base-content/60!"
             aria-label="Дополнительные фильтры аналитики"
           >
+            <label>
+              Тип оборудования (финансы)
+              <select className="select select-sm" value={analyticsFilters.equipmentType ?? ""} onChange={(event) => setAnalyticsFilters((current) => ({...current, equipmentType: (event.target.value || undefined) as "pc" | "xbox" | undefined}))}>
+                <option value="">Все</option><option value="pc">ПК</option><option value="xbox">Xbox</option>
+              </select>
+            </label>
             <label>
               Зал или зона
               <select

@@ -49,7 +49,7 @@ export function BookingsView({
   return api ? (
     <LiveBookingsView
       api={api}
-      pcs={pcs}
+      pcs={pcs.filter((place) => place.equipmentType !== "xbox")}
       clients={clients}
       reservations={reservations}
       bookingLoading={bookingLoading}

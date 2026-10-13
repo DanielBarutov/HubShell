@@ -5,6 +5,9 @@ import re
 import typing
 import uuid
 
+from gameclub_backend.domain.equipment import EquipmentType
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
+
 
 def normalize_mac_address(value: str) -> str:
     """Return a canonical colon-separated MAC address."""
@@ -102,7 +105,7 @@ class WorkstationGroup:
 @dataclasses.dataclass(frozen=True)
 class Workstation:
     id: uuid.UUID
-    device_id: str
+    device_id: str | None
     name: str
     group_id: str | None = None
     position: int | None = None
@@ -119,16 +122,27 @@ class Workstation:
     installation_id: str | None = None
     session_mode: WorkstationSessionMode = WorkstationSessionMode.LOCAL_LEDGER
 
+    equipment_type: EquipmentType = EquipmentType.PC
+    relay_settings: RelaySettings | None = None
+
     def __post_init__(self) -> None:
-        if not self.device_id.strip():
-            raise ValueError("Device identity cannot be empty")
-        if not self.name.strip():
-            raise ValueError("Workstation name cannot be empty")
+        object.__setattr__(self, "equipment_type", EquipmentType(self.equipment_type))
+        if self.relay_settings is not None and self.equipment_type is not EquipmentType.XBOX:
+            raise ValueError("Relay settings are available only for Xbox")
         if not isinstance(self.session_mode, WorkstationSessionMode):
             try:
                 object.__setattr__(self, "session_mode", WorkstationSessionMode(self.session_mode))
             except ValueError as error:
                 raise ValueError("Workstation session mode is invalid") from error
+        if self.equipment_type is EquipmentType.XBOX:
+            if self.device_id or self.mac_address or self.installation_id:
+                raise ValueError("Xbox cannot have a PC device identity")
+            if self.session_mode is not WorkstationSessionMode.SERVER_OWNED:
+                raise ValueError("Xbox time is owned by the server")
+        elif not self.device_id or not self.device_id.strip():
+            raise ValueError("Device identity cannot be empty")
+        if not self.name.strip():
+            raise ValueError("Workstation name cannot be empty")
         if self.mac_address:
             object.__setattr__(self, "mac_address", normalize_mac_address(self.mac_address))
         if self.installation_id is not None:
@@ -180,6 +194,12 @@ class Workstation:
         stale_after: datetime.timedelta,
         offline_after: datetime.timedelta,
     ) -> "Workstation":
+        if self.equipment_type is EquipmentType.XBOX:
+            return (
+                self
+                if self.status is WorkstationStatus.DISABLED
+                else dataclasses.replace(self, status=WorkstationStatus.ONLINE)
+            )
         if self.status is WorkstationStatus.DISABLED or self.last_seen_at is None:
             return self
         age = now - self.last_seen_at

@@ -1,3 +1,4 @@
+import datetime
 import typing
 import uuid
 
@@ -33,6 +34,7 @@ class InterruptSessionRequest(BaseModel):
 
 
 class SessionResponse(BaseModel):
+    expires_at: datetime.datetime | None = None
     id: uuid.UUID
     workstation_id: uuid.UUID
     client_id: uuid.UUID | None
@@ -55,6 +57,7 @@ class SessionResponse(BaseModel):
     @classmethod
     def from_domain(cls, session: Session) -> "SessionResponse":
         return cls(
+            expires_at=session.expires_at,
             id=session.id,
             workstation_id=session.workstation_id,
             client_id=session.client_id,
@@ -182,7 +185,7 @@ class SessionSnapshotResponse(BaseModel):
     server_time: str
     session: SessionResponse
     workstation_id: uuid.UUID
-    device_id: str
+    device_id: str | None
     zone_id: str | None
     client_id: uuid.UUID | None
     balance_cents: int | None

@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.domain import (
@@ -51,6 +52,7 @@ class ProductCategoryResponse(BaseModel):
 
 
 class TariffRequest(BaseModel):
+    equipment_type: EquipmentType = EquipmentType.PC
     name: str = Field(min_length=1, max_length=128)
     group_id: str | None = Field(default=None, max_length=128)
     duration_minutes: int = Field(gt=0)
@@ -103,6 +105,7 @@ class ProductResponse(BaseModel):
 
 
 class TariffResponse(BaseModel):
+    equipment_type: EquipmentType = EquipmentType.PC
     id: uuid.UUID
     name: str
     group_id: str | None

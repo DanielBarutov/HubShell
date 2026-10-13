@@ -4,8 +4,10 @@ import typing
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.workstations.application.ports import (
     Clock,
+    RelayControl,
     WorkstationGroupRepository,
     WorkstationRepository,
     WorkstationSnapshotCache,
@@ -16,6 +18,7 @@ from gameclub_backend.modules.workstations.domain import (
     WorkstationStatus,
     normalize_mac_address,
 )
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
 
 LEGACY_WORKSTATION_GROUP_IDS = frozenset({"main", "vip"})
 
@@ -35,6 +38,7 @@ class WorkstationService:
         groups: WorkstationGroupRepository | None = None,
         cache: WorkstationSnapshotCache | None = None,
         cache_ttl_seconds: int = 20,
+        relay: RelayControl | None = None,
     ) -> None:
         self._repository = repository
         self._clock = clock or UtcClock()
@@ -43,6 +47,7 @@ class WorkstationService:
         self._groups = groups
         self._cache = cache
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._relay = relay
 
     async def register(
         self,
@@ -54,7 +59,19 @@ class WorkstationService:
         capabilities: typing.Sequence[str] = (),
         mac_address: str | None = None,
         session_mode: WorkstationSessionMode = WorkstationSessionMode.SERVER_OWNED,
+        equipment_type: EquipmentType = EquipmentType.PC,
+        relay_settings: RelaySettings | None = None,
     ) -> Workstation:
+        try:
+            equipment_type = EquipmentType(equipment_type)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid equipment type") from error
+        if equipment_type is EquipmentType.XBOX:
+            if device_id or mac_address or client_version or capabilities:
+                raise ApplicationError(
+                    ErrorCode.INVALID_ARGUMENT, "Xbox cannot have PC device settings"
+                )
+            session_mode = WorkstationSessionMode.SERVER_OWNED
         try:
             normalized_mac = normalize_mac_address(mac_address) if mac_address else None
         except ValueError as error:
@@ -63,12 +80,12 @@ class WorkstationService:
         if not normalized_device_id and normalized_mac:
             normalized_device_id = f"mac-{normalized_mac.replace(':', '').lower()}"
         normalized_name = name.strip()
-        if not normalized_device_id or not normalized_name:
+        if (equipment_type is EquipmentType.PC and not normalized_device_id) or not normalized_name:
             raise ApplicationError(
                 ErrorCode.INVALID_ARGUMENT,
                 "name and either device_id or mac_address are required",
             )
-        if await self._repository.get_by_device_id(normalized_device_id):
+        if normalized_device_id and await self._repository.get_by_device_id(normalized_device_id):
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation already registered")
         if normalized_mac and await self._repository.get_by_mac_address(normalized_mac):
             raise ApplicationError(ErrorCode.CONFLICT, "MAC address is already assigned")
@@ -76,7 +93,12 @@ class WorkstationService:
         try:
             workstation = Workstation(
                 id=uuid.uuid4(),
-                device_id=normalized_device_id,
+                device_id=normalized_device_id or None,
+                equipment_type=equipment_type,
+                relay_settings=relay_settings,
+                status=WorkstationStatus.ONLINE
+                if equipment_type is EquipmentType.XBOX
+                else WorkstationStatus.UNKNOWN,
                 name=normalized_name,
                 group_id=group_id,
                 position=position,
@@ -100,6 +122,8 @@ class WorkstationService:
         workstation = await self._repository.get_by_device_id(device_id.strip())
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.equipment_type is EquipmentType.XBOX:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox has no PC heartbeat")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
         updated = workstation.heartbeat(
@@ -138,10 +162,14 @@ class WorkstationService:
         group_id: str | None,
         position: int | None,
         mac_address: str | None = None,
+        relay_settings: RelaySettings | None = None,
+        relay_settings_provided: bool = False,
     ) -> Workstation:
         workstation = await self._repository.get(workstation_id)
         if workstation is None or workstation.archived_at is not None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.equipment_type is EquipmentType.XBOX and mac_address:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Xbox cannot have a MAC address")
         normalized_name = name.strip()
         normalized_group = group_id.strip().lower() if group_id else None
         if not normalized_name:
@@ -166,16 +194,35 @@ class WorkstationService:
             and await self._groups.get(normalized_group) is None
         ):
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation group not found")
-        updated = dataclasses.replace(
-            workstation,
-            name=normalized_name,
-            group_id=normalized_group,
-            position=position,
-            mac_address=normalized_mac,
-        )
+        try:
+            updated = dataclasses.replace(
+                workstation,
+                name=normalized_name,
+                group_id=normalized_group,
+                position=position,
+                mac_address=normalized_mac,
+                relay_settings=relay_settings
+                if relay_settings_provided
+                else workstation.relay_settings,
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
         saved = await self._with_group_theme(await self._repository.save(updated))
         await self._invalidate_cache()
         return saved
+
+    async def test_relay(self, workstation_id: uuid.UUID, on: bool) -> str:
+        workstation = await self.get(workstation_id)
+        if workstation is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if (
+            workstation.equipment_type is not EquipmentType.XBOX
+            or workstation.relay_settings is None
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Save Xbox relay settings before testing")
+        if self._relay is None:
+            raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "Relay control is unavailable")
+        return await self._relay.set_state(workstation.relay_settings, on)
 
     async def enroll_by_mac(
         self,

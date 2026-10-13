@@ -4,6 +4,12 @@ import uuid
 
 from gameclub_backend.modules.workstations.domain import Workstation, WorkstationGroup
 from gameclub_backend.modules.workstations.domain_commands import WorkstationCommand
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
+
+
+class RelayControl(typing.Protocol):
+    async def set_state(self, settings: RelaySettings, on: bool) -> str:
+        """Set and verify the relay output; raise if its state is not confirmed."""
 
 
 class WorkstationGroupRepository(typing.Protocol):

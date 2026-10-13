@@ -97,7 +97,7 @@ async def meter_sessions_once(
     """Meter active sessions and queue stop commands when their paid time ends."""
     stopped = 0
     for session in await session_reader.list(active_only=True):
-        if session.source in SessionService.LOCAL_SOURCES:
+        if session.source in SessionService.LOCAL_SOURCES or session.source == "xbox":
             continue
         try:
             await billing.meter_session(session.id)
@@ -291,6 +291,28 @@ async def meter_active_sessions() -> None:
             meter_repository=PostgresMeterRepository(engine_provider),
             entitlements=entitlements,
         )
+        from gameclub_backend.modules.direct_payments.application.xbox import XboxService
+        from gameclub_backend.modules.direct_payments.infrastructure.xbox_transaction import (
+            PostgresXboxTransaction,
+        )
+        from gameclub_backend.modules.workstations.application.service import UtcClock
+
+        xbox_payments = GuestSessionPaymentService(
+            PostgresGuestSessionPaymentRepository(engine_provider),
+            tariffs=catalog,
+            cash=CashShiftGuestPaymentSettlement(
+                CashShiftService(PostgresCashShiftRepository(engine_provider))
+            ),
+        )
+        xbox = XboxService(
+            xbox_payments,
+            sessions,
+            workstation_repository,
+            PostgresXboxTransaction(engine_provider),
+            UtcClock(),
+            audit=PostgresAuditRepository(engine_provider),
+        )
+        await xbox.expire()
         stopped = await meter_sessions_once(
             billing,
             session_repository,

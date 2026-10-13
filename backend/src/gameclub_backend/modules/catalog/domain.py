@@ -4,6 +4,8 @@ import enum
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from gameclub_backend.domain.equipment import EquipmentType
+
 
 @dataclasses.dataclass(frozen=True)
 class ProductCategory:
@@ -84,7 +86,19 @@ class Tariff:
     audience: TariffAudience = TariffAudience.ALL
     sale_channel: TariffSaleChannel = TariffSaleChannel.BOTH
 
+    equipment_type: EquipmentType = EquipmentType.PC
+
     def __post_init__(self) -> None:
+        object.__setattr__(self, "equipment_type", EquipmentType(self.equipment_type))
+        if self.equipment_type is EquipmentType.XBOX and (
+            self.billing_mode != BillingMode.BLOCK
+            or self.price_per_minute_cents
+            or self.free_minutes
+            or self.time_restricted
+            or self.audience != TariffAudience.GUEST
+            or self.sale_channel != TariffSaleChannel.OPERATOR
+        ):
+            raise ValueError("Xbox requires a guest operator block tariff without time windows")
         if self.duration_minutes <= 0:
             raise ValueError("Tariff duration must be positive")
         if self.price_cents < 0 or self.price_per_minute_cents < 0 or self.free_minutes < 0:
@@ -200,10 +214,12 @@ class Tariff:
         moment: datetime.datetime,
         group_id: str | None,
         audience: TariffAudience = TariffAudience.ALL,
+        equipment_type: EquipmentType = EquipmentType.PC,
     ) -> bool:
         normalized_group_id = group_id.strip().lower() if group_id else None
         return (
-            self.active
+            self.equipment_type == equipment_type
+            and self.active
             and self.lifecycle is TariffLifecycle.PUBLISHED
             and (self.group_id is None or self.group_id.strip().lower() == normalized_group_id)
             and self.valid_from <= moment

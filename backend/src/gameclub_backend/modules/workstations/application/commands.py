@@ -3,6 +3,7 @@ import json
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.workstations.application.ports import (
     Clock,
     CommandNotifier,
@@ -81,6 +82,8 @@ class WorkstationCommandService:
         workstation = await self._workstations.get(workstation_id)
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.equipment_type is EquipmentType.XBOX:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox does not accept PC commands")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
 

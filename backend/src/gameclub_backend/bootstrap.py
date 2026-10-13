@@ -90,6 +90,7 @@ from gameclub_backend.modules.clients.infrastructure.postgres import (
 )
 from gameclub_backend.modules.direct_payments.application.ports import GuestSessionPaymentRepository
 from gameclub_backend.modules.direct_payments.application.service import GuestSessionPaymentService
+from gameclub_backend.modules.direct_payments.application.xbox import XboxService
 from gameclub_backend.modules.direct_payments.infrastructure.cash import (
     CashShiftGuestPaymentSettlement,
 )
@@ -98,6 +99,10 @@ from gameclub_backend.modules.direct_payments.infrastructure.memory import (
 )
 from gameclub_backend.modules.direct_payments.infrastructure.postgres import (
     PostgresGuestSessionPaymentRepository,
+)
+from gameclub_backend.modules.direct_payments.infrastructure.xbox_transaction import (
+    MemoryXboxTransaction,
+    PostgresXboxTransaction,
 )
 from gameclub_backend.modules.entitlements.application.ports import EntitlementRepository
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
@@ -190,7 +195,7 @@ from gameclub_backend.modules.workstations.application.ports import (
     WorkstationGroupRepository,
     WorkstationRepository,
 )
-from gameclub_backend.modules.workstations.application.service import WorkstationService
+from gameclub_backend.modules.workstations.application.service import UtcClock, WorkstationService
 from gameclub_backend.modules.workstations.infrastructure.cache_redis import (
     RedisWorkstationSnapshotCache,
 )
@@ -227,6 +232,7 @@ class ApplicationServices:
     catalog: CatalogService
     entitlements: EntitlementService
     offline: OfflineReplayService
+    xbox: XboxService
     guest_payments: GuestSessionPaymentService
     reservations: ReservationService
     sessions: SessionService
@@ -362,6 +368,8 @@ def build_application_services(
         if resources.redis is not None
         else InMemoryCommandNotifier()
     )
+    from gameclub_backend.modules.workstations.infrastructure.relay_http import DiyHttpRelayControl
+
     workstations = WorkstationService(
         workstation_repository,
         stale_after_seconds=settings.workstation_stale_after_seconds,
@@ -369,6 +377,7 @@ def build_application_services(
         groups=workstation_group_repository,
         cache=workstation_cache,
         cache_ttl_seconds=20,
+        relay=DiyHttpRelayControl(),
     )
     client_groups = ClientGroupService(client_group_repository, audit=audit_repository)
     notifications = NotificationRuleService(notification_repository)
@@ -427,6 +436,16 @@ def build_application_services(
         notifications=session_notifications,
         v2_session_leases=v2_session_leases,
         login_grant_minutes=settings.login_grant_minutes,
+    )
+    xbox = XboxService(
+        guest_payments,
+        sessions,
+        workstation_repository,
+        PostgresXboxTransaction(postgres_engine_provider)
+        if settings.postgres_dsn
+        else MemoryXboxTransaction(),
+        UtcClock(),
+        audit=audit_repository,
     )
     offline = OfflineReplayService(
         offline_repository,
@@ -509,6 +528,7 @@ def build_application_services(
             signer=signer,
         )
     return ApplicationServices(
+        xbox=xbox,
         workstations=workstations,
         workstation_groups=workstation_groups,
         clients=clients,

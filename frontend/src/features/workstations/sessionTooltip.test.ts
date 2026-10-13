@@ -3,6 +3,17 @@ import { getSessionTooltipDetails, sessionTooltip, SessionEndingProjection } fro
 import type { Workstation } from "../../types";
 
 describe("sessionTooltip", () => {
+  it("показывает точный серверный срок Xbox без округления до лишней минуты", () => {
+    const xbox: Workstation = {
+      id: "xbox", name: "Xbox", group: "Зал", status: "busy", equipmentType: "xbox",
+      sessionSnapshot: {
+        server_time: "2026-10-13T10:00:35Z",
+        session: { id: "session", expires_at: "2026-10-13T10:30:02Z" },
+        entitlements: [], active_tariff: { remaining_minutes: 30 },
+      } as never,
+    };
+    expect(getSessionTooltipDetails(xbox)?.ending?.toISOString()).toBe("2026-10-13T10:30:02.000Z");
+  });
   it("суммирует текущий пакет и все допроданные гостевые пакеты без двойного счёта", () => {
     const pc: Workstation = {
       id: "guest-pc", name: "Guest PC", group: "Зал", status: "busy", client: "Гость",
