@@ -233,6 +233,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.workstations,
             services.command_service,
             services.sessions,
+            services.xbox.pending_relay_workstations,
         )
     )
     application.include_router(create_workstation_commands_router(services.command_service))

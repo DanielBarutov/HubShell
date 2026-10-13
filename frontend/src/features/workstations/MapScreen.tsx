@@ -376,6 +376,11 @@ export function MapView({
               >
                 {statusMeta[placed.pc.status].label}
               </span>
+              {placed.pc.relayOffPending && (
+                <span className="text-warning text-[10px]" title="Реле не подтвердило выключение; сервер повторит OFF. Проверьте TV.">
+                  OFF не подтверждён
+                </span>
+              )}
               <div
                 className={`map-seat-screen flex mt-3 items-center justify-center ${viewMode === "list" ? "min-h-10 w-20 shrink-0" : "min-h-6"}`}
               >

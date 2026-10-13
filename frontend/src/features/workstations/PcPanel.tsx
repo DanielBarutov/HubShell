@@ -114,14 +114,16 @@ export function PcPanel({
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      if (isXbox) await api.stopXboxSession(pc.sessionId);
-      else await api.interruptSession(
+      const stopped = isXbox ? await api.stopXboxSession(pc.sessionId) : null;
+      if (!isXbox) await api.interruptSession(
         pc.sessionId,
         "Оператор прервал сессию из панели ПК",
         crypto.randomUUID(),
       );
-      setOperationSuccess(true);
-      setOperationState("Сессия завершена");
+      setOperationSuccess(!stopped?.relay_off_pending);
+      setOperationState(stopped?.relay_off_pending
+        ? "Сессия завершена без возврата. Реле не подтвердило выключение; сервер повторит OFF. Проверьте TV."
+        : "Сессия завершена");
       onSessionChanged();
     } catch (error) {
       setOperationState(
@@ -303,6 +305,12 @@ export function PcPanel({
           </div>
           <ChevronRight size={17} />
         </button>
+      )}
+      {isXbox && pc.relayOffPending && (
+        <div role="alert" className="alert alert-warning text-sm">
+          Реле не подтвердило выключение. Сессия завершена без возврата;
+          сервер повторит OFF. Проверьте TV.
+        </div>
       )}
       <div className="panel-actions pc-panel-actions flex flex-col gap-2">
         {!isXbox && pc.status === "busy" && client && (

@@ -3,6 +3,7 @@ export type PcStatus = "online" | "busy" | "stale" | "offline" | "maintenance";
 export type Section = "dashboard" | "map" | "bookings" | "clients" | "catalog" | "analytics" | "cash" | "settings";
 
 export type Workstation = {
+  relayOffPending?: boolean;
   relaySettings?: import("./api/types").RelaySettings | null;
   equipmentType?: "pc" | "xbox";
   id: string;
