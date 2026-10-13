@@ -160,6 +160,7 @@ def create_v2_router(service: FinanceAnalyticsService) -> APIRouter:
         principal: Reader,
         start_at: QueryDatetime,
         end_at: QueryDatetime,
+        equipment_type: str | None = Query(default=None),
         zone_key: str | None = Query(default=None),
         workstation_key: str | None = Query(default=None),
         tariff_key: str | None = Query(default=None),
@@ -174,6 +175,7 @@ def create_v2_router(service: FinanceAnalyticsService) -> APIRouter:
             filters = FinanceFilters(
                 start_at=start_at,
                 end_at=end_at,
+                equipment_type=equipment_type,
                 zone_key=zone_key,
                 workstation_key=workstation_key,
                 tariff_key=tariff_key,

@@ -26,7 +26,7 @@ def test_redis_workstation_snapshot_preserves_v2_session_mode() -> None:
     )
 
     assert restored.session_mode is WorkstationSessionMode.LOCAL_LEDGER
-    assert RedisWorkstationSnapshotCache._key.endswith(":v2")
+    assert RedisWorkstationSnapshotCache._key.endswith(":v4")
 
 
 async def test_redis_workstation_snapshot_misses_when_session_mode_is_missing() -> None:
@@ -42,7 +42,7 @@ async def test_redis_workstation_snapshot_misses_when_session_mode_is_missing() 
 
     class RedisClient:
         async def get(self, key: str) -> str:
-            assert key.endswith(":v2")
+            assert key.endswith(":v4")
             return json.dumps([payload])
 
     cache = RedisWorkstationSnapshotCache(lambda: RedisClient())

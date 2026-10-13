@@ -1,6 +1,7 @@
 import { normalizePhoneQuery } from "./normalizers";
 import type {
   BackendWorkstation,
+  RelaySettings,
   BackendLockdownPolicy,
   BackendWorkstationGroup,
   BackendClient,
@@ -130,8 +131,10 @@ export class GameClubApi {
   }
 
   async registerWorkstation(payload: {
+    relay_settings?: RelaySettings | null;
+    equipment_type?: "pc" | "xbox";
     device_id?: string;
-    mac_address: string;
+    mac_address?: string;
     name: string;
     group_id: string | null;
     position: number | null;
@@ -151,6 +154,7 @@ export class GameClubApi {
   }
 
   async updateWorkstation(workstationId: string, payload: {
+    relay_settings?: RelaySettings | null;
     name: string;
     mac_address: string | null;
     group_id: string | null;
@@ -164,6 +168,10 @@ export class GameClubApi {
 
   async enableWorkstation(workstationId: string): Promise<BackendWorkstation> {
     return this.request<BackendWorkstation>(`/workstations/${workstationId}/enable`, { method: "POST" });
+  }
+
+  async testWorkstationRelay(workstationId: string, state: "on" | "off"): Promise<{ state: "on" | "off" }> {
+    return this.request(`/workstations/${workstationId}/relay/${state}`, { method: "POST" });
   }
 
   async deleteWorkstation(workstationId: string): Promise<void> {
@@ -522,6 +530,17 @@ export class GameClubApi {
     });
   }
 
+  async confirmXboxSale(payload: Parameters<GameClubApi["confirmGuestSessionPayment"]>[0], idempotencyKey: string): Promise<BackendGuestSessionPayment> {
+    return this.request<BackendGuestSessionPayment>("/xbox/sales", {
+      method: "POST", headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({workstation_id: payload.workstation_id, tariff_id: payload.tariff_id, session_id: payload.session_id, cash_shift_id: payload.cash_shift_id, payment_parts: payload.payment_parts}),
+    });
+  }
+
+  async stopXboxSession(sessionId: string): Promise<BackendSession> {
+    return this.request<BackendSession>(`/xbox/sessions/${sessionId}/stop`, {method: "POST"});
+  }
+
   async prepareGuestSessionAccess(paymentId: string): Promise<BackendGuestV2Access> {
     return this.request<BackendGuestV2Access>(`/guest-payments/${paymentId}/v2-access`, {
       method: "POST",
@@ -551,6 +570,7 @@ export class GameClubApi {
   }
 
   async createTariff(payload: {
+    equipment_type?: "pc" | "xbox";
     name: string;
     group_id: string | null;
     duration_minutes: number;
@@ -651,6 +671,7 @@ export class GameClubApi {
   async getAnalyticsFinance(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -662,6 +683,7 @@ export class GameClubApi {
   }): Promise<BackendAnalyticsFinanceResponse> {
     const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
     const filters: Array<[string, string | undefined]> = [
+      ["equipment_type", params.equipmentType],
       ["zone_key", params.zoneKey],
       ["workstation_key", params.workstationKey],
       ["tariff_key", params.tariffKey],
@@ -685,6 +707,7 @@ export class GameClubApi {
   async getAnalyticsDashboard(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -709,6 +732,7 @@ export class GameClubApi {
   async getAnalyticsDrillDown(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -733,6 +757,7 @@ export class GameClubApi {
   private analyticsQuery(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -745,6 +770,7 @@ export class GameClubApi {
   }): URLSearchParams {
     const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
     const filters: Array<[string, string | undefined]> = [
+      ["equipment_type", params.equipmentType],
       ["zone_key", params.zoneKey],
       ["workstation_key", params.workstationKey],
       ["tariff_key", params.tariffKey],

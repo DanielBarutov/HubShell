@@ -7,6 +7,7 @@ import uuid
 from dataclasses import replace
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.reservations.application.ports import ReservationEntryLookup
 from gameclub_backend.modules.sessions.application.ports import (
     Clock,
@@ -112,6 +113,8 @@ class SessionTransferService:
             target = await self._workstations.get(target_workstation_id)
             if target is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Transfer target workstation not found")
+            if target.equipment_type is EquipmentType.XBOX:
+                raise ApplicationError(ErrorCode.CONFLICT, "Xbox transfers are not supported")
             if target.status.value == "disabled":
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
@@ -260,6 +263,8 @@ class SessionTransferService:
                         ErrorCode.NOT_FOUND,
                         "Transfer target workstation not found",
                     )
+                if target.equipment_type is EquipmentType.XBOX:
+                    raise ApplicationError(ErrorCode.CONFLICT, "Xbox transfers are not supported")
                 if target.status.value == "disabled":
                     raise ApplicationError(
                         ErrorCode.CONFLICT,

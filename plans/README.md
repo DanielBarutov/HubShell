@@ -78,6 +78,8 @@ Windows сохраняют свои короткие owner-level входы в `
 | 44 | [`44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md) | сводный backlog фиксов, фич и UI-правок из `fixes.md` | `in_progress` |
 | 46 | [`46-v2-offline-event-platform/PLAN.md`](46-v2-offline-event-platform/PLAN.md) | V2: автономная сессия, Kafka inbox/outbox, финансовая сверка, аналитика и Grafana | `in_progress` |
 
+| 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
+
 Статусы:
 
 - `planned` — план подготовлен, работа не начата;

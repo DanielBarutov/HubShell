@@ -39,6 +39,7 @@ class WalletFactType(enum.StrEnum):
 class FinanceFilters:
     start_at: datetime.datetime
     end_at: datetime.datetime
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None
@@ -49,6 +50,8 @@ class FinanceFilters:
     operator_key: str | None = None
 
     def __post_init__(self) -> None:
+        if self.equipment_type not in {None, "pc", "xbox"}:
+            raise ValueError("Invalid equipment type")
         if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
             raise ValueError("Analytics period requires aware timestamps")
         start_at = self.start_at.astimezone(datetime.UTC)
@@ -62,6 +65,7 @@ class FinanceFilters:
         if not self.start_at <= fact.occurred_at < self.end_at:
             return False
         dimensions = (
+            (self.equipment_type, fact.equipment_type),
             (self.zone_key, fact.zone_key),
             (self.workstation_key, fact.workstation_key),
             (self.tariff_key, fact.tariff_key),
@@ -84,6 +88,7 @@ class FinancialFact:
     source_reference: str | None = None
     payment_method_key: str | None = None
     operation_type: str | None = None
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None
@@ -118,6 +123,7 @@ class WalletFact:
     source_reference: str | None = None
     payment_method_key: str | None = None
     operation_type: str | None = None
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None

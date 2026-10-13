@@ -17,6 +17,7 @@ export function WorkstationPanel({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [equipmentType, setEquipmentType] = useState<"pc" | "xbox">(workstation?.equipmentType ?? "pc");
   const [deviceId] = useState(workstation?.deviceId ?? "");
   const [macAddress, setMacAddress] = useState(workstation?.macAddress ?? "");
   const [name, setName] = useState(workstation?.name ?? "");
@@ -31,6 +32,34 @@ export function WorkstationPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [relayEnabled, setRelayEnabled] = useState(Boolean(workstation?.relaySettings));
+  const [relayIp, setRelayIp] = useState(workstation?.relaySettings?.ip ?? "");
+  const [relayPort, setRelayPort] = useState(String(workstation?.relaySettings?.port ?? 8081));
+  const [relayDeviceid, setRelayDeviceid] = useState(workstation?.relaySettings?.deviceid ?? "");
+  const [relayTesting, setRelayTesting] = useState(false);
+  const [relayResult, setRelayResult] = useState<string | null>(null);
+  const relaySettings = equipmentType === "xbox" && relayEnabled
+    ? {ip: relayIp.trim(), port: Number(relayPort), deviceid: relayDeviceid.trim()}
+    : null;
+  const relaySaved = relayEnabled && Boolean(workstation?.relaySettings)
+    && relaySettings?.ip === workstation?.relaySettings?.ip
+    && relaySettings?.port === workstation?.relaySettings?.port
+    && relaySettings?.deviceid === workstation?.relaySettings?.deviceid;
+
+  const testRelay = async (state: "on" | "off") => {
+    if (!workstation || !relaySaved) return;
+    setRelayTesting(true);
+    setRelayResult(null);
+    setError(null);
+    try {
+      const result = await api.testWorkstationRelay(workstation.id, state);
+      setRelayResult(result.state === "on" ? "Реле включено; состояние подтверждено" : "Реле выключено; состояние подтверждено");
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : "Не удалось проверить реле");
+    } finally {
+      setRelayTesting(false);
+    }
+  };
 
   const availableGroups = groups.length
     ? groups.some((item) => item.id === groupId) || !workstation
@@ -50,7 +79,7 @@ export function WorkstationPanel({
     event.preventDefault();
     const parsedPosition = position.trim() ? Number(position) : null;
     if (
-      (!workstation && !macAddress.trim()) ||
+      (!workstation && equipmentType === "pc" && !macAddress.trim()) ||
       !name.trim() ||
       (parsedPosition !== null &&
         (!Number.isInteger(parsedPosition) || parsedPosition < 1))
@@ -58,7 +87,7 @@ export function WorkstationPanel({
       setError(
         workstation
           ? "Укажите название и корректную позицию"
-          : "Укажите MAC-адрес, название и корректную позицию",
+          : equipmentType === "xbox" ? "Укажите название и корректную позицию" : "Укажите MAC-адрес, название и корректную позицию",
       );
       return;
     }
@@ -71,15 +100,18 @@ export function WorkstationPanel({
           mac_address: macAddress.trim() || null,
           group_id: groupId || null,
           position: parsedPosition,
+          ...(equipmentType === "xbox" ? {relay_settings: relaySettings} : {}),
         });
       } else {
         await api.registerWorkstation({
           device_id: deviceId.trim() || undefined,
-          mac_address: macAddress.trim(),
+          equipment_type: equipmentType,
+          relay_settings: relaySettings,
+          mac_address: equipmentType === "pc" ? macAddress.trim() : undefined,
           name: name.trim(),
           group_id: groupId || null,
           position: parsedPosition,
-          capabilities: [
+          capabilities: equipmentType === "xbox" ? [] : [
             "display-lock.v2",
             "v2.local-ledger",
             "v2.device-commands",
@@ -119,7 +151,13 @@ export function WorkstationPanel({
         </button>
       </div>
       <form className="flex flex-col gap-3" onSubmit={submit}>
-        {!workstation && (
+        {!workstation && <label className="flex flex-col gap-1 text-sm">
+          Тип места
+          <select className="select select-sm" value={equipmentType} onChange={(event) => setEquipmentType(event.target.value as "pc" | "xbox")}>
+            <option value="pc">ПК</option><option value="xbox">Xbox</option>
+          </select>
+        </label>}
+        {!workstation && equipmentType === "pc" && (
           <label className="flex flex-col gap-1 text-sm">
             MAC-адрес игрового ПК
             <input
@@ -131,7 +169,7 @@ export function WorkstationPanel({
             />
           </label>
         )}
-        {workstation && (
+        {workstation && equipmentType === "pc" && (
           <>
             <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm">
               <span className="text-base-content/60!">MAC-адрес</span>
@@ -163,7 +201,7 @@ export function WorkstationPanel({
             )}
           </>
         )}
-        {workstation && (
+        {workstation && equipmentType === "pc" && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm">
             <span className="text-base-content/60!">Device ID</span>
             <strong>{deviceId}</strong>
@@ -224,9 +262,34 @@ export function WorkstationPanel({
             {error}
           </div>
         )}
+        {equipmentType === "xbox" && <fieldset className="fieldset rounded-box border border-base-300 p-3" disabled={submitting || relayTesting}>
+          <legend className="fieldset-legend">Реле DIY</legend>
+          <label className="label justify-start gap-2">
+            <input className="checkbox checkbox-sm" type="checkbox" checked={relayEnabled} onChange={(event) => {setRelayEnabled(event.target.checked); setRelayResult(null);}} />
+            Настроить реле
+          </label>
+          {relayEnabled && <>
+            <label className="flex flex-col gap-1 text-sm">IP реле
+              <input className="input input-sm w-full" value={relayIp} maxLength={45} onChange={(event) => {setRelayIp(event.target.value); setRelayResult(null);}} placeholder="192.168.1.100" required />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">Порт реле
+              <input className="input input-sm w-full" type="number" value={relayPort} onChange={(event) => {setRelayPort(event.target.value); setRelayResult(null);}} min={1} max={65535} step={1} required />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">deviceid реле
+              <input className="input input-sm w-full" value={relayDeviceid} maxLength={128} onChange={(event) => {setRelayDeviceid(event.target.value); setRelayResult(null);}} required />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-sm" disabled={!relaySaved} onClick={() => void testRelay("on")}>Тест: включить</button>
+              <button type="button" className="btn btn-sm" disabled={!relaySaved} onClick={() => void testRelay("off")}>Тест: выключить</button>
+            </div>
+            {!relaySaved && <p className="text-sm text-base-content/70">Сохраните настройки перед тестом.</p>}
+            {relayTesting && <p role="status">Проверяем состояние реле…</p>}
+            {relayResult && <p className="text-sm text-success" role="status">{relayResult}</p>}
+          </>}
+        </fieldset>}
         <button
           className="btn btn-primary btn-block w-full bg-primary! text-primary-content!"
-          disabled={submitting}
+          disabled={submitting || relayTesting}
         >
           {submitting
             ? "Сохраняем..."
@@ -234,10 +297,10 @@ export function WorkstationPanel({
               ? "Сохранить изменения"
               : "Добавить место"}
         </button>
-        <p className="mt-1 text-sm text-base-content/70!">
+        {equipmentType === "pc" && <p className="mt-1 text-sm text-base-content/70!">
           После запуска EXE клиент сам найдёт это место по MAC и получит
           настройки группы.
-        </p>
+        </p>}
       </form>
     </div>
   );

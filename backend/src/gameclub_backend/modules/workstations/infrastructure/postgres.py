@@ -5,12 +5,14 @@ from sqlalchemy import JSON, DateTime, String, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.workstations.domain import (
     Workstation,
     WorkstationSessionMode,
     WorkstationStatus,
 )
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
 
 
 class WorkstationBase(DeclarativeBase):
@@ -21,7 +23,13 @@ class WorkstationModel(WorkstationBase):
     __tablename__ = "workstations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    device_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    device_id: Mapped[str | None] = mapped_column(
+        String(128), unique=True, index=True, nullable=True
+    )
+    equipment_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pc", server_default="pc"
+    )
+    relay_settings: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     mac_address: Mapped[str | None] = mapped_column(
         String(17), unique=True, index=True, nullable=True
     )
@@ -51,6 +59,8 @@ class WorkstationModel(WorkstationBase):
         return Workstation(
             id=self.id,
             device_id=self.device_id,
+            equipment_type=EquipmentType(self.equipment_type),
+            relay_settings=RelaySettings(**self.relay_settings) if self.relay_settings else None,
             name=self.name,
             group_id=self.group_id,
             position=self.position,
@@ -70,6 +80,16 @@ class WorkstationModel(WorkstationBase):
         return cls(
             id=workstation.id,
             device_id=workstation.device_id,
+            equipment_type=workstation.equipment_type.value,
+            relay_settings=(
+                {
+                    "ip": workstation.relay_settings.ip,
+                    "port": workstation.relay_settings.port,
+                    "deviceid": workstation.relay_settings.deviceid,
+                }
+                if workstation.relay_settings
+                else None
+            ),
             name=workstation.name,
             group_id=workstation.group_id,
             position=workstation.position,

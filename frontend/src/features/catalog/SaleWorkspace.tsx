@@ -174,12 +174,13 @@ export function SaleWorkspace({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isXbox = pc?.equipmentType === "xbox";
   const [activeTab, setActiveTab] = useState<"time" | "products">(initialTab);
   const [tariffCategory, setTariffCategory] = useState<"all" | "blocks">("all");
   const [productCategory, setProductCategory] = useState("all");
   const [lines, setLines] = useState<SaleLine[]>([]);
   const [buyerMode, setBuyerMode] = useState<"guest" | "client">(() =>
-    initialClient || (pc?.status === "busy" && pc.clientId)
+    !isXbox && (initialClient || (pc?.status === "busy" && pc.clientId))
       ? "client"
       : "guest",
   );
@@ -234,9 +235,10 @@ export function SaleWorkspace({
         : undefined);
   const registeredSession = Boolean(pc?.status === "busy" && pc.clientId);
   const sourceTariffs =
-    availableTariffs ?? (api ? catalogTariffs : demoSaleTariffs);
+    (isXbox ? null : availableTariffs) ?? (api ? catalogTariffs : demoSaleTariffs);
   const tariffs = sourceTariffs.filter(
     (item) =>
+      (item.equipment_type ?? "pc") === (pc?.equipmentType ?? "pc") &&
       Boolean(pc) &&
       item.lifecycle === "published" &&
       item.active &&
@@ -247,7 +249,7 @@ export function SaleWorkspace({
   );
 
   useEffect(() => {
-    if (!api || !pc || typeof api.listAvailableTariffs !== "function") {
+    if (isXbox || !api || !pc || typeof api.listAvailableTariffs !== "function") {
       setAvailableTariffs(null);
       return;
     }
@@ -269,12 +271,12 @@ export function SaleWorkspace({
   }, [api, buyerMode, pc]);
 
   useEffect(() => {
-    if (!initialClient) return;
+    if (isXbox || !initialClient) return;
     setClient(initialClient);
     setBuyerMode("client");
     setClientQuery(initialClient.nickname);
     setSearchResults([]);
-  }, [initialClient?.id]);
+  }, [initialClient?.id, isXbox]);
 
   useEffect(() => {
     if (registeredSession && !initialClient) setBuyerMode("client");
@@ -393,6 +395,7 @@ export function SaleWorkspace({
     setLines((current) => {
       const key = `tariff:${tariff.id}`;
       const existing = current.find((line) => line.key === key);
+      if (existing && isXbox) return current;
       if (existing)
         return current.map((line) =>
           line.key === key
@@ -448,7 +451,7 @@ export function SaleWorkspace({
     setLines((current) =>
       current.flatMap((line) => {
         if (line.key !== key) return [line];
-        const max = line.kind === "product" ? (line.stockQuantity ?? 1) : 10;
+        const max = line.kind === "product" ? (line.stockQuantity ?? 1) : isXbox ? 1 : 10;
         const quantity = Math.min(max, line.quantity + delta);
         return quantity > 0 ? [{ ...line, quantity }] : [];
       }),
@@ -581,7 +584,8 @@ export function SaleWorkspace({
       }
       let guestAccessPrepared = false;
       if (buyerMode === "guest" && timeLines[0]) {
-        const payment = await api.confirmGuestSessionPayment(
+        if (isXbox && timeLines[0].quantity !== 1) {setError("Для Xbox выберите один тариф; повторная продажа продлевает сессию"); return;}
+        const payment = await (isXbox ? api.confirmXboxSale.bind(api) : api.confirmGuestSessionPayment.bind(api))(
           {
             workstation_id: pc!.id,
             session_id: activeGuestSession ? pc!.sessionId : undefined,
@@ -611,7 +615,7 @@ export function SaleWorkspace({
           return;
         }
         try {
-          await api.prepareGuestSessionAccess(payment.id);
+          if (!isXbox) await api.prepareGuestSessionAccess(payment.id);
           guestAccessPrepared = true;
         } catch (accessError) {
           setError(
@@ -841,6 +845,7 @@ export function SaleWorkspace({
                   </span>
                 </button>
                 <button
+                  hidden={isXbox}
                   type="button"
                   className={`sale-buyer-choice btn h-auto min-h-16 justify-start gap-3 text-left ${buyerMode === "client" ? "bg-primary! text-primary-content!" : "btn-dash"}`}
                   onClick={() => setBuyerMode("client")}

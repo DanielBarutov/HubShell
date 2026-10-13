@@ -644,7 +644,7 @@ function LiveCatalog({
                   {tariff.name}
                 </h3>
                 <p className="relative z-10 text-[11px] text-base-content/65">
-                  {groupLabel(tariff.group_id)} · {tariff.duration_minutes} мин
+                  {tariff.equipment_type === "xbox" ? "Xbox" : groupLabel(tariff.group_id)} · {tariff.duration_minutes} мин
                   · v{tariff.version}
                 </p>
                 <div className="relative z-10 flex items-end justify-between gap-2">
@@ -1063,6 +1063,7 @@ export function TariffPanel({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [equipmentType, setEquipmentType] = useState<"pc" | "xbox">("pc");
   const [name, setName] = useState("");
   const [groupId, setGroupId] = useState("main");
   const [duration, setDuration] = useState("60");
@@ -1092,7 +1093,7 @@ export function TariffPanel({
       !Number.isInteger(durationMinutes) ||
       durationMinutes <= 0 ||
       !Number.isFinite(priceRubles) ||
-      priceRubles < 0
+      (equipmentType === "xbox" ? priceRubles <= 0 : priceRubles < 0)
     ) {
       setError("Заполните название, длительность и корректную цену");
       return;
@@ -1132,27 +1133,28 @@ export function TariffPanel({
     try {
       await api.createTariff({
         name: name.trim(),
-        group_id: groupId || null,
+        equipment_type: equipmentType,
+        group_id: equipmentType === "xbox" ? null : groupId || null,
         duration_minutes: durationMinutes,
         price_cents: Math.round(priceRubles * 100),
         billing_mode: "block",
-        valid_from: parsedDate.toISOString(),
-        lifecycle: "draft",
-        time_restricted: timeRestricted,
-        sale_window_start_minute: timeRestricted
+        valid_from: equipmentType === "xbox" ? new Date().toISOString() : parsedDate.toISOString(),
+        lifecycle: equipmentType === "xbox" ? "published" : "draft",
+        time_restricted: equipmentType === "pc" && timeRestricted,
+        sale_window_start_minute: equipmentType === "pc" && timeRestricted
           ? (saleStart ?? undefined)
           : undefined,
-        sale_window_end_minute: timeRestricted
+        sale_window_end_minute: equipmentType === "pc" && timeRestricted
           ? (saleEnd ?? undefined)
           : undefined,
-        usage_window_start_minute: timeRestricted
+        usage_window_start_minute: equipmentType === "pc" && timeRestricted
           ? (usageStart ?? undefined)
           : undefined,
-        usage_window_end_minute: timeRestricted
+        usage_window_end_minute: equipmentType === "pc" && timeRestricted
           ? (usageEnd ?? undefined)
           : undefined,
-        window_timezone: timeRestricted ? timezone.trim() : undefined,
-        audience,
+        window_timezone: equipmentType === "pc" && timeRestricted ? timezone.trim() : undefined,
+        audience: equipmentType === "xbox" ? "guest" : audience,
       });
       onSaved();
     } catch (requestError) {
@@ -1188,6 +1190,11 @@ export function TariffPanel({
         </button>
       </div>
       <form className="booking-form flex flex-col gap-3" onSubmit={submit}>
+        <label>Тип оборудования
+          <select className="select select-sm" value={equipmentType} onChange={(event) => {setEquipmentType(event.target.value as "pc" | "xbox"); setTimeRestricted(false);}}>
+            <option value="pc">ПК</option><option value="xbox">Xbox</option>
+          </select>
+        </label>
         <label>
           Название
           <input
@@ -1198,7 +1205,7 @@ export function TariffPanel({
             autoFocus
           />
         </label>
-        <label>
+        {equipmentType === "pc" && <label>
           Зона
           <select
             className="select select-sm"
@@ -1211,7 +1218,7 @@ export function TariffPanel({
               </option>
             ))}
           </select>
-        </label>
+        </label>}
         <div className="form-grid-two grid grid-cols-1 gap-3 md:grid-cols-2">
           <label>
             Длительность, минут
@@ -1236,6 +1243,7 @@ export function TariffPanel({
             />
           </label>
         </div>
+        {equipmentType === "pc" && <>
         <label>
           Для кого доступен тариф
           <select
@@ -1326,6 +1334,7 @@ export function TariffPanel({
             </p>
           </>
         )}
+        </>}
         {error && (
           <div
             className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!"
@@ -1340,9 +1349,9 @@ export function TariffPanel({
         >
           {submitting ? "Сохраняем..." : "Создать тариф"}
         </button>
-        <p className="mt-1 text-sm text-base-content/65!">
+        {equipmentType === "pc" && <p className="mt-1 text-sm text-base-content/65!">
           Поминутная ставка и бесплатные минуты настраиваются в карточке зоны.
-        </p>
+        </p>}
       </form>
     </div>
   );

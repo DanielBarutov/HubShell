@@ -3,6 +3,7 @@ import math
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.catalog.application.ports import CatalogRepository, ZoneRateLookup
 from gameclub_backend.modules.catalog.domain import (
     BillingMode,
@@ -173,8 +174,10 @@ class CatalogService:
         window_timezone: str | None = None,
         audience: TariffAudience | str = TariffAudience.ALL,
         sale_channel: TariffSaleChannel | str = TariffSaleChannel.BOTH,
+        equipment_type: EquipmentType = EquipmentType.PC,
     ) -> Tariff:
         try:
+            equipment_type = EquipmentType(equipment_type)
             lifecycle = TariffLifecycle(lifecycle)
         except (TypeError, ValueError) as error:
             raise ApplicationError(
@@ -215,7 +218,20 @@ class CatalogService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff dates must include timezone")
         if valid_to and valid_to <= valid_from:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff period is invalid")
+        if equipment_type is EquipmentType.XBOX:
+            if (
+                price_cents <= 0
+                or billing_mode is not BillingMode.BLOCK
+                or price_per_minute_cents
+                or free_minutes
+                or time_restricted
+            ):
+                raise ApplicationError(
+                    ErrorCode.INVALID_ARGUMENT, "Xbox requires a simple block tariff"
+                )
+            audience, sale_channel = TariffAudience.GUEST, TariffSaleChannel.OPERATOR
         tariff = Tariff(
+            equipment_type=equipment_type,
             id=uuid.uuid4(),
             name=name.strip(),
             group_id=group_id,

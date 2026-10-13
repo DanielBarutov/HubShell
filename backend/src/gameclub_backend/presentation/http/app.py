@@ -54,6 +54,9 @@ from gameclub_backend.modules.clients.presentation.http import (
 from gameclub_backend.modules.direct_payments.presentation.http import (
     create_router as create_guest_payment_router,
 )
+from gameclub_backend.modules.direct_payments.presentation.xbox import (
+    create_router as create_xbox_router,
+)
 from gameclub_backend.modules.entitlements.presentation.http import (
     create_router as create_entitlements_router,
 )
@@ -171,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.resources = resources
         try:
             await services.workstation_groups.restore_per_minute_tariffs()
+            await services.xbox.expire()
             yield
         finally:
             if stop_pyroscope is not None:
@@ -202,6 +206,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.catalog = services.catalog
     application.state.entitlements = services.entitlements
     application.state.offline = services.offline
+    application.state.xbox = services.xbox
     application.state.guest_payments = services.guest_payments
     application.state.reservations = services.reservations
     application.state.sessions = services.sessions
@@ -239,6 +244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))
     application.include_router(create_offline_router(services.offline))
+    application.include_router(create_xbox_router(services.xbox))
     application.include_router(
         create_guest_payment_router(services.guest_payments, services.v2_guest_access)
     )

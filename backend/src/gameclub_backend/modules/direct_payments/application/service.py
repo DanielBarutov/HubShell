@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.catalog.domain import BillingMode, TariffAudience, TariffSaleChannel
 from gameclub_backend.modules.direct_payments.application.ports import (
     ActiveSessionLookup,
@@ -57,6 +58,9 @@ class GuestSessionPaymentService:
     async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
         return await self._repository.list_for_session(session_id)
 
+    async def get_by_idempotency_key(self, key: str) -> GuestSessionPayment | None:
+        return await self._repository.get_by_idempotency_key(key.strip())
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment:
         payment = await self._repository.get(payment_id)
         if payment is None:
@@ -75,6 +79,7 @@ class GuestSessionPaymentService:
         guest_id: uuid.UUID | None = None,
         cash_shift_id: uuid.UUID | None = None,
         session_id: uuid.UUID | None = None,
+        xbox_sale: bool = False,
     ) -> GuestSessionPayment:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -112,10 +117,18 @@ class GuestSessionPaymentService:
         tariff = await self._tariffs.get_tariff(tariff_id)
         if tariff is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
+        zone_id = None
         if self._workstations is not None:
             workstation = await self._workstations.get(workstation_id)
             if workstation is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+            zone_id = effective_workstation_group_id(workstation.group_id)
+            if tariff.equipment_type != workstation.equipment_type:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Tariff equipment type does not match place"
+                )
+            if (workstation.equipment_type is EquipmentType.XBOX) != xbox_sale:
+                raise ApplicationError(ErrorCode.CONFLICT, "Use the Xbox sale endpoint")
             if (
                 tariff.group_id is not None
                 and tariff.group_id.strip().lower()
@@ -135,7 +148,7 @@ class GuestSessionPaymentService:
                 active is None
                 or active.id != session_id
                 or active.client_id is not None
-                or active.source != "guest_local_ledger"
+                or active.source != ("xbox" if xbox_sale else "guest_local_ledger")
             ):
                 raise ApplicationError(
                     ErrorCode.CONFLICT, "Active guest session does not match payment"
@@ -146,6 +159,10 @@ class GuestSessionPaymentService:
                 "Guest tariff cannot be sold while the workstation has an active session",
             )
         now = self._clock.now()
+        if xbox_sale and not tariff.applies_at(
+            now, zone_id, TariffAudience.GUEST, EquipmentType.XBOX
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox tariff is not currently available")
         if tariff.billing_mode is not BillingMode.BLOCK or tariff.duration_minutes <= 0:
             raise ApplicationError(ErrorCode.CONFLICT, "Guest time requires a block tariff")
         if not tariff.active or tariff.price_cents <= 0:
@@ -174,6 +191,8 @@ class GuestSessionPaymentService:
                 total_price_cents=tariff.price_cents * tariff_quantity,
                 duration_minutes=tariff.duration_minutes,
                 tariff_name=tariff.name,
+                equipment_type=tariff.equipment_type.value,
+                zone_id=zone_id,
                 payment_parts=parts,
                 cash_shift_id=cash_shift_id,
                 status=DirectPaymentStatus.PENDING,

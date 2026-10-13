@@ -46,7 +46,7 @@ describe("панель игрового ПК", () => {
     const view = renderPcPanel();
 
     expect(screen.getAllByText("Оформить продажу")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Заблокировать клиент" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Заблокировать клиент" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Прервать сессию" })).toBeInTheDocument();
 
     view.rerender(
@@ -62,7 +62,7 @@ describe("панель игрового ПК", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Заблокировать клиент" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Заблокировать клиент" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Прервать сессию" })).toBeInTheDocument();
   });
 

@@ -155,7 +155,9 @@ export function getSessionTooltipDetails(
   const totalMinutes = sessionCutoffMinutes == null
     ? uncappedTotalMinutes
     : Math.min(uncappedTotalMinutes, sessionCutoffMinutes);
-  const candidateEnding = validSnapshotTime && totalMinutes > 0
+  const candidateEnding = pc.equipmentType === "xbox" && snapshot.session?.expires_at
+    ? new Date(snapshot.session.expires_at)
+    : validSnapshotTime && totalMinutes > 0
     ? new Date(validSnapshotTime.valueOf() + totalMinutes * 60_000)
     : null;
   const sessionKey = snapshot.session?.id ?? pc.sessionId ?? pc.id;

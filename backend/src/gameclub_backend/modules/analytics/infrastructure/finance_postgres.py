@@ -45,6 +45,10 @@ product_sales = sa.table(
 )
 guest_session_payments = sa.table(
     "guest_session_payments",
+    sa.column("equipment_type", sa.String()),
+    sa.column("zone_id", sa.String()),
+    sa.column("workstation_id", UUID(as_uuid=True)),
+    sa.column("tariff_id", UUID(as_uuid=True)),
     sa.column("id", UUID(as_uuid=True)),
     sa.column("guest_id", UUID(as_uuid=True)),
     sa.column("total_price_cents", sa.BigInteger()),
@@ -150,6 +154,10 @@ def _payment_facts_from_parts(
     client_id: uuid.UUID | None = None,
     operator_key: str | None = None,
     guest_id: uuid.UUID | None = None,
+    equipment_type: str | None = None,
+    zone_key: str | None = None,
+    workstation_key: str | None = None,
+    tariff_key: str | None = None,
 ) -> list[FinancialFact]:
     if not is_confirmed_status(status):
         return []
@@ -170,6 +178,10 @@ def _payment_facts_from_parts(
                 payment_method_key=method_key,
                 operation_type="payment",
                 operator_key=operator_key,
+                equipment_type=equipment_type,
+                zone_key=zone_key,
+                workstation_key=workstation_key,
+                tariff_key=tariff_key,
                 client_id=client_id,
             )
         )
@@ -229,6 +241,10 @@ def _guest_payment_facts(row: dict[str, object]) -> list[FinancialFact]:
         status=str(row.get("status") or ""),
         parts=_as_parts(row.get("payment_parts")),
         guest_id=_as_uuid(row.get("guest_id")),
+        equipment_type=str(row.get("equipment_type") or "pc"),
+        zone_key=str(row.get("zone_id") or "") or None,
+        workstation_key=str(row.get("workstation_id") or "") or None,
+        tariff_key=str(row.get("tariff_id") or "") or None,
         operator_key=str(row.get("created_by") or "") or None,
     )
 

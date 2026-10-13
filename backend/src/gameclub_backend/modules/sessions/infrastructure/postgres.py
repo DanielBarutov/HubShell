@@ -4,12 +4,12 @@ import builtins
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy import JSON, DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
@@ -51,6 +51,13 @@ class SessionModel(SessionBase):
     login_grant_minutes: Mapped[int] = mapped_column(Integer(), default=0)
     entitlement_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    applied_payment_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+
     def to_domain(self) -> Session:
         return Session(
             id=self.id,
@@ -71,6 +78,8 @@ class SessionModel(SessionBase):
             guest_payment_id=self.guest_payment_id,
             login_grant_minutes=self.login_grant_minutes,
             entitlement_id=self.entitlement_id,
+            expires_at=self.expires_at,
+            applied_payment_ids=tuple(self.applied_payment_ids or []),
         )
 
     @classmethod
@@ -94,6 +103,8 @@ class SessionModel(SessionBase):
             guest_payment_id=session.guest_payment_id,
             login_grant_minutes=session.login_grant_minutes,
             entitlement_id=session.entitlement_id,
+            expires_at=session.expires_at,
+            applied_payment_ids=list(session.applied_payment_ids),
         )
 
 
@@ -171,7 +182,7 @@ class PostgresSessionRepository:
 
     async def save(self, session: Session) -> Session:
         async with open_session(self._engine_provider) as db_session:
-            async with db_session.begin():
+            async with begin_session(db_session):
                 return await PostgresSessionTransactionWriter().save(db_session, session)
 
 

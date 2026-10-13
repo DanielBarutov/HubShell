@@ -5,17 +5,19 @@ import uuid
 
 import redis.asyncio as redis_asyncio
 
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.workstations.domain import (
     Workstation,
     WorkstationSessionMode,
     WorkstationStatus,
 )
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
 
 RedisProvider = typing.Callable[[], redis_asyncio.Redis | None]
 
 
 class RedisWorkstationSnapshotCache:
-    _key = "gameclub:workstations:snapshot:v2"
+    _key = "gameclub:workstations:snapshot:v4"
 
     def __init__(self, redis_provider: RedisProvider) -> None:
         self._redis_provider = redis_provider
@@ -79,6 +81,16 @@ class RedisWorkstationSnapshotCache:
             "theme": workstation.theme,
             "archived_at": workstation.archived_at.isoformat() if workstation.archived_at else None,
             "session_mode": workstation.session_mode.value,
+            "equipment_type": workstation.equipment_type.value,
+            "relay_settings": (
+                {
+                    "ip": workstation.relay_settings.ip,
+                    "port": workstation.relay_settings.port,
+                    "deviceid": workstation.relay_settings.deviceid,
+                }
+                if workstation.relay_settings
+                else None
+            ),
         }
 
     @staticmethod
@@ -96,7 +108,11 @@ class RedisWorkstationSnapshotCache:
             raise ValueError("Invalid workstation capabilities")
         return Workstation(
             id=uuid.UUID(str(payload["id"])),
-            device_id=str(payload["device_id"]),
+            device_id=payload["device_id"],
+            equipment_type=EquipmentType(payload.get("equipment_type", "pc")),
+            relay_settings=RelaySettings(**payload["relay_settings"])
+            if payload.get("relay_settings")
+            else None,
             name=str(payload["name"]),
             group_id=payload.get("group_id"),
             position=payload.get("position"),

@@ -7,7 +7,12 @@ from sqlalchemy import DateTime, Index, String, Time, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import (
+    EngineProvider,
+    begin_session,
+    commit_session,
+    open_session,
+)
 from gameclub_backend.modules.cash_shifts.domain import (
     CashApproval,
     CashApprovalKind,
@@ -242,7 +247,7 @@ class PostgresCashShiftRepository:
                 model.auto_close = schedule.auto_close
                 model.auto_close_at = schedule.auto_close_at
                 model.opening_balance_cents = schedule.opening_balance_cents
-            await session.commit()
+            await commit_session(session)
             return schedule
 
     async def get(self, shift_id: uuid.UUID) -> CashShift | None:
@@ -304,7 +309,7 @@ class PostgresCashShiftRepository:
 
     async def open_shift(self, shift: CashShift) -> CashShift:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"cash-register:{shift.register_id}"},
@@ -341,7 +346,7 @@ class PostgresCashShiftRepository:
         movement: CashMovement,
     ) -> tuple[CashShift, CashMovement]:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"cash-shift:{shift_id}"},
@@ -400,7 +405,7 @@ class PostgresCashShiftRepository:
         expected_close_cents: int,
     ) -> CashShift:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"cash-shift:{shift_id}"},
@@ -467,7 +472,7 @@ class PostgresCashApprovalRepository:
 
     async def save(self, approval: CashApproval) -> CashApproval:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"cash-approval:{approval.shift_id}:{approval.target_key}"},

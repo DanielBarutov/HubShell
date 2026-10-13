@@ -21,6 +21,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2,<3",
     "uvicorn[standard]>=0.34,<1",
     "pyroscope-io>=1.2.4,<2",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]

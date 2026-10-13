@@ -1,6 +1,10 @@
+export type RelaySettings = { ip: string; port: number; deviceid: string };
+
 export type BackendWorkstation = {
+  relay_settings?: RelaySettings | null;
   id: string;
-  device_id: string;
+  device_id: string | null;
+  equipment_type?: "pc" | "xbox";
   mac_address: string | null;
   installation_bound: boolean;
   name: string;
@@ -185,6 +189,7 @@ export type BackendDeviceCommand = {
 };
 
 export type BackendTariff = {
+  equipment_type?: "pc" | "xbox";
   id: string;
   name: string;
   group_id: string | null;
@@ -666,6 +671,7 @@ export type ReservationAvailability = {
 };
 
 export type BackendSession = {
+  expires_at?: string | null;
   id: string;
   workstation_id: string;
   client_id: string | null;

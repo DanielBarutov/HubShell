@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   CalendarDays,
+  Gamepad2,
   Circle,
   Clock3,
   Edit3,
@@ -354,7 +355,7 @@ export function MapView({
               aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}
             >
               <div className="map-seat-top flex items-center justify-between gap-2 text-xs font-semibold">
-                <span className="min-w-0 truncate">{placed.pc.name}</span>
+                <span className="min-w-0 truncate">{placed.pc.equipmentType === "xbox" && <Gamepad2 size={12} className="inline mr-1" aria-label="Xbox" />}{placed.pc.name}</span>
                 <span className="map-seat-state text-primary!">
                   {placed.pc.status === "busy" ? (
                     <Circle
@@ -420,7 +421,7 @@ export function MapView({
                 <button
                   className="btn btn-ghost btn-sm justify-start"
                   role="menuitem"
-                  disabled={placed.pc.status !== "online"}
+                  disabled={placed.pc.status !== "online" && !(placed.pc.equipmentType === "xbox" && placed.pc.status === "busy")}
                   onClick={() => {
                     setContextPcId(null);
                     onSalePc(placed.pc);
@@ -438,7 +439,7 @@ export function MapView({
                 >
                   <PanelRightClose size={13} /> Открыть карточку
                 </button>
-                <button
+                {placed.pc.equipmentType !== "xbox" && <button
                   className="btn btn-ghost btn-sm justify-start"
                   role="menuitem"
                   disabled={placed.pc.status !== "online"}
@@ -448,7 +449,7 @@ export function MapView({
                   }}
                 >
                   <CalendarDays size={13} /> Забронировать
-                </button>
+                </button>}
                 <button
                   className="btn btn-ghost btn-sm justify-start"
                   role="menuitem"

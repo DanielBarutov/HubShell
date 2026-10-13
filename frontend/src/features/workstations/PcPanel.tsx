@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ChevronRight,
   Computer,
+  Gamepad2,
   Receipt,
   Settings,
   WalletCards,
@@ -37,6 +38,7 @@ export function PcPanel({
   client?: Client;
   api?: GameClubApi;
 }) {
+  const isXbox = pc.equipmentType === "xbox";
   const meta = statusMeta[pc.status];
   const [operationState, setOperationState] = useState<string | null>(null);
   const [operationSuccess, setOperationSuccess] = useState(false);
@@ -103,7 +105,7 @@ export function PcPanel({
     }
     if (
       !window.confirm(
-        `Прервать сессию на «${pc.name}»? Неиспользованный остаток активного пакета сгорит.`,
+        `Прервать сессию на «${pc.name}»? Весь неиспользованный остаток сгорит без возврата денег.`,
       )
     ) {
       return;
@@ -112,7 +114,8 @@ export function PcPanel({
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      await api.interruptSession(
+      if (isXbox) await api.stopXboxSession(pc.sessionId);
+      else await api.interruptSession(
         pc.sessionId,
         "Оператор прервал сессию из панели ПК",
         crypto.randomUUID(),
@@ -191,7 +194,7 @@ export function PcPanel({
         <div
           className={`large-pc-icon grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-primary/15! text-primary! ${pc.status}`}
         >
-          <Computer size={50} strokeWidth={1.2} />
+          {isXbox ? <Gamepad2 size={50} strokeWidth={1.2} /> : <Computer size={50} strokeWidth={1.2} />}
         </div>
         <div className="min-w-0">
           <span className="pill-status badge badge-soft badge-success gap-1">
@@ -202,7 +205,7 @@ export function PcPanel({
           </h2>
           <p className="text-xs text-base-content/60!">
             {pc.session
-              ? `Сессия началась ${pc.session} назад`
+              ? isXbox ? pc.session : `Сессия началась ${pc.session} назад`
               : pc.status === "offline"
                 ? "Нет связи; новые операции заблокированы"
                 : pc.lastSeen || "Готово к новой сессии"}
@@ -239,6 +242,12 @@ export function PcPanel({
           <span className="text-base-content/60!">Устройство</span>
           <strong>{pc.name}</strong>
         </div>
+        {isXbox && sessionSnapshot?.session.expires_at && (
+          <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm">
+            <span className="text-base-content/60!">Завершение</span>
+            <strong>{new Date(sessionSnapshot.session.expires_at).toLocaleTimeString("ru-RU")}</strong>
+          </div>
+        )}
         {sessionSnapshot?.active_entitlement && (
           <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm">
             <span className="text-base-content/60!">Активный пакет</span>
@@ -296,7 +305,7 @@ export function PcPanel({
         </button>
       )}
       <div className="panel-actions pc-panel-actions flex flex-col gap-2">
-        {pc.status === "busy" && client && (
+        {!isXbox && pc.status === "busy" && client && (
           <button
             className="secondary-button wide btn btn-outline"
             onClick={() =>
@@ -320,7 +329,7 @@ export function PcPanel({
           className="secondary-button wide btn btn-outline"
           onClick={onEdit}
         >
-          <Settings size={15} /> Редактировать ПК
+          <Settings size={15} /> {isXbox ? "Редактировать Xbox" : "Редактировать ПК"}
         </button>
         <div className="pc-session-actions flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/45! p-3">
           {hasActiveSession && (
@@ -337,19 +346,7 @@ export function PcPanel({
               Прервать сессию
             </button>
           )}
-          <button
-            className="secondary-button wide btn btn-outline"
-            onClick={() => void dispatchDeviceCommand("display.lock")}
-            disabled={
-              submitting ||
-              !api ||
-              pc.status === "maintenance" ||
-              pc.status === "offline"
-            }
-          >
-            Заблокировать клиент
-          </button>
-          <button
+          {!isXbox && (<button
             className="danger-button wide btn btn-error btn-outline"
             onClick={() => void dispatchDeviceCommand("system.restart")}
             disabled={
@@ -360,15 +357,15 @@ export function PcPanel({
             }
           >
             Перезапустить ПК
-          </button>
+          </button>)}
         </div>
-        <button
+        {!isXbox && (<button
           className="secondary-button wide btn btn-outline"
           onClick={onBook}
           disabled={pc.status !== "online"}
         >
           Забронировать место
-        </button>
+        </button>)}
         {operationState && (
           <div
             className={`${operationSuccess ? "form-success border-success/40! bg-success/10! text-success-content!" : "form-error border-error/40! bg-error/10! text-error-content!"} command-result rounded-lg border p-3 text-sm`}

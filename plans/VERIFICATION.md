@@ -334,3 +334,16 @@ Windows host build на Linux: 0 warnings, 0 errors; существующие cl
 не проверены; Linux build/tests не проверяют user32/Explorer.
 Graphify update недоступен: CLI не установлен.
 >>>>>>> 6eff53637abdbff36cfb5824892a9a82fb64b00b
+
+### 2026-10-13 — Xbox, реализация первого этапа
+
+Доказательства, команды и ограничения — [план 48](48-xbox-places/PLAN.md).
+Backend: 81 passed / 1 skipped в основном срезе, дополнительные Xbox API и
+V2 PostgreSQL checks; 167 .NET tests passed. Frontend сценарии и production build
+прошли. Chrome проверил создание места/тарифа, продажу и продление с реальным
+backend. Миграция 0074 → 0075 на заполненной временной PostgreSQL сохранила
+все прежние поля ПК, тарифов, активной сессии и продажи. Общие lint/Analytics
+ошибки и старые fixtures описаны в плане, полный clean gate не заявляется.
+Промышленная база, native Windows и Sonoff/TV не проверены.
+
+2026-10-13: временно скрыта кнопка «Заблокировать клиент» в панели ПК из-за активного V2 ledger после display.lock; «Прервать сессию» сохранено. Проверено: 8 frontend-тестов (PcPanel/Xbox), production build. Развёртывание и браузер не проверены; существующий зависший ledger этим изменением не исправляется.
