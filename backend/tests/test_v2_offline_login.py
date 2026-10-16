@@ -109,8 +109,10 @@ class RecordingV2SessionLeaseRevoker:
 async def build_service(
     mode: WorkstationSessionMode,
     *,
-    competing_rates: bool = False,
+    minute_rates: tuple[int, ...] = (),
     allow_debt: bool = False,
+    discount_bps: int | None = None,
+    free_minutes: int = 0,
 ) -> tuple[V2OfflineLoginService, SessionService, ClientPortalService, ClientService, Client]:
     client_groups = InMemoryClientGroupRepository()
     if allow_debt:
@@ -141,18 +143,18 @@ async def build_service(
         datetime.datetime.now(datetime.UTC),
         None,
     )
-    if competing_rates:
-        for rate in (150, 100):
-            await catalog.create_tariff(
-                f"Rate {rate}",
-                None,
-                1,
-                0,
-                datetime.datetime.now(datetime.UTC),
-                None,
-                billing_mode=BillingMode.PER_MINUTE,
-                price_per_minute_cents=rate,
-            )
+    for rate in minute_rates:
+        await catalog.create_tariff(
+            f"Rate {rate}",
+            None,
+            1,
+            0,
+            datetime.datetime.now(datetime.UTC),
+            None,
+            billing_mode=BillingMode.PER_MINUTE,
+            price_per_minute_cents=rate,
+            free_minutes=free_minutes,
+        )
     sessions = SessionService(
         session_repository,
         workstations=workstations,
@@ -177,6 +179,15 @@ async def build_service(
         workstations=workstations,
     )
     client = await portal.register("V2 Player", "79991230001", "safe-password")
+    if discount_bps is not None:
+        await catalog.create_discount_rule(
+            "admin",
+            percent_bps=discount_bps,
+            priority=0,
+            valid_from=datetime.datetime.now(datetime.UTC),
+            valid_to=None,
+        )
+        client = await clients.update(client.id, client.nickname, client.phone, " ADMIN ")
     service = V2OfflineLoginService(
         workstations=workstation_service,
         client_portal=portal,
@@ -191,6 +202,44 @@ async def build_service(
         ),
     )
     return service, sessions, portal, clients, client
+
+
+@pytest.mark.parametrize("discount_bps, expected_rate", [(0, 100), (1250, 88), (10000, 0)])
+@pytest.mark.parametrize("free_minutes", [0, 3])
+async def test_v2_login_signs_discounted_minute_rate(
+    discount_bps: int, expected_rate: int, free_minutes: int
+) -> None:
+    service, _, _, _, _ = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER,
+        minute_rates=(150, 100),
+        discount_bps=discount_bps,
+        free_minutes=free_minutes,
+    )
+    signed = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="discount-login",
+    )
+    rate = next(item for item in signed.payload.tariffs if item.name == "Rate 100")
+    assert rate.per_minute_price_cents == expected_rate
+    assert rate.is_per_minute
+    assert all(
+        not item.is_per_minute for item in signed.payload.tariffs if item.package_minutes == 60
+    )
+
+
+async def test_v2_discount_does_not_create_a_missing_minute_rate() -> None:
+    service, _, _, _, _ = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, discount_bps=10000
+    )
+    signed = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="disabled-rate-login",
+    )
+    assert all(not item.is_per_minute for item in signed.payload.tariffs)
 
 
 @pytest.mark.asyncio
@@ -534,7 +583,7 @@ async def test_v2_grpc_login_requires_the_same_device_identity() -> None:
 
 async def test_login_snapshot_has_only_server_selected_per_minute_rate() -> None:
     service, _, _, _, _ = await build_service(
-        WorkstationSessionMode.LOCAL_LEDGER, competing_rates=True
+        WorkstationSessionMode.LOCAL_LEDGER, minute_rates=(150, 100)
     )
     snapshot = await service.login(
         device_id="v2-device-01",

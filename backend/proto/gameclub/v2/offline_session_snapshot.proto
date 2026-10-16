@@ -34,6 +34,8 @@ message OfflineTariffSnapshot {
   optional uint32 usage_window_start_minute = 8;
   optional uint32 usage_window_end_minute = 9;
   optional string window_timezone = 10;
+  // Отличает бесплатную поминутную игру со скидкой от пакетного тарифа.
+  bool is_per_minute = 11;
 }
 
 // Содержимое подписи. Его сериализуют детерминированно без wrapper/signature.

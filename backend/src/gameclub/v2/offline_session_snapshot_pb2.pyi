@@ -38,7 +38,7 @@ class OfflinePackageSnapshot(_message.Message):
     def __init__(self, package_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., remaining_minutes: _Optional[int] = ..., status: _Optional[_Union[OfflinePackageStatus, str]] = ...) -> None: ...
 
 class OfflineTariffSnapshot(_message.Message):
-    __slots__ = ("tariff_id", "name", "zone_id", "package_minutes", "package_price_cents", "per_minute_price_cents", "is_purchasable", "usage_window_start_minute", "usage_window_end_minute", "window_timezone")
+    __slots__ = ("tariff_id", "name", "zone_id", "package_minutes", "package_price_cents", "per_minute_price_cents", "is_purchasable", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "is_per_minute")
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -49,6 +49,7 @@ class OfflineTariffSnapshot(_message.Message):
     USAGE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
     USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
     WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    IS_PER_MINUTE_FIELD_NUMBER: _ClassVar[int]
     tariff_id: str
     name: str
     zone_id: str
@@ -59,7 +60,8 @@ class OfflineTariffSnapshot(_message.Message):
     usage_window_start_minute: int
     usage_window_end_minute: int
     window_timezone: str
-    def __init__(self, tariff_id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., package_minutes: _Optional[int] = ..., package_price_cents: _Optional[int] = ..., per_minute_price_cents: _Optional[int] = ..., is_purchasable: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ...) -> None: ...
+    is_per_minute: bool
+    def __init__(self, tariff_id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., package_minutes: _Optional[int] = ..., package_price_cents: _Optional[int] = ..., per_minute_price_cents: _Optional[int] = ..., is_purchasable: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., is_per_minute: _Optional[bool] = ...) -> None: ...
 
 class OfflineSessionSnapshotPayload(_message.Message):
     __slots__ = ("snapshot_id", "schema_version", "snapshot_version", "issued_at", "client_id", "session_id", "device_id", "workstation_zone_id", "balance_cents", "debt_limit_cents", "login_grant_remaining_minutes", "packages", "tariffs", "policy_version", "purchase_idempotency_key")

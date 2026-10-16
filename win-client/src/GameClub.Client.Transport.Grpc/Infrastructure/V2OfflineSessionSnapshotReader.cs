@@ -150,7 +150,8 @@ public static class V2OfflineSessionSnapshotReader
             checked((int)tariff.PackageMinutes),
             tariff.PackagePriceCents,
             tariff.PerMinutePriceCents,
-            tariff.IsPurchasable);
+            tariff.IsPurchasable,
+            tariff.IsPerMinute);
 
     private static Guid ParseGuid(string value, string fieldName) =>
         Guid.TryParse(value, out var result)

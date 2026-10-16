@@ -8,6 +8,32 @@ namespace GameClub.Client.Tests;
 public sealed class V2BillingLogicTests
 {
     [Theory]
+    [InlineData(0)]
+    [InlineData(-500)]
+    [InlineData(1_000)]
+    public void DiscountedFreeRateKeepsSessionActiveWithoutDebit(long balance)
+    {
+        var ledger = CreateLedger(1, balance, 0,
+            packages: [new("package", "hour", "vip", 1, V2LocalPackageStatus.Active)], tariffs:
+            [new("rate", "Admin", "vip", 0, 0, 0, false, IsPerMinute: true)]);
+        var grant = V2LocalLedgerEngine.ConsumeMinuteBoundary(ledger, Guid.NewGuid(), Activation);
+        Assert.Equal("login_grant_consumed", Assert.Single(grant.OutboxFacts).EventType);
+        var package = V2LocalLedgerEngine.ConsumeMinuteBoundary(
+            grant.Ledger, Guid.NewGuid(), Activation.AddMinutes(1));
+        Assert.Equal("package_consumed", Assert.Single(package.OutboxFacts).EventType);
+        var action = Guid.NewGuid();
+        var free = V2LocalLedgerEngine.ConsumeMinuteBoundary(package.Ledger, action, Activation.AddMinutes(2));
+        Assert.Equal(V2LocalSessionStatus.Active, free.Ledger.Status);
+        Assert.Equal(balance, free.Ledger.BalanceCents);
+        Assert.Empty(free.OutboxFacts);
+        Assert.False(free.LockWorkstation);
+        Assert.Equal(V2TimeSource.PerMinute, V2LocalLedgerEngine.CurrentSource(free.Ledger));
+        Assert.True(V2LocalLedgerEngine.HasFreePerMinuteTime(free.Ledger));
+        Assert.True(V2LocalLedgerEngine.ConsumeMinuteBoundary(
+            free.Ledger, action, Activation.AddMinutes(2)).IsDuplicate);
+    }
+
+    [Theory]
     [InlineData(0, true)]
     [InlineData(20, false)]
     public void PackageSnapshotRateControlsGrantToPerMinuteTransition(long packageRate, bool validSnapshot)

@@ -1,5 +1,16 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-15 — скидка категории в V2 поминутной игре
+
+Backend выдаёт подписанную цену минуты с учётом `discount_category`; новый
+`OfflineTariffSnapshot.is_per_minute = 11` позволяет клиенту продолжать игру
+при скидке 100% без списания. В виджете — «Бесплатно»/«∞». Обновлены три
+контракта, [план 46](46-v2-offline-event-platform/PLAN.md) и
+[проверки](VERIFICATION.md). Linux: 79 backend / 172 client tests,
+Windows-host build; Ruff/format/diff проходят. Runtime frontend не менялся.
+Развёртывание, PostgreSQL/Kafka и native Windows не проверены. Для применения
+обновить backend и клиент, затем войти заново; старые списания не пересчитаны.
+
 ### 2026-10-12 — отрицательный баланс и пакетные V2-проекции
 
 - Поминутная reconciliation использует сохранённый signed debt limit; debit

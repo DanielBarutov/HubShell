@@ -42,7 +42,8 @@ public sealed record V2LocalTariff(
     int PackageMinutes,
     long PackagePriceCents,
     long PerMinutePriceCents,
-    bool IsPurchasable);
+    bool IsPurchasable,
+    bool IsPerMinute = false);
 
 public sealed record V2LocalFact(
     Guid EventId,
@@ -197,6 +198,10 @@ public sealed record V2ServerEventIssue(
 /// </summary>
 public static class V2LocalLedgerEngine
 {
+    public static bool HasFreePerMinuteTime(V2LocalSessionLedger ledger) =>
+        ledger.Status == V2LocalSessionStatus.Active
+        && FindPerMinuteTariff(ledger) is { IsPerMinute: true, PerMinutePriceCents: 0 };
+
     public static long RemainingMinutes(V2LocalSessionLedger ledger)
     {
         if (ledger.Status != V2LocalSessionStatus.Active)
@@ -280,6 +285,10 @@ public static class V2LocalLedgerEngine
         }
 
         var perMinuteTariff = FindPerMinuteTariff(ledger);
+        if (perMinuteTariff is { IsPerMinute: true, PerMinutePriceCents: 0 })
+        {
+            return AppendClientFacts(ledger, actionId, occurredAt, []);
+        }
         if (perMinuteTariff is not null
             && perMinuteTariff.PerMinutePriceCents > 0
             && ledger.BalanceCents - perMinuteTariff.PerMinutePriceCents >= -ledger.DebtLimitCents)
@@ -592,7 +601,7 @@ public static class V2LocalLedgerEngine
 
     private static V2LocalTariff? FindPerMinuteTariff(V2LocalSessionLedger ledger) =>
         ledger.Tariffs.SingleOrDefault(item =>
-            item.PerMinutePriceCents > 0
+            (item.IsPerMinute || item.PerMinutePriceCents > 0)
             && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId));
 
     private static string Payload(params (string Key, object Value)[] values) =>
