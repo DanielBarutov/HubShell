@@ -4,7 +4,6 @@ import {
   CreditCard,
   Gamepad2,
   Plus,
-  Settings,
   Users,
 } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
@@ -185,24 +184,12 @@ function LiveSettingsLayout({
 }) {
   return (
     <>
-      <div
-        className="relative mb-3 flex min-h-24 flex-wrap items-center justify-between gap-3 overflow-hidden border-b border-primary/15! bg-base-100/25! p-3"
-        style={{
-          backgroundImage:
-            "linear-gradient(90deg, rgba(7,24,27,.44), rgba(7,24,27,.06)), url(/neon-club-room.png)",
-          backgroundPosition: "center 46%",
-          backgroundSize: "cover",
-          backgroundRepeat: "no-repeat",
-        }}
-      >
-        <div className="relative z-10 flex items-center gap-4">
-          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-primary/40! bg-primary/10! text-primary!">
-            <Settings size={32} />
-          </div>
+      <div className="relative mb-3 mt-7 flex min-h-28 flex-wrap items-start justify-between gap-3">
+        <div className="relative z-10">
           <div>
-            <p className="mb-0 text-xs text-primary/80!">Конфигурация клуба</p>
+            <p className="mb-1 text-sm text-primary/80!">Конфигурация клуба</p>
             <h1 className="text-3xl font-bold tracking-tight">Настройки</h1>
-            <p className="mt-0 text-xs text-base-content/65!">
+            <p className="mt-1 text-xs text-base-content/65!">
               В зоне задаются тема, ставка поминутной игры и доступные способы
               оплаты.
             </p>
@@ -210,13 +197,13 @@ function LiveSettingsLayout({
         </div>
         <div className="heading-actions relative z-10 flex flex-wrap items-center gap-2">
           <button
-            className="secondary-button btn btn-outline btn-sm"
+            className="secondary-button btn btn-outline"
             onClick={onNewPaymentMethod}
           >
             <Plus size={16} /> Способ оплаты
           </button>
           <button
-            className="primary-button btn btn-primary btn-sm"
+            className="primary-button btn btn-primary"
             onClick={onNewGroup}
           >
             <Plus size={17} /> Добавить группу
@@ -231,8 +218,8 @@ function LiveSettingsLayout({
           {error}
         </div>
       )}
-      <div className="grid grid-cols-1 items-stretch gap-2 lg:grid-cols-2 [&>section]:gap-2 [&>section]:p-3 [&>section:nth-child(3)]:gap-1 [&>section:nth-child(3)]:p-2 [&>section:nth-child(4)]:gap-1 [&>section:nth-child(4)]:p-2 [&>section_.card-heading>span]:size-10 [&>section_.card-heading>span]:rounded-xl [&>section_.card-heading>span_svg]:size-5 [&>section_.card-heading]:gap-3 [&>section_.card-heading_h3]:text-base [&>section_.card-heading_p]:text-xs [&>section_.settings-row]:grid [&>section_.settings-row]:grid-cols-[auto_minmax(0,1fr)_auto_auto] [&>section_.settings-row]:items-center [&>section_.settings-row]:gap-3 [&>section_.settings-row]:py-2 [&>section_.settings-row>span:first-child]:size-10 [&>section_.settings-row>span:first-child]:rounded-xl [&>section_.settings-row>span:first-child_svg]:size-5 [&>section_.settings-row>span:first-child]:shrink-0 [&>section_.settings-row_strong]:text-base [&>section_.settings-row_.text-sm]:text-xs [&>section_.settings-row_.text-sm]:leading-tight">
-        <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2 [&_.card-heading_h3]:text-base [&_.card-heading_h3]:font-semibold [&_.card-heading_p]:mt-1 [&_.card-heading_p]:text-sm [&_.card-heading_p]:text-base-content/65 [&_.settings-row_strong]:text-sm">
+        <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
           <div className="card-heading flex items-start justify-between gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
               <Gamepad2 size={20} />
@@ -279,7 +266,7 @@ function LiveSettingsLayout({
             </div>
           )}
         </section>
-        <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+        <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
           <div className="card-heading flex items-start justify-between gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
               <CreditCard size={20} />
@@ -333,7 +320,7 @@ function LiveSettingsLayout({
             </div>
           )}
         </section>
-        <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+        <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
           <div className="card-heading flex items-start justify-between gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
               <Users size={20} />
@@ -381,7 +368,7 @@ function LiveSettingsLayout({
             </div>
           )}
         </section>
-        <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+        <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
           <div className="card-heading flex items-start justify-between gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
               <Bell size={20} />
@@ -431,7 +418,7 @@ function LiveSettingsLayout({
         </section>
       </div>
       {api ? (
-        <div className="mt-2">
+        <div className="mt-4">
           <SettingsResourceEditors
             api={api}
             clientGroups={clientGroups}
@@ -452,8 +439,8 @@ function LiveSettingsLayout({
 
 function DemoSettingsResourceEditors() {
   return (
-    <div className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
@@ -478,10 +465,10 @@ function DemoSettingsResourceEditors() {
             <button className="btn btn-ghost btn-xs" type="button">Изменить</button>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 border-t border-primary/15! pt-2 md:grid-cols-2">
-          <label className="form-control text-xs">ID группы<input className="input input-sm mt-1" value="regular" readOnly /></label>
-          <label className="form-control text-xs">Название<input className="input input-sm mt-1" value="Обычные клиенты" readOnly /></label>
-          <label className="form-control text-xs">Лимит долга, ₽<input className="input input-sm mt-1" value="0" readOnly /></label>
+        <div className="grid grid-cols-1 gap-4 border-t border-primary/15! pt-4 md:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-2 text-sm">ID группы<input className="input input-sm w-full" value="regular" readOnly /></label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">Название<input className="input input-sm w-full" value="Обычные клиенты" readOnly /></label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">Лимит долга, ₽<input className="input input-sm w-full" value="0" readOnly /></label>
           <label className="flex items-end gap-2 pb-1 text-xs"><input className="toggle toggle-primary toggle-sm" type="checkbox" /> Разрешить отрицательный баланс</label>
         </div>
         <div className="flex flex-wrap gap-3 rounded-lg border border-primary/15! bg-base-200/60 p-2 text-xs">
@@ -490,7 +477,7 @@ function DemoSettingsResourceEditors() {
         </div>
         <button className="btn btn-primary btn-sm w-full" type="button">Сохранить группу</button>
       </section>
-      <section className="card gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+      <section className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
@@ -504,10 +491,10 @@ function DemoSettingsResourceEditors() {
           <button className="btn btn-outline btn-sm" type="button">Новое правило</button>
         </div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          <label className="form-control text-xs">Порог, минут<input className="input input-sm mt-1" value="5" readOnly /></label>
-          <label className="form-control text-xs">Тип звука<select className="select select-sm mt-1" defaultValue="standard"><option value="standard">Стандартный</option></select></label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">Порог, минут<input className="input input-sm w-full" value="5" readOnly /></label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">Тип звука<select className="select select-sm w-full" defaultValue="standard"><option value="standard">Стандартный</option></select></label>
         </div>
-        <label className="form-control text-xs">Текст уведомления<textarea className="textarea textarea-sm mt-1" rows={2} value="До окончания оплаченного времени осталось 5 минут." readOnly /></label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">Текст уведомления<textarea className="textarea textarea-sm w-full" rows={2} value="До окончания оплаченного времени осталось 5 минут." readOnly /></label>
         <div className="grid gap-1 rounded-lg border border-primary/15! bg-base-200/60 p-2 text-xs">
           <label className="flex items-center gap-2"><input className="toggle toggle-primary toggle-sm" type="checkbox" defaultChecked /> Включено</label>
           <label className="flex items-center gap-2"><input className="toggle toggle-primary toggle-sm" type="checkbox" defaultChecked /> Воспроизводить звук</label>
@@ -665,10 +652,10 @@ export function GroupSettingsPanel({
         onClose={onClose}
       />
       <form className="booking-form flex flex-col gap-3" onSubmit={submit}>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Идентификатор группы
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             value={groupId}
             onChange={(event) => setGroupId(event.target.value)}
             placeholder="vip"
@@ -676,19 +663,19 @@ export function GroupSettingsPanel({
             disabled={Boolean(group)}
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Название группы
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="VIP-зона"
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Цена поминутки, ₽
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             type="number"
             min="0"
             step="0.01"
@@ -700,10 +687,10 @@ export function GroupSettingsPanel({
             0 — поминутное списание отключено для этой зоны.
           </span>
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Тема Windows-клиента
           <select
-            className="select select-sm"
+            className="select select-sm w-full"
             value={theme}
             onChange={(event) =>
               setTheme(event.target.value as BackendWorkstationGroup["theme"])
@@ -716,10 +703,10 @@ export function GroupSettingsPanel({
             ))}
           </select>
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Режим блокировки Windows
           <select
-            className="select select-sm"
+            className="select select-sm w-full"
             value={deploymentMode}
             onChange={(event) =>
               setDeploymentMode(
@@ -733,7 +720,7 @@ export function GroupSettingsPanel({
           </select>
         </label>
         <div className="settings-toggle-list flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/55! p-3 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -742,7 +729,7 @@ export function GroupSettingsPanel({
             />{" "}
             Запускать клиент HUBSHELL
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -753,7 +740,7 @@ export function GroupSettingsPanel({
             />{" "}
             Разрешить вход пользователя
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -762,7 +749,7 @@ export function GroupSettingsPanel({
             />{" "}
             Блокировать после сессии
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -771,7 +758,7 @@ export function GroupSettingsPanel({
             />{" "}
             Перезапускать ПК после сессии
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -782,7 +769,7 @@ export function GroupSettingsPanel({
             />{" "}
             Запретить внешние накопители
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -791,7 +778,7 @@ export function GroupSettingsPanel({
             />{" "}
             Ограничить меню «Пуск»
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -803,29 +790,29 @@ export function GroupSettingsPanel({
             Запретить смену рабочих столов
           </label>
         </div>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Скрытые диски
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             value={hiddenDrives}
             onChange={(event) => setHiddenDrives(event.target.value)}
             placeholder="C:, D:"
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Блокируемые окна/классы
           <textarea
-            className="textarea textarea-sm"
+            className="textarea textarea-sm w-full"
             value={blockedWindowRules}
             onChange={(event) => setBlockedWindowRules(event.target.value)}
             placeholder="CabinetWClass\n*cmd*"
             rows={3}
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Пароль менеджера Win-клиента
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             type="password"
             value={managerPassword}
             onChange={(event) => setManagerPassword(event.target.value)}
@@ -980,29 +967,29 @@ export function PaymentMethodPanel({
         className="booking-form flex flex-col gap-3"
         onSubmit={(event) => void submit(event)}
       >
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Системный ключ
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             value={key}
             onChange={(event) => setKey(event.target.value)}
             placeholder="transfer"
             autoFocus
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Название в интерфейсе
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Перевод"
           />
         </label>
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Порядок отображения
           <input
-            className="input input-sm"
+            className="input input-sm w-full"
             type="number"
             min="0"
             step="1"

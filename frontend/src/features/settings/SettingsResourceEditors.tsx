@@ -101,11 +101,11 @@ function ClientGroupEditor({
   };
 
   return (
-    <section className="card mb-4 gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+    <section className="card gap-4 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
       <div className="card-heading flex items-start justify-between gap-3">
         <div>
-          <h3>Редактор групп клиентов</h3>
-          <p>
+          <h3 className="text-base font-semibold">Редактор групп клиентов</h3>
+          <p className="mt-1 text-sm text-base-content/65">
             Долг разрешён только во время поминутной игры и ограничен указанной
             суммой.
           </p>
@@ -145,32 +145,32 @@ function ClientGroupEditor({
         className="settings-inline-form mt-4 flex flex-col gap-3 border-t border-primary/15! pt-4"
         onSubmit={(event) => void submit(event)}
       >
-        <div className="form-grid-two grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label>
+        <div className="form-grid-two grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             ID группы
             <input
-              className="input input-sm"
+              className="input input-sm w-full"
               value={id}
               disabled={Boolean(selected)}
               onChange={(event) => setId(event.target.value)}
               placeholder="regular"
             />
           </label>
-          <label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             Название
             <input
-              className="input input-sm"
+              className="input input-sm w-full"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Обычные клиенты"
             />
           </label>
         </div>
-        <div className="form-grid-two grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label>
+        <div className="form-grid-two grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             Лимит долга, ₽
             <input
-              className="input input-sm"
+              className="input input-sm w-full"
               type="number"
               min="0"
               step="0.01"
@@ -189,7 +189,7 @@ function ClientGroupEditor({
           </label>
         </div>
         <div className="settings-toggle-list flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/55! p-3 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -198,7 +198,7 @@ function ClientGroupEditor({
             />{" "}
             Группа по умолчанию
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -328,11 +328,11 @@ function NotificationRuleEditor({
   };
 
   return (
-    <section className="card mb-4 gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+    <section className="card gap-4 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
       <div className="card-heading flex items-start justify-between gap-3">
         <div>
-          <h3>Редактор уведомлений</h3>
-          <p>Уведомление не дублируется после восстановления связи.</p>
+          <h3 className="text-base font-semibold">Редактор уведомлений</h3>
+          <p className="mt-1 text-sm text-base-content/65">Уведомление не дублируется после восстановления связи.</p>
         </div>
         <button
           type="button"
@@ -387,11 +387,11 @@ function NotificationRuleEditor({
         className="settings-inline-form mt-4 flex flex-col gap-3 border-t border-primary/15! pt-4"
         onSubmit={(event) => void submit(event)}
       >
-        <div className="form-grid-two grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label>
+        <div className="form-grid-two grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             Порог, минут
             <input
-              className="input input-sm"
+              className="input input-sm w-full"
               type="number"
               min="1"
               max="1440"
@@ -399,10 +399,10 @@ function NotificationRuleEditor({
               onChange={(event) => setThreshold(event.target.value)}
             />
           </label>
-          <label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             Тип звука
             <select
-              className="select select-sm"
+              className="select select-sm w-full"
               value={sound}
               onChange={(event) =>
                 setSound(event.target.value as "standard" | "custom")
@@ -414,27 +414,27 @@ function NotificationRuleEditor({
           </label>
         </div>
         {sound === "custom" && (
-          <label>
+          <label className="flex min-w-0 flex-col gap-2 text-sm">
             Путь к звуку
             <input
-              className="input input-sm"
+              className="input input-sm w-full"
               value={customSoundPath}
               onChange={(event) => setCustomSoundPath(event.target.value)}
               placeholder="C:\\Club\\sounds\\five.wav"
             />
           </label>
         )}
-        <label>
+        <label className="flex min-w-0 flex-col gap-2 text-sm">
           Текст уведомления
           <textarea
-            className="textarea textarea-sm"
+            className="textarea textarea-sm w-full"
             rows={2}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
           />
         </label>
         <div className="settings-toggle-list flex flex-col gap-2 rounded-lg border border-primary/15! bg-base-200/55! p-3 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -443,7 +443,7 @@ function NotificationRuleEditor({
             />{" "}
             Включено
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"
@@ -452,7 +452,7 @@ function NotificationRuleEditor({
             />{" "}
             Воспроизводить звук
           </label>
-          <label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm">
             <input
               className="toggle toggle-primary toggle-sm"
               type="checkbox"

@@ -561,8 +561,10 @@ public sealed class V2LocalLedgerTests
         Assert.False(message.HasPreviousHash);
     }
 
-    [Fact]
-    public void SignedSnapshotMustPassVerificationBeforeCreatingLedger()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SignedSnapshotMustPassVerificationBeforeCreatingLedger(bool freeMinuteRate)
     {
         var payload = new OfflineSessionSnapshotPayload
         {
@@ -578,6 +580,10 @@ public sealed class V2LocalLedgerTests
             LoginGrantRemainingMinutes = 5,
             PolicyVersion = "2026-09-27",
         };
+        payload.Tariffs.Add(new OfflineTariffSnapshot
+        {
+            TariffId = "rate", Name = "Поминутный", IsPerMinute = freeMinuteRate,
+        });
         var signingBytes = V2OfflineSessionSnapshotReader.SerializeDeterministic(payload);
         var signed = new SignedOfflineSessionSnapshot
         {
@@ -591,6 +597,7 @@ public sealed class V2LocalLedgerTests
 
         Assert.Equal(payload.SnapshotId, ledger.SnapshotId.ToString());
         Assert.Equal(5, ledger.LoginGrantRemainingMinutes);
+        Assert.Equal(freeMinuteRate, V2LocalLedgerEngine.HasFreePerMinuteTime(ledger));
         Assert.Equal(signingBytes, verifier.Payload.ToArray());
     }
 

@@ -447,6 +447,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         get
         {
+            if (_activeV2Ledger is not null && V2LocalLedgerEngine.HasFreePerMinuteTime(_activeV2Ledger))
+            {
+                return "∞";
+            }
             long? minutes = _activeV2Ledger is not null
                 ? V2LocalLedgerEngine.RemainingMinutes(_activeV2Ledger)
                 : _sessionTimeProjection.GetRemainingMinutes(_clock());
@@ -2452,7 +2456,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 $"status_before={before?.Status} status_current={_activeV2Ledger?.Status} " +
                 $"login_grant_before={before?.LoginGrantRemainingMinutes} balance_before_cents={before?.BalanceCents} " +
                 $"activated_at={before?.ActivatedAtUtc:O} last_boundary_before={before?.LastConsumedMinuteUtc:O} " +
-                $"per_minute_candidates={before?.Tariffs.Count(item => item.PerMinutePriceCents > 0 && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, before.ZoneId))} " +
+                $"per_minute_candidates={before?.Tariffs.Count(item => (item.IsPerMinute || item.PerMinutePriceCents > 0) && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, before.ZoneId))} " +
                 $"stack={error.StackTrace}");
             _isV2MinuteBillingPaused = true;
             _portalMessage = "Не удалось безопасно обновить V2 ledger. Доступ заблокирован до проверки";
@@ -2604,7 +2608,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private static string V2ActiveTimeSummary(V2LocalSessionLedger ledger) =>
         ledger.Status == V2LocalSessionStatus.Active
-            ? $"Осталось {FormatDuration(V2LocalLedgerEngine.RemainingMinutes(ledger))}"
+            ? V2LocalLedgerEngine.HasFreePerMinuteTime(ledger)
+                ? "Бесплатно"
+                : $"Осталось {FormatDuration(V2LocalLedgerEngine.RemainingMinutes(ledger))}"
             : "Сессия завершена";
 
     private static string V2TariffSummary(V2LocalSessionLedger ledger) =>
@@ -2618,7 +2624,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                     ? $"Пакет «{V2PackageName(ledger, package)}» · {package.RemainingMinutes} мин"
                     : "Пакет завершён",
             V2TimeSource.PerMinute => ledger.Tariffs.FirstOrDefault(item =>
-                item.PerMinutePriceCents > 0
+                (item.IsPerMinute || item.PerMinutePriceCents > 0)
                 && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId))
                 is { } tariff
                     ? $"{tariff.Name} · {FormatMoney(tariff.PerMinutePriceCents)}/мин"

@@ -9,6 +9,7 @@ from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.domain import SessionCharge
 from gameclub_backend.modules.catalog.domain import (
     BillingMode,
+    Quote,
     Tariff,
     TariffAudience,
     TariffLifecycle,
@@ -65,6 +66,18 @@ class ProductHistoryReader(typing.Protocol):
 
 
 class TariffReader(typing.Protocol):
+    async def quote_for_tariff(
+        self,
+        tariff_id: uuid.UUID,
+        group_id: str | None,
+        moment: datetime.datetime,
+        discount_category: str | None = None,
+        duration_minutes: int | None = None,
+        quantity: int = 1,
+        audience: TariffAudience = TariffAudience.ALL,
+    ) -> Quote:
+        """Return the price calculated by Catalog, including category discounts."""
+
     async def find_per_minute_tariff(
         self, group_id: str | None, moment: datetime.datetime
     ) -> Tariff | None:
@@ -305,8 +318,22 @@ class ClientPortalService:
             and item.status in {EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED}
         )
         per_minute_tariff = await self._tariffs.find_per_minute_tariff(group_id, now)
+        if per_minute_tariff is not None:
+            quote = await self._tariffs.quote_for_tariff(
+                per_minute_tariff.id,
+                group_id,
+                now,
+                discount_category=client.discount_category,
+                duration_minutes=per_minute_tariff.free_minutes + 1,
+                audience=TariffAudience.REGISTERED,
+            )
+            per_minute_tariff = dataclasses.replace(
+                per_minute_tariff, price_per_minute_cents=quote.price_cents
+            )
         tariffs = tuple(
-            tariff
+            per_minute_tariff
+            if per_minute_tariff is not None and tariff.id == per_minute_tariff.id
+            else tariff
             for tariff in await self._tariffs.list_tariffs()
             if tariff.applies_at(now, group_id, TariffAudience.REGISTERED)
             and (

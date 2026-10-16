@@ -12,6 +12,20 @@ namespace GameClub.Client.Tests;
 
 public sealed class AvaloniaHostSmokeTests
 {
+    [Fact]
+    public void FreeMinuteRateShowsUnlimitedTimeInWidget()
+    {
+        EnsureAvaloniaInitialized();
+        var vm = (MainViewModel)new MainWindow().DataContext!;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var ledger = GameClub.Client.Domain.V2LocalSessionLedger.Create(1, Guid.NewGuid(), Guid.NewGuid(),
+            "device-01", null, 0, 0, 0, [],
+            [new("rate", "Admin", null, 0, 0, 0, false, IsPerMinute: true)]);
+        typeof(MainViewModel).GetMethod("OpenV2Session", flags)!.Invoke(vm, [ledger, "Тест"]);
+        Assert.Equal("∞", vm.WidgetTimerSummary);
+        Assert.Equal("Бесплатно", vm.ActiveTimeSummary);
+    }
+
     private static readonly object AvaloniaSetupLock = new();
     private static bool _isAvaloniaInitialized;
 
