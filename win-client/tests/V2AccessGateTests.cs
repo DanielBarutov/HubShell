@@ -44,12 +44,45 @@ public sealed class V2AccessGateTests
         Assert.False(vm.IsMinuteBonusSelected);
     }
 
+    [Fact]
+    public async Task PortalRefreshIncreasesReserveOnlyWhileBonusPaymentIsEnabled()
+    {
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            tariffs: [new("minute", "Minute", null, 0, 0, 100, false, true)]) with { BalanceCents = 1000 };
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        var portal = new MinuteBonusPortal(saved) { LoseFirstResponse = false };
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: saved.DeviceId,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator), v2Ledger: coordinator,
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier(), v2ClientPortal: portal);
+        await vm.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+        portal.AvailableBonusCents = 100;
+        await vm.RefreshPortalAsync();
+        Assert.Equal(0, portal.EnableCalls);
+        await vm.SetMinuteBonusAsync(true);
+        Assert.Equal(1, portal.EnableCalls);
+        await vm.RefreshPortalAsync();
+        Assert.Equal(2, portal.EnableCalls);
+        Assert.True(vm.IsMinuteBonusSelected);
+        portal.AvailableBonusCents = 0;
+        await vm.RefreshPortalAsync();
+        Assert.Equal(2, portal.EnableCalls);
+        await vm.SetMinuteBonusAsync(false);
+        portal.AvailableBonusCents = 100;
+        await vm.RefreshPortalAsync();
+        Assert.Equal(2, portal.EnableCalls);
+        Assert.False(vm.IsMinuteBonusSelected);
+    }
+
     private sealed class MinuteBonusPortal(V2LocalSessionLedger ledger) : IV2ClientPortalGateway
     {
         public int EnableCalls { get; private set; }
+        public long AvailableBonusCents { get; set; }
+        public bool LoseFirstResponse { get; set; } = true;
         private int _cancelCalls;
         private ClientPortalSnapshot Snapshot() => new(ledger.ClientId.ToString(), "Test", "", ledger.BalanceCents,
-            0, 0, [], [], [], [], [], [], []);
+            0, 0, [], [], [], [], [], [], [], BonusWallet: new(AvailableBonusCents, AvailableBonusCents, 0, 0));
         public Task<ClientPortalSnapshot> ResumePortalAsync(string deviceId, string sessionId, string clientId, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
         public Task<ClientPortalSnapshot> RefreshAsync(string deviceId, int limit = 50, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
         public Task<ClientPortalSnapshot> ActivateEntitlementAsync(string deviceId, string entitlementId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -59,7 +92,7 @@ public sealed class V2AccessGateTests
         public Task<V2MinuteBonusGrant> EnableMinuteBonusAsync(V2MinuteBonusRequest request, IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default)
         {
             EnableCalls++;
-            return EnableCalls == 1 ? Task.FromException<V2MinuteBonusGrant>(new RpcException(new Status(StatusCode.Unavailable, "lost")))
+            return LoseFirstResponse && EnableCalls == 1 ? Task.FromException<V2MinuteBonusGrant>(new RpcException(new Status(StatusCode.Unavailable, "lost")))
                 : Task.FromResult(new V2MinuteBonusGrant(Guid.NewGuid(), EnableCalls, request, 1000, 2000));
         }
         public Task CancelMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) =>

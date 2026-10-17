@@ -12,6 +12,29 @@ namespace GameClub.Client.Tests;
 public sealed class V2LocalLedgerTests
 {
     [Fact]
+    public async Task MinuteBonusCanReenableAfterDisabledMinuteWithoutDebitingMoney()
+    {
+        var ledger = CreateLedger(balanceCents: 1000, loginGrantMinutes: 0) with {
+            Packages = [], Tariffs = [new("minute", "Minute", null, 0, 0, 100, false, true)],
+        };
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(ledger);
+        await coordinator.EnableMinuteBonusAsync((request, _) => Task.FromResult(
+            new V2MinuteBonusGrant(Guid.NewGuid(), 1, request, 5000, 10000)));
+        var paidWithBonus = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(1000, paidWithBonus.Ledger.BalanceCents);
+        await coordinator.DisableMinuteBonusAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var paidWithMoney = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(900, paidWithMoney.Ledger.BalanceCents);
+        var enabledAgain = await coordinator.EnableMinuteBonusAsync((request, _) => Task.FromResult(
+            new V2MinuteBonusGrant(Guid.NewGuid(), 2, request, 4900, 10000)));
+        Assert.True(enabledAgain.MinuteBonus!.Enabled);
+        var next = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(900, next.Ledger.BalanceCents);
+        Assert.Equal(4800, next.Ledger.MinuteBonus!.RemainingCents);
+    }
+
+    [Fact]
     public async Task CancelledLostMinuteBonusRequestNeverEnablesAfterRestart()
     {
         var ledger = CreateLedger(balanceCents: 1000, loginGrantMinutes: 0) with {

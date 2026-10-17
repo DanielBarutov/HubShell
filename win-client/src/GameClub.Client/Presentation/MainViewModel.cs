@@ -1579,7 +1579,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     {
         if (_minuteBonusBusy || _v2Ledger is null || _v2ClientPortal is null || _activeV2Ledger is not { Status: V2LocalSessionStatus.Active }) return;
         if (!await ReadMinuteBonusRequestStateAsync()) return;
-        if (!_minuteBonusPending) return;
+        var shouldIncreaseReserve = !_minuteBonusCancellationPending
+            && _activeV2Ledger.MinuteBonus is { Enabled: true }
+            && _activeV2Ledger.BalanceCents >= 0
+            && _portalSnapshot?.BonusWallet is { AvailableCents: > 0 };
+        if (!_minuteBonusPending && !shouldIncreaseReserve) return;
         _minuteBonusBusy = true;
         PublishMinuteBonusState();
         try {
