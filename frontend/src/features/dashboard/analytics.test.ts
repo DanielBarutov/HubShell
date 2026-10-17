@@ -45,3 +45,9 @@ describe("analytics report labels", () => {
     expect(productCategoryLabel("Игровые аксессуары")).toBe("Игровые аксессуары");
   });
 });
+
+
+it("показывает понятный статус неполных данных", async () => {
+  const { stateLabel } = await import("./analytics");
+  expect(stateLabel("partial")).toBe("Частичные данные");
+});

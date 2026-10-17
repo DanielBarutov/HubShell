@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import typing
 import uuid
@@ -22,11 +23,16 @@ from gameclub_backend.modules.auth.infrastructure.jwt import (
     InvalidTokenError,
     JwtTokenService,
 )
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusPurchaseConfirmation,
+    StaleBonusQuoteError,
+)
 from gameclub_backend.modules.clients.application.portal import (
     ClientPortalService,
     ClientPortalSnapshot,
 )
 from gameclub_backend.modules.clients.domain import Client
+from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetRequest
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.workstations.application.commands import (
@@ -341,6 +347,13 @@ def to_v2_portal_snapshot_proto(
         phone=snapshot.client.phone or "",
         balance_cents=snapshot.client.balance_cents,
         balance_bonus=snapshot.client.balance_bonus,
+        bonus_wallet=(
+            offline_session_service_pb2.OfflineBonusWallet(
+                **dataclasses.asdict(snapshot.bonus_wallet)
+            )
+            if snapshot.bonus_wallet is not None
+            else None
+        ),
         available_time_minutes=snapshot.available_time_minutes,
         payment_methods=[
             offline_session_service_pb2.OfflinePaymentMethod(key=key, name=name)
@@ -1129,10 +1142,145 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
                 device_id=request.device_id,
                 tariff_id=parse_uuid(request.tariff_id, "tariff_id"),
                 idempotency_key=request.idempotency_key,
+                **(
+                    {
+                        "bonus_confirmation": BonusPurchaseConfirmation(
+                            request.bonus_confirmation.price_cents,
+                            request.bonus_confirmation.bonus_cents,
+                            request.bonus_confirmation.money_cents,
+                            request.bonus_confirmation.earned_bonus_cents,
+                        ),
+                        "principal": principal,
+                    }
+                    if request.HasField("bonus_confirmation")
+                    else {}
+                ),
             )
             response = to_v2_portal_snapshot_proto(purchase.portal)
             response.purchased_package.CopyFrom(purchase.purchased_package)
             return response
+        except StaleBonusQuoteError as error:
+            await context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.message)
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def EnableMinuteBonus(
+        self,
+        request: offline_session_service_pb2.EnableMinuteBonusRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.SignedMinuteBonusBudget:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context, self._token_service, principal.subject_id, request.device_id
+            )
+            return await self._service.enable_minute_bonus(
+                BonusBudgetRequest(
+                    parse_uuid(principal.subject_id, "client_id"),
+                    parse_uuid(request.session_id, "session_id"),
+                    request.device_id,
+                    parse_uuid(request.snapshot_id, "snapshot_id"),
+                    request.snapshot_version,
+                    request.last_sequence,
+                    request.last_payload_hash if request.HasField("last_payload_hash") else None,
+                    request.idempotency_key,
+                ),
+                principal,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def CancelMinuteBonus(
+        self,
+        request: offline_session_service_pb2.EnableMinuteBonusRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> empty_pb2.Empty:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context, self._token_service, principal.subject_id, request.device_id
+            )
+            await self._service.cancel_minute_bonus(
+                BonusBudgetRequest(
+                    parse_uuid(principal.subject_id, "client_id"),
+                    parse_uuid(request.session_id, "session_id"),
+                    request.device_id,
+                    parse_uuid(request.snapshot_id, "snapshot_id"),
+                    request.snapshot_version,
+                    request.last_sequence,
+                    request.last_payload_hash if request.HasField("last_payload_hash") else None,
+                    request.idempotency_key,
+                ),
+                principal,
+            )
+            return empty_pb2.Empty()
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def QuoteMinuteBonus(
+        self,
+        request: offline_session_service_pb2.EnableMinuteBonusRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.OfflineBonusGameQuote:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context, self._token_service, principal.subject_id, request.device_id
+            )
+            quote = await self._service.quote_minute_bonus(
+                BonusBudgetRequest(
+                    parse_uuid(principal.subject_id, "client_id"),
+                    parse_uuid(request.session_id, "session_id"),
+                    request.device_id,
+                    parse_uuid(request.snapshot_id, "snapshot_id"),
+                    request.snapshot_version,
+                    request.last_sequence,
+                    request.last_payload_hash if request.HasField("last_payload_hash") else None,
+                    request.idempotency_key,
+                ),
+                principal,
+            )
+            return offline_session_service_pb2.OfflineBonusGameQuote(**dataclasses.asdict(quote))
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        raise AssertionError("unreachable after gRPC abort")
+
+    async def QuoteEntitlement(
+        self,
+        request: offline_session_service_pb2.QuoteOfflineEntitlementRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.OfflineBonusGameQuote:
+        if self._service is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 offline login is not configured")
+        try:
+            principal = await require_principal(context, self._token_service)
+            await require_client_portal(
+                context, self._token_service, principal.subject_id, request.device_id
+            )
+            quote = await self._service.quote_entitlement(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+                tariff_id=parse_uuid(request.tariff_id, "tariff_id"),
+                use_bonus=request.use_bonus,
+            )
+            return offline_session_service_pb2.OfflineBonusGameQuote(**dataclasses.asdict(quote))
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:

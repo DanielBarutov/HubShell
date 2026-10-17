@@ -6,8 +6,22 @@ import uuid
 from collections.abc import Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.client_groups.application.ports import ClientGroupRepository
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusCommand,
+    BonusEarningCommand,
+    BonusGameQuote,
+    BonusOperation,
+)
+from gameclub_backend.modules.clients.application.bonus_reporting import BonusReport
 from gameclub_backend.modules.clients.application.ports import ClientRepository, Clock
+from gameclub_backend.modules.clients.bonus import (
+    BonusOperationKind,
+    BonusPolicy,
+    BonusSource,
+    BonusWallet,
+)
 from gameclub_backend.modules.clients.domain import (
     BalanceOperation,
     BalanceOperationType,
@@ -29,6 +43,17 @@ class UtcClock:
 
 
 class ClientService:
+    async def read_bonus_report(
+        self, start_at: datetime.datetime, end_at: datetime.datetime
+    ) -> BonusReport:
+        if start_at.tzinfo is None or end_at.tzinfo is None or start_at >= end_at:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "Bonus report requires an aware [start, end) period"
+            )
+        return await self._repository.read_bonus_report(
+            start_at.astimezone(datetime.UTC), end_at.astimezone(datetime.UTC)
+        )
+
     def __init__(
         self,
         repository: ClientRepository,
@@ -355,7 +380,9 @@ class ClientService:
                 operation,
             )
         except ValueError as error:
-            error_code = ErrorCode.CONFLICT if "Idempotency" in str(error) else ErrorCode.NOT_FOUND
+            error_code = (
+                ErrorCode.NOT_FOUND if str(error) == "Client not found" else ErrorCode.CONFLICT
+            )
             raise ApplicationError(error_code, str(error)) from error
         self._validate_existing_operation(
             applied_operation,
@@ -368,6 +395,155 @@ class ClientService:
             payment_parts=normalized_parts,
         )
         return applied_client, applied_operation
+
+    async def get_bonus_wallet(self, client_id: uuid.UUID) -> BonusWallet:
+        try:
+            return await self._repository.get_bonus_wallet(client_id)
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.NOT_FOUND, str(error)) from error
+
+    async def adjust_bonus(
+        self,
+        client_id: uuid.UUID,
+        amount_cents: int,
+        principal: Principal,
+        reason: str,
+        idempotency_key: str,
+    ) -> BonusOperation:
+        if principal.subject_type is not SubjectType.OPERATOR or not principal.can(
+            "clients.manage"
+        ):
+            raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Bonus adjustment is not permitted")
+        key = self._required_idempotency_key(idempotency_key)
+        try:
+            command = BonusCommand(
+                client_id,
+                BonusOperationKind.ADJUST,
+                amount_cents,
+                principal.subject_id,
+                reason,
+                f"operator-bonus:{key}",
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        return await self.apply_bonus_operation(command)
+
+    async def apply_bonus_operation(self, command: BonusCommand) -> BonusOperation:
+        """Internal owner port; callers supply authorized, server-calculated commands."""
+        try:
+            return await self._repository.apply_bonus_operation(command, self._clock.now())
+        except ValueError as error:
+            code = ErrorCode.NOT_FOUND if str(error) == "Client not found" else ErrorCode.CONFLICT
+            raise ApplicationError(code, str(error)) from error
+
+    async def list_bonus_operations(
+        self, client_id: uuid.UUID, limit: int = 100
+    ) -> list[BonusOperation]:
+        await self.get(client_id)
+        return await self._repository.list_bonus_operations(client_id, limit)
+
+    async def begin_bonus_session(self, client_id: uuid.UUID, session_id: uuid.UUID) -> BonusPolicy:
+        try:
+            return await self._repository.begin_bonus_session(client_id, session_id)
+        except ValueError as error:
+            code = ErrorCode.NOT_FOUND if str(error) == "Client not found" else ErrorCode.CONFLICT
+            raise ApplicationError(code, str(error)) from error
+
+    async def get_bonus_policy(
+        self, client_id: uuid.UUID | None = None, session_id: uuid.UUID | None = None
+    ) -> BonusPolicy:
+        try:
+            return await self._repository.get_bonus_policy(client_id, session_id)
+        except ValueError as error:
+            code = ErrorCode.NOT_FOUND if str(error) == "Client not found" else ErrorCode.CONFLICT
+            raise ApplicationError(code, str(error)) from error
+
+    async def update_bonus_policy(
+        self, policy: BonusPolicy, principal: Principal, idempotency_key: str
+    ) -> BonusPolicy:
+        if principal.subject_type is not SubjectType.OPERATOR or not principal.can(
+            "settings.manage"
+        ):
+            raise ApplicationError(
+                ErrorCode.PERMISSION_DENIED, "Bonus settings change is not permitted"
+            )
+        key = self._required_idempotency_key(idempotency_key)
+        try:
+            return await self._repository.update_bonus_policy(
+                policy, principal.subject_id, key, self._clock.now()
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def confirm_bonus_earning(self, command: BonusEarningCommand) -> None:
+        try:
+            await self._repository.confirm_bonus_earning(command, self._clock.now())
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def finish_bonus_session(self, client_id: uuid.UUID, session_id: uuid.UUID) -> None:
+        try:
+            await self._repository.finish_bonus_session(client_id, session_id, self._clock.now())
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def get_pending_bonus_cents(self, client_id: uuid.UUID) -> int:
+        await self.get(client_id)
+        return await self._repository.get_pending_bonus_cents(client_id)
+
+    async def quote_bonus_game(
+        self,
+        client_id: uuid.UUID,
+        price_cents: int,
+        use_bonus: bool,
+        session_id: uuid.UUID | None = None,
+        *,
+        include_session_reserved: bool = False,
+    ) -> BonusGameQuote:
+        if not isinstance(use_bonus, bool):
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Bonus choice must be a boolean")
+        try:
+            state = await self._repository.get_bonus_payment_state(client_id, session_id)
+            spendable = state.wallet.available_cents + (
+                state.session_reserved_cents if include_session_reserved else 0
+            )
+            allowed = (
+                state.program_enabled
+                and state.policy.enabled
+                and state.balance_cents >= 0
+                and spendable > 0
+                and state.policy.payment_limit_bps > 0
+                and price_cents > 0
+            )
+            payment = state.policy.payment(
+                price_cents,
+                spendable,
+                state.balance_cents,
+                use_bonus=use_bonus and state.program_enabled,
+            )
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+        can_pay = payment.money_cents == 0 or await self.can_debit(
+            client_id, payment.money_cents, allow_negative_balance=True
+        )
+        rate = state.policy.rate(BonusSource.GAME)
+        # Minute previews include the fractional reward already carried by this source.
+        previous_money = state.session_minute_money_cents if include_session_reserved else 0
+        earned = (
+            previous_money + payment.money_cents
+        ) * rate // 10000 - previous_money * rate // 10000
+        return BonusGameQuote(
+            state.policy.rate(BonusSource.GAME),
+            price_cents,
+            payment.bonus_cents,
+            payment.money_cents,
+            earned,
+            state.policy.payment_limit_bps,
+            state.wallet.available_cents,
+            state.wallet.reserved_cents,
+            allowed,
+            can_pay,
+        )
 
     async def debit(
         self,

@@ -4,6 +4,7 @@ import uuid
 
 from gameclub_backend.modules.catalog.domain import Product
 from gameclub_backend.modules.sales.domain import ProductSale
+from gameclub_backend.modules.sessions.domain import Session
 
 
 class ProductLookup(typing.Protocol):
@@ -93,3 +94,8 @@ class CashSaleSettlement(typing.Protocol):
 class Clock(typing.Protocol):
     def now(self) -> datetime.datetime:
         """Return an aware UTC datetime."""
+
+
+class ActiveSessionLookup(typing.Protocol):
+    async def get_active_for_client(self, client_id: uuid.UUID) -> Session | None:
+        """Return the session that gates availability of a registered buyer's bonuses."""

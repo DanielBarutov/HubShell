@@ -13,6 +13,47 @@ namespace GameClub.Client.Tests;
 public sealed class AvaloniaHostSmokeTests
 {
     [Fact]
+    public void WidgetShowsExactAvailablePendingAndReservedBonuses()
+    {
+        EnsureAvaloniaInitialized();
+        var vm = (MainViewModel)new MainWindow().DataContext!;
+        var profile = new GameClub.Client.Domain.ClientPortalSnapshot(
+            "client", "Игрок", "79990000000", 10000, 12, 0, [], [], [], [], [], [], [],
+            BonusWallet: new(1234, 1100, 134, 5));
+        typeof(MainViewModel).GetMethod("SetPortalSnapshot", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(vm, [profile]);
+        Assert.Contains("Доступно бонусов: 11,00 ₽", vm.PortalBonusSummary);
+        Assert.Contains("Ожидает начисления: 0,05 ₽", vm.PortalBonusSummary);
+        Assert.Contains("Резерв для игры: 1,34 ₽", vm.PortalBonusSummary);
+        Assert.DoesNotContain("Бонусы: 12", vm.PortalBalanceSummary);
+    }
+
+    [Fact]
+    public void BonusPurchaseDialogStartsUncheckedAndWaitsForServerQuote()
+    {
+        EnsureAvaloniaInitialized();
+        var initial = new GameClub.Client.Domain.BonusGameQuote(100, 0, 100, 5, 500, 10000, 100, 0, true, true);
+        var pending = new TaskCompletionSource<GameClub.Client.Domain.BonusGameQuote?>();
+        var dialog = new BonusPackagePurchaseDialog("Пакет", "1 час", initial, _ => pending.Task);
+        var content = (StackPanel)((Border)dialog.Content!).Child!;
+        var toggle = (ToggleSwitch)content.Children[2];
+        var amounts = (TextBlock)content.Children[3];
+        var actions = (StackPanel)content.Children[5];
+        var confirm = (Button)actions.Children[1];
+        Assert.False(toggle.IsChecked);
+        Assert.Contains("С депозита", amounts.Text);
+        Assert.True(confirm.IsEnabled);
+        toggle.IsChecked = true;
+        Assert.False(confirm.IsEnabled);
+        Assert.Equal("", amounts.Text);
+        pending.SetResult(initial with { BonusCents = 100, MoneyCents = 0, EarnedBonusCents = 0 });
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(confirm.IsEnabled);
+        Assert.Contains("Бонусами", amounts.Text);
+        dialog.Close();
+    }
+
+    [Fact]
     public void FreeMinuteRateShowsUnlimitedTimeInWidget()
     {
         EnsureAvaloniaInitialized();
@@ -69,6 +110,8 @@ public sealed class AvaloniaHostSmokeTests
         Assert.False(feedback.IsVisible);
         Assert.NotNull(window.FindControl<Border>("UpcomingBookingPanel"));
         Assert.NotNull(window.FindControl<ItemsControl>("PortalTariffList"));
+        Assert.False(window.FindControl<ToggleSwitch>("MinuteBonusToggle")!.IsChecked);
+        Assert.False(window.FindControl<Border>("MinuteBonusPanel")!.IsVisible);
         Assert.NotNull(window.FindControl<ItemsControl>("PortalEntitlementQueueList"));
         Assert.NotNull(window.FindControl<Border>("TransferPanel"));
         Assert.NotNull(window.FindControl<Button>("OpenAccountHistoryButton"));

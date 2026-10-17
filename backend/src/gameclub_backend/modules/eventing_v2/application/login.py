@@ -7,15 +7,23 @@ import datetime
 import typing
 import uuid
 
-from gameclub.v2 import offline_session_snapshot_pb2
+from gameclub.v2 import offline_session_service_pb2, offline_session_snapshot_pb2
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
 from gameclub_backend.modules.catalog.domain import TariffLifecycle
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusGameQuote,
+    BonusPurchaseConfirmation,
+)
 from gameclub_backend.modules.clients.application.portal import (
     ClientPortalService,
     ClientPortalSnapshot,
+)
+from gameclub_backend.modules.eventing_v2.application.bonus_budget import (
+    BonusBudgetRequest,
+    BonusBudgetService,
 )
 from gameclub_backend.modules.eventing_v2.application.lease import V2SessionLease
 from gameclub_backend.modules.eventing_v2.application.snapshot import (
@@ -75,6 +83,7 @@ class V2OfflineLoginService:
         policy_version: str,
         token_service: JwtTokenService | None = None,
         clock: Clock | None = None,
+        bonus_budgets: BonusBudgetService | None = None,
     ) -> None:
         if not signing_key_id.strip() or not policy_version.strip():
             raise ValueError("V2 signing key and policy version are required")
@@ -88,6 +97,64 @@ class V2OfflineLoginService:
         self._policy_version = policy_version.strip()
         self._token_service = token_service
         self._clock = clock or UtcClock()
+        self._bonus_budgets = bonus_budgets
+
+    async def enable_minute_bonus(
+        self, request: BonusBudgetRequest, principal: Principal
+    ) -> offline_session_service_pb2.SignedMinuteBonusBudget:
+        await self._validate_bonus_session(request)
+        grant = await self._bonus_budgets.issue(request, principal)
+        payload = offline_session_service_pb2.MinuteBonusBudgetPayload(
+            grant_id=str(grant.id),
+            schema_version=1,
+            grant_version=grant.version,
+            client_id=str(request.client_id),
+            session_id=str(request.session_id),
+            device_id=request.device_id,
+            snapshot_id=str(request.snapshot_id),
+            snapshot_version=request.snapshot_version,
+            checkpoint_sequence=request.last_sequence,
+            checkpoint_hash=request.last_payload_hash,
+            budget_cents=grant.budget_cents,
+            payment_limit_bps=grant.payment_limit_bps,
+            idempotency_key=request.idempotency_key,
+        )
+        payload.issued_at.FromDatetime(grant.issued_at)
+        return offline_session_service_pb2.SignedMinuteBonusBudget(
+            payload=payload,
+            signing_key_id=self._signing_key_id,
+            signature=self._signer.sign(payload.SerializeToString(deterministic=True)),
+        )
+
+    async def quote_minute_bonus(
+        self, request: BonusBudgetRequest, principal: Principal
+    ) -> BonusGameQuote:
+        await self._validate_bonus_session(request)
+        return await self._bonus_budgets.quote(request, principal)
+
+    async def cancel_minute_bonus(self, request: BonusBudgetRequest, principal: Principal) -> None:
+        await self._validate_bonus_session(request, require_active=False)
+        await self._bonus_budgets.cancel(request, principal)
+
+    async def _validate_bonus_session(
+        self, request: BonusBudgetRequest, *, require_active: bool = True
+    ) -> None:
+        if self._bonus_budgets is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE, "Minute bonus is not configured"
+            )
+        session = await self._sessions.get(request.session_id)
+        workstation = await self._workstations.get_by_device_id(request.device_id)
+        if (
+            session is None
+            or (require_active and session.status is not SessionStatus.ACTIVE)
+            or session.source != "local_ledger"
+            or session.client_id != request.client_id
+            or session.workstation_id != workstation.id
+        ):
+            raise ApplicationError(
+                ErrorCode.PERMISSION_DENIED, "No active client session on this device"
+            )
 
     async def login(
         self,
@@ -247,6 +314,8 @@ class V2OfflineLoginService:
         device_id: str,
         tariff_id: uuid.UUID,
         idempotency_key: str,
+        bonus_confirmation: BonusPurchaseConfirmation | None = None,
+        principal: Principal | None = None,
     ) -> V2PortalPurchaseResult:
         workstation = await self._workstations.get_by_device_id(device_id)
         active = [
@@ -265,6 +334,11 @@ class V2OfflineLoginService:
             tariff_id,
             idempotency_key,
             device_id=device_id,
+            **(
+                {"bonus_confirmation": bonus_confirmation, "principal": principal}
+                if bonus_confirmation is not None
+                else {}
+            ),
         )
         package = portal.purchased_entitlement
         tariff = portal.purchased_tariff
@@ -297,8 +371,29 @@ class V2OfflineLoginService:
             )
         )
         payload.purchase_idempotency_key = idempotency_key.strip()
+        payload.purchase_money_cents = package.price_cents - package.bonus_amount_cents
+        payload.purchase_bonus_cents = package.bonus_amount_cents
         return V2PortalPurchaseResult(
             portal, sign_offline_session_snapshot(payload, self._signing_key_id, self._signer)
+        )
+
+    async def quote_entitlement(
+        self, *, client_id: uuid.UUID, device_id: str, tariff_id: uuid.UUID, use_bonus: bool
+    ) -> BonusGameQuote:
+        workstation = await self._workstations.get_by_device_id(device_id)
+        active = [
+            item
+            for item in await self._sessions.list_for_client(client_id)
+            if item.status is SessionStatus.ACTIVE
+            and item.source == "local_ledger"
+            and item.workstation_id == workstation.id
+        ]
+        if len(active) != 1 or not await self._snapshot_issues.has_active_lease(
+            active[0].id, client_id, device_id
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "No active V2 session for package quote")
+        return await self._client_portal.quote_entitlement(
+            client_id, tariff_id, device_id, use_bonus
         )
 
     async def activate_entitlement(

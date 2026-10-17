@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { SaleWorkspace } from "./SaleWorkspace";
 import type { BackendProduct, BackendProductCategory, BackendTariff, GameClubApi } from "../../api";
 import type { Workstation } from "../../types";
@@ -24,6 +24,15 @@ const products: BackendProduct[] = [
 
 const categories: BackendProductCategory[] = [{ id: "drinks", name: "Напитки", kind: "drink", active: true }];
 const api = {} as GameClubApi;
+beforeAll(() => { HTMLDialogElement.prototype.showModal = function () { this.open = true; }; });
+
+function renderBonusSale(purchase = vi.fn().mockResolvedValue({ id: "package" })) {
+  const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 200, category: "Обычная" };
+  const quote = vi.fn().mockResolvedValue({ earning_rate_bps: 500, price_cents: 400, bonus_cents: 400, money_cents: 0, earned_bonus_cents: 0, payment_limit_bps: 10000, available_bonus_cents: 1000, reserved_bonus_cents: 0, bonus_allowed: true, can_pay: true });
+  const saved = vi.fn();
+  render(<SaleWorkspace api={{ listAvailableTariffs: vi.fn().mockResolvedValue(tariffs), searchClients: vi.fn().mockResolvedValue([]), quoteEntitlement: quote, purchaseEntitlement: purchase } as unknown as GameClubApi} pc={{ ...pc, status: "busy", clientId: client.id, client: client.nickname }} initialClient={client} initialProduct={null} clients={[client]} cashShifts={[]} tariffs={tariffs} products={products} categories={categories} onClose={vi.fn()} onSaved={saved} />);
+  return { quote, purchase, saved };
+}
 
 function renderSale() {
   return render(
@@ -44,6 +53,41 @@ function renderSale() {
 }
 
 describe("Окно продажи", () => {
+  it("подтверждает каждый пакет серверным расчётом и сохраняет количество", async () => {
+    const { quote, purchase, saved } = renderBonusSale();
+    fireEvent.click(await screen.findByRole("button", { name: /Час в основном зале/ }));
+    expect(screen.getByRole("checkbox", { name: "Использовать бонусы для пакетов" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Увеличить Час в основном зале" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Использовать бонусы для пакетов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Рассчитать оплату пакетов" }));
+    await screen.findByText("Час в основном зале · пакет 1 из 2");
+    expect(purchase).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить покупку пакета" }));
+    await screen.findByText("Час в основном зале · пакет 2 из 2");
+    expect(purchase).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить покупку пакета" }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(quote).toHaveBeenCalledTimes(2);
+    expect(purchase).toHaveBeenCalledTimes(2);
+    expect(purchase.mock.calls[0][5]).toEqual({ use_bonus: true, expected_price_cents: 400, expected_bonus_cents: 400, expected_money_cents: 0, expected_earned_bonus_cents: 0 });
+    expect(purchase.mock.calls[0][2]).not.toBe(purchase.mock.calls[1][2]);
+  });
+
+  it("повторяет неопределённую покупку с исходным расчётом и ключом", async () => {
+    const purchase = vi.fn().mockRejectedValueOnce(new Error("Нет ответа")).mockResolvedValue({ id: "package" });
+    const { quote, saved } = renderBonusSale(purchase);
+    fireEvent.click(await screen.findByRole("button", { name: /Час в основном зале/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Использовать бонусы для пакетов" }));
+    fireEvent.click(screen.getByRole("button", { name: "Рассчитать оплату пакетов" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Подтвердить покупку пакета" }));
+    await screen.findByText("Не удалось провести продажу");
+    expect(saved).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Рассчитать оплату пакетов" }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(quote).toHaveBeenCalledOnce();
+    expect(purchase.mock.calls[0]).toEqual(purchase.mock.calls[1]);
+  });
+
   it("блокирует гостя на занятом ПК с зарегистрированным клиентом", async () => {
     const activePc: Workstation = { ...pc, status: "busy", clientId: "client-1", client: "NightFox" };
     const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 0, category: "Обычная" };

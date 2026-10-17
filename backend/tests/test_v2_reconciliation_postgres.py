@@ -11,9 +11,13 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.jobs.reports import project_analytics_events
 from gameclub_backend.modules.clients.domain import Client
+from gameclub_backend.modules.clients.infrastructure.balance_transaction import (
+    PostgresClientBalanceTransactionWriter,
+)
 from gameclub_backend.modules.clients.infrastructure.postgres import PostgresClientRepository
 from gameclub_backend.modules.eventing_v2.application.deposit import (
     V2DepositCreditCommand,
@@ -188,7 +192,10 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 },
             )
         service = V2ClientFactReconciliationService(
-            PostgresV2ClientFactReconciliationRepository(lambda: engine)
+            PostgresV2ClientFactReconciliationRepository(
+                lambda: engine,
+                clients=PostgresClientBalanceTransactionWriter(),
+            )
         )
         async with engine.begin() as connection:
             await connection.execute(
@@ -344,6 +351,7 @@ async def test_postgres_v2_reconciliation_is_atomic_and_inbox_fans_out(
                 text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                 {"client_id": client_id},
             )
+            await clear_client_bonus_records(connection, client_id)
             await connection.execute(
                 text("DELETE FROM clients WHERE id = :client_id"),
                 {"client_id": client_id},
@@ -543,6 +551,7 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
                 text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                 {"client_id": client_id},
             )
+            await clear_client_bonus_records(connection, client_id)
             await connection.execute(
                 text("DELETE FROM clients WHERE id = :client_id"),
                 {"client_id": client_id},
@@ -582,7 +591,12 @@ async def test_postgres_v2_deposit_requires_matching_active_lease(postgres_dsn: 
             actor_id="integration-test",
             payment_parts=(PaymentPart("transfer", 500),),
         )
-        service = V2DepositCreditService(PostgresV2DepositCreditRepository(lambda: engine))
+        service = V2DepositCreditService(
+            PostgresV2DepositCreditRepository(
+                lambda: engine,
+                clients=PostgresClientBalanceTransactionWriter(),
+            )
+        )
 
         with pytest.raises(ValueError, match="active V2 lease"):
             await service.apply(command)
@@ -661,6 +675,7 @@ async def test_postgres_v2_deposit_requires_matching_active_lease(postgres_dsn: 
                 text("DELETE FROM v2_session_leases WHERE session_id = :session_id"),
                 {"session_id": session_id},
             )
+            await clear_client_bonus_records(connection, client_id)
             await connection.execute(
                 text("DELETE FROM clients WHERE id = :client_id"),
                 {"client_id": client_id},
@@ -1042,7 +1057,10 @@ async def test_postgres_v2_deposit_lease_lookup_ignores_expired_active_status(
         leases = PostgresV2SessionLeaseRepository(lambda: engine)
         await leases.issue_exclusively(expired_lease)
         await leases.issue_exclusively(active_lease)
-        deposits = PostgresV2DepositCreditRepository(lambda: engine)
+        deposits = PostgresV2DepositCreditRepository(
+            lambda: engine,
+            clients=PostgresClientBalanceTransactionWriter(),
+        )
 
         assert not await deposits.has_active_lease_for_client(expired_lease.client_id)
         assert await deposits.has_active_lease_for_client(active_lease.client_id)
@@ -1254,7 +1272,9 @@ async def test_confirmed_package_minutes_reduce_operator_snapshot_once(
             )
         reconciliation = V2ClientFactReconciliationService(
             PostgresV2ClientFactReconciliationRepository(
-                lambda: engine, entitlement_writer=PostgresEntitlementTransactionWriter()
+                lambda: engine,
+                entitlement_writer=PostgresEntitlementTransactionWriter(),
+                clients=PostgresClientBalanceTransactionWriter(),
             )
         )
         previous = None
@@ -1348,5 +1368,6 @@ async def test_confirmed_package_minutes_reduce_operator_snapshot_once(
             await connection.execute(
                 text("DELETE FROM gaming_sessions WHERE id = :id"), {"id": session_id}
             )
+            await clear_client_bonus_records(connection, client_id)
             await connection.execute(text("DELETE FROM clients WHERE id = :id"), {"id": client_id})
         await engine.dispose()

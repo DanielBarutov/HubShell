@@ -8,6 +8,10 @@ namespace GameClub.Client.Application.Ports;
 /// </summary>
 public interface IV2ClientPortalGateway
 {
+    Task CancelMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default);
+    Task<BonusGameQuote> QuoteMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default);
+    Task<V2MinuteBonusGrant> EnableMinuteBonusAsync(V2MinuteBonusRequest request,
+        IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default);
     Task<ClientPortalSnapshot> ResumePortalAsync(
         string deviceId,
         string sessionId,
@@ -29,5 +33,10 @@ public interface IV2ClientPortalGateway
         string tariffId,
         string idempotencyKey,
         IOfflineSnapshotSignatureVerifier signatureVerifier,
+        CancellationToken cancellationToken = default,
+        BonusPurchaseConfirmation? bonusConfirmation = null);
+
+    Task<BonusGameQuote> QuoteEntitlementAsync(
+        string deviceId, string tariffId, bool useBonus,
         CancellationToken cancellationToken = default);
 }

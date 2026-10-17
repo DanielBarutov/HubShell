@@ -375,7 +375,8 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
         string tariffId,
         string idempotencyKey,
         IOfflineSnapshotSignatureVerifier signatureVerifier,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        BonusPurchaseConfirmation? bonusConfirmation = null)
     {
         var response = await _offlineSessionClient.PurchaseEntitlementAsync(
             new GameClub.Client.Contracts.Events.V2.PurchaseOfflineEntitlementRequest
@@ -383,6 +384,13 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
                 DeviceId = deviceId,
                 TariffId = tariffId,
                 IdempotencyKey = idempotencyKey,
+                BonusConfirmation = bonusConfirmation is null ? null : new GameClub.Client.Contracts.Events.V2.OfflineBonusPurchaseConfirmation
+                {
+                    PriceCents = bonusConfirmation.PriceCents,
+                    BonusCents = bonusConfirmation.BonusCents,
+                    MoneyCents = bonusConfirmation.MoneyCents,
+                    EarnedBonusCents = bonusConfirmation.EarnedBonusCents,
+                },
             },
             headers: CreateClientPortalMetadata(),
             deadline: DateTime.UtcNow.AddSeconds(10),
@@ -396,6 +404,59 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
             PurchasedPackage = V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(
                 response.PurchasedPackage, signatureVerifier),
         };
+    }
+
+    public async Task<BonusGameQuote> QuoteEntitlementAsync(
+        string deviceId, string tariffId, bool useBonus,
+        CancellationToken cancellationToken = default)
+    {
+        var quote = await _offlineSessionClient.QuoteEntitlementAsync(
+            new GameClub.Client.Contracts.Events.V2.QuoteOfflineEntitlementRequest
+            {
+                DeviceId = deviceId, TariffId = tariffId, UseBonus = useBonus,
+            },
+            headers: CreateClientPortalMetadata(), deadline: DateTime.UtcNow.AddSeconds(10),
+            cancellationToken: cancellationToken);
+        return new(quote.PriceCents, quote.BonusCents, quote.MoneyCents, quote.EarnedBonusCents,
+            checked((int)quote.EarningRateBps), checked((int)quote.PaymentLimitBps),
+            quote.AvailableBonusCents, quote.ReservedBonusCents, quote.BonusAllowed, quote.CanPay);
+    }
+
+    public async Task<V2MinuteBonusGrant> EnableMinuteBonusAsync(V2MinuteBonusRequest request,
+        IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default)
+    {
+        var message = MinuteBonusRequest(request);
+        var response = await _offlineSessionClient.EnableMinuteBonusAsync(message,
+            headers: CreateClientPortalMetadata(), deadline: DateTime.UtcNow.AddSeconds(10), cancellationToken: cancellationToken);
+        var grant = V2OfflineSessionSnapshotReader.VerifyMinuteBonusBudget(response, signatureVerifier);
+        if (grant.Request != request) throw new InvalidOperationException("Minute bonus grant differs from the request");
+        return grant;
+    }
+
+    public async Task<BonusGameQuote> QuoteMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default)
+    {
+        var quote = await _offlineSessionClient.QuoteMinuteBonusAsync(MinuteBonusRequest(request),
+            headers: CreateClientPortalMetadata(), deadline: DateTime.UtcNow.AddSeconds(10), cancellationToken: cancellationToken);
+        return new(quote.PriceCents, quote.BonusCents, quote.MoneyCents, quote.EarnedBonusCents,
+            checked((int)quote.EarningRateBps), checked((int)quote.PaymentLimitBps),
+            quote.AvailableBonusCents, quote.ReservedBonusCents, quote.BonusAllowed, quote.CanPay);
+    }
+
+    public async Task CancelMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default)
+    {
+        await _offlineSessionClient.CancelMinuteBonusAsync(MinuteBonusRequest(request),
+            headers: CreateClientPortalMetadata(), deadline: DateTime.UtcNow.AddSeconds(10), cancellationToken: cancellationToken);
+    }
+
+    private static GameClub.Client.Contracts.Events.V2.EnableMinuteBonusRequest MinuteBonusRequest(V2MinuteBonusRequest request)
+    {
+        var message = new GameClub.Client.Contracts.Events.V2.EnableMinuteBonusRequest {
+            DeviceId = request.DeviceId, SessionId = request.SessionId.ToString(), SnapshotId = request.SnapshotId.ToString(),
+            SnapshotVersion = checked((uint)request.SnapshotVersion), LastSequence = checked((ulong)request.LastSequence),
+            IdempotencyKey = request.IdempotencyKey,
+        };
+        if (request.LastPayloadHash is not null) message.LastPayloadHash = request.LastPayloadHash;
+        return message;
     }
 
     Task<ClientPortalSnapshot> IClientPortalGateway.PurchaseEntitlementAsync(

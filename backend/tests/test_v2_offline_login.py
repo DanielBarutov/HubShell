@@ -21,8 +21,10 @@ from gameclub_backend.modules.client_groups.domain import ClientGroup
 from gameclub_backend.modules.client_groups.infrastructure.memory import (
     InMemoryClientGroupRepository,
 )
+from gameclub_backend.modules.clients.application.bonus import BonusCommand
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.service import ClientService
+from gameclub_backend.modules.clients.bonus import BonusOperationKind, BonusPolicy
 from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.entitlements.application.service import EntitlementService
@@ -54,6 +56,120 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 from gameclub_backend.presentation.grpc.services import OfflineSessionGrpcService
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("interrupt", [False, True])
+async def test_v2_server_stop_keeps_bonus_reserve_until_ordered_client_stop(
+    interrupt: bool,
+) -> None:
+    """Серверная остановка не освобождает резерв до подтверждения накопленных V2-фактов."""
+    service, sessions, _, clients, client = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, bonuses=True
+    )
+    await clients.top_up(client.id, 10000, 100, "Opening", "owner", "opening")
+    login = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="stop-bonus",
+    )
+    session_id = uuid.UUID(login.payload.session_id)
+    await clients.apply_bonus_operation(
+        BonusCommand(
+            client.id, BonusOperationKind.RESERVE, 0, "owner", "Reserve", "reserve", session_id
+        )
+    )
+    if interrupt:
+        await sessions.interrupt(session_id, "owner", "Interrupt", "interrupt")
+    else:
+        await sessions.stop(session_id)
+        await sessions.stop(session_id)
+    assert (await clients.get_bonus_wallet(client.id)).reserved_cents == 10000
+
+
+@pytest.mark.parametrize("limit", [2000, 10000])
+async def test_v2_bonus_package_quote_confirmation_and_signed_money(limit: int) -> None:
+    """Подтверждает по JWT бонусную покупку и подписывает только её денежную часть."""
+    service, _, portal, clients, client = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, bonuses=True
+    )
+    admin = Principal("owner", SubjectType.OPERATOR, frozenset(), frozenset({"settings.manage"}))
+    await clients.update_bonus_policy(BonusPolicy(payment_limit_bps=limit), admin, "policy")
+    await clients.top_up(client.id, 10000, 100, "Opening", "owner", "opening")
+    login = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="bonus-login",
+    )
+    tariff = await portal._tariffs.create_tariff(
+        "Bonus package", None, 60, 10000, datetime.datetime.now(datetime.UTC), None
+    )
+    server = grpc.aio.server()
+    offline_session_service_pb2_grpc.add_OfflineSessionServiceServicer_to_server(
+        OfflineSessionGrpcService(service, service._token_service), server
+    )
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+    channel = grpc.aio.insecure_channel(f"127.0.0.1:{port}")
+    metadata = (("authorization", f"Bearer {login.portal_access_token}"),)
+    try:
+        rpc = offline_session_service_pb2_grpc.OfflineSessionServiceStub(channel)
+        request = offline_session_service_pb2.QuoteOfflineEntitlementRequest(
+            device_id="v2-device-01", tariff_id=str(tariff.id), use_bonus=True
+        )
+        with pytest.raises(grpc.aio.AioRpcError) as denied:
+            await rpc.QuoteEntitlement(request)
+        assert denied.value.code() == grpc.StatusCode.UNAUTHENTICATED
+        quote = await rpc.QuoteEntitlement(request, metadata=metadata)
+        assert quote.bonus_cents == limit
+        assert quote.money_cents == 10000 - limit
+        confirmation = offline_session_service_pb2.OfflineBonusPurchaseConfirmation(
+            price_cents=quote.price_cents,
+            bonus_cents=quote.bonus_cents,
+            money_cents=quote.money_cents,
+            earned_bonus_cents=quote.earned_bonus_cents,
+        )
+        purchase_request = offline_session_service_pb2.PurchaseOfflineEntitlementRequest(
+            device_id="v2-device-01",
+            tariff_id=str(tariff.id),
+            idempotency_key="bonus-purchase",
+            bonus_confirmation=confirmation,
+        )
+        purchase_request.bonus_confirmation.price_cents += 1
+        with pytest.raises(grpc.aio.AioRpcError) as stale:
+            await rpc.PurchaseEntitlement(purchase_request, metadata=metadata)
+        assert stale.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+        assert (await clients.get(client.id)).balance_cents == 10000
+        purchase_request.bonus_confirmation.CopyFrom(confirmation)
+        response = await rpc.PurchaseEntitlement(purchase_request, metadata=metadata)
+        repeated = await rpc.PurchaseEntitlement(purchase_request, metadata=metadata)
+        payload = response.purchased_package.payload
+        assert payload.HasField("purchase_money_cents")
+        assert payload.purchase_money_cents == quote.money_cents
+        assert payload.purchase_bonus_cents == quote.bonus_cents
+        assert payload.tariffs[0].package_price_cents == 10000
+        assert repeated.purchased_package.payload.snapshot_id == payload.snapshot_id
+        assert response.HasField("bonus_wallet")
+        assert response.bonus_wallet.total_cents == 10000 - limit
+        assert response.bonus_wallet.available_cents == 10000 - limit
+        assert response.bonus_wallet.reserved_cents == 0
+        assert response.bonus_wallet.pending_cents == quote.earned_bonus_cents
+        assert (await clients.get(client.id)).balance_cents == limit
+        assert (await clients.get_bonus_wallet(client.id)).total_cents == 10000 - limit
+        assert await clients.get_pending_bonus_cents(client.id) == quote.earned_bonus_cents
+        public_key = Ed25519PublicKey.from_public_bytes(
+            base64.b64decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+        )
+        public_key.verify(response.purchased_package.signature, serialize_snapshot_payload(payload))
+        payload.purchase_money_cents += 1
+        with pytest.raises(InvalidSignature):
+            public_key.verify(
+                response.purchased_package.signature, serialize_snapshot_payload(payload)
+            )
+    finally:
+        await channel.close()
+        await server.stop(None)
 
 
 class SnapshotIssueMemoryRepository:
@@ -113,6 +229,7 @@ async def build_service(
     allow_debt: bool = False,
     discount_bps: int | None = None,
     free_minutes: int = 0,
+    bonuses: bool = False,
 ) -> tuple[V2OfflineLoginService, SessionService, ClientPortalService, ClientService, Client]:
     client_groups = InMemoryClientGroupRepository()
     if allow_debt:
@@ -159,11 +276,14 @@ async def build_service(
         session_repository,
         workstations=workstations,
         clients=clients,
+        bonuses=clients if bonuses else None,
     )
     entitlements = EntitlementService(
         InMemoryEntitlementRepository(),
         tariffs=catalog,
         clients=clients,
+        bonuses=clients if bonuses else None,
+        active_sessions=session_repository if bonuses else None,
     )
     portal = ClientPortalService(
         clients=clients,

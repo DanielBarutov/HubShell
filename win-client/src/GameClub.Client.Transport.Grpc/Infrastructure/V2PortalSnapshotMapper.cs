@@ -22,7 +22,10 @@ internal static class V2PortalSnapshotMapper
             source.Reservations.Select(ToReservation).ToArray(),
             source.PaymentMethods
                 .Select(item => new ClientPortalPaymentMethod(item.Key, item.Name))
-                .ToArray());
+                .ToArray(),
+            BonusWallet: source.BonusWallet is { } wallet
+                ? new(wallet.TotalCents, wallet.AvailableCents, wallet.ReservedCents, wallet.PendingCents)
+                : null);
 
     private static ClientPortalBalanceOperation ToBalanceOperation(OfflineBalanceOperation item) =>
         new(

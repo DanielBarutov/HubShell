@@ -50,6 +50,7 @@ public static class V2EventProtobufSerializer
         "package_purchased" => V2EventType.PackagePurchased,
         "package_consumed" => V2EventType.PackageConsumed,
         "per_minute_debit" => V2EventType.PerMinuteDebit,
+        "bonus_payment_disabled" => V2EventType.BonusPaymentDisabled,
         "package_burned" => V2EventType.PackageBurned,
         "session_stopped" => V2EventType.SessionStopped,
         "balance_credit_applied" => V2EventType.BalanceCreditApplied,

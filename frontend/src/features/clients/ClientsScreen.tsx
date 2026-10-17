@@ -23,6 +23,7 @@ import type {
   BackendClientGroup,
 } from "../../api";
 import { toUiClient } from "../../adapters";
+import { BonusWalletSummary } from "./BonusWalletSummary";
 import { formatRussianPhone, getSearchField } from "../../shared/formatters";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import { MetricDecoration } from "../../shared/components/MetricCard";
@@ -599,12 +600,13 @@ export function ClientPanel({
               {client.balance.toLocaleString("ru-RU")} ₽
             </strong>
           </div>
-          <div className="mt-2">
+          {!api && <div className="mt-2">
             <span>Бонусный баланс</span>
             <strong className="badge badge-outline badge-md font-bold ml-5">
               {client.bonus.toLocaleString("ru-RU")} ₽
             </strong>
-          </div>
+          </div>}
+          {api && <BonusWalletSummary key={client.id} api={api} clientId={client.id} />}
         </div>
         <div className="client-action-grid grid grid-cols-2 gap-2 mt-4">
           <button
@@ -617,7 +619,7 @@ export function ClientPanel({
             className="secondary-button btn btn-outline text-xs"
             onClick={onBonusDeposit}
           >
-            <Sparkles size={14} /> Начислить бонусы
+            <Sparkles size={14} /> Изменить бонусы
           </button>
         </div>
       </div>

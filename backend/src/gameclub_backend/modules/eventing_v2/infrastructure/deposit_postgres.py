@@ -21,11 +21,8 @@ from gameclub_backend.modules.cash_shifts.infrastructure.postgres import (
     CashMovementModel,
     CashShiftModel,
 )
+from gameclub_backend.modules.clients.application.ports import ClientBalanceTransactionWriter
 from gameclub_backend.modules.clients.domain import BalanceOperation, BalanceOperationType
-from gameclub_backend.modules.clients.infrastructure.postgres import (
-    BalanceOperationModel,
-    ClientModel,
-)
 from gameclub_backend.modules.eventing_v2.application.deposit import (
     V2DepositCreditCommand,
     V2DepositCreditResult,
@@ -78,8 +75,11 @@ class V2DepositCreditModel(V2EventingBase):
 class PostgresV2DepositCreditRepository:
     """Единственная transaction boundary для server-owned пополнения V2."""
 
-    def __init__(self, engine_provider: EngineProvider) -> None:
+    def __init__(
+        self, engine_provider: EngineProvider, *, clients: ClientBalanceTransactionWriter
+    ) -> None:
         self._engine_provider = engine_provider
+        self._clients = clients
 
     async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
         async with open_session(self._engine_provider) as session:
@@ -131,12 +131,6 @@ class PostgresV2DepositCreditRepository:
                 ):
                     raise ValueError("No active V2 lease for deposit client/device/session")
 
-                client = await session.scalar(
-                    select(ClientModel).where(ClientModel.id == command.client_id).with_for_update()
-                )
-                if client is None:
-                    raise ValueError("Client not found")
-
                 balance_operation = BalanceOperation(
                     id=uuid.uuid4(),
                     client_id=command.client_id,
@@ -150,9 +144,8 @@ class PostgresV2DepositCreditRepository:
                     payment_parts=command.payment_parts,
                 )
                 await self._record_cash_if_needed(session, command, accepted_at)
-                client.balance_cents += command.amount_delta_cents
-                client.updated_at = accepted_at
-                session.add(BalanceOperationModel.from_domain(balance_operation))
+                if await self._clients.apply(session, balance_operation) is None:
+                    raise ValueError("Client not found")
 
                 client_event = self._client_delivery_event(command, accepted_at)
                 domain_event = self._confirmed_domain_event(command, accepted_at)

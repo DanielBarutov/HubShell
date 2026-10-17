@@ -23,6 +23,7 @@ const client: Client = {
 function clientApi(updateClient = vi.fn().mockResolvedValue({})): GameClubApi {
   return {
     updateClient,
+    getBonusWallet: vi.fn().mockResolvedValue({ total_cents: 0, reserved_cents: 0, available_cents: 0, pending_cents: 0 }),
     listClientOperations: vi.fn().mockResolvedValue([]),
     listDiscountRules: vi.fn().mockResolvedValue([]),
     getClientAnalytics: vi.fn().mockResolvedValue(null),

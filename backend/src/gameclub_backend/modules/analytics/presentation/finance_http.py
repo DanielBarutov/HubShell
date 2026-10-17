@@ -19,6 +19,7 @@ from gameclub_backend.modules.analytics.finance import (
     PeriodComparison,
 )
 from gameclub_backend.modules.auth.domain import Principal
+from gameclub_backend.modules.clients.application.bonus_reporting import BonusReport
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Reader = typing.Annotated[Principal, Depends(require_permissions("analytics.read"))]
@@ -154,6 +155,16 @@ class FinanceResponse(BaseModel):
 
 def create_v2_router(service: FinanceAnalyticsService) -> APIRouter:
     router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+    @router.get("/bonuses", response_model=BonusReport)
+    async def bonuses(
+        principal: Reader, start_at: QueryDatetime, end_at: QueryDatetime
+    ) -> BonusReport:
+        del principal
+        try:
+            return await service.bonus_report(start_at, end_at)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @router.get("/finance", response_model=FinanceResponse)
     async def finance(

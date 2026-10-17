@@ -1,5 +1,115 @@
 # Verification matrix
 
+### 2026-10-17 — отдельная бонусная аналитика
+
+План 49: read-only owner-порт Clients, защищённый API и отчёт во вкладке
+«Продажи»: потоки за период отдельно от текущих остатков; бонусы отдельно от
+денежной выручки. 99 backend tests passed, 4 skips; 2 новых frontend tests и
+production build проходят. Прежний AnalyticsView.test.tsx:215 падает отдельно.
+Рабочая БД не менялась; ручная browser/Avalonia и Kafka проверка остаётся.
+
+
+### 2026-10-17 — совместимость сессий и операторская корректировка
+
+159 scoped backend tests passed / 5 skipped с отдельной PostgreSQL 17.
+Memory/PostgreSQL: чтение старой сессии не принимает текущие ставки, повторный
+begin сохраняет её disabled policy, новая сессия явно фиксирует программу.
+Старый lease не получает новый grant. HTTP: активная V2-игра допускает точную
+корректировку свободных бонусов, попытка затронуть резерв отклоняется, денежный
+баланс не меняется. 16 frontend scenarios passed: сотые бонуса, причина,
+подтверждение отрицательной суммы, сохранение payload/key при потере ответа,
+история с автором/дельтой и отсутствие округления legacy целого поля.
+Production build, scoped Ruff/format/diff проходят. Рабочая база не менялась;
+браузерные/native Windows/live broker проверки и аналитика ещё не завершены.
+
+### 2026-10-17 — переключатель поминутки и отмена неопределённого запроса
+
+177 scoped backend tests passed / 6 skipped с отдельной PostgreSQL 17.
+Проверены cancel до/после enable, запрет позднего enable, подтверждённый
+checkpoint перед release, отсутствие повторного release нового резерва,
+audit клиента/времени/ключа, сохранение прежнего offline бюджета при потере
+ответа на увеличение. Quote учитывает свой резерв и fractional source carry;
+пакетный quote не тратит резерв. Миграция 0082 дополнена cancelled marker до
+выпуска, тестовая пустая история безопасно downgrade/upgrade; рабочая БД не менялась.
+186 client tests passed на Linux: durable отмена после restart, отказ
+повторного включения до cancel ack, refresh не включает отменённый запрос,
+quote не резервирует и переключатель по умолчанию выключен. Headless Avalonia
+проверяет наличие/начальное состояние панели. Windows-host Release build:
+0 warnings / 0 errors; в тестовом проекте прежнее xUnit1031 предупреждение.
+Ручные Linux developer-host/browser/native Windows и live Kafka/Redis ещё
+не выполнены. Политика старых сессий, операторская точная корректировка и
+бонусная аналитика остаются открытыми пунктами плана.
+
+### 2026-10-17 — ядро бонусной поминутки V2
+
+160 backend tests passed / 6 skipped с реальной отдельной PostgreSQL:
+20/100% split, signed цена и зона, полный rollback обеих частей после wallet
+write, конкурентный повтор без повторного debit, GAP до disable, ordered
+release и stop, отсутствие денежной выручки при полной бонусной оплате.
+Серверный quote не резервирует бонусы. 184 client tests passed на Linux:
+подпись/checkpoint, durable запрос после потери ответа, непрерывность ledger,
+неповторяемый расход и локальное отключение. Windows-host Release build:
+0 warnings / 0 errors. Ruff/format изменённых файлов и diff проходят.
+Пока не подключён видимый переключатель поминутки и отмена pending выдачи;
+браузер, native Windows и live Kafka/Redis не проверены. Аналитика бонусов
+остаётся незавершённой. Полная бонусная программа ещё не готова.
+
+### 2026-10-17 — выдача бонусного V2-резерва
+
+113 scoped backend tests passed / 5 skipped. Реальная тестовая PostgreSQL:
+выдача/повтор/конкурентный повтор grant, snapshot/device/checkpoint guard,
+откат резерва и замены активной версии при сбое сохранения. Миграция 0082
+применена только к отдельной тестовой БД. Проверены server stop/interrupt и
+повторный stop: резерв остаётся до ordered confirmed client stop. Ruff/format
+и diff проходят, Windows-host Release build на Linux проходит. Local minute
+split, C# применение grant/подписи и сквозной Kafka flow ещё не реализованы
+или не подтверждены; этот срез не означает готовность бонусной поминутки.
+
+### 2026-10-17 — бонусная покупка пакета и подтверждение в UI
+
+Дополнение: точный wallet добавлен в V2 portal и основной Avalonia-виджет;
+после этих изменений 31 backend portal/JWT/gRPC test и 180 client tests прошли.
+Проверены отдельные суммы pending/reserve/available и сохранение копеек.
+
+- Backend: 190 passed / 5 skipped, включая реальную отдельную PostgreSQL 17.
+  Проверены 20/100% бонусной оплаты, скидка до расчёта, отсутствие денежного
+  debit при нулевой части, stale quote, конкурентные ключи и полный rollback
+  пакета/денег/бонусов/начисления. Миграции до `20261017_0081`, constraint суммы
+  и явного выбора. Публичные HTTP и настоящий loopback gRPC/JWT: quote,
+  повтор, неизменность денежной/бонусной частей и Ed25519 подпись receipt.
+  Четыре memory-случая требуют PostgreSQL; live Kafka test пропущен без брокеров.
+- Клиент: 179 tests passed на Linux, включая headless Avalonia, выключенный
+  переключатель, блокировку подтверждения до ответа, durable pending выбор,
+  запрет изменённого receipt, применение только денежной части без замены ledger.
+  Windows-host Release build на Linux: 0 warnings / 0 errors. В тестовом проекте
+  остаётся прежнее xUnit1031 предупреждение.
+- Frontend: 29 scoped tests passed; полный прогон 103 passed / 1 failed
+  (`AnalyticsView.test.tsx:215`, отсутствует ожидаемый текст состояния данных
+  после переключения на продажи; отдельно повторяется, эти файлы не менялись).
+  Production build проходит; предупреждение о bundle >500 KB остаётся.
+- Ruff check/format проходят для 46 изменённых Python-файлов, diff check проходит.
+  Общие Ruff-команды также проверяют generated protobuf и прежние исходники:
+  там остаются нарушения, соседние файлы не переформатированы.
+- Рабочие БД и приложение не обновлялись. Браузер, Kafka/Redis и native Windows
+  не проверены; Linux build/headless не доказывают эти сценарии. Signed бюджет
+  и бонусное списание поминутки, аналитика бонусов ещё не реализованы.
+
+### 2026-10-17 — подтверждённые начисления и FIFO долга
+
+[План 49](49-bonus-program/PLAN.md): 150 passed / 4 skipped. Реальная PostgreSQL 17 подтверждает покупку и bonus receipt в одной транзакции, откат после записи начисления и последующий review/retry, исходный actor/reason, FIFO со старыми не участвующими расходами, гонку погашения и receipt, cumulative minute fractions, подтверждённый V2 stop и release reserve. Проверены миграции до `20261017_0080`, перенос старого долга без бонусов и восстановление неиспользованных purchase snapshots. Core/API/memory, существующие sales/V2 tests проходят; Kafka smoke пропущен без Kafka/Redis, три memory-случая требуют PostgreSQL. Широкий unit/API: 422 passed / 23 skipped / 1 прежнее падение docstring-check на 8 guest/V2-тестах. Ruff/format/diff проходят. Бонусная оплата, signed/local V2, browser/UI/Avalonia и аналитика не подтверждены: реализация продолжается.
+
+### 2026-10-17 — бонусный wallet, журнал и резерв
+
+[План 49](49-bonus-program/PLAN.md): 95 scoped test passed, 1 skipped. PostgreSQL 17 — реальная миграция всей цепочки, nonzero legacy opening, negative/overflow rejection, безопасный downgrade и запрет потери истории; конкурентные операции и changed retry payload, общий rollback денег/бонусов/журналов, bigint/дроби, legacy top-up. Memory/API — JWT/permissions, read/history/correction и active V2 guard. Ruff/format/diff проходят. Широкий unit/API прогон: 411 passed, 23 skipped, 1 failed (`test_test_conventions`: 8 прежних guest/V2 функций без русских docstring). Полный `test_postgres_concurrency.py` дополнительно дал 4 прежних нарушения `ck_workstations_session_mode` из-за `server_owned`; отдельный client top-up проходит. Рабочая база прочитана read-only: 11 клиентов, бонусы 0, расхождения 0, migration head `20261013_0076`. Рабочая миграция, settlement, FIFO/начисления, Kafka, frontend и Avalonia runtime этим срезом не подтверждены.
+
+### 2026-10-16 — расчётное ядро бонусов и аудит остатков
+
+Первый срез [плана 49](49-bonus-program/PLAN.md): 46 тестов (`test_bonus_calculations.py`, `test_bonus_audit_postgres.py`, `test_modules_workstations_clients.py`). PostgreSQL 17 запущена отдельно во временном каталоге: проверены пустые остатки, расхождение ledger, orphan-записи, отрицательные суммы, переполнение, read-only транзакция и отсутствие изменений. Это тестовые временные таблицы, не фактическая инвентаризация рабочей БД. Ruff check/format и diff check проходят. Runtime, миграция, PostgreSQL финансовые гонки, Kafka, браузер и native Windows не проверялись: соответствующей интеграции ещё нет.
+
+### 2026-10-16 — дизайн бонусной программы
+
+[План 49](49-bonus-program/PLAN.md): согласованы продуктовые правила, обновлены контракты. Это документальный срез: автоматическое начисление, бонусная оплата и V2-резерв не реализованы. Тесты приложения, PostgreSQL/Kafka, браузер и native Windows для этого среза не выполнялись; проверки реализации перечислены в плане.
+
 ### 2026-10-15 — скидка категории для поминутной V2-игры
 
 - Backend подписывает цену минуты через Catalog quote с категорией клиента.
@@ -366,3 +476,26 @@ backend. Миграция 0074 → 0075 на заполненной времен
 Промышленная база, native Windows и Sonoff/TV не проверены.
 
 2026-10-13: временно скрыта кнопка «Заблокировать клиент» в панели ПК из-за активного V2 ledger после display.lock; «Прервать сессию» сохранено. Проверено: 8 frontend-тестов (PcPanel/Xbox), production build. Развёртывание и браузер не проверены; существующий зависший ledger этим изменением не исправляется.
+
+Проверка полного frontend набора после бонусной аналитики: 111 passed,
+1 прежнее падение AnalyticsView.test.tsx:215 (статус товарного блока).
+Изменение ожидания на асинхронное не устраняет ошибку; пробное изменение
+откачено. Новые бонусные UI-тесты проходят. Graphify обновлён (прежние
+предупреждения парсинга/метаданных сохраняются).
+
+
+2026-10-17 — гонка выхода V2 и событий пакета исправлена. Серверный stop
+может пометить пакет BURNED раньше доставки локальных package_consumed /
+package_burned. Entitlements writer принимает такие отложенные факты только
+для точного ID/подтверждённого ключа, с совпадающими тарифом, settled-статусом,
+остатком и occurred_at не позже ended_at пакета. Legacy-поиск по тарифу для
+BURNED не расширен. Терминальный статус/причина/время серверного сгорания
+сохраняются: пакет не активируется заново. Ordered session_stopped затем
+освобождает бонусный резерв обычной транзакцией Clients.
+Регрессионный PostgreSQL-тест сначала воспроизвёл conflict, после исправления
+проверяет stop до доставки consumed/burned/stop, повторы, отсутствие повторного
+списания, запрет неверных остатков/тарифа и фактов после stop. Проверено:
+26 passed, 3 broker-smoke skipped в test_v2_bonus_budget_postgres.py и
+ test_v2_reconciliation_postgres.py. Клиентский текст выхода теперь поясняет,
+что освобождение бонусов ждёт подтверждения списаний. Рабочие сервисы не
+пересобирались; старый зависший резерв автоматически не освобождался.

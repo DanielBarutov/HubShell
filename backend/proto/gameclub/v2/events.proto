@@ -22,6 +22,7 @@ enum V2EventType {
   V2_EVENT_TYPE_BALANCE_CREDIT_APPLIED = 9;
   V2_EVENT_TYPE_RECONCILIATION_COMPLETED = 10;
   V2_EVENT_TYPE_LOGIN_GRANT_BURNED = 11;
+  V2_EVENT_TYPE_BONUS_PAYMENT_DISABLED = 12;
 }
 
 // Общий неизменяемый V2-конверт для Kafka. payload_json — канонический JSON

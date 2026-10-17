@@ -58,6 +58,9 @@ message OfflineSessionSnapshotPayload {
   reserved 15 to 31;
   // Заполнено только в подписанном ответе на покупку пакета текущей сессии.
   string purchase_idempotency_key = 32;
+  // Только для signed receipt покупки; отсутствие сохраняет старую полную цену.
+  optional sint64 purchase_money_cents = 33;
+  sint64 purchase_bonus_cents = 34;
 }
 
 // Клиент принимает snapshot только после проверки signature выбранным key id.

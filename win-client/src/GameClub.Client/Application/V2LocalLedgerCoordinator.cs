@@ -17,6 +17,80 @@ public sealed class V2LocalLedgerCoordinator
 
     public V2LocalLedgerCoordinator(IV2LocalLedgerStore store) => _store = store;
 
+    public async Task<V2LocalSessionLedger> EnableMinuteBonusAsync(
+        Func<V2MinuteBonusRequest, CancellationToken, Task<V2MinuteBonusGrant>> issue,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.MinuteBonusCancellationPending)
+                throw new InvalidOperationException("Minute bonus cancellation must synchronize first");
+            var ledger = current.Ledger;
+            if (ledger.IsGuest || ledger.Status != V2LocalSessionStatus.Active)
+                throw new InvalidOperationException("Minute bonus requires an active registered session");
+            var request = current.PendingMinuteBonusRequest;
+            if (request is null || request.LastSequence != ledger.NextSequence - 1
+                || request.LastPayloadHash != ledger.PreviousPayloadHash)
+            {
+                request = new(ledger.ClientId, ledger.SessionId, ledger.DeviceId, ledger.SnapshotId,
+                    ledger.SnapshotVersion, ledger.NextSequence - 1, ledger.PreviousPayloadHash,
+                    $"minute-bonus-{Guid.NewGuid():N}");
+                current = current with { PendingMinuteBonusRequest = request };
+                await _store.WriteAsync(current, cancellationToken);
+            }
+            var grant = await issue(request, cancellationToken);
+            if (grant.Request != request) throw new InvalidOperationException("Minute bonus response differs from the durable request");
+            ledger = V2LocalLedgerEngine.ApplyMinuteBonusGrant(ledger, grant);
+            await _store.WriteAsync(current with { Ledger = ledger, PendingMinuteBonusRequest = null }, cancellationToken);
+            return ledger;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<V2LocalLedgerTransition> DisableMinuteBonusAsync(Guid actionId, DateTimeOffset occurredAt,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            var transition = V2LocalLedgerEngine.DisableMinuteBonus(current.Ledger, actionId, occurredAt);
+            await _store.WriteAsync(current with { Ledger = transition.Ledger,
+                PendingOutbox = current.PendingOutbox.Concat(transition.OutboxFacts).ToArray(),
+                MinuteBonusCancellationPending = current.MinuteBonusCancellationPending || current.PendingMinuteBonusRequest is not null }, cancellationToken);
+            return transition;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<(V2MinuteBonusRequest? Request, bool CancellationPending)> ReadPendingMinuteBonusAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            return (current.PendingMinuteBonusRequest, current.MinuteBonusCancellationPending);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<V2LocalSessionLedger> SynchronizeMinuteBonusCancellationAsync(
+        Func<V2MinuteBonusRequest, CancellationToken, Task> cancel, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            if (!current.MinuteBonusCancellationPending || current.PendingMinuteBonusRequest is not { } pending) return current.Ledger;
+            var request = pending with { LastSequence = current.Ledger.NextSequence - 1, LastPayloadHash = current.Ledger.PreviousPayloadHash };
+            await cancel(request, cancellationToken);
+            await _store.WriteAsync(current with { PendingMinuteBonusRequest = null, MinuteBonusCancellationPending = false }, cancellationToken);
+            return current.Ledger;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task InitializeAsync(
         V2LocalSessionLedger ledger,
         CancellationToken cancellationToken = default)
@@ -116,7 +190,8 @@ public sealed class V2LocalLedgerCoordinator
 
     public async Task<V2PendingPortalPackagePurchase> BeginPortalPackagePurchaseAsync(
         string tariffId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        BonusPurchaseConfirmation? bonusConfirmation = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -129,6 +204,10 @@ public sealed class V2LocalLedgerCoordinator
                     throw new InvalidOperationException(
                         "A previous portal package purchase must be resolved before starting another");
                 }
+                if (bonusConfirmation is not null && pending.BonusConfirmation != bonusConfirmation)
+                {
+                    throw new InvalidOperationException("Pending package payment cannot be changed");
+                }
                 return pending;
             }
 
@@ -139,7 +218,8 @@ public sealed class V2LocalLedgerCoordinator
             var purchase = new V2PendingPortalPackagePurchase(
                 Guid.NewGuid(),
                 $"win-portal-tariff-{Guid.NewGuid():N}",
-                tariffId);
+                tariffId,
+                bonusConfirmation);
             await _store.WriteAsync(
                 current with { PendingPortalPackagePurchase = purchase },
                 cancellationToken);
@@ -169,6 +249,10 @@ public sealed class V2LocalLedgerCoordinator
             }
 
             var purchaseLedger = current.Ledger;
+            if (pending.BonusConfirmation is not null && purchasedPackage is null)
+            {
+                throw new InvalidOperationException("Bonus purchase requires a signed payment receipt");
+            }
             string? packageId = null;
             if (purchasedPackage is not null)
             {
@@ -185,6 +269,14 @@ public sealed class V2LocalLedgerCoordinator
                     throw new InvalidOperationException("Signed package purchase belongs to another session or tariff");
                 }
                 packageId = package.Id;
+                if (pending.BonusConfirmation is { } confirmed
+                    && (purchasedPackage.PurchasePayment is not { } paid
+                        || paid.MoneyCents != confirmed.MoneyCents
+                        || paid.BonusCents != confirmed.BonusCents
+                        || tariff.PackagePriceCents != confirmed.PriceCents))
+                {
+                    throw new InvalidOperationException("Signed payment differs from the confirmed quote");
+                }
                 purchaseLedger = purchaseLedger with
                 {
                     Tariffs = purchaseLedger.Tariffs.Where(item => item.Id != tariffId).Append(tariff).ToArray(),
@@ -197,7 +289,8 @@ public sealed class V2LocalLedgerCoordinator
                 occurredAt,
                 serverConfirmed: true,
                 packageId: packageId,
-                purchaseIdempotencyKey: pending.IdempotencyKey);
+                purchaseIdempotencyKey: pending.IdempotencyKey,
+                payment: purchasedPackage?.PurchasePayment);
             await _store.WriteAsync(
                 current with
                 {

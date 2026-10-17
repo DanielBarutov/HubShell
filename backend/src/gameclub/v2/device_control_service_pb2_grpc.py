@@ -26,8 +26,8 @@ if _version_not_supported:
 
 
 class DeviceControlServiceStub:
-    """V2 device boundary. It deliberately carries workstation configuration only:
-    V2 session state and charging remain in the signed local ledger.
+    """Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
+    состояние сессии V2 и списания остаются в подписанном локальном ledger.
     """
 
     def __init__(self, channel):
@@ -64,8 +64,8 @@ class DeviceControlServiceStub:
 
 
 class DeviceControlServiceServicer:
-    """V2 device boundary. It deliberately carries workstation configuration only:
-    V2 session state and charging remain in the signed local ledger.
+    """Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
+    состояние сессии V2 и списания остаются в подписанном локальном ledger.
     """
 
     def GetHealth(self, request, context):
@@ -135,8 +135,8 @@ def add_DeviceControlServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class DeviceControlService:
-    """V2 device boundary. It deliberately carries workstation configuration only:
-    V2 session state and charging remain in the signed local ledger.
+    """Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
+    состояние сессии V2 и списания остаются в подписанном локальном ledger.
     """
 
     @staticmethod

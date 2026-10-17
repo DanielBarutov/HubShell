@@ -22,6 +22,9 @@ from prometheus_client import CollectorRegistry, start_http_server
 from gameclub_backend.config import Settings, get_settings
 from gameclub_backend.infrastructure.resources import InfrastructureResources, create_resources
 from gameclub_backend.logging_setup import configure_stdout_logger
+from gameclub_backend.modules.clients.infrastructure.balance_transaction import (
+    PostgresClientBalanceTransactionWriter,
+)
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementTransactionWriter,
 )
@@ -104,6 +107,7 @@ async def prepare_client_facts_consumer() -> None:
             lambda: _resources.engine,
             session_writer=PostgresSessionTransactionWriter(),
             entitlement_writer=PostgresEntitlementTransactionWriter(),
+            clients=PostgresClientBalanceTransactionWriter(),
         )
     )
     _consumer = V2ClientFactsConsumer(

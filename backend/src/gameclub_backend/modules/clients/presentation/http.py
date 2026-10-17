@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import typing
 import uuid
@@ -9,8 +10,10 @@ from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
 from gameclub_backend.modules.client_groups.domain import ClientGroup
+from gameclub_backend.modules.clients.application.bonus import BonusOperation
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.service import ClientService
+from gameclub_backend.modules.clients.bonus import BonusPolicy, BonusWallet
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client, Guest
 from gameclub_backend.modules.eventing_v2.application.deposit import (
     V2DepositCreditCommand,
@@ -43,6 +46,64 @@ class TopUpRequest(BaseModel):
     bonus_amount: int = Field(default=0, ge=0)
     reason: str = Field(min_length=1, max_length=255)
     payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class BonusWalletResponse(BaseModel):
+    total_cents: int
+    reserved_cents: int
+    available_cents: int
+
+    @classmethod
+    def from_domain(cls, wallet: BonusWallet) -> "BonusWalletResponse":
+        return cls(
+            total_cents=wallet.total_cents,
+            reserved_cents=wallet.reserved_cents,
+            available_cents=wallet.available_cents,
+        )
+
+
+class BonusSummaryResponse(BonusWalletResponse):
+    pending_cents: int
+
+
+class BonusAdjustmentRequest(BaseModel):
+    amount_cents: int = Field(
+        strict=True, ge=-9_223_372_036_854_775_807, le=9_223_372_036_854_775_807
+    )
+    reason: str = Field(min_length=1, max_length=255)
+
+
+class BonusOperationResponse(BaseModel):
+    id: uuid.UUID
+    client_id: uuid.UUID
+    kind: str
+    amount_cents: int
+    actor_id: str
+    reason: str
+    idempotency_key: str
+    session_id: uuid.UUID | None
+    wallet_after: BonusWalletResponse
+    total_delta_cents: int
+    reserved_delta_cents: int
+    created_at: str
+
+    @classmethod
+    def from_domain(cls, operation: BonusOperation) -> "BonusOperationResponse":
+        command = operation.command
+        return cls(
+            id=operation.id,
+            client_id=command.client_id,
+            kind=command.kind.value,
+            amount_cents=command.amount_cents,
+            actor_id=command.actor_id,
+            reason=command.reason,
+            idempotency_key=command.idempotency_key,
+            session_id=command.session_id,
+            wallet_after=BonusWalletResponse.from_domain(operation.wallet_after),
+            total_delta_cents=operation.total_delta_cents,
+            reserved_delta_cents=operation.reserved_delta_cents,
+            created_at=operation.created_at.isoformat(),
+        )
 
 
 class V2DepositRequest(BaseModel):
@@ -254,9 +315,8 @@ def create_router(
         principal: Operator,
         idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
     ) -> TopUpResponse:
-        if (
-            v2_deposit_credits is not None
-            and await v2_deposit_credits.has_active_lease_for_client(client_id)
+        if v2_deposit_credits is not None and await v2_deposit_credits.has_active_lease_for_client(
+            client_id
         ):
             logger.warning(
                 "client_top_up_rejected_active_v2 client_id=%s actor_id=%s",
@@ -278,6 +338,40 @@ def create_router(
             operation_id=operation.id,
             idempotency_key=operation.idempotency_key,
         )
+
+    @router.get("/{client_id}/bonuses", response_model=BonusSummaryResponse)
+    async def get_bonus_wallet(client_id: uuid.UUID, principal: Operator) -> BonusSummaryResponse:
+        del principal
+        wallet = BonusWalletResponse.from_domain(await service.get_bonus_wallet(client_id))
+        return BonusSummaryResponse(
+            **wallet.model_dump(), pending_cents=await service.get_pending_bonus_cents(client_id)
+        )
+
+    @router.get("/{client_id}/bonus-operations", response_model=list[BonusOperationResponse])
+    async def get_bonus_operations(
+        client_id: uuid.UUID, principal: Operator, limit: int = Query(default=100, ge=1, le=100)
+    ) -> list[BonusOperationResponse]:
+        del principal
+        return [
+            BonusOperationResponse.from_domain(operation)
+            for operation in await service.list_bonus_operations(client_id, limit)
+        ]
+
+    @router.post("/{client_id}/bonus-adjustments", response_model=BonusOperationResponse)
+    async def adjust_bonus(
+        client_id: uuid.UUID,
+        body: BonusAdjustmentRequest,
+        principal: Operator,
+        idempotency_key: str = Header(min_length=1, max_length=113, alias="Idempotency-Key"),
+    ) -> BonusOperationResponse:
+        operation = await service.adjust_bonus(
+            client_id=client_id,
+            amount_cents=body.amount_cents,
+            principal=principal,
+            reason=body.reason,
+            idempotency_key=idempotency_key,
+        )
+        return BonusOperationResponse.from_domain(operation)
 
     @router.post("/{client_id}/v2-deposits", response_model=V2DepositResponse)
     async def create_v2_deposit(
@@ -449,5 +543,35 @@ def create_guest_router(service: GuestService) -> APIRouter:
     async def get_guest(guest_id: uuid.UUID, principal: Operator) -> GuestResponse:
         del principal
         return GuestResponse.from_domain(await service.get(guest_id))
+
+    return router
+
+
+class BonusProgramBody(BaseModel):
+    enabled: bool = Field(strict=True)
+    game_rate_bps: int = Field(strict=True, ge=0, le=10000)
+    product_rate_bps: int = Field(strict=True, ge=0, le=10000)
+    payment_limit_bps: int = Field(strict=True, ge=0, le=10000)
+
+
+def create_bonus_program_router(service: ClientService) -> APIRouter:
+    router = APIRouter(prefix="/api/v1/bonus-program", tags=["bonus-program"])
+    settings_operator = typing.Annotated[Principal, Depends(require_permissions("settings.manage"))]
+
+    @router.get("", response_model=BonusProgramBody)
+    async def get_program(principal: settings_operator) -> BonusProgramBody:
+        del principal
+        return BonusProgramBody(**dataclasses.asdict(await service.get_bonus_policy()))
+
+    @router.put("", response_model=BonusProgramBody)
+    async def update_program(
+        body: BonusProgramBody,
+        principal: settings_operator,
+        idempotency_key: str = Header(min_length=1, max_length=128, alias="Idempotency-Key"),
+    ) -> BonusProgramBody:
+        policy = await service.update_bonus_policy(
+            BonusPolicy(**body.model_dump()), principal, idempotency_key
+        )
+        return BonusProgramBody(**dataclasses.asdict(policy))
 
     return router

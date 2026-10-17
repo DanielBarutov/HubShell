@@ -20,6 +20,7 @@ class V2EventType(enum.StrEnum):
     PACKAGE_PURCHASED = "package_purchased"
     PACKAGE_CONSUMED = "package_consumed"
     PER_MINUTE_DEBIT = "per_minute_debit"
+    BONUS_PAYMENT_DISABLED = "bonus_payment_disabled"
     PACKAGE_BURNED = "package_burned"
     SESSION_STOPPED = "session_stopped"
     BALANCE_CREDIT_APPLIED = "balance_credit_applied"
@@ -336,10 +337,14 @@ class V2OutgoingServerEvent:
             raise ValueError("V2 outgoing event timestamp must include timezone")
         if self.attempts < 0:
             raise ValueError("V2 outgoing event attempts cannot be negative")
-        if self.status in {
-            V2OutgoingEventStatus.PUBLISHED,
-            V2OutgoingEventStatus.ACKNOWLEDGED,
-        } and self.published_at is None:
+        if (
+            self.status
+            in {
+                V2OutgoingEventStatus.PUBLISHED,
+                V2OutgoingEventStatus.ACKNOWLEDGED,
+            }
+            and self.published_at is None
+        ):
             raise ValueError("Published V2 outgoing event requires timestamp")
         if self.status is V2OutgoingEventStatus.PENDING and self.published_at is not None:
             raise ValueError("Pending V2 outgoing event cannot have published timestamp")

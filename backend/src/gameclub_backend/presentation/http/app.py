@@ -45,6 +45,7 @@ from gameclub_backend.modules.catalog.presentation.http import (
     create_router as create_catalog_router,
 )
 from gameclub_backend.modules.clients.presentation.http import (
+    create_bonus_program_router,
     create_client_groups_router,
     create_guest_router,
 )
@@ -241,6 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_v2_server_events_router())
     application.include_router(create_workstation_groups_router(services.workstation_groups))
     application.include_router(create_clients_router(services.clients, services.v2_deposit_credits))
+    application.include_router(create_bonus_program_router(services.clients))
     application.include_router(create_client_groups_router(services.client_groups))
     application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))

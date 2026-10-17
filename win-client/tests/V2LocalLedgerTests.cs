@@ -12,6 +12,179 @@ namespace GameClub.Client.Tests;
 public sealed class V2LocalLedgerTests
 {
     [Fact]
+    public async Task CancelledLostMinuteBonusRequestNeverEnablesAfterRestart()
+    {
+        var ledger = CreateLedger(balanceCents: 1000, loginGrantMinutes: 0) with {
+            Packages = [], Tariffs = [new("minute", "Minute", null, 0, 0, 100, false, true)],
+        };
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(ledger);
+        V2MinuteBonusRequest? original = null;
+        await Assert.ThrowsAsync<IOException>(() => coordinator.EnableMinuteBonusAsync((request, _) => {
+            original = request; return Task.FromException<V2MinuteBonusGrant>(new IOException("lost"));
+        }));
+        await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        await coordinator.DisableMinuteBonusAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var restarted = new V2LocalLedgerCoordinator(store);
+        Assert.True((await restarted.ReadPendingMinuteBonusAsync()).CancellationPending);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.EnableMinuteBonusAsync((_, _) => throw new Exception("must not issue")));
+        await Assert.ThrowsAsync<IOException>(() => restarted.SynchronizeMinuteBonusCancellationAsync((_, _) => throw new IOException("offline")));
+        Assert.True((await restarted.ReadPendingMinuteBonusAsync()).CancellationPending);
+        await restarted.SynchronizeMinuteBonusCancellationAsync((request, _) => {
+            Assert.Equal(original!.IdempotencyKey, request.IdempotencyKey);
+            Assert.Equal(1, request.LastSequence);
+            return Task.CompletedTask;
+        });
+        Assert.Null((await restarted.ReadPendingMinuteBonusAsync()).Request);
+        Assert.Null((await restarted.ReadLedgerAsync())!.MinuteBonus);
+        var enabled = await restarted.EnableMinuteBonusAsync((request, _) => {
+            Assert.NotEqual(original!.IdempotencyKey, request.IdempotencyKey);
+            return Task.FromResult(new V2MinuteBonusGrant(Guid.NewGuid(), 2, request, 100, 10000));
+        });
+        Assert.True(enabled.MinuteBonus!.Enabled);
+        Assert.Equal(900, enabled.BalanceCents);
+    }
+
+    [Theory]
+    [InlineData(2000, 20, 80)]
+    [InlineData(10000, 100, 0)]
+    public void MinuteBonusConsumesSignedBudgetAndDisablesWithoutConnection(int cap, long bonus, long money)
+    {
+        var ledger = CreateLedger(balanceCents: 1000, loginGrantMinutes: 0) with {
+            Packages = [], Tariffs = [new("minute", "Minute", null, 0, 0, 100, false, true)],
+        };
+        var request = new V2MinuteBonusRequest(ledger.ClientId, ledger.SessionId, ledger.DeviceId, ledger.SnapshotId,
+            ledger.SnapshotVersion, 0, null, "enable");
+        var grant = new V2MinuteBonusGrant(Guid.NewGuid(), 1, request, 200, cap);
+        ledger = V2LocalLedgerEngine.ApplyMinuteBonusGrant(ledger, grant);
+        Assert.True(V2LocalLedgerEngine.RemainingMinutes(ledger) > 10);
+        var action = Guid.NewGuid();
+        var minute = V2LocalLedgerEngine.ConsumeOneMinute(ledger, action, DateTimeOffset.UtcNow);
+        Assert.Equal(1000 - money, minute.Ledger.BalanceCents);
+        Assert.Equal(200 - bonus, minute.Ledger.MinuteBonus!.RemainingCents);
+        using var payload = System.Text.Json.JsonDocument.Parse(Assert.Single(minute.OutboxFacts).PayloadJson);
+        Assert.Equal(money, payload.RootElement.GetProperty("amount_cents").GetInt64());
+        Assert.Equal(bonus, payload.RootElement.GetProperty("bonus_amount_cents").GetInt64());
+        Assert.Equal(minute.Ledger, V2LocalLedgerEngine.ApplyMinuteBonusGrant(minute.Ledger, grant));
+        Assert.True(V2LocalLedgerEngine.ConsumeOneMinute(minute.Ledger, action, DateTimeOffset.UtcNow).IsDuplicate);
+        var disabled = V2LocalLedgerEngine.DisableMinuteBonus(minute.Ledger, Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal("bonus_payment_disabled", Assert.Single(disabled.OutboxFacts).EventType);
+        Assert.False(disabled.Ledger.MinuteBonus!.Enabled);
+        var next = V2LocalLedgerEngine.ConsumeOneMinute(disabled.Ledger, Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(900 - money, next.Ledger.BalanceCents);
+        Assert.Equal(200 - bonus, next.Ledger.MinuteBonus!.RemainingCents);
+        Assert.Throws<InvalidOperationException>(() => V2LocalLedgerEngine.ApplyMinuteBonusGrant(next.Ledger, grant with { Version = 2 }));
+    }
+
+    [Fact]
+    public async Task MinuteBonusRequestSurvivesLostResponseAndRestartWithoutResettingLedger()
+    {
+        var ledger = CreateLedger(balanceCents: 0, loginGrantMinutes: 0) with {
+            Packages = [], Tariffs = [new("minute", "Minute", null, 0, 0, 100, false, true)],
+        };
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(ledger);
+        V2MinuteBonusRequest? original = null;
+        await Assert.ThrowsAsync<IOException>(() => coordinator.EnableMinuteBonusAsync((request, _) => {
+            original = request;
+            return Task.FromException<V2MinuteBonusGrant>(new IOException("response lost"));
+        }));
+        Assert.Equal(ledger, await coordinator.ReadLedgerAsync());
+        var restarted = new V2LocalLedgerCoordinator(store);
+        var enabled = await restarted.EnableMinuteBonusAsync((request, _) => {
+            Assert.Equal(original, request);
+            return Task.FromResult(new V2MinuteBonusGrant(Guid.NewGuid(), 1, request, 100, 10000));
+        });
+        Assert.Equal(ledger.SnapshotId, enabled.SnapshotId);
+        Assert.Equal(1, V2LocalLedgerEngine.RemainingMinutes(enabled));
+        var minute = await restarted.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        Assert.Equal(0, minute.Ledger.BalanceCents);
+        Assert.Equal(0, minute.Ledger.MinuteBonus!.RemainingCents);
+        Assert.Equal(V2LocalSessionStatus.Active, minute.Ledger.Status);
+        Assert.Equal(V2LocalSessionStatus.Exhausted, (await restarted.ConsumeOneMinuteAsync(Guid.NewGuid(), DateTimeOffset.UtcNow)).Ledger.Status);
+    }
+
+    [Fact]
+    public void MinuteBonusSignatureCoversBudgetAndCheckpoint()
+    {
+        var payload = new MinuteBonusBudgetPayload { GrantId = Guid.NewGuid().ToString(), SchemaVersion = 1, GrantVersion = 1,
+            ClientId = Guid.NewGuid().ToString(), SessionId = Guid.NewGuid().ToString(), DeviceId = "device",
+            SnapshotId = Guid.NewGuid().ToString(), SnapshotVersion = 1, CheckpointSequence = 0,
+            BudgetCents = 1234, PaymentLimitBps = 10000, IssuedAt = Timestamp.FromDateTime(DateTime.UtcNow), IdempotencyKey = "enable" };
+        var signed = new SignedMinuteBonusBudget { Payload = payload, SigningKeyId = "club", Signature = ByteString.CopyFrom([1]) };
+        var verifier = new SnapshotVerifier(payload.ToByteArray(), accepts: true);
+        var grant = V2OfflineSessionSnapshotReader.VerifyMinuteBonusBudget(signed, verifier);
+        Assert.Equal(1234, grant.BudgetCents);
+        payload.BudgetCents++;
+        Assert.Throws<InvalidOperationException>(() => V2OfflineSessionSnapshotReader.VerifyMinuteBonusBudget(signed, verifier));
+    }
+
+    [Theory]
+    [InlineData(0, 100, true)]
+    [InlineData(80, 20, true)]
+    [InlineData(-1, 101, false)]
+    [InlineData(100, 1, false)]
+    public void SignedPackagePaymentIsValidatedBeforeLocalUse(long money, long bonus, bool valid)
+    {
+        var payload = new OfflineSessionSnapshotPayload {
+            SnapshotId = Guid.NewGuid().ToString(), SchemaVersion = 1, SnapshotVersion = 1,
+            IssuedAt = Timestamp.FromDateTime(DateTime.UtcNow), ClientId = Guid.NewGuid().ToString(),
+            SessionId = Guid.NewGuid().ToString(), DeviceId = "device-01", PolicyVersion = "policy",
+            PurchaseIdempotencyKey = "purchase", PurchaseMoneyCents = money, PurchaseBonusCents = bonus,
+        };
+        payload.Packages.Add(new OfflinePackageSnapshot { PackageId = Guid.NewGuid().ToString(), TariffId = "tariff", RemainingMinutes = 2, Status = OfflinePackageStatus.Queued });
+        payload.Tariffs.Add(new OfflineTariffSnapshot { TariffId = "tariff", PackageMinutes = 2, PackagePriceCents = 100, IsPurchasable = true });
+        var bytes = V2OfflineSessionSnapshotReader.SerializeDeterministic(payload);
+        var signed = new SignedOfflineSessionSnapshot { Payload = payload, SigningKeyId = "club-key", Signature = ByteString.CopyFrom([1]) };
+        var verifier = new SnapshotVerifier(bytes, accepts: true);
+        if (!valid)
+        {
+            Assert.Throws<InvalidOperationException>(() => V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier));
+            return;
+        }
+        var ledger = V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier);
+        Assert.Equal(new V2PackagePayment(money, bonus), ledger.PurchasePayment);
+        payload.PurchaseBonusCents++;
+        Assert.Throws<InvalidOperationException>(() => V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier));
+    }
+
+    [Theory]
+    [InlineData(20, 80)]
+    [InlineData(100, 0)]
+    public async Task SignedBonusPurchaseDebitsOnlyMoneyAndPersistsConfirmedChoice(long bonus, long money)
+    {
+        var original = CreateLedger(balanceCents: 500, loginGrantMinutes: 0);
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(original);
+        var confirmation = new BonusPurchaseConfirmation(100, bonus, money, 0);
+        var pending = await coordinator.BeginPortalPackagePurchaseAsync("new", bonusConfirmation: confirmation);
+        var restarted = new V2LocalLedgerCoordinator(store);
+        Assert.Equal(pending, await restarted.ReadPendingPortalPackagePurchaseAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.BeginPortalPackagePurchaseAsync(
+            "new", bonusConfirmation: confirmation with { BonusCents = bonus + 1 }));
+        var receipt = original with {
+            BalanceCents = 99999,
+            Packages = [new(Guid.NewGuid().ToString(), "new", null, 2, V2LocalPackageStatus.Queued)],
+            Tariffs = [new("new", "New", null, 2, 100, 0, true)],
+            PurchasePayment = new(money, bonus),
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.CompletePortalPackagePurchaseAsync("new", DateTimeOffset.UtcNow));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.CompletePortalPackagePurchaseAsync(
+            "new", DateTimeOffset.UtcNow, purchasedPackage: receipt with { PurchasePayment = new(money + 1, bonus) }));
+        Assert.Equal(original, await restarted.ReadLedgerAsync());
+        var result = await restarted.CompletePortalPackagePurchaseAsync("new", DateTimeOffset.UtcNow, purchasedPackage: receipt);
+        Assert.Equal(500 - money, result.Ledger.BalanceCents);
+        Assert.Equal(original.SnapshotId, result.Ledger.SnapshotId);
+        Assert.Null(await restarted.ReadPendingPortalPackagePurchaseAsync());
+        using var payload = System.Text.Json.JsonDocument.Parse(Assert.Single(result.OutboxFacts).PayloadJson);
+        Assert.Equal(money, payload.RootElement.GetProperty("amount_cents").GetInt64());
+        Assert.Equal(bonus, payload.RootElement.GetProperty("bonus_amount_cents").GetInt64());
+    }
+
+    [Fact]
     public async Task SignedPurchaseAddsNewTariffAtNegativeBalanceWithoutReplacingLedger()
     {
         var original = CreateLedger(balanceCents: -500, loginGrantMinutes: 0) with { DebtLimitCents = 1_000 };

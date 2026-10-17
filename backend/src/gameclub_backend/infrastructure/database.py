@@ -52,6 +52,10 @@ async def application_transaction(provider: EngineProvider) -> typing.AsyncItera
     engine = provider()
     if engine is None:
         raise RuntimeError("PostgreSQL engine is not configured")
+    ambient = _transaction.get()
+    if ambient is not None and ambient[0] is engine:
+        yield ambient[1]
+        return
     async with open_session(provider) as session:
         async with session.begin():
             token = _transaction.set((engine, session))

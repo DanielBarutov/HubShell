@@ -21,7 +21,10 @@ public sealed record ClientPortalSnapshot(
     IReadOnlyList<ClientPortalTariff> Tariffs,
     IReadOnlyList<ClientPortalReservation> Reservations,
     IReadOnlyList<ClientPortalPaymentMethod>? PaymentMethods = null,
-    V2LocalSessionLedger? PurchasedPackage = null);
+    V2LocalSessionLedger? PurchasedPackage = null,
+    ClientBonusWallet? BonusWallet = null);
+
+public sealed record ClientBonusWallet(long TotalCents, long AvailableCents, long ReservedCents, long PendingCents);
 
 public sealed record ClientPortalPaymentMethod(string Key, string Name);
 

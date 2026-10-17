@@ -9,6 +9,7 @@ import dramatiq
 from gameclub_backend.application.errors import ApplicationError
 from gameclub_backend.config import get_settings
 from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
+from gameclub_backend.infrastructure.database import application_transaction
 from gameclub_backend.infrastructure.resources import create_resources
 from gameclub_backend.jobs.broker import broker as shared_broker
 from gameclub_backend.modules.billing.application.service import BillingService
@@ -193,6 +194,8 @@ async def reconcile_billing_charges(
             clients=clients,
             active_sessions=sessions,
             workstations=workstations,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         billing = BillingService(
             PostgresChargeRepository(engine_provider),
@@ -263,6 +266,8 @@ async def meter_active_sessions() -> None:
             clients=clients,
             active_sessions=session_repository,
             workstations=workstation_repository,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         sessions = SessionService(
             session_repository,
@@ -271,6 +276,7 @@ async def meter_active_sessions() -> None:
             entitlements=entitlements,
             meters=PostgresMeterRepository(engine_provider),
             login_grant_minutes=settings.login_grant_minutes,
+            bonuses=clients,
         )
         commands = WorkstationCommandService(
             PostgresWorkstationCommandRepository(engine_provider),
@@ -378,6 +384,9 @@ async def reconcile_pending_settlements(
             clients=clients,
             cash=CashShiftSaleSettlement(cash_shifts),
             audit=audit,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
+            active_sessions=session_repository,
         )
         entitlements = EntitlementService(
             PostgresEntitlementRepository(engine_provider),
@@ -386,6 +395,8 @@ async def reconcile_pending_settlements(
             cash=CashShiftEntitlementSettlement(cash_shifts),
             active_sessions=session_repository,
             workstations=workstation_repository,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         sweep_now = _parse_sweep_time(now_iso)
         recovered_payments = 0

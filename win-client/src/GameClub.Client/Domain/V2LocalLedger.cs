@@ -61,6 +61,22 @@ public sealed record V2LocalFact(
     string PayloadHash,
     string? PreviousHash);
 
+public sealed record V2PackagePayment(long MoneyCents, long BonusCents);
+
+public sealed record BonusGameQuote(
+    long PriceCents, long BonusCents, long MoneyCents, long EarnedBonusCents,
+    int EarningRateBps, int PaymentLimitBps, long AvailableBonusCents,
+    long ReservedBonusCents, bool BonusAllowed, bool CanPay);
+
+public sealed record BonusPurchaseConfirmation(
+    long PriceCents, long BonusCents, long MoneyCents, long EarnedBonusCents);
+
+public sealed record V2MinuteBonusBudget(Guid GrantId, long Version, long RemainingCents, int PaymentLimitBps, bool Enabled = true);
+public sealed record V2MinuteBonusRequest(Guid ClientId, Guid SessionId, string DeviceId, Guid SnapshotId,
+    int SnapshotVersion, long LastSequence, string? LastPayloadHash, string IdempotencyKey);
+public sealed record V2MinuteBonusGrant(Guid GrantId, long Version, V2MinuteBonusRequest Request,
+    long BudgetCents, int PaymentLimitBps);
+
 public sealed record V2LocalSessionLedger(
     Guid SnapshotId,
     int SnapshotVersion,
@@ -81,7 +97,9 @@ public sealed record V2LocalSessionLedger(
     DateTimeOffset? ActivatedAtUtc,
     DateTimeOffset? LastConsumedMinuteUtc,
     string? GuestName = null,
-    Guid? GuestPaymentId = null)
+    Guid? GuestPaymentId = null,
+    V2PackagePayment? PurchasePayment = null,
+    V2MinuteBonusBudget? MinuteBonus = null)
 {
     public bool IsGuest => GuestPaymentId is not null;
 
@@ -170,12 +188,15 @@ public sealed record V2LocalLedgerStorageSnapshot(
     IReadOnlyList<V2LocalFact> PendingOutbox,
     IReadOnlyList<V2ClientInboxEntry> ClientInbox,
     IReadOnlyList<V2ServerEventIssue>? ServerEventIssues = null,
-    V2PendingPortalPackagePurchase? PendingPortalPackagePurchase = null);
+    V2PendingPortalPackagePurchase? PendingPortalPackagePurchase = null,
+    V2MinuteBonusRequest? PendingMinuteBonusRequest = null,
+    bool MinuteBonusCancellationPending = false);
 
 public sealed record V2PendingPortalPackagePurchase(
     Guid ActionId,
     string IdempotencyKey,
-    string TariffId);
+    string TariffId,
+    BonusPurchaseConfirmation? BonusConfirmation = null);
 
 public sealed record V2ClientInboxEntry(
     Guid EventId,
@@ -198,6 +219,42 @@ public sealed record V2ServerEventIssue(
 /// </summary>
 public static class V2LocalLedgerEngine
 {
+    public static V2LocalSessionLedger ApplyMinuteBonusGrant(V2LocalSessionLedger ledger, V2MinuteBonusGrant grant)
+    {
+        EnsureActive(ledger);
+        var request = grant.Request;
+        if (ledger.IsGuest || request.ClientId != ledger.ClientId || request.SessionId != ledger.SessionId
+            || request.DeviceId != ledger.DeviceId || request.SnapshotId != ledger.SnapshotId
+            || request.SnapshotVersion != ledger.SnapshotVersion || grant.GrantId == Guid.Empty
+            || grant.BudgetCents <= 0 || grant.PaymentLimitBps is < 1 or > 10000 || grant.Version < 1)
+            throw new InvalidOperationException("Minute bonus grant does not belong to this ledger");
+        if (ledger.MinuteBonus is { } previous && grant.Version <= previous.Version)
+        {
+            if (grant.GrantId == previous.GrantId && grant.Version == previous.Version) return ledger;
+            throw new InvalidOperationException("Minute bonus grant is stale");
+        }
+        if (request.LastSequence != ledger.NextSequence - 1 || request.LastPayloadHash != ledger.PreviousPayloadHash)
+            throw new InvalidOperationException("Minute bonus grant checkpoint is stale");
+        return ledger with { MinuteBonus = new(grant.GrantId, grant.Version, grant.BudgetCents, grant.PaymentLimitBps) };
+    }
+
+    public static V2LocalLedgerTransition DisableMinuteBonus(V2LocalSessionLedger ledger, Guid actionId, DateTimeOffset occurredAt)
+    {
+        EnsureActive(ledger);
+        if (IsDuplicate(ledger, actionId)) return new(ledger, [], Locks(ledger), IsDuplicate: true);
+        if (ledger.MinuteBonus is not { Enabled: true } bonus)
+            return new(ledger, [], Locks(ledger), IsDuplicate: true);
+        return AppendClientFacts(ledger with { MinuteBonus = bonus with { Enabled = false } }, actionId, occurredAt,
+            [("bonus_payment_disabled", Payload(("bonus_grant_id", bonus.GrantId.ToString())))]);
+    }
+
+    private static long MinuteBonusCents(V2LocalSessionLedger ledger, long price)
+    {
+        if (ledger.BalanceCents < 0 || ledger.MinuteBonus is not { Enabled: true } bonus) return 0;
+        var cap = price / 10000 * bonus.PaymentLimitBps + price % 10000 * bonus.PaymentLimitBps / 10000;
+        return Math.Min(bonus.RemainingCents, cap);
+    }
+
     public static bool HasFreePerMinuteTime(V2LocalSessionLedger ledger) =>
         ledger.Status == V2LocalSessionStatus.Active
         && FindPerMinuteTariff(ledger) is { IsPerMinute: true, PerMinutePriceCents: 0 };
@@ -210,6 +267,18 @@ public static class V2LocalLedgerEngine
         }
         var rate = FindPerMinuteTariff(ledger)?.PerMinutePriceCents ?? 0;
         var paidMinutes = rate > 0 ? Math.Max(0, ledger.BalanceCents) / rate : 0;
+        if (rate > 0 && ledger.BalanceCents >= 0 && ledger.MinuteBonus is { Enabled: true } bonus)
+        {
+            var cap = rate / 10000 * bonus.PaymentLimitBps + rate % 10000 * bonus.PaymentLimitBps / 10000;
+            long low = paidMinutes, high = (long)Math.Min(long.MaxValue, ((decimal)ledger.BalanceCents + bonus.RemainingCents) / rate);
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2 + 1;
+                var money = (decimal)middle * rate - Math.Min(bonus.RemainingCents, (decimal)middle * cap);
+                if (money <= ledger.BalanceCents) low = middle; else high = middle - 1;
+            }
+            paidMinutes = low;
+        }
         return ledger.LoginGrantRemainingMinutes + paidMinutes
             + ledger.Packages.Where(item =>
                 item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued
@@ -289,19 +358,28 @@ public static class V2LocalLedgerEngine
         {
             return AppendClientFacts(ledger, actionId, occurredAt, []);
         }
+        var minuteBonus = perMinuteTariff is null ? 0 : MinuteBonusCents(ledger, perMinuteTariff.PerMinutePriceCents);
+        var minuteMoney = (perMinuteTariff?.PerMinutePriceCents ?? 0) - minuteBonus;
         if (perMinuteTariff is not null
             && perMinuteTariff.PerMinutePriceCents > 0
-            && ledger.BalanceCents - perMinuteTariff.PerMinutePriceCents >= -ledger.DebtLimitCents)
+            && ledger.BalanceCents - minuteMoney >= -ledger.DebtLimitCents)
         {
-            var balanceAfterDebit = ledger.BalanceCents - perMinuteTariff.PerMinutePriceCents;
+            var balanceAfterDebit = ledger.BalanceCents - minuteMoney;
+            var fields = new List<(string, object)> { ("amount_cents", minuteMoney),
+                ("balance_after_cents", balanceAfterDebit), ("tariff_id", perMinuteTariff.Id) };
+            if (ledger.MinuteBonus is { Enabled: true } budget)
+            {
+                fields.Add(("bonus_grant_id", budget.GrantId.ToString()));
+                fields.Add(("price_cents", perMinuteTariff.PerMinutePriceCents));
+                fields.Add(("bonus_amount_cents", minuteBonus));
+            }
             return AppendClientFacts(
-                ledger with { BalanceCents = balanceAfterDebit },
+                ledger with { BalanceCents = balanceAfterDebit,
+                    MinuteBonus = ledger.MinuteBonus is { Enabled: true } currentBonus
+                        ? currentBonus with { RemainingCents = currentBonus.RemainingCents - minuteBonus } : ledger.MinuteBonus },
                 actionId,
                 occurredAt,
-                [("per_minute_debit", Payload(
-                    ("amount_cents", perMinuteTariff.PerMinutePriceCents),
-                    ("balance_after_cents", balanceAfterDebit),
-                    ("tariff_id", perMinuteTariff.Id)))]);
+                [("per_minute_debit", Payload(fields.ToArray()))]);
         }
 
         return AppendClientFacts(
@@ -341,13 +419,21 @@ public static class V2LocalLedgerEngine
         DateTimeOffset occurredAt,
         bool serverConfirmed = false,
         string? packageId = null,
-        string? purchaseIdempotencyKey = null)
+        string? purchaseIdempotencyKey = null,
+        V2PackagePayment? payment = null)
     {
         if (IsDuplicate(ledger, actionId))
         {
             return new(ledger, Array.Empty<V2LocalFact>(), Locks(ledger), IsDuplicate: true);
         }
         var tariff = RequirePurchasablePackageTariff(ledger, tariffId);
+        if (payment is not null && (!serverConfirmed || payment.MoneyCents < 0
+            || payment.BonusCents < 0 || payment.MoneyCents > tariff.PackagePriceCents
+            || payment.BonusCents != tariff.PackagePriceCents - payment.MoneyCents))
+        {
+            throw new InvalidOperationException("Signed package payment does not match the price");
+        }
+        var moneyCents = payment?.MoneyCents ?? tariff.PackagePriceCents;
         if (!serverConfirmed
             && ledger.BalanceCents - tariff.PackagePriceCents < -ledger.DebtLimitCents)
         {
@@ -363,13 +449,14 @@ public static class V2LocalLedgerEngine
         return AppendClientFacts(
             ledger with
             {
-                BalanceCents = ledger.BalanceCents - tariff.PackagePriceCents,
+                BalanceCents = checked(ledger.BalanceCents - moneyCents),
                 Packages = ledger.Packages.Append(package).ToArray(),
             },
             actionId,
             occurredAt,
             [("package_purchased", Payload(
-                ("amount_cents", tariff.PackagePriceCents),
+                ("amount_cents", moneyCents),
+                ("bonus_amount_cents", payment?.BonusCents ?? 0),
                 ("package_id", package.Id),
                 ("tariff_id", tariff.Id),
                 ("tariff_name", tariff.Name),

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BackendClient, GameClubApi } from "../../api";
 import { DepositPanel } from "./DepositPanel";
 import type { Client, Workstation } from "../../types";
+import { ApiError } from "../../api";
 
 const client: Client = {
   id: "client-1",
@@ -19,7 +20,77 @@ const otherClient: Client = {
   nickname: "OtherFox",
 };
 
+function renderBonusAdjustment(adjust = vi.fn().mockResolvedValue({ id: "operation" })) {
+  const topUp = vi.fn();
+  const createV2Deposit = vi.fn();
+  const completed = vi.fn();
+  render(<DepositPanel initialClient={client} bonusOnly target={{ sessionId: "active", deviceId: "device", workstationName: "PC" }}
+    api={{ adjustBonus: adjust, topUp, createV2Deposit } as unknown as GameClubApi} clients={[client]} workstations={[]}
+    onClose={vi.fn()} onCompleted={completed} />);
+  return { adjust, topUp, createV2Deposit, completed };
+}
+
+describe("Точная корректировка бонусов", () => {
+  it("начисляет сотые бонуса с причиной без кассы и изменения денежного баланса", async () => {
+    const { adjust, topUp, createV2Deposit, completed } = renderBonusAdjustment();
+    fireEvent.change(screen.getByLabelText("Количество бонусов"), { target: { value: "0,55" } });
+    fireEvent.change(screen.getByLabelText("Причина корректировки"), { target: { value: "Подарок клиенту" } });
+    fireEvent.click(screen.getByRole("button", { name: "Начислить бонусы" }));
+    await screen.findByText("Корректировка бонусов сохранена");
+    expect(adjust).toHaveBeenCalledWith(client.id, 55, "Подарок клиенту", expect.any(String));
+    expect(topUp).not.toHaveBeenCalled();
+    expect(createV2Deposit).not.toHaveBeenCalled();
+    expect(completed).toHaveBeenCalledWith(false);
+  });
+
+  it("не округляет лишние знаки и требует причину", () => {
+    const { adjust } = renderBonusAdjustment();
+    fireEvent.change(screen.getByLabelText("Количество бонусов"), { target: { value: "1,005" } });
+    fireEvent.click(screen.getByRole("button", { name: "Начислить бонусы" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("точностью до 0,01");
+    fireEvent.change(screen.getByLabelText("Количество бонусов"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Начислить бонусы" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("причину");
+    expect(adjust).not.toHaveBeenCalled();
+  });
+
+  it("подтверждает списание один раз и повторяет неопределённый результат с тем же ключом", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const adjust = vi.fn().mockRejectedValueOnce(new Error("lost response")).mockResolvedValue({ id: "op" });
+    const { completed } = renderBonusAdjustment(adjust);
+    fireEvent.change(screen.getByLabelText("Количество бонусов"), { target: { value: "-0,55" } });
+    fireEvent.change(screen.getByLabelText("Причина корректировки"), { target: { value: "Исправление ошибки" } });
+    fireEvent.click(screen.getByRole("button", { name: "Списать бонусы" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Нет подтверждения сервера");
+    expect(completed).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Количество бонусов")).toBeDisabled();
+    expect(screen.getByLabelText("Причина корректировки")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить корректировку" }));
+    await screen.findByText("Корректировка бонусов сохранена");
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(adjust.mock.calls[0]).toEqual(adjust.mock.calls[1]);
+    expect(adjust.mock.calls[0][1]).toBe(-55);
+    confirm.mockRestore();
+  });
+
+  it("позволяет исправить сумму после однозначного отказа сервера", async () => {
+    renderBonusAdjustment(vi.fn().mockRejectedValue(new ApiError(409, "Резерв нельзя списать")));
+    fireEvent.change(screen.getByLabelText("Причина корректировки"), { target: { value: "Корректировка" } });
+    fireEvent.click(screen.getByRole("button", { name: "Начислить бонусы" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Резерв нельзя списать");
+    expect(screen.getByLabelText("Количество бонусов")).toBeEnabled();
+  });
+});
+
 describe("Пополнение депозита", () => {
+  it("не округляет дробный ввод в старом целом бонусном поле пополнения", () => {
+    const topUp = vi.fn();
+    render(<DepositPanel initialClient={client} api={{ topUp } as unknown as GameClubApi} onClose={vi.fn()} onCompleted={vi.fn()} clients={[client]} workstations={[]} />);
+    fireEvent.change(screen.getByLabelText("Количество бонусов"), { target: { value: "0,55" } });
+    fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Для дробных бонусов используйте корректировку");
+    expect(topUp).not.toHaveBeenCalled();
+  });
   it("предзаполняет текущего клиента из карточки игрового места", () => {
     /** Проверяет, что пополнение из занятого места сразу связано с текущим клиентом и доступно к подтверждению. */
     render(<DepositPanel initialClient={client} onClose={vi.fn()} onCompleted={vi.fn()} clients={[client]} workstations={[]} />);
