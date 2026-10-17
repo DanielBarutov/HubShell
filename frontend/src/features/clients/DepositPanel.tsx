@@ -32,6 +32,8 @@ export function DepositPanel({
   const [query, setQuery] = useState(initialClient?.nickname ?? "");
   const [amount, setAmount] = useState("1000");
   const [bonusAmount, setBonusAmount] = useState(bonusOnly ? "100" : "0");
+  const [bonusReason, setBonusReason] = useState("");
+  const [pendingBonusAdjustment, setPendingBonusAdjustment] = useState<{ clientId: string; amountCents: number; reason: string; key: string } | null>(null);
   const [depositPaymentMethod, setDepositPaymentMethod] = useState<"cash" | "transfer" | "mixed">("cash");
   const [cashPartAmount, setCashPartAmount] = useState("");
   const [transferPartAmount, setTransferPartAmount] = useState("");
@@ -47,6 +49,7 @@ export function DepositPanel({
   const ready = searchField !== null;
 
   useEffect(() => {
+    if (pendingBonusAdjustment) return undefined;
     if (target) {
       setLiveResult(initialClient);
       return undefined;
@@ -77,7 +80,7 @@ export function DepositPanel({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [api, initialClient, normalized, searchField, target]);
+  }, [api, initialClient, normalized, searchField, target, pendingBonusAdjustment]);
 
   const result = api
     ? liveResult
@@ -91,7 +94,7 @@ export function DepositPanel({
     target.sessionId === selectedSessionId)
     ? selectedSessionId
     : "";
-  const depositTarget = target
+  const depositTarget = bonusOnly ? undefined : target
     ?? (activeTargets.length === 1
       ? activeTargets[0]
       : activeTargets.find((target) => target.sessionId === validSelectedSessionId));
@@ -112,14 +115,43 @@ export function DepositPanel({
       setSearchError("Подтвердите смену получателя");
       return;
     }
+    if (bonusOnly) {
+      const normalizedBonus = bonusAmount.trim().replace(",", ".");
+      if (!/^-?\d+(\.\d{1,2})?$/.test(normalizedBonus)) {
+        setSearchError("Введите ненулевую сумму бонусов с точностью до 0,01"); return;
+      }
+      const [whole, fraction = ""] = normalizedBonus.replace("-", "").split(".");
+      const amountCents = (Number(whole) * 100 + Number(fraction.padEnd(2, "0"))) * (normalizedBonus.startsWith("-") ? -1 : 1);
+      if (!Number.isSafeInteger(amountCents) || amountCents === 0 || !bonusReason.trim()) {
+        setSearchError("Укажите ненулевую сумму и причину корректировки"); return;
+      }
+      if (!api) { setDeliveryMessage("Демо: корректировка не отправлена на сервер"); return; }
+      if (!pendingBonusAdjustment && amountCents < 0 && !window.confirm(
+        `Списать ${(Math.abs(amountCents) / 100).toLocaleString("ru-RU")} бонусов у «${result.nickname}»?\nПричина: ${bonusReason.trim()}`,
+      )) return;
+      const operation = pendingBonusAdjustment ?? { clientId: result.id, amountCents, reason: bonusReason.trim(), key: crypto.randomUUID() };
+      setPendingBonusAdjustment(operation);
+      setSubmitting(true);
+      setSearchError(null);
+      try {
+        await api.adjustBonus(operation.clientId, operation.amountCents, operation.reason, operation.key);
+        setDeliveryMessage("Корректировка бонусов сохранена");
+        setPendingBonusAdjustment(null);
+        try { await onCompleted(false); } catch { setSearchError("Корректировка сохранена, но данные клиента не удалось обновить"); }
+      } catch (error) {
+        if (!pendingBonusAdjustment && error instanceof ApiError && [400, 404, 409, 422].includes(error.status)) setPendingBonusAdjustment(null);
+        setSearchError(error instanceof ApiError ? error.message : "Нет подтверждения сервера. Повторите сохранённую корректировку.");
+      } finally { setSubmitting(false); }
+      return;
+    }
     if (!api) {
       await onCompleted();
       return;
     }
     const amountCents = Math.round(Number(amount.replace(",", ".")) * 100);
-    const parsedBonus = Math.round(Number(bonusAmount.replace(",", ".")));
-    if ((!bonusOnly && (!Number.isFinite(amountCents) || amountCents <= 0)) || !Number.isFinite(parsedBonus) || parsedBonus < 0 || (bonusOnly && parsedBonus <= 0)) {
-      setSearchError(bonusOnly ? "Введите положительное количество бонусов" : "Введите положительную сумму");
+    const parsedBonus = Number(bonusAmount.replace(",", "."));
+    if (!Number.isFinite(amountCents) || amountCents <= 0 || !Number.isInteger(parsedBonus) || parsedBonus < 0) {
+      setSearchError("Введите положительную сумму и целое количество бонусов. Для дробных бонусов используйте корректировку.");
       return;
     }
     const cashPartCents = Math.round(Number(cashPartAmount.replace(",", ".")) * 100);
@@ -173,10 +205,10 @@ export function DepositPanel({
       await api.topUp(
         result.id,
         {
-          amount_cents: bonusOnly ? 0 : amountCents,
+          amount_cents: amountCents,
           bonus_amount: parsedBonus,
-          reason: bonusOnly ? "Начисление бонусов через оператора" : "Пополнение через оператора",
-          payment_parts: bonusOnly ? undefined : paymentParts,
+          reason: "Пополнение через оператора",
+          payment_parts: paymentParts,
         },
         crypto.randomUUID(),
       );
@@ -189,7 +221,7 @@ export function DepositPanel({
   };
 
   return <div className="panel-inner deposit-panel flex flex-col gap-4 p-5">
-    <PanelHeader title={bonusOnly ? "Начисление бонусов" : "Пополнение депозита"} subtitle="Баланс клиента" onClose={onClose} />
+    <PanelHeader title={bonusOnly ? "Корректировка бонусов" : "Пополнение депозита"} subtitle="Баланс клиента" onClose={onClose} />
     <section className="deposit-step flex flex-col gap-3">
       <h2>{requiresTargetSelection ? "Выберите игровое место" : depositTarget ? "Пополнение игрового счёта" : "Найдите клиента"}</h2>
       <p>{requiresTargetSelection
@@ -197,7 +229,7 @@ export function DepositPanel({
         : depositTarget
           ? "Зачислим средства на баланс выбранного клиента."
           : "Введите имя или номер телефона."}</p>
-      <div className="search-box panel-search input input-sm flex items-center gap-2 border-primary/20! bg-base-200/55! shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]"><Search size={17} /><input className="grow input input-sm" aria-label="Ник или номер телефона" autoFocus={!depositTarget} value={query} disabled={Boolean(depositTarget)} onChange={(event) => { setQuery(event.target.value); setRecipientChangeConfirmed(false); }} placeholder="Ник или номер телефона" /></div>
+      <div className="search-box panel-search input input-sm flex items-center gap-2 border-primary/20! bg-base-200/55! shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]"><Search size={17} /><input className="grow input input-sm" aria-label="Ник или номер телефона" autoFocus={!depositTarget} value={query} disabled={Boolean(depositTarget) || Boolean(pendingBonusAdjustment)} onChange={(event) => { setQuery(event.target.value); setRecipientChangeConfirmed(false); }} placeholder="Ник или номер телефона" /></div>
       {ready && result && <div className="client-result flex items-center gap-3 rounded-lg border border-primary/20! bg-base-200/55! p-3"><div className="client-avatar grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary! text-sm font-bold text-primary-content!">{result.nickname.slice(0, 2).toUpperCase()}</div><div><strong>{result.nickname}</strong><span>{formatRussianPhone(result.phone)}</span></div></div>}
       {ready && !result && <div className="empty-result rounded-lg border border-primary/20! bg-base-200/55! p-3 text-sm text-base-content/60!" role="status" aria-live="polite">{searchError || "Клиент не найден"}</div>}
     </section>
@@ -224,14 +256,19 @@ export function DepositPanel({
         {depositPaymentMethod === "mixed" && <div className="deposit-payment-parts grid grid-cols-1 gap-3 md:grid-cols-2"><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Наличными<input className="input input-sm" aria-label="Сумма наличными" inputMode="decimal" value={cashPartAmount} onChange={(event) => setCashPartAmount(event.target.value)} /> <span>₽</span></label><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Переводом<input className="input input-sm" aria-label="Сумма переводом" inputMode="decimal" value={transferPartAmount} onChange={(event) => setTransferPartAmount(event.target.value)} /> <span>₽</span></label></div>}
         {!depositTarget && activeTargets.length === 0 && <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="numeric" value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>}
       </>}
-      {bonusOnly && <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="numeric" value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>}
+      {bonusOnly && <div className="col-span-full flex flex-col gap-3">
+        <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="decimal" disabled={Boolean(pendingBonusAdjustment)} value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /></label>
+        <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Причина корректировки<input className="input input-sm w-full" maxLength={255} disabled={Boolean(pendingBonusAdjustment)} value={bonusReason} onChange={(event) => setBonusReason(event.target.value)} /></label>
+        <p className="text-xs text-base-content/60">1 бонус = 1 ₽. Для списания введите отрицательную сумму. Резерв игры не затрагивается.</p>
+        {pendingBonusAdjustment && <p role="status" className="text-xs text-warning">Данные сохранены для повтора с тем же ключом до подтверждения результата.</p>}
+      </div>}
     </div>}
     {deliveryMessage && <div className="form-success rounded-lg border border-success/40! bg-success/10! p-3 text-sm text-success-content!" role="status" aria-live="polite">{deliveryMessage}</div>}
     {searchError && result && <div className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!" role="alert">{searchError}</div>}
     {deliveryMessage
       ? <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" onClick={onClose}>Готово</button>
       : <>
-        <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" disabled={!result || submitting || requiresTargetSelection || (recipientChanged && !recipientChangeConfirmed)} onClick={() => void submit()}>{submitting ? "Зачисляем..." : bonusOnly ? "Начислить бонусы" : "Зачислить депозит"}</button>
+        <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" disabled={!result || submitting || requiresTargetSelection || (recipientChanged && !recipientChangeConfirmed)} onClick={() => void submit()}>{submitting ? bonusOnly ? "Сохраняем..." : "Зачисляем..." : bonusOnly ? pendingBonusAdjustment ? "Повторить корректировку" : bonusAmount.trim().startsWith("-") ? "Списать бонусы" : "Начислить бонусы" : "Зачислить депозит"}</button>
         <button className="secondary-button btn btn-outline btn-block wide w-full" onClick={onClose}>Отмена</button>
       </>}
   </div>;

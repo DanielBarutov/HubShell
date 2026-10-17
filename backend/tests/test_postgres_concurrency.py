@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.infrastructure.postgres import (
@@ -99,6 +100,7 @@ async def test_postgres_preserves_concurrent_distinct_top_ups(postgres_dsn: str)
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -384,6 +386,7 @@ async def test_postgres_charges_one_completed_session_once_under_concurrency(
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -468,6 +471,7 @@ async def test_postgres_serializes_conflicting_reservations(postgres_dsn: str) -
                         {"reservation_id": reservation_id},
                     )
             if client_id is not None:
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},

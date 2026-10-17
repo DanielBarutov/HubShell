@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Presentation;
+using GameClub.Client.Domain;
 
 namespace GameClub.Client.Avalonia;
 
@@ -399,6 +400,42 @@ public partial class MainWindow : Window
         _accountHistoryWindow.Activate();
     }
 
+    private async void ToggleMinuteBonus(object? sender, RoutedEventArgs args)
+    {
+        if (sender is not ToggleSwitch toggle || toggle.IsChecked == ViewModel.IsMinuteBonusSelected) return;
+        try {
+            if (toggle.IsChecked == true) await ConfirmMinuteBonusAsync();
+            else await ViewModel.SetMinuteBonusAsync(false);
+        }
+        finally { toggle.SetCurrentValue(ToggleSwitch.IsCheckedProperty, ViewModel.IsMinuteBonusSelected); }
+    }
+
+    private async void RefreshMinuteBonus(object? sender, RoutedEventArgs args) => await ConfirmMinuteBonusAsync();
+
+    private async Task ConfirmMinuteBonusAsync()
+    {
+        var quote = await ViewModel.QuoteMinuteBonusAsync();
+        if (quote is null) return;
+        static string Money(long cents) => (cents / 100m).ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")) + " ₽";
+        if (!quote.BonusAllowed || !quote.CanPay) {
+            var reason = quote.PriceCents <= 0
+                ? "Нет платного поминутного тарифа для этой сессии."
+                : quote.PaymentLimitBps <= 0
+                    ? "В условиях этой сессии бонусная оплата выключена."
+                    : !quote.BonusAllowed && quote.AvailableBonusCents == 0 && quote.ReservedBonusCents > 0
+                        ? $"Зарезервировано для игры: {Money(quote.ReservedBonusCents)}. Сервер пока не разрешает использовать этот резерв в текущей сессии. Дождитесь подтверждения завершения предыдущей игры."
+                        : !quote.CanPay
+                            ? $"Недостаточно средств для денежной части минуты: {Money(quote.MoneyCents)}."
+                            : "Нет доступных бонусов, есть денежный долг или программа отключена для этой сессии.";
+            await ShowConfirmationAsync("Бонусная оплата недоступна", reason, "Понятно");
+            return;
+        }
+        var updating = ViewModel.IsMinuteBonusSelected;
+        if (await ShowConfirmationAsync(updating ? "Обновить бонусный резерв?" : "Включить бонусную поминутку?",
+            $"За одну минуту: {Money(quote.PriceCents)}\nБонусами: {Money(quote.BonusCents)}\nС депозита: {Money(quote.MoneyCents)}\nНачисление: {Money(quote.EarnedBonusCents)}\n\nСервер зарезервирует доступные бонусы. Пакеты и бесплатные минуты расходуются первыми. Выбор действует до отключения или завершения сессии.", updating ? "Обновить" : "Включить"))
+            await ViewModel.SetMinuteBonusAsync(true);
+    }
+
     private async void PurchaseTariff(object? sender, RoutedEventArgs args)
     {
         if (sender is not Button { Tag: string tariffId })
@@ -407,6 +444,21 @@ public partial class MainWindow : Window
         }
 
         var tariff = ViewModel.FindPortalTariff(tariffId);
+        if (tariff is not null && ViewModel.CanQuoteBonusPackage)
+        {
+            var quote = await ViewModel.QuotePortalTariffAsync(tariffId, false);
+            if (quote is null) return;
+            var dialog = new BonusPackagePurchaseDialog(tariff.Name, tariff.DurationSummary, quote,
+                useBonus => ViewModel.QuotePortalTariffAsync(tariffId, useBonus)) { Topmost = Topmost };
+            BonusPackagePurchaseDecision? decision;
+            try { decision = await dialog.ShowDialog<BonusPackagePurchaseDecision?>(this); }
+            finally { dialog.Close(); }
+            if (decision is null) return;
+            var confirmation = decision.UseBonus ? new BonusPurchaseConfirmation(decision.Quote.PriceCents,
+                decision.Quote.BonusCents, decision.Quote.MoneyCents, decision.Quote.EarnedBonusCents) : null;
+            await ViewModel.PurchasePortalTariffAsync(tariffId, bonusConfirmation: confirmation);
+            return;
+        }
         if (tariff is null || !await ConfirmTariffPurchaseAsync(tariff.Name, tariff.DurationSummary, tariff.PriceSummary))
         {
             return;

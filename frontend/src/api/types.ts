@@ -102,6 +102,8 @@ export type BackendV2Deposit = {
 };
 
 export type BackendEntitlement = {
+  bonus_amount_cents?: number;
+  bonus_requested?: boolean;
   id: string;
   client_id: string;
   tariff_id: string;
@@ -889,3 +891,64 @@ export type BackendEntryDecision = {
   starts_at: string | null;
   ends_at: string | null;
 };
+
+
+export type BackendBonusProgram = {
+  enabled: boolean;
+  game_rate_bps: number;
+  product_rate_bps: number;
+  payment_limit_bps: number;
+};
+
+export type BackendBonusWallet = {
+  total_cents: number;
+  available_cents: number;
+  reserved_cents: number;
+  pending_cents: number;
+};
+
+export type BackendBonusOperation = {
+  id: string; client_id: string; kind: string; amount_cents: number;
+  actor_id: string; reason: string; idempotency_key: string; session_id: string | null;
+  wallet_after: Omit<BackendBonusWallet, "pending_cents">;
+  total_delta_cents: number; reserved_delta_cents: number; created_at: string;
+};
+
+export type BackendBonusGameQuote = {
+  earning_rate_bps: number;
+  price_cents: number;
+  bonus_cents: number;
+  money_cents: number;
+  earned_bonus_cents: number;
+  payment_limit_bps: number;
+  available_bonus_cents: number;
+  reserved_bonus_cents: number;
+  bonus_allowed: boolean;
+  can_pay: boolean;
+};
+
+export type BonusPurchaseConfirmation = {
+  use_bonus: boolean;
+  expected_price_cents: number;
+  expected_bonus_cents: number;
+  expected_money_cents: number;
+  expected_earned_bonus_cents: number;
+};
+
+export interface BackendBonusReport {
+  start_at: string;
+  end_at: string;
+  observed_at: string;
+  period: {
+    credited_cents: number;
+    spent_cents: number;
+    adjustments_cents: number;
+    opening_cents: number;
+    reserved_in_cents: number;
+    released_cents: number;
+  };
+  total_cents: number;
+  available_cents: number;
+  reserved_cents: number;
+  pending_cents: number;
+}

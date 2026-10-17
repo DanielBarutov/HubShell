@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub_backend.modules.client_groups.application.service import ClientGroupService
 from gameclub_backend.modules.client_groups.infrastructure.postgres import (
     PostgresClientGroupRepository,
@@ -83,6 +84,7 @@ async def test_postgres_debtor_group_allows_first_metered_minute_after_free_time
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},

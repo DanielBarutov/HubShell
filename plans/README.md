@@ -79,6 +79,7 @@ Windows сохраняют свои короткие owner-level входы в `
 | 46 | [`46-v2-offline-event-platform/PLAN.md`](46-v2-offline-event-platform/PLAN.md) | V2: автономная сессия, Kafka inbox/outbox, финансовая сверка, аналитика и Grafana | `in_progress` |
 
 | 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
+| 49 | [`49-bonus-program/PLAN.md`](49-bonus-program/PLAN.md) | начисление, оплата игры бонусами и V2-резерв | `in_progress` |
 
 Статусы:
 

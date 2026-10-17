@@ -177,7 +177,7 @@ export function stateLabel(state: AnalyticsDataState): string {
     ready: "Готово",
     loading: "Загрузка…",
     empty: "Нет данных",
-    partial: "",
+    partial: "Частичные данные",
     not_available: "Недоступно",
     not_calculated: "Не рассчитано",
     permission_denied: "Нет доступа",

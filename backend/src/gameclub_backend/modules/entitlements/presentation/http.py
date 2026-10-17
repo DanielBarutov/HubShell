@@ -1,3 +1,4 @@
+import dataclasses
 import typing
 import uuid
 
@@ -16,7 +17,30 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("clients.mana
 class PurchaseEntitlementRequest(BaseModel):
     tariff_id: uuid.UUID
     cash_shift_id: uuid.UUID | None = None
+    use_bonus: bool = Field(default=False, strict=True)
+    expected_price_cents: int | None = Field(default=None, strict=True, ge=0)
+    expected_bonus_cents: int | None = Field(default=None, strict=True, ge=0)
+    expected_money_cents: int | None = Field(default=None, strict=True, ge=0)
+    expected_earned_bonus_cents: int | None = Field(default=None, strict=True, ge=0)
     payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
+
+
+class QuoteEntitlementRequest(BaseModel):
+    tariff_id: uuid.UUID
+    use_bonus: bool = Field(default=False, strict=True)
+
+
+class QuoteEntitlementResponse(BaseModel):
+    earning_rate_bps: int
+    price_cents: int
+    bonus_cents: int
+    money_cents: int
+    earned_bonus_cents: int
+    payment_limit_bps: int
+    available_bonus_cents: int
+    reserved_bonus_cents: int
+    bonus_allowed: bool
+    can_pay: bool
 
 
 class PaymentPartRequest(BaseModel):
@@ -40,6 +64,8 @@ class EntitlementResponse(BaseModel):
     duration_minutes: int
     remaining_minutes: int
     price_cents: int
+    bonus_amount_cents: int
+    bonus_requested: bool
     queue_position: int
     status: str
     idempotency_key: str
@@ -71,6 +97,8 @@ class EntitlementResponse(BaseModel):
             duration_minutes=item.duration_minutes,
             remaining_minutes=item.remaining_minutes,
             price_cents=item.price_cents,
+            bonus_amount_cents=item.bonus_amount_cents,
+            bonus_requested=item.bonus_requested,
             queue_position=item.queue_position,
             status=item.status.value,
             idempotency_key=item.idempotency_key,
@@ -105,6 +133,16 @@ def create_router(service: EntitlementService) -> APIRouter:
             for item in await service.list_for_client(client_id)
         ]
 
+    @router.post("/quote", response_model=QuoteEntitlementResponse)
+    async def quote_entitlement(
+        client_id: uuid.UUID,
+        body: QuoteEntitlementRequest,
+        principal: Operator,
+    ) -> QuoteEntitlementResponse:
+        del principal
+        quote = await service.quote_purchase(client_id, body.tariff_id, body.use_bonus)
+        return QuoteEntitlementResponse(**dataclasses.asdict(quote))
+
     @router.post("", response_model=EntitlementResponse, status_code=status.HTTP_201_CREATED)
     async def purchase_entitlement(
         client_id: uuid.UUID,
@@ -120,6 +158,12 @@ def create_router(service: EntitlementService) -> APIRouter:
                 idempotency_key=idempotency_key,
                 payment_parts=[part.model_dump() for part in body.payment_parts],
                 cash_shift_id=body.cash_shift_id,
+                use_bonus=body.use_bonus,
+                principal=principal,
+                expected_price_cents=body.expected_price_cents,
+                expected_bonus_cents=body.expected_bonus_cents,
+                expected_money_cents=body.expected_money_cents,
+                expected_earned_bonus_cents=body.expected_earned_bonus_cents,
             )
         )
 

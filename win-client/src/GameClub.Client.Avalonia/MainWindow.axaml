@@ -463,12 +463,26 @@
               <StackPanel Spacing="5">
                 <TextBlock Text="БАЛАНС" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"/>
                 <TextBlock Text="{Binding PortalBalanceAmountSummary}" FontSize="25" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                <TextBlock Text="{Binding PortalBonusSummary}" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                <TextBlock Text="{Binding PortalBonusAmountSummary}" FontSize="12" FontWeight="SemiBold" Foreground="#E9AE4B" ToolTip.Tip="{Binding PortalBonusReservedSummary}"/>
               </StackPanel>
-              <StackPanel Grid.Column="1" Spacing="5" IsVisible="{Binding IsPortalBalanceTimeVisible}" VerticalAlignment="Center">
-                <TextBlock Text="По балансу" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                <TextBlock Text="{Binding PortalAvailableTimeValue}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
-              </StackPanel>
+              <Border Name="MinuteBonusPanel" Grid.Column="1" IsVisible="{Binding IsMinuteBonusVisible}" VerticalAlignment="Center">
+                <StackPanel Spacing="5">
+                  <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock Text="Бонусы" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                    <Border Width="13" Height="13" CornerRadius="7" BorderThickness="1" BorderBrush="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Top" Margin="0,-5,0,0" Focusable="True" AutomationProperties.Name="Как работает оплата минут бонусами">
+                      <ToolTip.Tip>
+                        <StackPanel MaxWidth="260" Spacing="6">
+                          <TextBlock Text="Оплата минут бонусами в пределах настроенного лимита. Остаток стоимости списывается с депозита. Для включения и увеличения резерва нужна связь с сервером. При денежном долге бонусная оплата недоступна." TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding MinuteBonusStatus}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </ToolTip.Tip>
+                      <TextBlock Text="?" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                  </StackPanel>
+                  <ToggleSwitch Name="MinuteBonusToggle" AutomationProperties.Name="Оплата минут бонусами" IsChecked="{Binding IsMinuteBonusSelected, Mode=OneWay}" IsEnabled="{Binding CanChangeMinuteBonus}" IsCheckedChanged="ToggleMinuteBonus"/>
+                  <Button Content="Обновить резерв" Classes="widget-secondary" FontSize="10" IsVisible="{Binding IsMinuteBonusSelected}" IsEnabled="{Binding CanChangeMinuteBonus}" Click="RefreshMinuteBonus"/>
+                </StackPanel>
+              </Border>
             </Grid>
           </Border>
 <Border Name="UpcomingBookingPanel" IsVisible="{Binding IsUpcomingBookingVisible}" Background="#1B2733" BorderBrush="#4D61D8FF" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel Spacing="3"><TextBlock Text="БЛИЖАЙШАЯ БРОНЬ НА ЭТОМ МЕСТЕ" Foreground="{DynamicResource SignalBrush}" FontSize="9" /><TextBlock Text="{Binding UpcomingBookingTitle}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" /><TextBlock Text="{Binding UpcomingBookingDetails}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="10" TextWrapping="Wrap" /></StackPanel></Border>

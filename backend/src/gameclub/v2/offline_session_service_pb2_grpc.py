@@ -87,6 +87,26 @@ class OfflineSessionServiceStub:
                 request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.PurchaseOfflineEntitlementRequest.SerializeToString,
                 response_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflinePortalSnapshot.FromString,
                 _registered_method=True)
+        self.QuoteEntitlement = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/QuoteEntitlement',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.QuoteOfflineEntitlementRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.FromString,
+                _registered_method=True)
+        self.EnableMinuteBonus = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/EnableMinuteBonus',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.SignedMinuteBonusBudget.FromString,
+                _registered_method=True)
+        self.QuoteMinuteBonus = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/QuoteMinuteBonus',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+                response_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.FromString,
+                _registered_method=True)
+        self.CancelMinuteBonus = channel.unary_unary(
+                '/gameclub.events.v2.OfflineSessionService/CancelMinuteBonus',
+                request_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
 
 
 class OfflineSessionServiceServicer:
@@ -153,6 +173,30 @@ class OfflineSessionServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def QuoteEntitlement(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def EnableMinuteBonus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QuoteMinuteBonus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CancelMinuteBonus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_OfflineSessionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -205,6 +249,26 @@ def add_OfflineSessionServiceServicer_to_server(servicer, server):
                     servicer.PurchaseEntitlement,
                     request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.PurchaseOfflineEntitlementRequest.FromString,
                     response_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflinePortalSnapshot.SerializeToString,
+            ),
+            'QuoteEntitlement': grpc.unary_unary_rpc_method_handler(
+                    servicer.QuoteEntitlement,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.QuoteOfflineEntitlementRequest.FromString,
+                    response_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.SerializeToString,
+            ),
+            'EnableMinuteBonus': grpc.unary_unary_rpc_method_handler(
+                    servicer.EnableMinuteBonus,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.FromString,
+                    response_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.SignedMinuteBonusBudget.SerializeToString,
+            ),
+            'QuoteMinuteBonus': grpc.unary_unary_rpc_method_handler(
+                    servicer.QuoteMinuteBonus,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.FromString,
+                    response_serializer=gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.SerializeToString,
+            ),
+            'CancelMinuteBonus': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelMinuteBonus,
+                    request_deserializer=gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -478,6 +542,114 @@ class OfflineSessionService:
             '/gameclub.events.v2.OfflineSessionService/PurchaseEntitlement',
             gameclub_dot_v2_dot_offline__session__service__pb2.PurchaseOfflineEntitlementRequest.SerializeToString,
             gameclub_dot_v2_dot_offline__session__service__pb2.OfflinePortalSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QuoteEntitlement(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/QuoteEntitlement',
+            gameclub_dot_v2_dot_offline__session__service__pb2.QuoteOfflineEntitlementRequest.SerializeToString,
+            gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def EnableMinuteBonus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/EnableMinuteBonus',
+            gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+            gameclub_dot_v2_dot_offline__session__service__pb2.SignedMinuteBonusBudget.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QuoteMinuteBonus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/QuoteMinuteBonus',
+            gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+            gameclub_dot_v2_dot_offline__session__service__pb2.OfflineBonusGameQuote.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelMinuteBonus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gameclub.events.v2.OfflineSessionService/CancelMinuteBonus',
+            gameclub_dot_v2_dot_offline__session__service__pb2.EnableMinuteBonusRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,

@@ -3,7 +3,11 @@ from __future__ import annotations
 import dataclasses
 import datetime
 
-from gameclub_backend.modules.analytics.application.ports import FinanceAnalyticsRepository
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.analytics.application.ports import (
+    BonusFinanceReadPort,
+    FinanceAnalyticsRepository,
+)
 from gameclub_backend.modules.analytics.finance import (
     FINANCE_METRIC_INFO,
     AnalyticsDataState,
@@ -22,11 +26,25 @@ from gameclub_backend.modules.analytics.finance import (
     build_period_comparison,
     compare_metric,
 )
+from gameclub_backend.modules.clients.application.bonus_reporting import BonusReport
 
 
 class FinanceAnalyticsService:
-    def __init__(self, repository: FinanceAnalyticsRepository) -> None:
+    def __init__(
+        self, repository: FinanceAnalyticsRepository, bonuses: BonusFinanceReadPort | None = None
+    ) -> None:
         self._repository = repository
+        self._bonuses = bonuses
+
+    async def bonus_report(
+        self, start_at: datetime.datetime, end_at: datetime.datetime
+    ) -> BonusReport:
+        period = FinanceFilters(start_at, end_at)
+        if self._bonuses is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE, "Bonus reporting is not configured"
+            )
+        return await self._bonuses.read_bonus_report(period.start_at, period.end_at)
 
     async def finance(
         self,

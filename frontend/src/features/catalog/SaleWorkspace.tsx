@@ -22,7 +22,10 @@ import type {
   BackendProduct,
   BackendProductCategory,
   BackendTariff,
+  BackendBonusGameQuote,
+  BonusPurchaseConfirmation,
 } from "../../api";
+import { BonusPackageConfirmation } from "./BonusPackageConfirmation";
 import { toUiClient } from "../../adapters";
 import { formatRussianPhone, getSearchField } from "../../shared/formatters";
 import type { Client, Workstation } from "../../types";
@@ -198,6 +201,17 @@ export function SaleWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [useBonus, setUseBonus] = useState(false);
+  const [bonusConfirmation, setBonusConfirmation] = useState<{ quote: BackendBonusGameQuote; name: string; position: string } | null>(null);
+  const resolveBonusConfirmation = useRef<((confirmed: boolean) => void) | null>(null);
+  const confirmedBonusPurchases = useRef(new Map<string, BonusPurchaseConfirmation>());
+  const completedTariffPurchases = useRef(new Set<string>());
+  useEffect(() => () => { resolveBonusConfirmation.current?.(false); }, []);
+  const finishBonusConfirmation = (confirmed: boolean) => {
+    setBonusConfirmation(null);
+    resolveBonusConfirmation.current?.(confirmed);
+    resolveBonusConfirmation.current = null;
+  };
   const seededProduct = useRef(false);
   const sessionIdempotencyKey = useRef(`sale-session-${crypto.randomUUID()}`);
   const tariffIdempotencyKeys = useRef(new Map<string, string[]>());
@@ -643,6 +657,31 @@ export function SaleWorkspace({
         let remainingTransferPartCents =
           paymentMethod === "mixed" ? transferPartCents : 0;
         for (const purchaseKey of purchaseKeys.slice(0, tariffLine.quantity)) {
+          if (completedTariffPurchases.current.has(purchaseKey)) continue;
+          if ((useBonus && paymentMethod === "balance") || confirmedBonusPurchases.current.has(purchaseKey)) {
+            let confirmation = confirmedBonusPurchases.current.get(purchaseKey);
+            if (!confirmation) {
+              const quote = await api.quoteEntitlement(client.id, tariffLine.sourceId, true);
+              const confirmed = await new Promise<boolean>((resolve) => {
+                resolveBonusConfirmation.current = resolve;
+                setBonusConfirmation({ quote, name: tariffLine.name, position: `${purchaseKeys.indexOf(purchaseKey) + 1} из ${tariffLine.quantity}` });
+              });
+              if (!confirmed) {
+                setError("Оставшаяся продажа отменена. Уже подтверждённые пакеты сохранены.");
+                return;
+              }
+              confirmation = { use_bonus: true, expected_price_cents: quote.price_cents, expected_bonus_cents: quote.bonus_cents, expected_money_cents: quote.money_cents, expected_earned_bonus_cents: quote.earned_bonus_cents };
+              confirmedBonusPurchases.current.set(purchaseKey, confirmation);
+            }
+            try {
+              await api.purchaseEntitlement(client.id, tariffLine.sourceId, purchaseKey, undefined, undefined, confirmation);
+              completedTariffPurchases.current.add(purchaseKey);
+            } catch (purchaseError) {
+              if (purchaseError instanceof ApiError && purchaseError.status === 409) confirmedBonusPurchases.current.delete(purchaseKey);
+              throw purchaseError;
+            }
+            continue;
+          }
           const unitCashPartCents =
             paymentMethod === "mixed"
               ? Math.min(tariffLine.priceCents, remainingCashPartCents)
@@ -750,6 +789,7 @@ export function SaleWorkspace({
       }}
     >
       <section
+        inert={submitting}
         className="sale-workspace relative mx-auto flex h-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-primary/30! bg-base-100/95! text-base-content! shadow-[0_0_32px_rgba(49,217,120,0.12),0_25px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl"
         role="dialog"
         aria-modal="true"
@@ -1256,6 +1296,13 @@ export function SaleWorkspace({
                   <Tags size={15} /> Смешанная
                 </button>
               </div>
+              {api && client && timeLines.length > 0 && !isXbox && (
+                <label className="mt-3 flex items-center gap-3 text-sm">
+                  <input type="checkbox" className="toggle toggle-primary" checked={useBonus && paymentMethod === "balance"} disabled={submitting} onChange={(event) => { setUseBonus(event.target.checked); if (event.target.checked) setPaymentMethod("balance"); }} />
+                  Использовать бонусы для пакетов
+                </label>
+              )}
+              {useBonus && paymentMethod === "balance" && <p className="mt-2 text-xs text-base-content/60">Перед каждым пакетом покажем серверный расчёт. Денежная часть и товары оплачиваются с депозита.</p>}
               {activeClientSession && timeLines.length && (
                 <p className="sale-payment-hint">
                   Пакет будет сразу подключён к текущей сессии выбранным
@@ -1314,12 +1361,13 @@ export function SaleWorkspace({
             >
               {submitting
                 ? "Проводим заказ…"
-                : `Оформить продажу · ${money(totalCents)}`}
+                : useBonus && paymentMethod === "balance" ? "Рассчитать оплату пакетов" : `Оформить продажу · ${money(totalCents)}`}
               <ChevronRight size={17} />
             </button>
             <button
               type="button"
               className="sale-cancel-button btn btn-error btn-outline w-full mt-3"
+              disabled={submitting}
               onClick={onClose}
             >
               Отмена
@@ -1327,6 +1375,7 @@ export function SaleWorkspace({
           </form>
         </div>
       </section>
+      {bonusConfirmation && <BonusPackageConfirmation {...bonusConfirmation} onConfirm={() => finishBonusConfirmation(true)} onCancel={() => finishBonusConfirmation(false)} />}
     </div>
   );
 }

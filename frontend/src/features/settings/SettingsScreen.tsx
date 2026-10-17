@@ -17,6 +17,7 @@ import type {
 import { themeLabels } from "../../shared/constants";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import type { Workstation } from "../../types";
+import { BonusProgramSettings } from "./BonusProgramSettings";
 import { SettingsResourceEditors } from "./SettingsResourceEditors";
 
 export function SettingsView({
@@ -419,6 +420,7 @@ function LiveSettingsLayout({
       </div>
       {api ? (
         <div className="mt-4">
+          <BonusProgramSettings api={api} />
           <SettingsResourceEditors
             api={api}
             clientGroups={clientGroups}

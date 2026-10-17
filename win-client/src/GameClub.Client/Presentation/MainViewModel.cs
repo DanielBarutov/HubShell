@@ -16,6 +16,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private readonly IWorkstationPowerController? _powerController;
     private readonly IClientPortalGateway _clientPortal;
     private readonly IV2ClientPortalGateway? _v2ClientPortal;
+    private bool _minuteBonusBusy;
+    private bool _minuteBonusPending;
+    private bool _minuteBonusCancellationPending;
     private readonly IV2OfflineSessionGateway? _v2OfflineSession;
     private readonly IV2GuestSessionGateway? _v2GuestSession;
     private readonly V2OfflineLoginCoordinator? _v2OfflineLogin;
@@ -353,15 +356,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string PortalBalanceAmountSummary => CurrentPortalBalanceCents is { } balance
         ? FormatMoney(balance)
         : string.Empty;
+    public string PortalBonusAmountSummary => _portalSnapshot?.BonusWallet is { } wallet
+        ? $"Бонусы: {FormatMoney(wallet.TotalCents)}"
+        : "Бонусы: недоступно";
+    public string PortalBonusReservedSummary => _portalSnapshot?.BonusWallet is { } wallet
+        ? $"Зарезервировано для игры: {FormatMoney(wallet.ReservedCents)}"
+        : "Точный бонусный счёт недоступен";
     public string PortalBonusSummary => _portalSnapshot is null
         ? string.Empty
-        : $"Бонусы: {_portalSnapshot.BalanceBonus}";
+        : _portalSnapshot.BonusWallet is { } wallet
+            ? $"Доступно бонусов: {FormatMoney(wallet.AvailableCents)}\nОжидает начисления: {FormatMoney(wallet.PendingCents)}\nРезерв для игры: {FormatMoney(wallet.ReservedCents)}"
+            : "Точный бонусный счёт недоступен";
     public string PortalAvailableTimeValue => _portalSnapshot is null
         ? string.Empty
         : FormatDuration(_portalSnapshot.AvailableTimeMinutes);
     public string PortalBalanceSummary => _portalSnapshot is null
         ? string.Empty
-        : $"Баланс: {PortalBalanceAmountSummary} · Бонусы: {_portalSnapshot.BalanceBonus}";
+        : $"Баланс: {PortalBalanceAmountSummary} · {PortalBonusSummary}";
     public string PortalAvailableTimeSummary => _portalSnapshot is null
         ? string.Empty
         : $"Осталось примерно {FormatDuration(_portalSnapshot.AvailableTimeMinutes)}";
@@ -1270,6 +1281,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             {
                 await ActivateQueuedPortalEntitlementQuietlyAsync();
             }
+            await SynchronizePendingMinuteBonusAsync();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -1411,7 +1423,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         string deviceId,
         string tariffId,
         string idempotencyKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        BonusPurchaseConfirmation? bonusConfirmation = null)
     {
         if (_v2OfflineLogin is not null)
         {
@@ -1419,7 +1432,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ? Task.FromException<ClientPortalSnapshot>(
                     new InvalidOperationException("Client portal transport is not configured."))
                 : _v2ClientPortal.PurchaseEntitlementAsync(
-                    deviceId, tariffId, idempotencyKey, _v2SignatureVerifier!, cancellationToken);
+                    deviceId, tariffId, idempotencyKey, _v2SignatureVerifier!, cancellationToken, bonusConfirmation);
         }
         return _clientPortal.PurchaseEntitlementAsync(
             deviceId, tariffId, idempotencyKey, cancellationToken);
@@ -1480,9 +1493,127 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         }
     }
 
+    public bool CanQuoteBonusPackage => _v2ClientPortal is not null && _activeV2Ledger is { IsGuest: false };
+
+    public bool IsMinuteBonusVisible => CanQuoteBonusPackage && _activeV2Ledger is { Status: V2LocalSessionStatus.Active } ledger
+        && !V2LocalLedgerEngine.HasFreePerMinuteTime(ledger)
+        && ledger.Tariffs.Any(item => item.PerMinutePriceCents > 0 && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId));
+    public bool CanChangeMinuteBonus => IsMinuteBonusVisible && !_minuteBonusBusy;
+    public bool IsMinuteBonusSelected => _activeV2Ledger?.MinuteBonus?.Enabled == true || (_minuteBonusPending && !_minuteBonusCancellationPending);
+    public string MinuteBonusStatus => _minuteBonusBusy ? "Ожидаем ответ сервера…"
+        : _minuteBonusCancellationPending ? "Оплата выключена. Отмена запроса и освобождение резерва ожидают синхронизации."
+        : _minuteBonusPending ? _activeV2Ledger?.MinuteBonus is { Enabled: true } previous
+            ? $"Увеличение ожидает подтверждения. Прежний резерв: {FormatMoney(previous.RemainingCents)}."
+            : "Запрос включения ожидает подтверждения; новый резерв пока не расходуется."
+        : _activeV2Ledger is { BalanceCents: < 0, MinuteBonus: { Enabled: true } } ? "При денежном долге бонусы не списываются. Резерв сохраняется до погашения долга или отключения."
+        : _activeV2Ledger?.MinuteBonus is { Enabled: true } budget ? $"Остаток для поминутки: {FormatMoney(budget.RemainingCents)} · лимит {budget.PaymentLimitBps / 100m:0.##}%"
+        : "Поминутка оплачивается с депозита. Освобождение прежнего резерва — после синхронизации.";
+
+    private void PublishMinuteBonusState()
+    {
+        OnPropertyChanged(nameof(IsMinuteBonusVisible));
+        OnPropertyChanged(nameof(CanChangeMinuteBonus));
+        OnPropertyChanged(nameof(IsMinuteBonusSelected));
+        OnPropertyChanged(nameof(MinuteBonusStatus));
+    }
+
+    private async Task<bool> ReadMinuteBonusRequestStateAsync()
+    {
+        if (_v2Ledger is null || _activeV2Ledger is null) return false;
+        try {
+            var pending = await _v2Ledger.ReadPendingMinuteBonusAsync(_lifetime.Token);
+            _minuteBonusPending = pending.Request is not null;
+            _minuteBonusCancellationPending = pending.CancellationPending;
+            PublishMinuteBonusState();
+            return true;
+        }
+        catch (Exception) {
+            ShowSessionNotification("Не удалось прочитать состояние бонусной оплаты. Повторите синхронизацию.");
+            return false;
+        }
+    }
+
+    public async Task<BonusGameQuote?> QuoteMinuteBonusAsync()
+    {
+        if (!CanChangeMinuteBonus || _activeV2Ledger is not { } ledger) return null;
+        _minuteBonusBusy = true;
+        PublishMinuteBonusState();
+        try {
+            return await _v2ClientPortal!.QuoteMinuteBonusAsync(new(ledger.ClientId, ledger.SessionId, ledger.DeviceId,
+                ledger.SnapshotId, ledger.SnapshotVersion, ledger.NextSequence - 1, ledger.PreviousPayloadHash,
+                $"minute-quote-{Guid.NewGuid():N}"), _lifetime.Token);
+        }
+        catch (Exception) { ShowSessionNotification("Расчёт недоступен. Дождитесь синхронизации списаний и проверьте соединение."); return null; }
+        finally { _minuteBonusBusy = false; PublishMinuteBonusState(); }
+    }
+
+    public async Task SetMinuteBonusAsync(bool enabled)
+    {
+        if (!CanChangeMinuteBonus || _v2Ledger is null || _v2ClientPortal is null) return;
+        _minuteBonusBusy = true;
+        PublishMinuteBonusState();
+        try {
+            if (!enabled) {
+                var transition = await _v2Ledger.DisableMinuteBonusAsync(Guid.NewGuid(), _clock(), _lifetime.Token);
+                _activeV2Ledger = transition.Ledger;
+                _minuteBonusCancellationPending = true;
+                await ReadMinuteBonusRequestStateAsync();
+                PublishSessionState();
+            }
+            _activeV2Ledger = await _v2Ledger.SynchronizeMinuteBonusCancellationAsync(
+                (request, token) => _v2ClientPortal.CancelMinuteBonusAsync(request, token), _lifetime.Token);
+            if (enabled) _activeV2Ledger = await _v2Ledger.EnableMinuteBonusAsync(
+                (request, token) => _v2ClientPortal.EnableMinuteBonusAsync(request, _v2SignatureVerifier!, token), _lifetime.Token);
+        }
+        catch (Exception) { ShowSessionNotification(enabled
+            ? "Запрос ожидает подтверждения. Повтор не увеличит резерв дважды; выключатель отменит запрос."
+            : "Оплата минут выключена. Резерв освободится после синхронизации."); }
+        finally {
+            await ReadMinuteBonusRequestStateAsync();
+            _minuteBonusBusy = false;
+            PublishSessionState();
+        }
+    }
+
+    private async Task SynchronizePendingMinuteBonusAsync()
+    {
+        if (_minuteBonusBusy || _v2Ledger is null || _v2ClientPortal is null || _activeV2Ledger is not { Status: V2LocalSessionStatus.Active }) return;
+        if (!await ReadMinuteBonusRequestStateAsync()) return;
+        if (!_minuteBonusPending) return;
+        _minuteBonusBusy = true;
+        PublishMinuteBonusState();
+        try {
+            _activeV2Ledger = _minuteBonusCancellationPending
+                ? await _v2Ledger.SynchronizeMinuteBonusCancellationAsync((request, token) => _v2ClientPortal.CancelMinuteBonusAsync(request, token), _lifetime.Token)
+                : await _v2Ledger.EnableMinuteBonusAsync((request, token) => _v2ClientPortal.EnableMinuteBonusAsync(request, _v2SignatureVerifier!, token), _lifetime.Token);
+        }
+        catch (Exception) { /* The durable intent remains pending until its checkpoint is confirmed. */ }
+        finally { await ReadMinuteBonusRequestStateAsync(); _minuteBonusBusy = false; PublishSessionState(); }
+    }
+
+    public async Task<BonusGameQuote?> QuotePortalTariffAsync(string tariffId, bool useBonus)
+    {
+        if (!CanQuoteBonusPackage || string.IsNullOrWhiteSpace(DeviceId)) return null;
+        try
+        {
+            if (await _v2Ledger!.ReadPendingPortalPackagePurchaseAsync(_lifetime.Token) is not null)
+            {
+                await RetryPendingV2PackagePurchaseAsync(_lifetime.Token);
+                return null;
+            }
+            return await _v2ClientPortal!.QuoteEntitlementAsync(DeviceId, tariffId, useBonus, _lifetime.Token);
+        }
+        catch (Exception)
+        {
+            ShowSessionNotification("Не удалось получить расчёт покупки. Проверьте соединение и повторите.");
+            return null;
+        }
+    }
+
     public async Task PurchasePortalTariffAsync(
         string tariffId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        BonusPurchaseConfirmation? bonusConfirmation = null)
     {
         if (string.IsNullOrWhiteSpace(DeviceId))
         {
@@ -1511,7 +1642,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                     }
                     pendingPurchase = await _v2Ledger.BeginPortalPackagePurchaseAsync(
                         tariffId,
-                        cancellationToken);
+                        cancellationToken,
+                        bonusConfirmation);
                 }
             }
             else if (FindPortalTariff(tariffId) is null)
@@ -1522,7 +1654,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 DeviceId,
                 tariffId,
                 pendingPurchase?.IdempotencyKey ?? $"win-portal-tariff-{Guid.NewGuid():N}",
-                cancellationToken);
+                cancellationToken,
+                pendingPurchase?.BonusConfirmation);
             if (pendingPurchase is not null)
             {
                 var transition = await _v2Ledger!.CompletePortalPackagePurchaseAsync(
@@ -1563,6 +1696,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             }
             ShowSessionNotification(error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded
                 ? "Покупка ожидает синхронизации; повтор не спишет средства ещё раз."
+                : error.StatusCode == StatusCode.FailedPrecondition && pendingPurchase?.BonusConfirmation is not null
+                ? "Расчёт покупки изменился. Откройте пакет и подтвердите новые суммы."
                 : "Не удалось купить тариф. Проверьте баланс и повторите.");
         }
         catch (Exception)
@@ -1784,7 +1919,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 }
             }
             _portalMessage = serverStopConfirmed
-                ? "Сеанс завершён."
+                ? "Выход выполнен. Резерв бонусов освободится после подтверждения списаний сервером."
                 : "Сеанс остановлен локально; сервер завершит его после доставки события.";
             _accessGate.LockSession("Сессия завершена");
             _activeV2Ledger = null;
@@ -2382,6 +2517,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void OpenV2Session(V2LocalSessionLedger ledger, string message)
     {
+        if (_activeV2Ledger?.SessionId != ledger.SessionId) {
+            _minuteBonusPending = false;
+            _minuteBonusCancellationPending = false;
+            _minuteBonusBusy = false;
+        }
         _activeSession = null;
         _activeV2Ledger = ledger;
         _isV2MinuteBillingPaused = false;
@@ -2555,6 +2695,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(PortalBalanceSummary));
         OnPropertyChanged(nameof(PortalBalanceAmountSummary));
         OnPropertyChanged(nameof(PortalBonusSummary));
+        OnPropertyChanged(nameof(PortalBonusAmountSummary));
+        OnPropertyChanged(nameof(PortalBonusReservedSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeSummary));
         OnPropertyChanged(nameof(PortalAvailableTimeValue));
         OnPropertyChanged(nameof(IsPortalBalanceTimeVisible));
@@ -2670,6 +2812,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private void PublishSessionState()
     {
+        PublishMinuteBonusState();
         OnPropertyChanged(nameof(PortalBalanceAmountSummary));
         OnPropertyChanged(nameof(PortalBalanceSummary));
         OnPropertyChanged(nameof(HasPortalBalance));

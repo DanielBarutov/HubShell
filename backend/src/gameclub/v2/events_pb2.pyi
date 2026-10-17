@@ -23,6 +23,7 @@ class V2EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     V2_EVENT_TYPE_BALANCE_CREDIT_APPLIED: _ClassVar[V2EventType]
     V2_EVENT_TYPE_RECONCILIATION_COMPLETED: _ClassVar[V2EventType]
     V2_EVENT_TYPE_LOGIN_GRANT_BURNED: _ClassVar[V2EventType]
+    V2_EVENT_TYPE_BONUS_PAYMENT_DISABLED: _ClassVar[V2EventType]
 
 class V2EventProcessingStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -43,6 +44,7 @@ V2_EVENT_TYPE_SESSION_STOPPED: V2EventType
 V2_EVENT_TYPE_BALANCE_CREDIT_APPLIED: V2EventType
 V2_EVENT_TYPE_RECONCILIATION_COMPLETED: V2EventType
 V2_EVENT_TYPE_LOGIN_GRANT_BURNED: V2EventType
+V2_EVENT_TYPE_BONUS_PAYMENT_DISABLED: V2EventType
 V2_EVENT_PROCESSING_STATUS_UNSPECIFIED: V2EventProcessingStatus
 V2_EVENT_PROCESSING_STATUS_ACCEPTED: V2EventProcessingStatus
 V2_EVENT_PROCESSING_STATUS_DUPLICATE: V2EventProcessingStatus

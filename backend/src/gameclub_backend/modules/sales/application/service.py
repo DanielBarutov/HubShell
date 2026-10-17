@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
 import logging
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from gameclub_backend.application.audit import AuditEvent, AuditRepository
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusEarningCommand,
+    BonusEarningsPort,
+)
+from gameclub_backend.modules.clients.bonus import BonusPolicy, BonusSource
 from gameclub_backend.modules.payment_methods.domain import (
     PaymentPart,
     normalize_payment_parts,
     validate_mixed_cash_transfer,
 )
 from gameclub_backend.modules.sales.application.ports import (
+    ActiveSessionLookup,
     CashSaleSettlement,
     ClientSale,
     Clock,
@@ -40,6 +47,9 @@ class ProductSaleService:
         cash: CashSaleSettlement | None = None,
         clock: Clock | None = None,
         audit: AuditRepository | None = None,
+        bonuses: BonusEarningsPort | None = None,
+        active_sessions: ActiveSessionLookup | None = None,
+        transaction: Callable[[], contextlib.AbstractAsyncContextManager] | None = None,
     ) -> None:
         self._repository = repository
         self._products = products
@@ -47,6 +57,9 @@ class ProductSaleService:
         self._cash = cash
         self._clock = clock or UtcClock()
         self._audit = audit
+        self._bonuses = bonuses
+        self._active_sessions = active_sessions
+        self._transaction = transaction or contextlib.nullcontext
 
     async def sell(
         self,
@@ -128,9 +141,19 @@ class ProductSaleService:
         actor = sold_by.strip()
         if not actor:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Sale author is required")
+        bonus_rate = 0
+        bonus_session_id = None
+        if client_id is not None and self._bonuses is not None:
+            policy = await self._bonuses.get_bonus_policy(client_id)
+            bonus_rate = policy.rate(BonusSource.PRODUCT)
+            if self._active_sessions is not None:
+                active = await self._active_sessions.get_active_for_client(client_id)
+                bonus_session_id = active.id if active is not None else None
         try:
             sale = ProductSale(
                 id=uuid.uuid4(),
+                bonus_rate_bps=bonus_rate,
+                bonus_session_id=bonus_session_id,
                 product_id=product.id,
                 product_name=product.name,
                 product_category=product.category,
@@ -177,6 +200,7 @@ class ProductSaleService:
             settlement_parts = pending.payment_parts or (
                 PaymentPart(method.value, pending.total_price_cents),
             )
+            debit_ids = []
             for index, part in enumerate(settlement_parts):
                 if part.method == ProductPaymentMethod.BALANCE.value:
                     if client_id is None:
@@ -185,13 +209,16 @@ class ProductSaleService:
                             "Balance payment requires a client",
                         )
                     settlement_attempted = True
-                    await self._clients.debit(
+                    debit_result = await self._clients.debit(
                         client_id=client_id,
                         amount_cents=part.amount_cents,
                         reason=f"Product sale {pending.id}",
                         actor_id=actor,
                         idempotency_key=f"product-sale-balance:{key}:{index}",
                     )
+                    if self._bonuses is not None:
+                        _, debit = debit_result
+                        debit_ids.append(debit.id)
                 elif part.method == ProductPaymentMethod.TRANSFER.value:
                     # Перевод подтверждает оператор, это безналичный settlement.
                     # PaymentPart остаётся бухгалтерским фактом, внешнего вызова
@@ -212,7 +239,7 @@ class ProductSaleService:
                         actor_id=actor,
                     )
                 settled_any = True
-            result = await self._repository.complete(pending.complete(self._clock.now()))
+            result = await self._complete_sale(pending, debit_ids)
             await self._record_audit(
                 action="product_sale.settlement",
                 sale=result,
@@ -334,6 +361,7 @@ class ProductSaleService:
             PaymentPart(sale.payment_method.value, sale.total_price_cents),
         )
         try:
+            debit_ids = []
             for index, part in enumerate(parts):
                 if part.method == ProductPaymentMethod.BALANCE.value:
                     if sale.client_id is None:
@@ -341,13 +369,16 @@ class ProductSaleService:
                             ErrorCode.CONFLICT,
                             "Balance payment requires a client",
                         )
-                    await self._clients.debit(
+                    debit_result = await self._clients.debit(
                         client_id=sale.client_id,
                         amount_cents=part.amount_cents,
                         reason=f"Product sale {sale.id}",
                         actor_id=sale.sold_by,
                         idempotency_key=f"product-sale-balance:{sale.idempotency_key}:{index}",
                     )
+                    if self._bonuses is not None:
+                        _, debit = debit_result
+                        debit_ids.append(debit.id)
                 elif part.method == ProductPaymentMethod.TRANSFER.value:
                     continue
                 else:
@@ -362,7 +393,7 @@ class ProductSaleService:
                         sale_idempotency_key=f"{sale.idempotency_key}:{index}",
                         actor_id=sale.sold_by,
                     )
-            result = await self._repository.complete(sale.complete(self._clock.now()))
+            result = await self._complete_sale(sale, debit_ids)
             await self._record_audit(
                 action="product_sale.settlement",
                 sale=result,
@@ -390,6 +421,30 @@ class ProductSaleService:
                 status_code=500,
             )
             raise
+
+    async def _complete_sale(self, sale: ProductSale, debit_ids: list[uuid.UUID]) -> ProductSale:
+        async with self._transaction():
+            result = await self._repository.complete(sale.complete(self._clock.now()))
+            if self._bonuses is not None and result.client_id is not None:
+                parts = result.payment_parts or (
+                    PaymentPart(result.payment_method.value, result.total_price_cents),
+                )
+                await self._bonuses.confirm_bonus_earning(
+                    BonusEarningCommand(
+                        receipt_id=uuid.uuid5(result.id, "bonus-earning"),
+                        client_id=result.client_id,
+                        source_key=f"product-sale:{result.id}",
+                        source=BonusSource.PRODUCT,
+                        policy=BonusPolicy(product_rate_bps=result.bonus_rate_bps),
+                        debit_operation_ids=tuple(debit_ids),
+                        external_paid_cents=sum(
+                            p.amount_cents for p in parts if p.method != "balance"
+                        ),
+                        session_id=result.bonus_session_id,
+                        actor_id=result.sold_by,
+                    )
+                )
+            return result
 
     @staticmethod
     def _is_retryable(error: Exception) -> bool:

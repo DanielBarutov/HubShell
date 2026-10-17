@@ -11,6 +11,62 @@ namespace GameClub.Client.Tests;
 public sealed class V2AccessGateTests
 {
     [Fact]
+    public async Task MinuteBonusToggleCancelsLostEnableAndRefreshNeverReenablesIt()
+    {
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            tariffs: [new("minute", "Minute", null, 0, 0, 100, false, true)]) with { BalanceCents = 1000 };
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        var portal = new MinuteBonusPortal(saved);
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: saved.DeviceId,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator), v2Ledger: coordinator,
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier(), v2ClientPortal: portal);
+        await vm.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+        Assert.True(vm.IsMinuteBonusVisible);
+        Assert.False(vm.IsMinuteBonusSelected);
+        Assert.Equal(100, (await vm.QuoteMinuteBonusAsync())!.PriceCents);
+        Assert.Equal(0, portal.EnableCalls);
+        await vm.SetMinuteBonusAsync(true);
+        Assert.True(vm.IsMinuteBonusSelected);
+        Assert.Contains("ожидает", vm.MinuteBonusStatus);
+        Assert.Null((await coordinator.ReadLedgerAsync())!.MinuteBonus);
+        await vm.SetMinuteBonusAsync(false);
+        Assert.False(vm.IsMinuteBonusSelected);
+        Assert.True((await coordinator.ReadPendingMinuteBonusAsync()).CancellationPending);
+        await vm.RefreshPortalAsync();
+        Assert.Null((await coordinator.ReadPendingMinuteBonusAsync()).Request);
+        Assert.Equal(1, portal.EnableCalls);
+        Assert.False(vm.IsMinuteBonusSelected);
+        await vm.SetMinuteBonusAsync(true);
+        Assert.True((await coordinator.ReadLedgerAsync())!.MinuteBonus!.Enabled);
+        await vm.SetMinuteBonusAsync(false);
+        Assert.False(vm.IsMinuteBonusSelected);
+    }
+
+    private sealed class MinuteBonusPortal(V2LocalSessionLedger ledger) : IV2ClientPortalGateway
+    {
+        public int EnableCalls { get; private set; }
+        private int _cancelCalls;
+        private ClientPortalSnapshot Snapshot() => new(ledger.ClientId.ToString(), "Test", "", ledger.BalanceCents,
+            0, 0, [], [], [], [], [], [], []);
+        public Task<ClientPortalSnapshot> ResumePortalAsync(string deviceId, string sessionId, string clientId, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
+        public Task<ClientPortalSnapshot> RefreshAsync(string deviceId, int limit = 50, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
+        public Task<ClientPortalSnapshot> ActivateEntitlementAsync(string deviceId, string entitlementId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ClientPortalSnapshot> PurchaseEntitlementAsync(string deviceId, string tariffId, string idempotencyKey, IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default, BonusPurchaseConfirmation? bonusConfirmation = null) => throw new NotSupportedException();
+        public Task<BonusGameQuote> QuoteEntitlementAsync(string deviceId, string tariffId, bool useBonus, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<BonusGameQuote> QuoteMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new BonusGameQuote(100, 20, 80, 4, 500, 2000, 1000, 0, true, true));
+        public Task<V2MinuteBonusGrant> EnableMinuteBonusAsync(V2MinuteBonusRequest request, IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default)
+        {
+            EnableCalls++;
+            return EnableCalls == 1 ? Task.FromException<V2MinuteBonusGrant>(new RpcException(new Status(StatusCode.Unavailable, "lost")))
+                : Task.FromResult(new V2MinuteBonusGrant(Guid.NewGuid(), EnableCalls, request, 1000, 2000));
+        }
+        public Task CancelMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) =>
+            ++_cancelCalls == 1 ? Task.FromException(new RpcException(new Status(StatusCode.Unavailable, "offline"))) : Task.CompletedTask;
+    }
+
+    [Fact]
     public async Task OfflineMinuteUpdatesDisplayedNegativeBalanceFromLocalLedger()
     {
         var now = DateTimeOffset.Parse("2026-10-12T12:00:00Z");
@@ -663,6 +719,11 @@ public sealed class V2AccessGateTests
 
     private sealed class CompletedSessionPortal(V2LocalSessionLedger ledger) : IV2ClientPortalGateway
     {
+        public Task CancelMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<BonusGameQuote> QuoteMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<V2MinuteBonusGrant> EnableMinuteBonusAsync(V2MinuteBonusRequest request,
+            IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
         private ClientPortalSnapshot CreateSnapshot() => new(
             ledger.ClientId.ToString(),
             "NightFox",
@@ -712,8 +773,13 @@ public sealed class V2AccessGateTests
             string tariffId,
             string idempotencyKey,
             IOfflineSnapshotSignatureVerifier signatureVerifier,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            BonusPurchaseConfirmation? bonusConfirmation = null) =>
             throw new NotSupportedException();
+
+        public Task<BonusGameQuote> QuoteEntitlementAsync(
+            string deviceId, string tariffId, bool useBonus,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class AcceptingVerifier : IOfflineSnapshotSignatureVerifier

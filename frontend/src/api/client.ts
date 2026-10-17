@@ -1,5 +1,11 @@
 import { normalizePhoneQuery } from "./normalizers";
 import type {
+  BackendBonusReport,
+  BackendBonusProgram,
+  BackendBonusWallet,
+  BackendBonusOperation,
+  BackendBonusGameQuote,
+  BonusPurchaseConfirmation,
   BackendWorkstation,
   RelaySettings,
   BackendLockdownPolicy,
@@ -478,6 +484,36 @@ export class GameClubApi {
     });
   }
 
+  async getBonusProgram(): Promise<BackendBonusProgram> {
+    return this.request<BackendBonusProgram>("/bonus-program");
+  }
+
+  async updateBonusProgram(body: BackendBonusProgram, key: string): Promise<BackendBonusProgram> {
+    return this.request<BackendBonusProgram>("/bonus-program", {
+      method: "PUT", headers: { "Idempotency-Key": key }, body: JSON.stringify(body),
+    });
+  }
+
+  async getBonusWallet(clientId: string): Promise<BackendBonusWallet> {
+    return this.request<BackendBonusWallet>(`/clients/${clientId}/bonuses`);
+  }
+
+  async adjustBonus(clientId: string, amountCents: number, reason: string, key: string): Promise<BackendBonusOperation> {
+    return this.request<BackendBonusOperation>(`/clients/${clientId}/bonus-adjustments`, {
+      method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ amount_cents: amountCents, reason }),
+    });
+  }
+
+  async listBonusOperations(clientId: string, limit = 20): Promise<BackendBonusOperation[]> {
+    return this.request<BackendBonusOperation[]>(`/clients/${clientId}/bonus-operations?limit=${limit}`);
+  }
+
+  async quoteEntitlement(clientId: string, tariffId: string, useBonus: boolean): Promise<BackendBonusGameQuote> {
+    return this.request<BackendBonusGameQuote>(`/clients/${clientId}/entitlements/quote`, {
+      method: "POST", body: JSON.stringify({ tariff_id: tariffId, use_bonus: useBonus }),
+    });
+  }
+
   async listClientEntitlements(clientId: string): Promise<BackendEntitlement[]> {
     return this.request<BackendEntitlement[]>(`/clients/${clientId}/entitlements`);
   }
@@ -488,11 +524,12 @@ export class GameClubApi {
     idempotencyKey: string,
     paymentParts: BackendPaymentPart[] = [],
     cashShiftId?: string,
+    bonusConfirmation?: BonusPurchaseConfirmation,
   ): Promise<BackendEntitlement> {
     return this.request<BackendEntitlement>(`/clients/${clientId}/entitlements`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId }),
+      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId, ...bonusConfirmation }),
     });
   }
 
@@ -666,6 +703,11 @@ export class GameClubApi {
   async getAnalyticsOverview(startAt: string, endAt: string, limit = 10): Promise<BackendAnalyticsOverview> {
     const query = new URLSearchParams({ start_at: startAt, end_at: endAt, limit: String(limit) });
     return this.request<BackendAnalyticsOverview>(`/analytics/overview?${query}`);
+  }
+
+  async getBonusReport(startAt: string, endAt: string): Promise<BackendBonusReport> {
+    const query = new URLSearchParams({ start_at: startAt, end_at: endAt });
+    return this.request<BackendBonusReport>(`/analytics/bonuses?${query}`, undefined, true, this.analyticsBaseUrl);
   }
 
   async getAnalyticsFinance(params: {

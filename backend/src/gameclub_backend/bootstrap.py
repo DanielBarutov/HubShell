@@ -8,7 +8,7 @@ from gameclub_backend.application.audit import AuditRepository
 from gameclub_backend.config import Settings
 from gameclub_backend.infrastructure.audit_memory import InMemoryAuditRepository
 from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
-from gameclub_backend.infrastructure.database import EngineProvider
+from gameclub_backend.infrastructure.database import EngineProvider, application_transaction
 from gameclub_backend.infrastructure.resources import InfrastructureResources
 from gameclub_backend.modules.analytics.application.finance import FinanceAnalyticsService
 from gameclub_backend.modules.analytics.application.ports import (
@@ -82,6 +82,9 @@ from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.ports import ClientRepository, GuestRepository
 from gameclub_backend.modules.clients.application.service import ClientService
+from gameclub_backend.modules.clients.infrastructure.balance_transaction import (
+    PostgresClientBalanceTransactionWriter,
+)
 from gameclub_backend.modules.clients.infrastructure.guests_memory import InMemoryGuestRepository
 from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.clients.infrastructure.postgres import (
@@ -113,10 +116,14 @@ from gameclub_backend.modules.entitlements.infrastructure.memory import (
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
 )
+from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetService
 from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCreditService
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import V2SnapshotIssueService
+from gameclub_backend.modules.eventing_v2.infrastructure.bonus_budget_postgres import (
+    PostgresBonusBudgetRepository,
+)
 from gameclub_backend.modules.eventing_v2.infrastructure.deposit_postgres import (
     PostgresV2DepositCreditRepository,
 )
@@ -397,6 +404,10 @@ def build_application_services(
         active_sessions=session_repository,
         workstations=workstation_repository,
         cash=CashShiftEntitlementSettlement(cash_shifts),
+        bonuses=clients,
+        transaction=(lambda: application_transaction(postgres_engine_provider))
+        if settings.postgres_dsn
+        else None,
     )
     reservations = ReservationService(
         reservation_repository,
@@ -436,6 +447,7 @@ def build_application_services(
         notifications=session_notifications,
         v2_session_leases=v2_session_leases,
         login_grant_minutes=settings.login_grant_minutes,
+        bonuses=clients,
     )
     from gameclub_backend.modules.direct_payments.infrastructure.xbox_relay import (
         MemoryXboxRelayRepository,
@@ -469,10 +481,15 @@ def build_application_services(
         clients=clients,
         cash=CashShiftSaleSettlement(cash_shifts),
         audit=audit_repository,
+        bonuses=clients,
+        transaction=(lambda: application_transaction(postgres_engine_provider))
+        if settings.postgres_dsn
+        else None,
+        active_sessions=session_repository,
     )
     payment_methods = PaymentMethodService(payment_method_repository)
     analytics = AnalyticsService(analytics_repository)
-    finance_analytics = FinanceAnalyticsService(finance_repository)
+    finance_analytics = FinanceAnalyticsService(finance_repository, bonuses=clients)
     analytics_read_v2 = AnalyticsReadService(analytics_read_repository)
     analytics_projection = AnalyticsProjectionService(analytics_heavy_repository)
     report_jobs = ReportJobService(analytics_heavy_repository)
@@ -506,13 +523,23 @@ def build_application_services(
     v2_guest_access = None
     v2_token_service = JwtTokenService(settings) if settings.jwt_secret else None
     v2_deposit_credits = (
-        V2DepositCreditService(PostgresV2DepositCreditRepository(postgres_engine_provider))
+        V2DepositCreditService(
+            PostgresV2DepositCreditRepository(
+                postgres_engine_provider,
+                clients=PostgresClientBalanceTransactionWriter(),
+            )
+        )
         if settings.postgres_dsn
         else None
     )
     if settings.postgres_dsn and settings.v2_snapshot_signing_key_id:
         signing_key_id, signer = create_v2_snapshot_signer(settings)
         v2_offline_login = V2OfflineLoginService(
+            bonus_budgets=BonusBudgetService(
+                PostgresBonusBudgetRepository(postgres_engine_provider),
+                clients,
+                lambda: application_transaction(postgres_engine_provider),
+            ),
             workstations=workstations,
             client_portal=client_portal,
             sessions=sessions,

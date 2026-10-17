@@ -1,5 +1,8 @@
+import datetime
+
 from gameclub.v2 import offline_session_snapshot_pb2 as _offline_session_snapshot_pb2
 from google.protobuf import empty_pb2 as _empty_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -109,17 +112,125 @@ class ActivateOfflineEntitlementRequest(_message.Message):
     def __init__(self, device_id: _Optional[str] = ..., entitlement_id: _Optional[str] = ...) -> None: ...
 
 class PurchaseOfflineEntitlementRequest(_message.Message):
-    __slots__ = ("device_id", "tariff_id", "idempotency_key")
+    __slots__ = ("device_id", "tariff_id", "idempotency_key", "bonus_confirmation")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    BONUS_CONFIRMATION_FIELD_NUMBER: _ClassVar[int]
     device_id: str
     tariff_id: str
     idempotency_key: str
-    def __init__(self, device_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    bonus_confirmation: OfflineBonusPurchaseConfirmation
+    def __init__(self, device_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., bonus_confirmation: _Optional[_Union[OfflineBonusPurchaseConfirmation, _Mapping]] = ...) -> None: ...
+
+class QuoteOfflineEntitlementRequest(_message.Message):
+    __slots__ = ("device_id", "tariff_id", "use_bonus")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
+    USE_BONUS_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    tariff_id: str
+    use_bonus: bool
+    def __init__(self, device_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., use_bonus: _Optional[bool] = ...) -> None: ...
+
+class OfflineBonusPurchaseConfirmation(_message.Message):
+    __slots__ = ("price_cents", "bonus_cents", "money_cents", "earned_bonus_cents")
+    PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    MONEY_CENTS_FIELD_NUMBER: _ClassVar[int]
+    EARNED_BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    price_cents: int
+    bonus_cents: int
+    money_cents: int
+    earned_bonus_cents: int
+    def __init__(self, price_cents: _Optional[int] = ..., bonus_cents: _Optional[int] = ..., money_cents: _Optional[int] = ..., earned_bonus_cents: _Optional[int] = ...) -> None: ...
+
+class OfflineBonusGameQuote(_message.Message):
+    __slots__ = ("price_cents", "bonus_cents", "money_cents", "earned_bonus_cents", "earning_rate_bps", "payment_limit_bps", "available_bonus_cents", "reserved_bonus_cents", "bonus_allowed", "can_pay")
+    PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    MONEY_CENTS_FIELD_NUMBER: _ClassVar[int]
+    EARNED_BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    EARNING_RATE_BPS_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_LIMIT_BPS_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    RESERVED_BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    BONUS_ALLOWED_FIELD_NUMBER: _ClassVar[int]
+    CAN_PAY_FIELD_NUMBER: _ClassVar[int]
+    price_cents: int
+    bonus_cents: int
+    money_cents: int
+    earned_bonus_cents: int
+    earning_rate_bps: int
+    payment_limit_bps: int
+    available_bonus_cents: int
+    reserved_bonus_cents: int
+    bonus_allowed: bool
+    can_pay: bool
+    def __init__(self, price_cents: _Optional[int] = ..., bonus_cents: _Optional[int] = ..., money_cents: _Optional[int] = ..., earned_bonus_cents: _Optional[int] = ..., earning_rate_bps: _Optional[int] = ..., payment_limit_bps: _Optional[int] = ..., available_bonus_cents: _Optional[int] = ..., reserved_bonus_cents: _Optional[int] = ..., bonus_allowed: _Optional[bool] = ..., can_pay: _Optional[bool] = ...) -> None: ...
+
+class EnableMinuteBonusRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "snapshot_id", "snapshot_version", "last_sequence", "last_payload_hash", "idempotency_key")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
+    SNAPSHOT_VERSION_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    LAST_PAYLOAD_HASH_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    snapshot_id: str
+    snapshot_version: int
+    last_sequence: int
+    last_payload_hash: str
+    idempotency_key: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., snapshot_id: _Optional[str] = ..., snapshot_version: _Optional[int] = ..., last_sequence: _Optional[int] = ..., last_payload_hash: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+
+class MinuteBonusBudgetPayload(_message.Message):
+    __slots__ = ("grant_id", "schema_version", "grant_version", "client_id", "session_id", "device_id", "snapshot_id", "snapshot_version", "checkpoint_sequence", "checkpoint_hash", "budget_cents", "payment_limit_bps", "issued_at", "idempotency_key")
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
+    GRANT_VERSION_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
+    SNAPSHOT_VERSION_FIELD_NUMBER: _ClassVar[int]
+    CHECKPOINT_SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    CHECKPOINT_HASH_FIELD_NUMBER: _ClassVar[int]
+    BUDGET_CENTS_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_LIMIT_BPS_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_AT_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    grant_id: str
+    schema_version: int
+    grant_version: int
+    client_id: str
+    session_id: str
+    device_id: str
+    snapshot_id: str
+    snapshot_version: int
+    checkpoint_sequence: int
+    checkpoint_hash: str
+    budget_cents: int
+    payment_limit_bps: int
+    issued_at: _timestamp_pb2.Timestamp
+    idempotency_key: str
+    def __init__(self, grant_id: _Optional[str] = ..., schema_version: _Optional[int] = ..., grant_version: _Optional[int] = ..., client_id: _Optional[str] = ..., session_id: _Optional[str] = ..., device_id: _Optional[str] = ..., snapshot_id: _Optional[str] = ..., snapshot_version: _Optional[int] = ..., checkpoint_sequence: _Optional[int] = ..., checkpoint_hash: _Optional[str] = ..., budget_cents: _Optional[int] = ..., payment_limit_bps: _Optional[int] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+
+class SignedMinuteBonusBudget(_message.Message):
+    __slots__ = ("payload", "signing_key_id", "signature")
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    SIGNING_KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    payload: MinuteBonusBudgetPayload
+    signing_key_id: str
+    signature: bytes
+    def __init__(self, payload: _Optional[_Union[MinuteBonusBudgetPayload, _Mapping]] = ..., signing_key_id: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class OfflinePortalSnapshot(_message.Message):
-    __slots__ = ("client_id", "nickname", "phone", "balance_cents", "balance_bonus", "available_time_minutes", "balance_operations", "sessions", "charges", "purchases", "entitlements", "tariffs", "reservations", "payment_methods", "purchased_package")
+    __slots__ = ("client_id", "nickname", "phone", "balance_cents", "balance_bonus", "available_time_minutes", "balance_operations", "sessions", "charges", "purchases", "entitlements", "tariffs", "reservations", "payment_methods", "purchased_package", "bonus_wallet")
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     NICKNAME_FIELD_NUMBER: _ClassVar[int]
     PHONE_FIELD_NUMBER: _ClassVar[int]
@@ -135,6 +246,7 @@ class OfflinePortalSnapshot(_message.Message):
     RESERVATIONS_FIELD_NUMBER: _ClassVar[int]
     PAYMENT_METHODS_FIELD_NUMBER: _ClassVar[int]
     PURCHASED_PACKAGE_FIELD_NUMBER: _ClassVar[int]
+    BONUS_WALLET_FIELD_NUMBER: _ClassVar[int]
     client_id: str
     nickname: str
     phone: str
@@ -150,7 +262,20 @@ class OfflinePortalSnapshot(_message.Message):
     reservations: _containers.RepeatedCompositeFieldContainer[OfflinePortalReservation]
     payment_methods: _containers.RepeatedCompositeFieldContainer[OfflinePaymentMethod]
     purchased_package: _offline_session_snapshot_pb2.SignedOfflineSessionSnapshot
-    def __init__(self, client_id: _Optional[str] = ..., nickname: _Optional[str] = ..., phone: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., available_time_minutes: _Optional[int] = ..., balance_operations: _Optional[_Iterable[_Union[OfflineBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[OfflinePortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[OfflinePortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[OfflinePortalPurchase, _Mapping]]] = ..., entitlements: _Optional[_Iterable[_Union[OfflinePortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflinePortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[OfflinePortalReservation, _Mapping]]] = ..., payment_methods: _Optional[_Iterable[_Union[OfflinePaymentMethod, _Mapping]]] = ..., purchased_package: _Optional[_Union[_offline_session_snapshot_pb2.SignedOfflineSessionSnapshot, _Mapping]] = ...) -> None: ...
+    bonus_wallet: OfflineBonusWallet
+    def __init__(self, client_id: _Optional[str] = ..., nickname: _Optional[str] = ..., phone: _Optional[str] = ..., balance_cents: _Optional[int] = ..., balance_bonus: _Optional[int] = ..., available_time_minutes: _Optional[int] = ..., balance_operations: _Optional[_Iterable[_Union[OfflineBalanceOperation, _Mapping]]] = ..., sessions: _Optional[_Iterable[_Union[OfflinePortalSession, _Mapping]]] = ..., charges: _Optional[_Iterable[_Union[OfflinePortalCharge, _Mapping]]] = ..., purchases: _Optional[_Iterable[_Union[OfflinePortalPurchase, _Mapping]]] = ..., entitlements: _Optional[_Iterable[_Union[OfflinePortalEntitlement, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflinePortalTariff, _Mapping]]] = ..., reservations: _Optional[_Iterable[_Union[OfflinePortalReservation, _Mapping]]] = ..., payment_methods: _Optional[_Iterable[_Union[OfflinePaymentMethod, _Mapping]]] = ..., purchased_package: _Optional[_Union[_offline_session_snapshot_pb2.SignedOfflineSessionSnapshot, _Mapping]] = ..., bonus_wallet: _Optional[_Union[OfflineBonusWallet, _Mapping]] = ...) -> None: ...
+
+class OfflineBonusWallet(_message.Message):
+    __slots__ = ("total_cents", "available_cents", "reserved_cents", "pending_cents")
+    TOTAL_CENTS_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    RESERVED_CENTS_FIELD_NUMBER: _ClassVar[int]
+    PENDING_CENTS_FIELD_NUMBER: _ClassVar[int]
+    total_cents: int
+    available_cents: int
+    reserved_cents: int
+    pending_cents: int
+    def __init__(self, total_cents: _Optional[int] = ..., available_cents: _Optional[int] = ..., reserved_cents: _Optional[int] = ..., pending_cents: _Optional[int] = ...) -> None: ...
 
 class OfflinePaymentPart(_message.Message):
     __slots__ = ("method", "amount_cents", "reference")

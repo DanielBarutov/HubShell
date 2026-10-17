@@ -11,6 +11,26 @@ namespace GameClub.Client.Infrastructure;
 /// </summary>
 public static class V2OfflineSessionSnapshotReader
 {
+    public static V2MinuteBonusGrant VerifyMinuteBonusBudget(SignedMinuteBonusBudget signed,
+        IOfflineSnapshotSignatureVerifier verifier)
+    {
+        var payload = signed.Payload ?? throw new InvalidOperationException("Minute bonus signature payload is missing");
+        using var stream = new MemoryStream();
+        using (var output = new CodedOutputStream(stream, leaveOpen: true) { Deterministic = true })
+        { payload.WriteTo(output); output.Flush(); }
+        if (string.IsNullOrWhiteSpace(signed.SigningKeyId) || signed.Signature.IsEmpty
+            || !verifier.Verify(signed.SigningKeyId, stream.ToArray(), signed.Signature.Memory))
+            throw new InvalidOperationException("Minute bonus signature is invalid");
+        if (payload.SchemaVersion != 1 || payload.IssuedAt is null || payload.BudgetCents <= 0
+            || payload.PaymentLimitBps is < 1 or > 10000 || payload.GrantVersion < 1
+            || string.IsNullOrWhiteSpace(payload.IdempotencyKey))
+            throw new InvalidOperationException("Minute bonus grant is invalid");
+        return new(ParseGuid(payload.GrantId, "grant id"), checked((long)payload.GrantVersion),
+            new(ParseGuid(payload.ClientId, "client id"), ParseGuid(payload.SessionId, "session id"),
+                payload.DeviceId, ParseGuid(payload.SnapshotId, "snapshot id"), checked((int)payload.SnapshotVersion),
+                checked((long)payload.CheckpointSequence), payload.HasCheckpointHash ? payload.CheckpointHash : null,
+                payload.IdempotencyKey), payload.BudgetCents, checked((int)payload.PaymentLimitBps));
+    }
     public static V2LocalSessionLedger VerifyAndCreateLedger(
         SignedOfflineSessionSnapshot snapshot,
         IOfflineSnapshotSignatureVerifier verifier)
@@ -32,6 +52,23 @@ public static class V2OfflineSessionSnapshotReader
         {
             throw new InvalidOperationException("V2 offline snapshot version is invalid");
         }
+        V2PackagePayment? purchasePayment = null;
+        if (payload.HasPurchaseMoneyCents)
+        {
+            if (string.IsNullOrWhiteSpace(payload.PurchaseIdempotencyKey)
+                || payload.Packages.Count != 1 || payload.Tariffs.Count != 1
+                || payload.PurchaseMoneyCents < 0 || payload.PurchaseBonusCents < 0
+                || payload.PurchaseMoneyCents > payload.Tariffs[0].PackagePriceCents
+                || payload.PurchaseBonusCents != payload.Tariffs[0].PackagePriceCents - payload.PurchaseMoneyCents)
+            {
+                throw new InvalidOperationException("Signed package payment is invalid");
+            }
+            purchasePayment = new(payload.PurchaseMoneyCents, payload.PurchaseBonusCents);
+        }
+        else if (payload.PurchaseBonusCents != 0)
+        {
+            throw new InvalidOperationException("Signed bonus purchase has no monetary amount");
+        }
         return V2LocalSessionLedger.Create(
             snapshotVersion: checked((int)payload.SnapshotVersion),
             clientId: ParseGuid(payload.ClientId, "client id"),
@@ -44,7 +81,7 @@ public static class V2OfflineSessionSnapshotReader
             packages: payload.Packages.Select(ToPackage).ToArray(),
             tariffs: payload.Tariffs.Select(ToTariff).ToArray(),
             snapshotId: ParseGuid(payload.SnapshotId, "snapshot id"),
-            activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime()));
+            activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime())) with { PurchasePayment = purchasePayment };
     }
 
     public static byte[] SerializeDeterministic(OfflineSessionSnapshotPayload payload)

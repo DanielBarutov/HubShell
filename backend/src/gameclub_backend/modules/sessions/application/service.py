@@ -9,6 +9,7 @@ import uuid
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.catalog.domain import TariffAudience
+from gameclub_backend.modules.clients.application.bonus import BonusEarningsPort
 from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus, GuestSessionPayment
 from gameclub_backend.modules.entitlements.domain import Entitlement
 from gameclub_backend.modules.reservations.domain import ReservationStatus
@@ -66,6 +67,7 @@ class SessionService:
         notifications: TimeNotificationLookup | None = None,
         v2_session_leases: V2SessionLeaseRevoker | None = None,
         login_grant_minutes: int = 1,
+        bonuses: BonusEarningsPort | None = None,
     ) -> None:
         if not 0 <= login_grant_minutes <= 4_294_967_295:
             raise ValueError("Login grant minutes must fit an unsigned 32-bit integer")
@@ -81,6 +83,7 @@ class SessionService:
         self._tariffs = tariffs
         self._notifications = notifications
         self._v2_session_leases = v2_session_leases
+        self._bonuses = bonuses
         self._clock = clock or UtcClock()
 
     async def start(
@@ -342,6 +345,8 @@ class SessionService:
             login_grant_minutes=login_grant_minutes,
             entitlement_id=entitlement_id,
         )
+        if client_id is not None and self._bonuses is not None:
+            await self._bonuses.begin_bonus_session(client_id, session.id)
         if not persist:
             return session
         try:
@@ -704,6 +709,12 @@ class SessionService:
                     "Device identity does not match workstation",
                 )
         if session.status is SessionStatus.COMPLETED and session.source in self.LOCAL_SOURCES:
+            if (
+                session.client_id is not None
+                and self._bonuses is not None
+                and session.source != self.LOCAL_LEDGER_SOURCE
+            ):
+                await self._bonuses.finish_bonus_session(session.client_id, session.id)
             if self._v2_session_leases is not None:
                 await self._v2_session_leases.revoke(
                     session.id,
@@ -719,6 +730,13 @@ class SessionService:
             await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, "session_stop")
+        # V2 releases only after its ordered stop fact, after all pending debits.
+        if (
+            saved.client_id is not None
+            and self._bonuses is not None
+            and saved.source != self.LOCAL_LEDGER_SOURCE
+        ):
+            await self._bonuses.finish_bonus_session(saved.client_id, saved.id)
         return saved
 
     async def interrupt(
@@ -748,4 +766,10 @@ class SessionService:
             await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, normalized_reason)
+        if (
+            saved.client_id is not None
+            and self._bonuses is not None
+            and saved.source != self.LOCAL_LEDGER_SOURCE
+        ):
+            await self._bonuses.finish_bonus_session(saved.client_id, saved.id)
         return saved

@@ -40,6 +40,8 @@ class V2ConfirmedEventAnalyticsService:
         if event.event_type is V2EventType.BALANCE_CREDIT_APPLIED:
             return cls._deposit_events(event)
         if event.event_type is V2EventType.PER_MINUTE_DEBIT:
+            if cls._per_minute_debit_payload(event)["amount_cents"] == 0:
+                return ()
             return (cls._per_minute_debit_event(event),)
         return ()
 
@@ -134,8 +136,17 @@ class V2ConfirmedEventAnalyticsService:
         source_event_id = payload.get("source_event_id")
         source_event_type = payload.get("source_event_type")
         source_payload_hash = payload.get("source_payload_hash")
-        if not isinstance(amount_cents, int) or isinstance(amount_cents, bool) or amount_cents <= 0:
+        if not isinstance(amount_cents, int) or isinstance(amount_cents, bool) or amount_cents < 0:
             raise ValueError("Confirmed per-minute debit amount is invalid")
+        if amount_cents == 0:
+            bonus = payload.get("bonus_amount_cents")
+            if (
+                not isinstance(bonus, int)
+                or isinstance(bonus, bool)
+                or bonus <= 0
+                or bonus != payload.get("price_cents")
+            ):
+                raise ValueError("Zero monetary debit requires a confirmed bonus payment")
         if not isinstance(tariff_id, str) or not tariff_id.strip():
             raise ValueError("Confirmed per-minute debit tariff is invalid")
         if not isinstance(source_event_id, str) or not source_event_id.strip():

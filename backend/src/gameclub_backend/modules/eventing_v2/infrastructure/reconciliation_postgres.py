@@ -6,7 +6,7 @@ import datetime
 import json
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, Text, select, text
+from sqlalchemy import DateTime, Integer, String, Text, select, text, update
 from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,11 +14,9 @@ from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.application.audit import AuditEvent
 from gameclub_backend.infrastructure.audit_postgres import AuditEventModel
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.clients.application.bonus import BonusMinutePayment
+from gameclub_backend.modules.clients.application.ports import ClientBalanceTransactionWriter
 from gameclub_backend.modules.clients.domain import BalanceOperation, BalanceOperationType
-from gameclub_backend.modules.clients.infrastructure.postgres import (
-    BalanceOperationModel,
-    ClientModel,
-)
 from gameclub_backend.modules.entitlements.application.ports import EntitlementTransactionWriter
 from gameclub_backend.modules.eventing_v2.application.reconciliation import (
     V2ClientFactResult,
@@ -31,6 +29,9 @@ from gameclub_backend.modules.eventing_v2.domain import (
     V2OutgoingServerEvent,
     V2SessionChain,
     V2SessionChainStatus,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.bonus_budget_postgres import (
+    V2BonusBudgetModel,
 )
 from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import V2SessionLeaseModel
 from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
@@ -51,6 +52,7 @@ ALLOWED_CLIENT_FACT_TYPES = frozenset(
         V2EventType.PACKAGE_PURCHASED,
         V2EventType.PACKAGE_CONSUMED,
         V2EventType.PER_MINUTE_DEBIT,
+        V2EventType.BONUS_PAYMENT_DISABLED,
         V2EventType.PACKAGE_BURNED,
         V2EventType.SESSION_STOPPED,
     }
@@ -135,8 +137,11 @@ class PostgresV2ClientFactReconciliationRepository:
         engine_provider: EngineProvider,
         session_writer: SessionTransactionWriter | None = None,
         entitlement_writer: EntitlementTransactionWriter | None = None,
+        *,
+        clients: ClientBalanceTransactionWriter,
     ) -> None:
         self._engine_provider = engine_provider
+        self._clients = clients
         self._session_writer = session_writer
         self._entitlement_writer = entitlement_writer
 
@@ -251,15 +256,43 @@ class PostgresV2ClientFactReconciliationRepository:
                     snapshot = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload()
                     if lease.snapshot_payload:
                         snapshot.ParseFromString(lease.snapshot_payload)
-                    if not await self._apply_per_minute_debit(
-                        session, event, now, minimum_balance_cents=-snapshot.debt_limit_cents
-                    ):
+                    payload = json.loads(event.payload_json)
+                    if "bonus_grant_id" in payload:
+                        accepted = await self._apply_bonus_minute(session, event, snapshot)
+                    else:
+                        accepted = await self._apply_per_minute_debit(
+                            session, event, now, minimum_balance_cents=-snapshot.debt_limit_cents
+                        )
+                    if not accepted:
                         return V2ClientFactResult(
                             V2ClientFactStatus.CONFLICT,
                             event.event_id,
                             event.operation_id,
                             "Недостаточно средств на серверном балансе для поминутного списания",
                         )
+                if event.event_type is V2EventType.BONUS_PAYMENT_DISABLED:
+                    grant = await self._bonus_grant(session, event)
+                    if grant is None:
+                        return V2ClientFactResult(
+                            V2ClientFactStatus.CONFLICT,
+                            event.event_id,
+                            event.operation_id,
+                            "Бонусное разрешение неактивно",
+                        )
+                    await self._clients.release_bonus_reservation(
+                        session,
+                        event.client_id,
+                        event.session_id,
+                        event.operation_id,
+                        event.occurred_at,
+                    )
+                    await session.execute(
+                        update(V2BonusBudgetModel)
+                        .where(
+                            V2BonusBudgetModel.session_id == event.session_id,
+                        )
+                        .values(active=False, cancelled=True)
+                    )
                 if event.event_type is V2EventType.SESSION_STOPPED:
                     if self._session_writer is not None:
                         closed_session = await self._session_writer.complete(
@@ -278,6 +311,17 @@ class PostgresV2ClientFactReconciliationRepository:
                                 event.operation_id,
                                 "V2 event does not match its server session",
                             )
+                    await self._clients.finish_session(
+                        session, event.client_id, event.session_id, event.occurred_at
+                    )
+                    await session.execute(
+                        update(V2BonusBudgetModel)
+                        .where(
+                            V2BonusBudgetModel.session_id == event.session_id,
+                            V2BonusBudgetModel.active.is_(True),
+                        )
+                        .values(active=False, cancelled=True)
+                    )
                     lease.status = "revoked"
                     lease.revoked_at = now
                 await session.execute(
@@ -435,6 +479,7 @@ class PostgresV2ClientFactReconciliationRepository:
         """Проверить только уже утверждённую форму факта до его подтверждения."""
         if event.event_type not in (
             V2EventType.PER_MINUTE_DEBIT,
+            V2EventType.BONUS_PAYMENT_DISABLED,
             V2EventType.PACKAGE_CONSUMED,
             V2EventType.PACKAGE_BURNED,
         ):
@@ -445,6 +490,12 @@ class PostgresV2ClientFactReconciliationRepository:
             return False
         if not isinstance(payload, dict):
             return False
+        if event.event_type is V2EventType.BONUS_PAYMENT_DISABLED:
+            try:
+                uuid.UUID(payload.get("bonus_grant_id", ""))
+                return True
+            except (ValueError, TypeError, AttributeError):
+                return False
         if event.event_type in (V2EventType.PACKAGE_CONSUMED, V2EventType.PACKAGE_BURNED):
             try:
                 uuid.UUID(payload.get("package_id", ""))
@@ -455,6 +506,24 @@ class PostgresV2ClientFactReconciliationRepository:
             return isinstance(remaining, int) and not isinstance(remaining, bool) and remaining >= 0
         amount_cents = payload.get("amount_cents")
         tariff_id = payload.get("tariff_id")
+        if any(key in payload for key in ("bonus_grant_id", "bonus_amount_cents", "price_cents")):
+            try:
+                uuid.UUID(payload.get("bonus_grant_id", ""))
+            except (ValueError, TypeError, AttributeError):
+                return False
+            price, bonus = payload.get("price_cents"), payload.get("bonus_amount_cents")
+            return (
+                all(
+                    isinstance(value, int) and not isinstance(value, bool)
+                    for value in (price, bonus, amount_cents)
+                )
+                and price > 0
+                and bonus >= 0
+                and amount_cents >= 0
+                and amount_cents == price - bonus
+                and isinstance(tariff_id, str)
+                and bool(tariff_id.strip())
+            )
         return (
             isinstance(amount_cents, int)
             and not isinstance(amount_cents, bool)
@@ -464,7 +533,60 @@ class PostgresV2ClientFactReconciliationRepository:
         )
 
     @staticmethod
+    async def _bonus_grant(session, event: V2Event) -> V2BonusBudgetModel | None:
+        payload = json.loads(event.payload_json)
+        grant = await session.get(
+            V2BonusBudgetModel, uuid.UUID(payload["bonus_grant_id"]), with_for_update=True
+        )
+        if (
+            grant is None
+            or grant.cancelled
+            or grant.client_id != event.client_id
+            or grant.session_id != event.session_id
+            or grant.device_id != event.device_id
+            or str(grant.snapshot_id) != payload.get("snapshot_id")
+            or grant.snapshot_version != payload.get("snapshot_version")
+        ):
+            return None
+        return grant
+
+    async def _apply_bonus_minute(self, session, event: V2Event, snapshot) -> bool:
+        payload = json.loads(event.payload_json)
+        grant = await self._bonus_grant(session, event)
+        if grant is None or grant.spent_cents + payload["bonus_amount_cents"] > grant.budget_cents:
+            return False
+        tariff = next(
+            (item for item in snapshot.tariffs if item.tariff_id == payload["tariff_id"]), None
+        )
+        if (
+            tariff is None
+            or tariff.per_minute_price_cents != payload["price_cents"]
+            or (tariff.HasField("zone_id") and tariff.zone_id != snapshot.workstation_zone_id)
+            or not (tariff.is_per_minute or tariff.per_minute_price_cents > 0)
+        ):
+            return False
+        try:
+            payment = BonusMinutePayment(
+                event.client_id,
+                event.session_id,
+                event.operation_id,
+                event.occurred_at,
+                f"v2-device:{event.device_id[:117]}",
+                payload["price_cents"],
+                payload["amount_cents"],
+                payload["bonus_amount_cents"],
+                grant.payment_limit_bps,
+                -snapshot.debt_limit_cents,
+            )
+        except ValueError:
+            return False
+        if not await self._clients.apply_bonus_minute(session, payment):
+            return False
+        grant.spent_cents += payment.bonus_cents
+        return True
+
     async def _apply_per_minute_debit(
+        self,
         session,
         event: V2Event,
         occurred_at: datetime.datetime,
@@ -473,12 +595,6 @@ class PostgresV2ClientFactReconciliationRepository:
         """Списать минуту с серверного баланса в той же транзакции, что и подтверждение факта."""
         payload = json.loads(event.payload_json)
         amount_cents = payload["amount_cents"]
-        client = await session.scalar(
-            select(ClientModel).where(ClientModel.id == event.client_id).with_for_update()
-        )
-        if client is None or client.balance_cents - amount_cents < minimum_balance_cents:
-            return False
-
         operation = BalanceOperation(
             id=uuid.uuid5(event.operation_id, "v2-per-minute-balance-operation"),
             client_id=event.client_id,
@@ -490,9 +606,22 @@ class PostgresV2ClientFactReconciliationRepository:
             created_at=event.occurred_at,
             operation_type=BalanceOperationType.DEBIT,
         )
-        client.balance_cents -= amount_cents
-        client.updated_at = occurred_at
-        session.add(BalanceOperationModel.from_domain(operation))
+        if (
+            await self._clients.apply(
+                session, operation, minimum_balance_cents, accepted_at=occurred_at
+            )
+            is None
+        ):
+            return False
+        await self._clients.confirm_minute(
+            session,
+            event.client_id,
+            event.session_id,
+            operation.id,
+            event.operation_id,
+            operation.actor_id,
+            event.occurred_at,
+        )
         return True
 
     @staticmethod
@@ -570,6 +699,15 @@ def confirmed_per_minute_debit_event(
         traceparent=source.traceparent,
         payload={
             "amount_cents": amount_cents,
+            **(
+                {
+                    "bonus_amount_cents": payload["bonus_amount_cents"],
+                    "price_cents": payload["price_cents"],
+                    "bonus_grant_id": payload["bonus_grant_id"],
+                }
+                if "bonus_grant_id" in payload
+                else {}
+            ),
             "tariff_id": tariff_id,
             "source_event_id": str(source.event_id),
             "source_event_type": source.event_type.value,

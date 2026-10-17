@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import datetime
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.modules.catalog.domain import TariffAudience
+from gameclub_backend.modules.auth.domain import Principal, SubjectType
+from gameclub_backend.modules.catalog.domain import BillingMode, TariffAudience
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusCommand,
+    BonusEarningCommand,
+    BonusEarningsPort,
+    BonusGameQuote,
+    StaleBonusQuoteError,
+)
+from gameclub_backend.modules.clients.bonus import BonusOperationKind, BonusPolicy, BonusSource
 from gameclub_backend.modules.entitlements.application.ports import (
     ActiveSessionLookup,
     CashEntitlementSettlement,
@@ -52,6 +62,8 @@ class EntitlementService:
         active_sessions: ActiveSessionLookup | None = None,
         workstations: WorkstationLookup | None = None,
         cash: CashEntitlementSettlement | None = None,
+        bonuses: BonusEarningsPort | None = None,
+        transaction: Callable[[], contextlib.AbstractAsyncContextManager] | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -60,6 +72,8 @@ class EntitlementService:
         self._active_sessions = active_sessions
         self._workstations = workstations
         self._cash = cash
+        self._bonuses = bonuses
+        self._transaction = transaction or contextlib.nullcontext
         self._reconciliation_lock = asyncio.Lock()
 
     async def list_for_client(self, client_id: uuid.UUID) -> list[Entitlement]:
@@ -91,6 +105,43 @@ class EntitlementService:
             return None
         return await self.burn(active.id, client_id, reason)
 
+    async def quote_purchase(
+        self, client_id: uuid.UUID, tariff_id: uuid.UUID, use_bonus: bool = False
+    ) -> BonusGameQuote:
+        if self._bonuses is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE, "Bonus payment is not configured"
+            )
+        tariff = await self._tariffs.get_tariff(tariff_id)
+        if (
+            tariff is None
+            or not tariff.active
+            or tariff.billing_mode is not BillingMode.BLOCK
+            or not tariff.is_visible_to(self._clock.now(), TariffAudience.REGISTERED)
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Package is not available for this client")
+        active = (
+            await self._active_sessions.get_active_for_client(client_id)
+            if self._active_sessions
+            else None
+        )
+        session_id = active.id if active else None
+        price = await self._purchase_price(client_id, tariff)
+        return await self._bonuses.quote_bonus_game(client_id, price, use_bonus, session_id)
+
+    async def _purchase_price(self, client_id: uuid.UUID, tariff) -> int:
+        if self._bonuses is None:
+            return tariff.price_cents
+        client = await self._clients.get(client_id)
+        quote = await self._tariffs.quote_for_tariff(
+            tariff.id,
+            tariff.group_id,
+            self._clock.now(),
+            discount_category=client.discount_category,
+            audience=TariffAudience.REGISTERED,
+        )
+        return quote.price_cents
+
     async def purchase(
         self,
         client_id: uuid.UUID,
@@ -99,6 +150,75 @@ class EntitlementService:
         idempotency_key: str,
         payment_parts: Sequence[PaymentPart | Mapping[str, object]] | None = None,
         cash_shift_id: uuid.UUID | None = None,
+        use_bonus: bool = False,
+        expected_price_cents: int | None = None,
+        expected_bonus_cents: int | None = None,
+        expected_money_cents: int | None = None,
+        expected_earned_bonus_cents: int | None = None,
+        principal: Principal | None = None,
+    ) -> Entitlement:
+        if not isinstance(use_bonus, bool):
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Bonus choice must be a boolean")
+        if use_bonus:
+            operator = (
+                principal is not None
+                and principal.subject_type is SubjectType.OPERATOR
+                and principal.can("clients.manage")
+                and actor_id == principal.subject_id
+            )
+            member = (
+                principal is not None
+                and principal.subject_type is SubjectType.CLIENT
+                and principal.subject_id == str(client_id)
+                and actor_id == f"client:{client_id}"
+            )
+            if not operator and not member:
+                raise ApplicationError(
+                    ErrorCode.PERMISSION_DENIED, "Bonus purchase is not authorized for this client"
+                )
+        expected = (
+            expected_price_cents,
+            expected_bonus_cents,
+            expected_money_cents,
+            expected_earned_bonus_cents,
+        )
+        if use_bonus and (self._bonuses is None or any(value is None for value in expected)):
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "Confirm the server payment quote first"
+            )
+        if any(
+            value is not None
+            and (isinstance(value, bool) or not isinstance(value, int) or value < 0)
+            for value in expected
+        ):
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Invalid confirmed payment quote")
+        if use_bonus and (payment_parts or cash_shift_id is not None):
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "Bonus payment uses the deposit for its monetary remainder",
+            )
+        async with self._transaction() if use_bonus else contextlib.nullcontext():
+            return await self._purchase(
+                client_id,
+                tariff_id,
+                actor_id,
+                idempotency_key,
+                payment_parts,
+                cash_shift_id,
+                use_bonus,
+                expected,
+            )
+
+    async def _purchase(
+        self,
+        client_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        actor_id: str,
+        idempotency_key: str,
+        payment_parts: Sequence[PaymentPart | Mapping[str, object]] | None,
+        cash_shift_id: uuid.UUID | None,
+        use_bonus: bool,
+        expected: tuple[int | None, int | None, int | None, int | None],
     ) -> Entitlement:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -108,17 +228,16 @@ class EntitlementService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Purchase author is required")
         existing = await self._repository.get_by_idempotency_key(key)
         if existing is not None:
-            if existing.client_id != client_id or existing.tariff_id != tariff_id:
-                raise ApplicationError(
-                    ErrorCode.CONFLICT,
-                    "Idempotency key belongs to another package",
-                )
-            if existing.settlement_status is not EntitlementSettlementStatus.SETTLED:
-                raise ApplicationError(
-                    ErrorCode.CONFLICT,
-                    existing.settlement_error or "Package payment has not completed",
-                )
-            return existing
+            return self._replay_purchase(
+                existing,
+                client_id,
+                tariff_id,
+                actor,
+                payment_parts,
+                cash_shift_id,
+                use_bonus,
+                expected,
+            )
         tariff = await self._tariffs.get_tariff(tariff_id)
         if tariff is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")
@@ -130,23 +249,78 @@ class EntitlementService:
                 ErrorCode.CONFLICT,
                 "Tariff is not available for registered clients at this time",
             )
+        active = (
+            await self._active_sessions.get_active_for_client(client_id)
+            if self._active_sessions
+            else None
+        )
+        bonus_session_id = active.id if active is not None else None
+        policy = (
+            await self._bonuses.get_bonus_policy(client_id, bonus_session_id)
+            if self._bonuses is not None
+            else BonusPolicy(enabled=False)
+        )
+        if self._bonuses is not None and tariff.billing_mode is not BillingMode.BLOCK:
+            raise ApplicationError(ErrorCode.CONFLICT, "A package tariff is required")
+        price = await self._purchase_price(client_id, tariff)
+        bonus_amount = 0
+        earning_rate = policy.rate(BonusSource.GAME)
+        bonus_limit = policy.payment_limit_bps if policy.enabled else 0
+        if use_bonus:
+            quote = await self._bonuses.quote_bonus_game(client_id, price, True, bonus_session_id)
+            repeated = await self._repository.get_by_idempotency_key(key)
+            if repeated is not None:
+                return self._replay_purchase(
+                    repeated,
+                    client_id,
+                    tariff_id,
+                    actor,
+                    payment_parts,
+                    cash_shift_id,
+                    use_bonus,
+                    expected,
+                )
+            actual = (
+                quote.price_cents,
+                quote.bonus_cents,
+                quote.money_cents,
+                quote.earned_bonus_cents,
+            )
+            if actual != expected:
+                raise StaleBonusQuoteError()
+            if not quote.can_pay:
+                raise ApplicationError(ErrorCode.CONFLICT, "Insufficient balance")
+            bonus_amount = quote.bonus_cents
+            earning_rate = quote.earning_rate_bps
+            bonus_limit = quote.payment_limit_bps
+        elif any(value is not None for value in expected):
+            actual = (price, 0, price, price * earning_rate // 10000)
+            if any(value is not None and value != actual[i] for i, value in enumerate(expected)):
+                raise ApplicationError(ErrorCode.CONFLICT, "Confirmed payment quote has changed")
         try:
-            parts = normalize_payment_parts(payment_parts, tariff.price_cents)
+            parts = normalize_payment_parts(payment_parts, price - bonus_amount)
             validate_mixed_cash_transfer(parts)
-            if not parts:
-                parts = (PaymentPart("balance", tariff.price_cents),)
+            if not parts and price > bonus_amount:
+                parts = (PaymentPart("balance", price - bonus_amount),)
             if any(part.method == "cash" for part in parts) and self._cash is None:
                 raise ValueError("Cash settlement is not configured")
             queued = await self._repository.list_for_client(client_id)
             position = max((item.queue_position for item in queued), default=0) + 1
             entitlement = Entitlement(
                 id=uuid.uuid4(),
+                purchase_reason=f"Покупка тарифа «{tariff.name}»",
+                purchase_actor_id=actor,
+                bonus_requested=use_bonus,
+                bonus_amount_cents=bonus_amount,
+                bonus_rate_bps=earning_rate,
+                bonus_session_id=bonus_session_id,
+                bonus_limit_bps=bonus_limit,
                 client_id=client_id,
                 tariff_id=tariff.id,
                 zone_id=tariff.group_id,
                 duration_minutes=tariff.duration_minutes,
                 remaining_minutes=tariff.duration_minutes,
-                price_cents=tariff.price_cents,
+                price_cents=price,
                 queue_position=position,
                 status=EntitlementStatus.QUEUED,
                 idempotency_key=key,
@@ -171,6 +345,55 @@ class EntitlementService:
         if created.settlement_status is not EntitlementSettlementStatus.SETTLED:
             return await self._settle_pending(created, actor)
         return await self._activate_after_settlement(created, now)
+
+    @staticmethod
+    def _replay_purchase(
+        existing: Entitlement,
+        client_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        actor: str,
+        payment_parts: Sequence[PaymentPart | Mapping[str, object]] | None,
+        cash_shift_id: uuid.UUID | None,
+        use_bonus: bool,
+        expected: tuple[int | None, int | None, int | None, int | None],
+    ) -> Entitlement:
+        if (
+            existing.client_id != client_id
+            or existing.tariff_id != tariff_id
+            or existing.bonus_requested != use_bonus
+            or existing.purchase_actor_id not in (None, actor)
+            or existing.cash_shift_id != cash_shift_id
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Idempotency key belongs to another package",
+            )
+        actual = (
+            existing.price_cents,
+            existing.bonus_amount_cents,
+            existing.price_cents - existing.bonus_amount_cents,
+            (existing.price_cents - existing.bonus_amount_cents) * existing.bonus_rate_bps // 10000,
+        )
+        if any(value is not None and value != actual[i] for i, value in enumerate(expected)):
+            raise ApplicationError(ErrorCode.CONFLICT, "Confirmed payment quote has changed")
+        if not use_bonus:
+            try:
+                requested_parts = normalize_payment_parts(payment_parts, existing.price_cents)
+                if not requested_parts and existing.price_cents:
+                    requested_parts = (PaymentPart("balance", existing.price_cents),)
+                original_parts = existing.payment_parts
+                if not original_parts and existing.price_cents:
+                    original_parts = (PaymentPart("balance", existing.price_cents),)
+                if requested_parts != original_parts:
+                    raise ValueError("Payment parts have changed")
+            except ValueError as error:
+                raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        if existing.settlement_status is not EntitlementSettlementStatus.SETTLED:
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                existing.settlement_error or "Package payment has not completed",
+            )
+        return existing
 
     async def retry_pending_settlement(self, entitlement_id: uuid.UUID) -> Entitlement:
         entitlement = await self.get(entitlement_id)
@@ -209,14 +432,31 @@ class EntitlementService:
         actor_id: str,
     ) -> Entitlement:
         now = self._clock.now()
+        actor_id = entitlement.purchase_actor_id or actor_id
         tariff = await self._tariffs.get_tariff(entitlement.tariff_id)
-        purchase_reason = (
+        purchase_reason = entitlement.purchase_reason or (
             f"Покупка тарифа «{tariff.name}»" if tariff is not None else "Покупка тарифа"
         )
         try:
+            if entitlement.bonus_amount_cents:
+                if self._bonuses is None:
+                    raise ApplicationError(
+                        ErrorCode.DEPENDENCY_UNAVAILABLE, "Bonus payment is not configured"
+                    )
+                await self._bonuses.apply_bonus_operation(
+                    BonusCommand(
+                        entitlement.client_id,
+                        BonusOperationKind.DEBIT,
+                        entitlement.bonus_amount_cents,
+                        actor_id,
+                        purchase_reason,
+                        f"entitlement-bonus:{entitlement.id}",
+                    )
+                )
+            debit_ids = []
             for index, part in enumerate(entitlement.payment_parts):
                 if part.method == "balance":
-                    await self._clients.debit(
+                    debit_result = await self._clients.debit(
                         client_id=entitlement.client_id,
                         amount_cents=part.amount_cents,
                         reason=purchase_reason,
@@ -224,6 +464,9 @@ class EntitlementService:
                         idempotency_key=f"entitlement-purchase:{entitlement.idempotency_key}:{index}",
                         allow_negative_balance=True,
                     )
+                    if self._bonuses is not None:
+                        _, debit = debit_result
+                        debit_ids.append(debit.id)
                 elif part.method == "cash":
                     if self._cash is None or entitlement.cash_shift_id is None:
                         raise ApplicationError(
@@ -236,7 +479,26 @@ class EntitlementService:
                         payment_idempotency_key=f"{entitlement.idempotency_key}:{index}",
                         actor_id=actor_id,
                     )
-            settled = await self._repository.save(entitlement.mark_settled(now))
+            async with self._transaction():
+                settled = await self._repository.save(entitlement.mark_settled(now))
+                if self._bonuses is not None:
+                    await self._bonuses.confirm_bonus_earning(
+                        BonusEarningCommand(
+                            receipt_id=uuid.uuid5(settled.id, "bonus-earning"),
+                            client_id=settled.client_id,
+                            source_key=f"entitlement:{settled.id}",
+                            source=BonusSource.GAME,
+                            policy=BonusPolicy(game_rate_bps=settled.bonus_rate_bps),
+                            debit_operation_ids=tuple(debit_ids),
+                            external_paid_cents=sum(
+                                p.amount_cents
+                                for p in settled.payment_parts
+                                if p.method != "balance"
+                            ),
+                            session_id=settled.bonus_session_id,
+                            actor_id=actor_id,
+                        )
+                    )
             return await self._activate_after_settlement(settled, now)
         except Exception as error:
             try:

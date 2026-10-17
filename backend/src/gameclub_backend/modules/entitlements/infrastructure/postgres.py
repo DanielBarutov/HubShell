@@ -2,13 +2,13 @@ import dataclasses
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, and_, or_, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.entitlements.domain import (
     Entitlement,
@@ -37,8 +37,14 @@ class PostgresEntitlementTransactionWriter:
                 select(EntitlementModel)
                 .where(
                     EntitlementModel.client_id == client_id,
-                    EntitlementModel.status.in_(
-                        (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
+                    or_(
+                        EntitlementModel.status.in_(
+                            (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
+                        ),
+                        and_(
+                            EntitlementModel.status == EntitlementStatus.BURNED,
+                            EntitlementModel.ended_at >= occurred_at,
+                        ),
                     ),
                 )
                 .order_by(EntitlementModel.queue_position)
@@ -63,10 +69,10 @@ class PostgresEntitlementTransactionWriter:
             if len(candidates) != 1:
                 return False
             package = candidates[0]
+        server_burned = package.status == EntitlementStatus.BURNED
         if (
             package.tariff_id != tariff_id
             or package.settlement_status != EntitlementSettlementStatus.SETTLED
-            or package.status not in (EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED)
             or remaining_minutes != package.remaining_minutes - (0 if burned else 1)
         ):
             return False
@@ -78,18 +84,20 @@ class PostgresEntitlementTransactionWriter:
         ):
             return False
         package.remaining_minutes = 0 if burned else remaining_minutes
-        package.status = (
-            EntitlementStatus.BURNED
-            if burned
-            else EntitlementStatus.EXHAUSTED
-            if remaining_minutes == 0
-            else EntitlementStatus.ACTIVE
-        )
+        # Server stop can burn the package before its earlier ordered facts arrive.
+        if not server_burned:
+            package.status = (
+                EntitlementStatus.BURNED
+                if burned
+                else EntitlementStatus.EXHAUSTED
+                if remaining_minutes == 0
+                else EntitlementStatus.ACTIVE
+            )
+            if package.remaining_minutes == 0:
+                package.ended_at = occurred_at
+            if burned:
+                package.burn_reason = "client_early_exit"
         package.activated_at = package.activated_at or occurred_at
-        if package.remaining_minutes == 0:
-            package.ended_at = occurred_at
-        if burned:
-            package.burn_reason = "client_early_exit"
         return True
 
 
@@ -137,9 +145,23 @@ class EntitlementModel(EntitlementBase):
     next_settlement_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    purchase_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    purchase_actor_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    bonus_rate_bps: Mapped[int] = mapped_column(default=0)
+    bonus_session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    bonus_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    bonus_amount_cents: Mapped[int] = mapped_column(BigInteger, default=0)
+    bonus_limit_bps: Mapped[int] = mapped_column(default=0)
 
     def to_domain(self) -> Entitlement:
         return Entitlement(
+            purchase_reason=self.purchase_reason,
+            purchase_actor_id=self.purchase_actor_id,
+            bonus_rate_bps=self.bonus_rate_bps,
+            bonus_session_id=self.bonus_session_id,
+            bonus_requested=self.bonus_requested,
+            bonus_amount_cents=self.bonus_amount_cents,
+            bonus_limit_bps=self.bonus_limit_bps,
             id=self.id,
             client_id=self.client_id,
             tariff_id=self.tariff_id,
@@ -172,6 +194,13 @@ class EntitlementModel(EntitlementBase):
     @classmethod
     def from_domain(cls, item: Entitlement) -> "EntitlementModel":
         return cls(
+            purchase_reason=item.purchase_reason,
+            purchase_actor_id=item.purchase_actor_id,
+            bonus_rate_bps=item.bonus_rate_bps,
+            bonus_session_id=item.bonus_session_id,
+            bonus_requested=item.bonus_requested,
+            bonus_amount_cents=item.bonus_amount_cents,
+            bonus_limit_bps=item.bonus_limit_bps,
             id=item.id,
             client_id=item.client_id,
             tariff_id=item.tariff_id,
@@ -239,7 +268,7 @@ class PostgresEntitlementRepository:
 
     async def create(self, item: Entitlement) -> Entitlement:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"entitlement-client:{item.client_id}"},
@@ -264,7 +293,7 @@ class PostgresEntitlementRepository:
 
     async def save(self, item: Entitlement) -> Entitlement:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.scalar(
                     select(EntitlementModel).where(EntitlementModel.id == item.id).with_for_update()
                 )
@@ -315,7 +344,7 @@ class PostgresEntitlementRepository:
     ) -> Entitlement:
         try:
             async with open_session(self._engine_provider) as session:
-                async with session.begin():
+                async with begin_session(session):
                     model = await session.scalar(
                         select(EntitlementModel)
                         .where(
@@ -357,7 +386,7 @@ class PostgresEntitlementRepository:
         now: datetime.datetime,
     ) -> tuple[Entitlement, int]:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.scalar(
                     select(EntitlementModel)
                     .where(
@@ -405,7 +434,7 @@ class PostgresEntitlementRepository:
         now: datetime.datetime,
     ) -> Entitlement:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.scalar(
                     select(EntitlementModel)
                     .where(

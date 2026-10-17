@@ -1,3 +1,4 @@
+import { BonusAnalytics } from "./BonusAnalytics";
 import { useEffect, useState } from "react";
 import {
   ArrowDownLeft,
@@ -1256,6 +1257,9 @@ export function AnalyticsView({
               "Некоторые источники данных пока недоступны."}
           </span>
         </div>
+      )}
+      {activeAnalyticsTab === "finance" && api && (
+        <BonusAnalytics api={api} {...getAnalyticsPeriodBounds(startDate, endDate)} refreshGeneration={refreshGeneration} />
       )}
       {!loading && overview && (
         <div
