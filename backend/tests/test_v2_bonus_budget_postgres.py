@@ -679,3 +679,71 @@ async def test_logout_before_package_facts_releases_bonus_reserve(budget_context
             await transaction.execute(
                 text("DELETE FROM client_entitlements WHERE id=:id"), {"id": package_id}
             )
+
+
+@pytest.mark.parametrize("limit", [10000])
+async def test_bonus_can_enable_again_after_disable_in_same_session(budget_context, limit):
+    """Повторное включение после минуты без бонусов не требует новой сессии и не тратит деньги."""
+    service, clients, request, principal, _, provider = budget_context
+    first = await service.issue(request, principal)
+    repo = PostgresV2ClientFactReconciliationRepository(
+        provider,
+        PostgresSessionTransactionWriter(),
+        clients=PostgresClientBalanceTransactionWriter(),
+    )
+    event = minute_fact(
+        request,
+        V2EventType.PER_MINUTE_DEBIT,
+        {
+            "tariff_id": "minute",
+            "price_cents": 100,
+            "amount_cents": 0,
+            "bonus_amount_cents": 100,
+            "bonus_grant_id": str(first.id),
+        },
+    )
+    assert (await repo.accept(event)).status is V2ClientFactStatus.ACCEPTED
+    disabled = minute_fact(
+        request,
+        V2EventType.BONUS_PAYMENT_DISABLED,
+        {"bonus_grant_id": str(first.id)},
+        2,
+        event.payload_hash,
+    )
+    assert (await repo.accept(disabled)).status is V2ClientFactStatus.ACCEPTED
+    assert (await clients.get_bonus_wallet(request.client_id)).reserved_cents == 0
+    ordinary = minute_fact(
+        request,
+        V2EventType.PER_MINUTE_DEBIT,
+        {"tariff_id": "minute", "amount_cents": 100},
+        3,
+        disabled.payload_hash,
+    )
+    assert (await repo.accept(ordinary)).status is V2ClientFactStatus.ACCEPTED
+    again = dataclasses.replace(
+        request,
+        idempotency_key="enable-again",
+        last_sequence=3,
+        last_payload_hash=ordinary.payload_hash,
+    )
+    quote = await service.quote(again, principal)
+    assert quote.bonus_allowed and quote.can_pay
+    assert quote.money_cents == 0
+    second = await service.issue(again, principal)
+    assert second.id != first.id and second.version > first.version
+    next_minute = minute_fact(
+        request,
+        V2EventType.PER_MINUTE_DEBIT,
+        {
+            "tariff_id": "minute",
+            "price_cents": 100,
+            "amount_cents": 0,
+            "bonus_amount_cents": 100,
+            "bonus_grant_id": str(second.id),
+        },
+        4,
+        ordinary.payload_hash,
+    )
+    assert (await repo.accept(next_minute)).status is V2ClientFactStatus.ACCEPTED
+    assert (await clients.get(request.client_id)).balance_cents == 9900
+    assert (await clients.get_bonus_wallet(request.client_id)).total_cents == 9800

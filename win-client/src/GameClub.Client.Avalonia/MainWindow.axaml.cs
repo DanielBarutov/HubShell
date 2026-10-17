@@ -410,8 +410,6 @@ public partial class MainWindow : Window
         finally { toggle.SetCurrentValue(ToggleSwitch.IsCheckedProperty, ViewModel.IsMinuteBonusSelected); }
     }
 
-    private async void RefreshMinuteBonus(object? sender, RoutedEventArgs args) => await ConfirmMinuteBonusAsync();
-
     private async Task ConfirmMinuteBonusAsync()
     {
         var quote = await ViewModel.QuoteMinuteBonusAsync();

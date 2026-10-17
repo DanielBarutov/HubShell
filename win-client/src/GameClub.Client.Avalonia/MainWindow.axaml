@@ -467,8 +467,8 @@
               </StackPanel>
               <Border Name="MinuteBonusPanel" Grid.Column="1" IsVisible="{Binding IsMinuteBonusVisible}" VerticalAlignment="Center">
                 <StackPanel Spacing="5">
-                  <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                    <TextBlock Text="Бонусы" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                  <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="Бонусы" FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Border Width="13" Height="13" CornerRadius="7" BorderThickness="1" BorderBrush="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Top" Margin="0,-5,0,0" Focusable="True" AutomationProperties.Name="Как работает оплата минут бонусами">
                       <ToolTip.Tip>
                         <StackPanel MaxWidth="260" Spacing="6">
@@ -479,8 +479,9 @@
                       <TextBlock Text="?" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                   </StackPanel>
-                  <ToggleSwitch Name="MinuteBonusToggle" AutomationProperties.Name="Оплата минут бонусами" IsChecked="{Binding IsMinuteBonusSelected, Mode=OneWay}" IsEnabled="{Binding CanChangeMinuteBonus}" IsCheckedChanged="ToggleMinuteBonus"/>
-                  <Button Content="Обновить резерв" Classes="widget-secondary" FontSize="10" IsVisible="{Binding IsMinuteBonusSelected}" IsEnabled="{Binding CanChangeMinuteBonus}" Click="RefreshMinuteBonus"/>
+                  <ToggleSwitch Name="MinuteBonusToggle" OnContent="" OffContent="" MinWidth="0" Margin="5" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="50%,50%" AutomationProperties.Name="Оплата минут бонусами" IsChecked="{Binding IsMinuteBonusSelected, Mode=OneWay}" IsEnabled="{Binding CanChangeMinuteBonus}" IsCheckedChanged="ToggleMinuteBonus">
+                    <ToggleSwitch.RenderTransform><ScaleTransform ScaleX="1.2" ScaleY="1.2"/></ToggleSwitch.RenderTransform>
+                  </ToggleSwitch>
                 </StackPanel>
               </Border>
             </Grid>
