@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from gameclub_backend.config import Settings
+from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
 from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
@@ -34,6 +35,11 @@ async def test_workstation_list_includes_snapshot_for_active_session_over_http()
                 headers=headers,
                 json={"device_id": "map-hover-device", "name": "Map hover PC"},
             )
+            legacy_workstation = await application.state.workstations.register(
+                "map-hover-legacy-device",
+                "Map hover legacy PC",
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
+            )
             client_response = await client.post(
                 "/api/v1/clients",
                 headers=headers,
@@ -43,7 +49,7 @@ async def test_workstation_list_includes_snapshot_for_active_session_over_http()
                 "/api/v1/sessions",
                 headers={**headers, "Idempotency-Key": "map-hover-session"},
                 json={
-                    "workstation_id": workstation_response.json()["id"],
+                    "workstation_id": str(legacy_workstation.id),
                     "client_id": client_response.json()["id"],
                 },
             )
@@ -55,7 +61,7 @@ async def test_workstation_list_includes_snapshot_for_active_session_over_http()
     assert session_response.status_code == 201
     assert list_response.status_code == 200
     workstation = next(
-        item for item in list_response.json() if item["id"] == workstation_response.json()["id"]
+        item for item in list_response.json() if item["id"] == str(legacy_workstation.id)
     )
     assert workstation["active_session_id"] == session_response.json()["id"]
     assert workstation["session_snapshot"]["session"]["id"] == session_response.json()["id"]
@@ -167,12 +173,12 @@ async def test_operator_can_start_and_stop_session_over_http() -> None:
                 json={"username": "operator", "password": "password"},
             )
             headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
-            workstation_response = await client.post(
-                "/api/v1/workstations",
-                headers=headers,
-                json={"device_id": "device-session-http", "name": "PC-Session"},
+            legacy_workstation = await application.state.workstations.register(
+                "device-session-http-legacy",
+                "PC-Session legacy",
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
-            workstation_id = workstation_response.json()["id"]
+            workstation_id = str(legacy_workstation.id)
             payload = {
                 "workstation_id": workstation_id,
                 "guest_name": "HTTP guest",
@@ -259,10 +265,10 @@ async def test_operator_can_charge_completed_session_over_http() -> None:
                 json={"username": "operator", "password": "password"},
             )
             headers = {"Authorization": f"Bearer {token_response.json()['access_token']}"}
-            workstation_response = await client.post(
-                "/api/v1/workstations",
-                headers=headers,
-                json={"device_id": "device-billing-http", "name": "Billing PC"},
+            legacy_workstation = await application.state.workstations.register(
+                "device-billing-http-legacy",
+                "Billing legacy PC",
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             client_response = await client.post(
                 "/api/v1/clients",
@@ -290,7 +296,7 @@ async def test_operator_can_charge_completed_session_over_http() -> None:
                 "/api/v1/sessions",
                 headers={**headers, "Idempotency-Key": "billing-http-session"},
                 json={
-                    "workstation_id": workstation_response.json()["id"],
+                    "workstation_id": str(legacy_workstation.id),
                     "client_id": client_id,
                 },
             )

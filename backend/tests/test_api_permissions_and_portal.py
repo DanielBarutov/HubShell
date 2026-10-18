@@ -5,6 +5,7 @@ import pytest
 
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
+from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
 from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
@@ -80,12 +81,12 @@ async def test_operator_can_use_persisted_guest_for_reservation_and_session() ->
                 headers=headers,
                 params={"q": "wal", "field": "nickname"},
             )
-            workstation_response = await client.post(
-                "/api/v1/workstations",
-                headers=headers,
-                json={"device_id": "guest-api-device", "name": "Guest API PC"},
+            legacy_workstation = await application.state.workstations.register(
+                "guest-api-legacy-device",
+                "Guest API legacy PC",
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
-            workstation_id = workstation_response.json()["id"]
+            workstation_id = str(legacy_workstation.id)
             start_at = datetime.datetime(2035, 1, 1, 12, tzinfo=datetime.UTC)
             reservation_response = await client.post(
                 "/api/v1/reservations",

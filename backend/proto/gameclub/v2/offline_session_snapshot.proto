@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package gameclub.events.v2;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Events.V2";
+option java_multiple_files = true;
+
+enum OfflinePackageStatus {
+  OFFLINE_PACKAGE_STATUS_UNSPECIFIED = 0;
+  OFFLINE_PACKAGE_STATUS_ACTIVE = 1;
+  OFFLINE_PACKAGE_STATUS_QUEUED = 2;
+  OFFLINE_PACKAGE_STATUS_EXHAUSTED = 3;
+  OFFLINE_PACKAGE_STATUS_BURNED = 4;
+}
+
+message OfflinePackageSnapshot {
+  string package_id = 1;
+  string tariff_id = 2;
+  optional string zone_id = 3;
+  uint32 remaining_minutes = 4;
+  OfflinePackageStatus status = 5;
+}
+
+message OfflineTariffSnapshot {
+  string tariff_id = 1;
+  string name = 2;
+  optional string zone_id = 3;
+  uint32 package_minutes = 4;
+  sint64 package_price_cents = 5;
+  sint64 per_minute_price_cents = 6;
+  bool is_purchasable = 7;
+  optional uint32 usage_window_start_minute = 8;
+  optional uint32 usage_window_end_minute = 9;
+  optional string window_timezone = 10;
+  // Отличает бесплатную поминутную игру со скидкой от пакетного тарифа.
+  bool is_per_minute = 11;
+}
+
+// Содержимое подписи. Его сериализуют детерминированно без wrapper/signature.
+message OfflineSessionSnapshotPayload {
+  string snapshot_id = 1;
+  uint32 schema_version = 2;
+  uint64 snapshot_version = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  string client_id = 5;
+  string session_id = 6;
+  string device_id = 7;
+  optional string workstation_zone_id = 8;
+  sint64 balance_cents = 9;
+  sint64 debt_limit_cents = 10;
+  uint32 login_grant_remaining_minutes = 11;
+  repeated OfflinePackageSnapshot packages = 12;
+  repeated OfflineTariffSnapshot tariffs = 13;
+  string policy_version = 14;
+
+  reserved 15 to 31;
+  // Заполнено только в подписанном ответе на покупку пакета текущей сессии.
+  string purchase_idempotency_key = 32;
+  // Только для signed receipt покупки; отсутствие сохраняет старую полную цену.
+  optional sint64 purchase_money_cents = 33;
+  sint64 purchase_bonus_cents = 34;
+}
+
+// Клиент принимает snapshot только после проверки signature выбранным key id.
+message SignedOfflineSessionSnapshot {
+  OfflineSessionSnapshotPayload payload = 1;
+  string signing_key_id = 2;
+  bytes signature = 3;
+  bool password_reset_required = 4;
+  string password_reset_token = 5;
+  string portal_access_token = 6;
+  uint32 portal_access_expires_in = 7;
+}
+
+// schema 1 открывает гостевую сессию; schema 2 добавляет оплаченный пакет
+// только в указанную активную сессию, без сброса локального ledger.
+message GuestSessionAccessPayload {
+  string grant_id = 1;
+  uint32 schema_version = 2;
+  google.protobuf.Timestamp issued_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  string payment_id = 5;
+  string session_id = 6;
+  string device_id = 7;
+  optional string workstation_zone_id = 8;
+  string guest_name = 9;
+  string tariff_id = 10;
+  string tariff_name = 11;
+  uint32 duration_minutes = 12;
+  uint32 tariff_quantity = 13;
+  reserved 14 to 31;
+}
+
+message SignedGuestSessionAccess {
+  GuestSessionAccessPayload payload = 1;
+  string signing_key_id = 2;
+  bytes signature = 3;
+}

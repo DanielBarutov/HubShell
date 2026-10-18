@@ -18,6 +18,9 @@ build/
 win-client/artifacts/
 **/bin/
 **/obj/
+**/bin-v2/
+**/obj-v2/
+**/bin-*/
 frontend/node_modules/
 
 # IDE and OS
@@ -32,3 +35,7 @@ backend/logs/
 .playwright-mcp/
 output/
 steam-guest/.runtime/
+.delta/
+graphify-out/
+ref/
+/release/HubShell.exe

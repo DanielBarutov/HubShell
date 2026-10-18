@@ -120,6 +120,12 @@ export function getSessionTooltipDetails(
       status: item.status as "active" | "queued",
       availableNow: isPackageAvailableNow(item, validSnapshotTime),
     }));
+  for (const item of snapshot.guest_packages ?? []) {
+    packages.push({
+      id: item.id, tariffName: item.tariff_name, durationMinutes: item.duration_minutes,
+      remainingMinutes: item.remaining_minutes, status: item.status, availableNow: true,
+    });
+  }
   const activeTariffMinutes = packages.length
     ? 0
     : Math.max(0, snapshot.active_tariff?.remaining_minutes ?? 0);
@@ -149,7 +155,9 @@ export function getSessionTooltipDetails(
   const totalMinutes = sessionCutoffMinutes == null
     ? uncappedTotalMinutes
     : Math.min(uncappedTotalMinutes, sessionCutoffMinutes);
-  const candidateEnding = validSnapshotTime && totalMinutes > 0
+  const candidateEnding = pc.equipmentType === "xbox" && snapshot.session?.expires_at
+    ? new Date(snapshot.session.expires_at)
+    : validSnapshotTime && totalMinutes > 0
     ? new Date(validSnapshotTime.valueOf() + totalMinutes * 60_000)
     : null;
   const sessionKey = snapshot.session?.id ?? pc.sessionId ?? pc.id;
@@ -167,8 +175,11 @@ export function getSessionTooltipDetails(
   };
 }
 
-export function sessionTooltip(pc: Workstation): string | undefined {
-  const details = getSessionTooltipDetails(pc);
+export function sessionTooltip(
+  pc: Workstation,
+  endingProjection?: SessionEndingProjection,
+): string | undefined {
+  const details = getSessionTooltipDetails(pc, endingProjection);
   if (!details) return pc.status === "stale" ? "Связь нестабильна" : undefined;
   const lines = [`Пользователь: ${details.clientName}`];
   if (details.balanceCents != null) lines.push(`Баланс: ${(details.balanceCents / 100).toLocaleString("ru-RU")} ₽`);

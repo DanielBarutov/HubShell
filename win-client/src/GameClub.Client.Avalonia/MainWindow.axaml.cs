@@ -6,9 +6,9 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using GameClub.Client.Avalonia.Development;
 using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Presentation;
+using GameClub.Client.Domain;
 
 namespace GameClub.Client.Avalonia;
 
@@ -17,13 +17,17 @@ public partial class MainWindow : Window
     private const double DeveloperAccessGateWidth = 1120;
     private const double DeveloperAccessGateHeight = 680;
     private const double DeveloperWidgetWidth = 390;
-    private const double DeveloperWidgetHeight = 700;
+    private const double DeveloperWidgetHeight = 1000;
     private readonly IClientHost _clientHost;
     private AccountHistoryWindow? _accountHistoryWindow;
     private bool _normalizingPhone;
+    private bool _hostStarted;
+    private bool _isWidgetCollapsed;
+    private DispatcherTimer? _widgetAnimation;
+
 
     public MainWindow()
-        : this(new LocalBackendClientHost())
+        : this(AvaloniaClientHostFactory.Create())
     {
     }
 
@@ -33,14 +37,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title = clientHost.WindowTitle;
         this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
-        this.FindControl<Button>("HideToTrayButton")!.IsVisible = clientHost.WindowAdapter is not null;
+
         this.FindControl<Button>("OpenDesktopButton")!.IsVisible = clientHost.WindowAdapter is not null;
-        if (clientHost.WindowAdapter?.UsesTransparentWindow == true)
-        {
-            TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
-            Background = Brushes.Transparent;
-            TransparencyBackgroundFallback = new SolidColorBrush(Color.Parse("#07090D"));
-        }
+        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+        Background = Brushes.Transparent;
+        TransparencyBackgroundFallback = new SolidColorBrush(Color.Parse("#020D12"));
         DataContext = _clientHost.ViewModel;
         ViewModel.PropertyChanged += ViewModelPropertyChanged;
         Opened += MainWindowOpened;
@@ -51,13 +52,33 @@ public partial class MainWindow : Window
 
     private async void MainWindowOpened(object? sender, EventArgs args)
     {
+        // Avalonia raises Opened again after Hide/Show; recovery must run only once.
+        if (_hostStarted)
+        {
+            return;
+        }
+        _hostStarted = true;
         _clientHost.WindowAdapter?.Attach(this);
         ApplyHostWindowMode();
         await _clientHost.StartAsync();
     }
 
+    protected override void OnClosing(WindowClosingEventArgs args)
+    {
+        if (args.CloseReason != WindowCloseReason.OSShutdown)
+        {
+            args.Cancel = true;
+            if (ViewModel.IsWidgetContentVisible)
+            {
+                AnimateWidget(collapsed: true);
+            }
+        }
+        base.OnClosing(args);
+    }
+
     private async void MainWindowClosed(object? sender, EventArgs args)
     {
+        _widgetAnimation?.Stop();
         _accountHistoryWindow?.Close();
         ViewModel.PropertyChanged -= ViewModelPropertyChanged;
         _clientHost.WindowAdapter?.Dispose();
@@ -77,6 +98,12 @@ public partial class MainWindow : Window
             });
         }
 
+        if (args.PropertyName == nameof(MainViewModel.IsWidgetContentVisible)
+            && !ViewModel.IsWidgetContentVisible && (_isWidgetCollapsed || _widgetAnimation is not null))
+        {
+            Dispatcher.UIThread.Post(ApplyHostWindowMode);
+        }
+
         if (args.PropertyName is nameof(MainViewModel.IsAccessLocked)
             or nameof(MainViewModel.IsMaintenanceMode))
         {
@@ -90,7 +117,8 @@ public partial class MainWindow : Window
                 altPressed: (args.KeyModifiers & KeyModifiers.Alt) != 0,
                 tabPressed: args.Key == Key.Tab,
                 windowsPressed: (args.KeyModifiers & KeyModifiers.Meta) != 0,
-                rPressed: args.Key == Key.R))
+                rPressed: args.Key == Key.R,
+                dPressed: args.Key == Key.D))
         {
             args.Handled = true;
             ViewModel.TouchAccessActivity();
@@ -179,9 +207,11 @@ public partial class MainWindow : Window
 
     private async void SetPortalPassword(object? sender, RoutedEventArgs args)
     {
-        await ViewModel.SetPortalPasswordAsync();
-        ClearTextBox("PortalPasswordSetupBox");
-        ClearTextBox("PortalPasswordSetupConfirmationBox");
+        if (await ViewModel.SetPortalPasswordAsync())
+        {
+            ClearTextBox("PortalPasswordSetupBox");
+            ClearTextBox("PortalPasswordSetupConfirmationBox");
+        }
     }
 
     private void OpenManagerLogin(object? sender, RoutedEventArgs args) =>
@@ -219,8 +249,95 @@ public partial class MainWindow : Window
         await ViewModel.LogoutAsync();
     }
 
-    private void HideToTray(object? sender, RoutedEventArgs args) =>
-        _clientHost.WindowAdapter?.HideToTray();
+    private void CollapseWidget(object? sender, RoutedEventArgs args) => AnimateWidget(collapsed: true);
+
+    private void ExpandWidget(object? sender, RoutedEventArgs args) => AnimateWidget(collapsed: false);
+
+    private void AnimateWidget(bool collapsed)
+    {
+        if (_widgetAnimation is not null || !ViewModel.IsWidgetContentVisible
+            || ViewModel.IsAccessLocked || ViewModel.IsMaintenanceMode || collapsed == _isWidgetCollapsed)
+        {
+            return;
+        }
+
+        _accountHistoryWindow?.Close();
+        var expanded = this.FindControl<Grid>("ExpandedWidgetContainer")!;
+        var compact = this.FindControl<Button>("CompactWidgetButton")!;
+        var startWidth = Width;
+        var startHeight = Height;
+        var startPosition = Position;
+        if (!collapsed)
+        {
+            ApplyHostWindowMode();
+            expanded.IsVisible = false;
+            compact.IsVisible = true;
+        }
+        var targetWidth = collapsed ? 68 : Width;
+        var targetHeight = collapsed ? 280 : Height;
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = screen?.Scaling ?? 1;
+        var area = screen?.WorkingArea;
+        var targetPosition = area is { } workArea
+            ? new PixelPoint(workArea.Right - (int)Math.Ceiling(targetWidth * scale) - (collapsed ? 0 : 18),
+                workArea.Y + Math.Max(0, (workArea.Height - (int)Math.Ceiling(targetHeight * scale)) / 2))
+            : new PixelPoint(startPosition.X + (int)((startWidth - targetWidth) * scale), startPosition.Y);
+        MinWidth = 68;
+        MinHeight = 0;
+        Width = startWidth;
+        Height = startHeight;
+        Position = startPosition;
+        expanded.IsHitTestVisible = false;
+        compact.IsHitTestVisible = false;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        _widgetAnimation = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _widgetAnimation.Tick += (_, _) =>
+        {
+            var progress = Math.Clamp(started.Elapsed.TotalMilliseconds / 260, 0, 1);
+            var eased = 1 - Math.Pow(1 - progress, 3);
+            Width = startWidth + (targetWidth - startWidth) * eased;
+            Height = startHeight + (targetHeight - startHeight) * eased;
+            Position = new PixelPoint(
+                (int)Math.Round(startPosition.X + (targetPosition.X - startPosition.X) * eased),
+                (int)Math.Round(startPosition.Y + (targetPosition.Y - startPosition.Y) * eased));
+            if (collapsed)
+            {
+                expanded.Opacity = 1 - eased;
+            }
+            else
+            {
+                compact.Opacity = 1 - eased;
+            }
+            if (progress < 1)
+            {
+                return;
+            }
+            _widgetAnimation?.Stop();
+            _widgetAnimation = null;
+            _isWidgetCollapsed = collapsed;
+            this.FindControl<Border>("WindowContentSurface")!.Background = collapsed
+                ? Brushes.Transparent : new SolidColorBrush(Color.Parse("#020D12"));
+            this.FindControl<Border>("WindowContentSurface")!.CornerRadius = new CornerRadius(collapsed ? 0 : 14);
+            this.FindControl<Grid>("WindowContentGrid")!.Background = collapsed
+                ? Brushes.Transparent : new SolidColorBrush(Color.Parse("#020D12"));
+            expanded.IsVisible = !collapsed;
+            expanded.Opacity = 1;
+            expanded.IsHitTestVisible = true;
+            compact.IsVisible = collapsed;
+            compact.Opacity = 1;
+            compact.IsHitTestVisible = true;
+            if (!collapsed)
+            {
+                MinWidth = DeveloperWidgetWidth;
+                this.FindControl<Button>("HideToTrayButton")!.Focus();
+            }
+            else
+            {
+                compact.Focus();
+            }
+        };
+        _widgetAnimation.Start();
+    }
 
     private async void StopCurrentSession(object? sender, RoutedEventArgs args)
     {
@@ -232,72 +349,10 @@ public partial class MainWindow : Window
         await ViewModel.StopActiveSessionAsync();
     }
 
-    private async Task<bool> ConfirmSessionExitAsync(string title, string confirmationText)
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 410,
-            Height = 208,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-        };
-        var cancel = new Button
-        {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
-        };
-        var confirm = new Button
-        {
-            Content = confirmationText,
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
-        };
-        cancel.Click += (_, _) => dialog.Close(false);
-        confirm.Click += (_, _) => dialog.Close(true);
-        dialog.Content = new Border
-        {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
-            Child = new StackPanel
-            {
-                Spacing = 10,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = title,
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
-                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
-                    },
-                    new TextBlock
-                    {
-                        Text = "Активная игровая сессия будет завершена. Неиспользованные минуты текущего пакета сгорят.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
-                    },
-                    new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
-                        Children = { cancel, confirm },
-                    },
-                },
-            },
-        };
-
-        return await dialog.ShowDialog<bool>(this);
-    }
+    private Task<bool> ConfirmSessionExitAsync(string title, string confirmationText) =>
+        ShowConfirmationAsync(title,
+            "Активная игровая сессия будет завершена. Неиспользованные минуты текущего пакета сгорят.",
+            confirmationText);
 
     private async void ActivateFirstPortalEntitlement(object? sender, RoutedEventArgs args) =>
         await ViewModel.ActivateFirstPortalEntitlementAsync();
@@ -318,72 +373,10 @@ public partial class MainWindow : Window
     private async void ConfirmTransfer(object? sender, RoutedEventArgs args) =>
         await ViewModel.ConfirmTransferAsync();
 
-    private async Task<bool> ConfirmTransferAsync()
-    {
-        var dialog = new Window
-        {
-            Title = "Пересесть на другой ПК?",
-            Width = 430,
-            Height = 224,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-        };
-        var cancel = new Button
-        {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
-        };
-        var confirm = new Button
-        {
-            Content = "Пересесть",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
-        };
-        cancel.Click += (_, _) => dialog.Close(false);
-        confirm.Click += (_, _) => dialog.Close(true);
-        dialog.Content = new Border
-        {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
-            Child = new StackPanel
-            {
-                Spacing = 10,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "Пересесть на другой ПК?",
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
-                        Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
-                    },
-                    new TextBlock
-                    {
-                        Text = "После подтверждения войдите в этот же аккаунт на новом ПК. Активная сессия и доступное время перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
-                    },
-                    new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
-                        Children = { cancel, confirm },
-                    },
-                },
-            },
-        };
-
-        return await dialog.ShowDialog<bool>(this);
-    }
+    private Task<bool> ConfirmTransferAsync() =>
+        ShowConfirmationAsync("Пересесть на другой ПК?",
+            "После подтверждения войдите в этот же аккаунт на новом ПК. Активная сессия и доступное время перенесутся автоматически. Если зоны несовместимы, активный пакет может быть сожжён по правилам клуба.",
+            "Пересесть");
 
     private void DismissSessionNotification(object? sender, RoutedEventArgs args) =>
         ViewModel.DismissSessionNotification();
@@ -403,7 +396,42 @@ public partial class MainWindow : Window
             return;
         }
 
+        _accountHistoryWindow.Show(this);
         _accountHistoryWindow.Activate();
+    }
+
+    private async void ToggleMinuteBonus(object? sender, RoutedEventArgs args)
+    {
+        if (sender is not ToggleSwitch toggle || toggle.IsChecked == ViewModel.IsMinuteBonusSelected) return;
+        try {
+            if (toggle.IsChecked == true) await ConfirmMinuteBonusAsync();
+            else await ViewModel.SetMinuteBonusAsync(false);
+        }
+        finally { toggle.SetCurrentValue(ToggleSwitch.IsCheckedProperty, ViewModel.IsMinuteBonusSelected); }
+    }
+
+    private async Task ConfirmMinuteBonusAsync()
+    {
+        var quote = await ViewModel.QuoteMinuteBonusAsync();
+        if (quote is null) return;
+        static string Money(long cents) => (cents / 100m).ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")) + " ₽";
+        if (!quote.BonusAllowed || !quote.CanPay) {
+            var reason = quote.PriceCents <= 0
+                ? "Нет платного поминутного тарифа для этой сессии."
+                : quote.PaymentLimitBps <= 0
+                    ? "В условиях этой сессии бонусная оплата выключена."
+                    : !quote.BonusAllowed && quote.AvailableBonusCents == 0 && quote.ReservedBonusCents > 0
+                        ? $"Зарезервировано для игры: {Money(quote.ReservedBonusCents)}. Сервер пока не разрешает использовать этот резерв в текущей сессии. Дождитесь подтверждения завершения предыдущей игры."
+                        : !quote.CanPay
+                            ? $"Недостаточно средств для денежной части минуты: {Money(quote.MoneyCents)}."
+                            : "Нет доступных бонусов, есть денежный долг или программа отключена для этой сессии.";
+            await ShowConfirmationAsync("Бонусная оплата недоступна", reason, "Понятно");
+            return;
+        }
+        var updating = ViewModel.IsMinuteBonusSelected;
+        if (await ShowConfirmationAsync(updating ? "Обновить бонусный резерв?" : "Включить бонусную поминутку?",
+            $"За одну минуту: {Money(quote.PriceCents)}\nБонусами: {Money(quote.BonusCents)}\nС депозита: {Money(quote.MoneyCents)}\nНачисление: {Money(quote.EarnedBonusCents)}\n\nСервер зарезервирует доступные бонусы. Пакеты и бесплатные минуты расходуются первыми. Выбор действует до отключения или завершения сессии.", updating ? "Обновить" : "Включить"))
+            await ViewModel.SetMinuteBonusAsync(true);
     }
 
     private async void PurchaseTariff(object? sender, RoutedEventArgs args)
@@ -414,6 +442,21 @@ public partial class MainWindow : Window
         }
 
         var tariff = ViewModel.FindPortalTariff(tariffId);
+        if (tariff is not null && ViewModel.CanQuoteBonusPackage)
+        {
+            var quote = await ViewModel.QuotePortalTariffAsync(tariffId, false);
+            if (quote is null) return;
+            var dialog = new BonusPackagePurchaseDialog(tariff.Name, tariff.DurationSummary, quote,
+                useBonus => ViewModel.QuotePortalTariffAsync(tariffId, useBonus)) { Topmost = Topmost };
+            BonusPackagePurchaseDecision? decision;
+            try { decision = await dialog.ShowDialog<BonusPackagePurchaseDecision?>(this); }
+            finally { dialog.Close(); }
+            if (decision is null) return;
+            var confirmation = decision.UseBonus ? new BonusPurchaseConfirmation(decision.Quote.PriceCents,
+                decision.Quote.BonusCents, decision.Quote.MoneyCents, decision.Quote.EarnedBonusCents) : null;
+            await ViewModel.PurchasePortalTariffAsync(tariffId, bonusConfirmation: confirmation);
+            return;
+        }
         if (tariff is null || !await ConfirmTariffPurchaseAsync(tariff.Name, tariff.DurationSummary, tariff.PriceSummary))
         {
             return;
@@ -422,71 +465,106 @@ public partial class MainWindow : Window
         await ViewModel.PurchasePortalTariffAsync(tariffId);
     }
 
-    private async Task<bool> ConfirmTariffPurchaseAsync(string name, string duration, string price)
+    private Task<bool> ConfirmTariffPurchaseAsync(string name, string duration, string price) =>
+        ShowConfirmationAsync($"Купить «{name}»?",
+            $"{duration} · {price}. Сумма будет списана с баланса.",
+            "Купить");
+
+    private async Task<bool> ShowConfirmationAsync(string title, string message, string confirmationText)
+    {
+        var dialog = CreateConfirmationDialog(title, message, confirmationText);
+        try
+        {
+            return await dialog.ShowDialog<bool>(this);
+        }
+        finally
+        {
+            // Hiding the owner cancels Avalonia's modal task without closing its native window.
+            dialog.Close();
+        }
+    }
+
+    private Window CreateConfirmationDialog(string title, string message, string confirmationText)
     {
         var dialog = new Window
         {
-            Title = "Подтвердите покупку",
+            Title = title,
             Width = 390,
-            Height = 184,
+            SizeToContent = SizeToContent.Height,
             CanResize = false,
+            SystemDecorations = SystemDecorations.None,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.Parse("#182527")),
+            Topmost = Topmost,
+            Background = new SolidColorBrush(Color.Parse("#020D12")),
         };
         var cancel = new Button
         {
-            Content = "Отмена",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-secondary" },
+            Content = "Отмена", MinWidth = 110,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { "widget-secondary" },
         };
         var confirm = new Button
         {
-            Content = "Купить",
-            MinWidth = 120,
-            MinHeight = 38,
-            Classes = { "access-primary" },
+            Content = confirmationText, MinWidth = 110,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { "widget-primary" },
         };
         cancel.Click += (_, _) => dialog.Close(false);
         confirm.Click += (_, _) => dialog.Close(true);
+        dialog.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Escape)
+            {
+                dialog.Close(false);
+                args.Handled = true;
+            }
+        };
+        dialog.Opened += (_, _) => cancel.Focus();
         dialog.Content = new Border
         {
-            Background = new SolidColorBrush(Color.Parse("#182527")),
-            BorderBrush = new SolidColorBrush(Color.Parse("#385153")),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse("#020D12"), 0),
+                    new GradientStop(Color.Parse("#061E2A"), 1),
+                },
+            },
+            BorderBrush = new SolidColorBrush(Color.Parse("#246176")),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20),
+            Padding = new Thickness(16),
             Child = new StackPanel
             {
-                Spacing = 10,
+                Spacing = 12,
                 Children =
                 {
                     new TextBlock
                     {
-                        Text = $"Купить «{name}»?",
-                        FontSize = 18,
-                        FontWeight = FontWeight.SemiBold,
+                        Text = title, FontSize = 17, FontWeight = FontWeight.SemiBold,
+                        TextWrapping = TextWrapping.Wrap,
                         Foreground = new SolidColorBrush(Color.Parse("#EDF5EF")),
                     },
                     new TextBlock
                     {
-                        Text = $"{duration} · {price}. Сумма будет списана с баланса.",
-                        TextWrapping = TextWrapping.Wrap,
-                        Foreground = new SolidColorBrush(Color.Parse("#B9C5C0")),
+                        Text = message, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Color.Parse("#A6C0C8")),
                     },
                     new StackPanel
                     {
                         Orientation = Orientation.Horizontal,
                         HorizontalAlignment = HorizontalAlignment.Right,
-                        Spacing = 10,
-                        Margin = new Thickness(0, 2, 0, 0),
+                        Spacing = 8,
                         Children = { cancel, confirm },
                     },
                 },
             },
         };
-
-        return await dialog.ShowDialog<bool>(this);
+        return dialog;
     }
 
     private void ClearTextBox(string name)
@@ -499,21 +577,53 @@ public partial class MainWindow : Window
 
     private void ApplyHostWindowMode()
     {
+        _widgetAnimation?.Stop();
+        _widgetAnimation = null;
+        _isWidgetCollapsed = false;
+        MinWidth = DeveloperWidgetWidth;
+        this.FindControl<Border>("WindowContentSurface")!.Background = new SolidColorBrush(Color.Parse("#020D12"));
+        this.FindControl<Grid>("WindowContentGrid")!.Background = new SolidColorBrush(Color.Parse("#020D12"));
+        var expanded = this.FindControl<Grid>("ExpandedWidgetContainer")!;
+        expanded.IsVisible = true;
+        expanded.Opacity = 1;
+        expanded.IsHitTestVisible = true;
+        var compact = this.FindControl<Button>("CompactWidgetButton")!;
+        compact.IsVisible = false;
+        compact.Opacity = 1;
+        compact.IsHitTestVisible = true;
         var mode = ViewModel.IsMaintenanceMode
             ? ClientWindowMode.Maintenance
             : ViewModel.IsAccessLocked
                 ? ClientWindowMode.Locked
                 : ClientWindowMode.User;
+        this.FindControl<Border>("WindowContentSurface")!.CornerRadius = new CornerRadius(mode == ClientWindowMode.User ? 14 : 0);
         if (_clientHost.WindowAdapter is not null)
         {
             _clientHost.WindowAdapter.ApplyWindowMode(mode);
             return;
         }
 
+        SystemDecorations = SystemDecorations.None;
+        CanResize = false;
+        Topmost = mode == ClientWindowMode.Locked;
         WindowState = WindowState.Normal;
-        var useAccessGateSize = mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance;
+        var useAccessGateSize = mode != ClientWindowMode.User;
         Width = useAccessGateSize ? DeveloperAccessGateWidth : DeveloperWidgetWidth;
-        Height = useAccessGateSize ? DeveloperAccessGateHeight : DeveloperWidgetHeight;
+        var widgetHeight = ViewModel.IsGuestWidgetVisible ? 700 : DeveloperWidgetHeight;
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var availableHeight = screen is null
+            ? widgetHeight
+            : screen.WorkingArea.Height / screen.Scaling - 36;
+        MinHeight = useAccessGateSize ? 520 : Math.Min(520, Math.Max(0, availableHeight));
+        Height = useAccessGateSize ? DeveloperAccessGateHeight : Math.Clamp(availableHeight, MinHeight, widgetHeight);
+        if (screen is not null)
+        {
+            Position = new PixelPoint(
+                useAccessGateSize
+                    ? screen.WorkingArea.X + Math.Max(0, (screen.WorkingArea.Width - (int)Math.Ceiling(Width * screen.Scaling)) / 2)
+                    : screen.WorkingArea.Right - (int)Math.Ceiling(Width * screen.Scaling) - 18,
+                screen.WorkingArea.Y + Math.Max(0, (screen.WorkingArea.Height - (int)Math.Ceiling(Height * screen.Scaling)) / 2));
+        }
     }
 
     private static string FormatRussianPhone(string value)

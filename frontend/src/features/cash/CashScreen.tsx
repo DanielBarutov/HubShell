@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { Banknote, Plus, Settings, X } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Banknote,
+  Clock3,
+  MoreHorizontal,
+  Plus,
+  ReceiptText,
+  Settings,
+  X,
+} from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
 import type {
   BackendCashMovement,
@@ -10,6 +19,17 @@ import { PanelHeader } from "../../shared/components/PanelHeader";
 import { DateTimePicker } from "../../shared/components/DateTimePicker";
 import { cashMoney, cashIdempotencyKey } from "../../shared/formatters";
 import { cashDirectionLabels } from "../../shared/constants";
+
+function CashRegisterIllustration() {
+  return (
+    <img
+      src="/cash-register.png"
+      alt=""
+      className="h-24 w-32 object-contain mix-blend-screen"
+      aria-hidden="true"
+    />
+  );
+}
 
 export function CashScheduleEditor({
   api,
@@ -65,7 +85,9 @@ export function CashScheduleEditor({
       (autoOpen && !autoOpenAt) ||
       (autoClose && !autoCloseAt)
     ) {
-      setError("Заполните register, часовой пояс и время включённых правил");
+      setError(
+        "Заполните название кассы, часовой пояс и время включённых правил",
+      );
       return;
     }
     setSaving(true);
@@ -93,13 +115,16 @@ export function CashScheduleEditor({
   };
 
   return (
-    <form className="schedule-editor" onSubmit={(event) => void save(event)}>
-      <div className="schedule-editor-head">
+    <form
+      className="schedule-editor flex flex-col gap-3"
+      onSubmit={(event) => void save(event)}
+    >
+      <div className="schedule-editor-head flex items-start justify-between gap-3 border-b border-primary/15! pb-3">
         <div>
           <strong>
-            {schedule ? `Register · ${schedule.register_id}` : "Новая касса"}
+            {schedule ? `Касса · ${schedule.register_id}` : "Новая касса"}
           </strong>
-          <span>
+          <span className="text-sm text-base-content/50 ml-10">
             {schedule
               ? "Расписание можно изменить в любое время"
               : "Автоматические правила применятся после сохранения"}
@@ -108,7 +133,7 @@ export function CashScheduleEditor({
         {onCancel && (
           <button
             type="button"
-            className="icon-button"
+            className="icon-button btn btn-ghost btn-circle btn-sm"
             aria-label="Отменить добавление кассы"
             onClick={onCancel}
           >
@@ -116,26 +141,29 @@ export function CashScheduleEditor({
           </button>
         )}
       </div>
-      <div className="schedule-fields">
-        <label>
-          Register
+      <div className="schedule-fields grid grid-cols-1 gap-1 md:grid-cols-3">
+        <label className="text-sm">
+          Название кассы
           <input
+            className="input input-xs ml-2"
             value={registerId}
             onChange={(event) => setRegisterId(event.target.value)}
             disabled={Boolean(schedule)}
           />
         </label>
-        <label>
+        <label className="text-sm">
           Часовой пояс
           <input
+            className="input input-xs ml-2"
             value={timezone}
             onChange={(event) => setTimezone(event.target.value)}
             placeholder="Europe/Moscow"
           />
         </label>
-        <label>
+        <label className="text-sm">
           Остаток при автооткрытии, ₽
           <input
+            className="input input-xs ml-2"
             type="number"
             min="0"
             step="0.01"
@@ -144,9 +172,10 @@ export function CashScheduleEditor({
           />
         </label>
       </div>
-      <div className="schedule-rules">
-        <div className="schedule-toggle">
+      <div className="schedule-rules flex flex-col gap-3">
+        <div className="schedule-toggle flex items-center gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
           <input
+            className="toggle toggle-primary toggle-sm"
             id="cash-auto-open"
             type="checkbox"
             checked={autoOpen}
@@ -162,11 +191,12 @@ export function CashScheduleEditor({
             mode="time"
             label="Время автооткрытия"
             disabled={!autoOpen}
-            className="schedule-time-picker"
+            className="schedule-time-picker ml-auto"
           />
         </div>
-        <div className="schedule-toggle">
+        <div className="schedule-toggle flex items-center gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
           <input
+            className="toggle toggle-primary toggle-sm"
             id="cash-auto-close"
             type="checkbox"
             checked={autoClose}
@@ -182,21 +212,32 @@ export function CashScheduleEditor({
             mode="time"
             label="Время автозакрытия"
             disabled={!autoClose}
-            className="schedule-time-picker"
+            className="schedule-time-picker ml-auto"
+            popoverPlacement="top"
           />
         </div>
       </div>
       {error && (
-        <div className="form-error" role="alert">
+        <div
+          className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!"
+          role="alert"
+        >
           {error}
         </div>
       )}
-      <div className="schedule-editor-actions">
-        <button className="primary-button" disabled={saving}>
+      <div className="schedule-editor-actions flex flex-wrap items-center gap-2">
+        <button
+          className="primary-button btn btn-primary btn-sm"
+          disabled={saving}
+        >
           {saving ? "Сохраняем..." : "Сохранить расписание"}
         </button>
         {onCancel && (
-          <button type="button" className="secondary-button" onClick={onCancel}>
+          <button
+            type="button"
+            className="secondary-button btn btn-outline btn-sm"
+            onClick={onCancel}
+          >
             Отмена
           </button>
         )}
@@ -228,39 +269,217 @@ export function CashView({
   const openShift = shifts.find((shift) => shift.status === "open");
 
   if (!api) {
+    const movementRows = [
+      ["03.10.2026, 19:31:56", "Оплата гостевого тарифа", "+50,00 ₽"],
+      ["03.10.2026, 19:31:47", "Оплата гостевого тарифа", "+50,00 ₽"],
+      ["03.10.2026, 19:31:33", "Оплата гостевого тарифа", "+100,00 ₽"],
+      ["03.10.2026, 10:38:31", "Пополнение баланса клиента V2", "+1 000,00 ₽"],
+      ["03.10.2026, 10:36:25", "Оплата гостевого тарифа", "+50,00 ₽"],
+      ["03.10.2026, 10:35:30", "Оплата гостевого тарифа", "+280,00 ₽"],
+      ["03.10.2026, 10:23:15", "Оплата гостевого тарифа", "+280,00 ₽"],
+      ["03.10.2026, 10:21:03", "Оплата гостевого тарифа", "+280,00 ₽"],
+    ];
     return (
       <>
-        <div className="page-heading">
-          <div>
-            <p className="eyebrow">Финансы · Демонстрация</p>
-            <h1>Касса</h1>
-            <p className="subheading">
-              Открытие смены, наличные движения и закрытие дня.
-            </p>
+        <div
+          className="relative mb-3 flex flex-wrap items-end justify-between gap-3 overflow-hidden border-b border-primary/15! bg-base-100/25! p-3"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, rgba(7,24,27,.44), rgba(7,24,27,.06)), url(/neon-club-room.png)",
+            backgroundPosition: "center 46%",
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          <div className="relative z-10 flex items-start gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-primary/40! bg-primary/10! text-primary!">
+              <Banknote size={24} />
+            </div>
+            <div>
+              <p className="mb-1 text-sm text-base-content/65!">
+                Финансы · Сегодня
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight">Касса</h1>
+              <p className="mt-1 max-w-3xl text-xs text-base-content/65!">
+                Наличные операции хранятся отдельно от депозитов клиентов и
+                оплаты игрового времени.
+              </p>
+            </div>
           </div>
+          <button className="relative z-10 btn btn-primary btn-sm" disabled>
+            <Plus size={17} /> Открыть смену
+          </button>
         </div>
-        <div className="white-card product-list-card">
-          <div className="timeline-empty">
-            Подключите live-режим, чтобы управлять кассовой сменой через
-            backend.
+        <section
+          className="card relative mb-3 gap-2 overflow-hidden border-primary/45! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, rgba(3,25,27,.96) 0%, rgba(3,25,27,.88) 48%, rgba(3,25,27,.58)), url(/neon-club-room.png)",
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          <div className="relative z-10 flex flex-wrap items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="grid h-24 w-32 shrink-0 place-items-center rounded-2xl border border-primary/30 bg-primary/10">
+                <CashRegisterIllustration />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">Смена · front-desk</h2>
+                <p className="text-xs text-base-content/65!">
+                  Открыта 01.10.2026, 18:04:30 · dev-operator
+                </p>
+              </div>
+            </div>
+            <span className="badge badge-success badge-soft gap-2 px-3 py-2">
+              <i className="size-2 rounded-full bg-success" /> Открыта
+            </span>
           </div>
-        </div>
+          <div className="relative z-10 grid grid-cols-1 gap-2 md:grid-cols-3">
+            {[
+              ["В начале", "0,00 ₽", "Banknote"],
+              ["Ожидается", "2 942,00 ₽", "Clock"],
+              ["Разница", "—", "Arrow"],
+            ].map(([label, value, icon]) => (
+              <div
+                className="flex items-center justify-between rounded-xl border border-primary/15! bg-base-200/55! p-2"
+                key={label}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary">
+                    {icon === "Clock" ? (
+                      <Clock3 size={18} />
+                    ) : icon === "Arrow" ? (
+                      <ArrowLeftRight size={18} />
+                    ) : (
+                      <Banknote size={18} />
+                    )}
+                  </span>
+                  <span className="text-xs text-base-content/60!">{label}</span>
+                </div>
+                <strong className="text-lg">{value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="relative z-10 flex gap-2">
+            <button className="btn btn-outline btn-sm">
+              <Plus size={15} /> Движение
+            </button>
+            <button className="btn btn-primary btn-sm">Закрыть смену</button>
+          </div>
+        </section>
+        <section className="card mb-3 gap-3 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary">
+                <ReceiptText size={17} />
+              </span>
+              <div>
+                <h2 className="font-semibold">Последние движения</h2>
+                <p className="text-xs text-base-content/60!">
+                  Сегодня · подтверждённые операции
+                </p>
+              </div>
+            </div>
+            <span className="badge badge-neutral badge-sm">16</span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="grid min-w-[760px] grid-cols-[24px_180px_1fr_140px_100px_24px] gap-3 border-b border-primary/15! px-2 py-1 text-xs text-base-content/55!">
+              <span />
+              <span>Время</span>
+              <span>Описание</span>
+              <span>Тип операции</span>
+              <span className="text-right">Сумма</span>
+              <span />
+            </div>
+            {movementRows.map(([time, description, amount]) => (
+              <div
+                className="grid min-w-[760px] grid-cols-[24px_180px_1fr_140px_100px_24px] items-center gap-3 border-b border-primary/10! px-2 py-0.5 text-sm last:border-b-0"
+                key={time + description}
+              >
+                <ReceiptText size={14} className="text-base-content/60!" />
+                <span className="text-base-content/70!">{time}</span>
+                <span>{description}</span>
+                <span className="flex items-center gap-2 text-base-content/65!">
+                  <i className="grid size-5 place-items-center rounded-full bg-primary/15 text-primary">
+                    ↑
+                  </i>{" "}
+                  Приход
+                </span>
+                <strong className="text-right text-primary!">{amount}</strong>
+                <button
+                  className="btn btn-ghost btn-square btn-xs text-base-content/60!"
+                  aria-label={`Действия: ${description}`}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="card mb-3 gap-3 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary">
+                <Settings size={17} />
+              </span>
+              <div>
+                <h2 className="font-semibold">Автоматизация смен</h2>
+                <p className="text-xs text-base-content/60!">
+                  Ручное открытие и закрытие остаются доступными всегда.
+                </p>
+              </div>
+            </div>
+            <button className="btn btn-outline btn-sm">
+              <Plus size={14} /> Добавить кассу
+            </button>
+          </div>
+          <div className="mt-2 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm text-base-content/65! shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
+            Авторасписаний пока нет. Ручное управление сменой уже доступно выше.
+          </div>
+        </section>
+        <section className="card gap-3 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2)] backdrop-blur-md">
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary/12 text-primary">
+              <Clock3 size={17} />
+            </span>
+            <div>
+              <h2 className="font-semibold">История смен</h2>
+              <p className="text-xs text-base-content/60!">
+                Закрытые смены доступны только для чтения.
+              </p>
+            </div>
+          </div>
+          <div className="mt-2 grid gap-2 text-sm">
+            <div className="flex items-center justify-between border-t border-primary/15! pt-2">
+              <span>front-desk · 17.09.2026 · закрыта 17:52</span>
+              <span className="badge badge-success badge-soft">Закрыта</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-primary/15! pt-2">
+              <span>front-desk · 28.08.2026 · закрыта 11:14</span>
+              <span className="badge badge-success badge-soft">Закрыта</span>
+            </div>
+          </div>
+        </section>
       </>
     );
   }
-
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Финансы · Сегодня</p>
-          <h1>Касса</h1>
-          <p className="subheading">
-            Наличный ledger отделён от клиентских депозитов и session charge.
-          </p>
+      <div className="relative mt-7 flex flex-wrap items-start justify-between gap-4">
+        <div className="relative z-10 flex items-start gap-3">
+          <div>
+            <p className="mb-1 text-sm text-primary/80!">Финансы · Сегодня</p>
+            <h1 className="text-3xl font-bold tracking-tight">Касса</h1>
+            <p className="mt-1 text-sm text-base-content/65!">
+              Наличные операции хранятся отдельно от депозитов клиентов и оплаты
+              игрового времени.
+            </p>
+          </div>
         </div>
         <button
-          className="primary-button"
+          className="relative z-10 primary-button btn btn-primary btn-sm"
           disabled={Boolean(openShift)}
           onClick={onOpenShift}
         >
@@ -268,77 +487,138 @@ export function CashView({
         </button>
       </div>
       {openShift ? (
-        <div className="white-card product-list-card">
-          <div className="card-heading">
-            <div>
-              <h3>Смена · {openShift.register_id}</h3>
-              <p>
-                Открыта {new Date(openShift.opened_at).toLocaleString("ru-RU")}{" "}
-                · {openShift.opened_by}
-              </p>
+        <div
+          className="card relative mb-4 gap-3 overflow-hidden border border-primary/35! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_28px_rgba(49,217,120,0.14)] backdrop-blur-md"
+          style={{
+            backgroundImage:
+              "linear-gradient(90deg, rgba(3,25,27,.96) 0%, rgba(3,25,27,.88) 48%, rgba(3,25,27,.58)), url(/neon-club-room.png)",
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          <div className="card-heading relative z-10 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-24 w-32 shrink-0 place-items-center rounded-xl border border-primary/30! bg-primary/10">
+                <CashRegisterIllustration />
+              </div>
+              <div>
+                <h3>Смена · {openShift.register_id}</h3>
+                <p>
+                  Открыта{" "}
+                  {new Date(openShift.opened_at).toLocaleString("ru-RU")} ·{" "}
+                  {openShift.opened_by}
+                </p>
+              </div>
             </div>
-            <span className="active-chip">Открыта</span>
+            <span className="active-chip badge badge-success badge-soft">
+              Открыта
+            </span>
           </div>
-          <div className="cash-summary-grid">
-            <div className="metric-card">
-              <span className="metric-title">В начале</span>
-              <div className="metric-value">
+          <div className="cash-summary-grid relative z-10 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="card min-h-20 gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary!">
+                  <Banknote size={16} />
+                </span>
+                <span className="metric-title text-xs text-base-content/60!">
+                  В начале
+                </span>
+              </div>
+              <div className="metric-value text-xl font-bold text-base-content!">
                 {cashMoney(openShift.opening_balance_cents)}
               </div>
             </div>
-            <div className="metric-card">
-              <span className="metric-title">Ожидается</span>
-              <div className="metric-value">
+            <div className="card min-h-20 gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary!">
+                  <Banknote size={16} />
+                </span>
+                <span className="metric-title text-xs text-base-content/60!">
+                  Ожидается
+                </span>
+              </div>
+              <div className="metric-value text-xl font-bold text-base-content!">
                 {cashMoney(openShift.expected_close_cents)}
               </div>
             </div>
-            <div className="metric-card">
-              <span className="metric-title">Разница</span>
-              <div className="metric-value">—</div>
+            <div className="card min-h-20 gap-2 border border-primary/25! bg-base-100/85! p-3 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary!">
+                  <Banknote size={16} />
+                </span>
+                <span className="metric-title text-xs text-base-content/60!">
+                  Разница
+                </span>
+              </div>
+              <div className="metric-value text-xl font-bold text-base-content!">
+                —
+              </div>
             </div>
           </div>
-          <div className="panel-actions">
+          <div className="panel-actions relative z-10 flex flex-wrap items-center gap-2">
             <button
-              className="secondary-button"
+              className="secondary-button btn btn-outline btn-sm"
               onClick={() => onRecordMovement?.(openShift)}
             >
               <Plus size={15} /> Движение
             </button>
             <button
-              className="primary-button"
+              className="primary-button btn btn-primary btn-sm"
               onClick={() => onCloseShift?.(openShift)}
             >
               Закрыть смену
             </button>
           </div>
-          <div className="operation-section">
-            <div className="operation-heading">
+          <div className="operation-section relative z-10 rounded-lg border border-primary/15! bg-base-100/25! p-3 shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]">
+            <div className="operation-heading mb-2 flex items-center justify-between gap-3">
               <h3>Последние движения</h3>
               <span>{cashMovements.length}</span>
             </div>
+            {!!cashMovements.length && (
+              <div className="hidden grid-cols-[24px_minmax(8rem,1.15fr)_minmax(0,2fr)_minmax(8rem,1fr)_auto_24px]! gap-3 border-b border-primary/15! px-2 py-1.5 text-xs text-base-content/55 md:grid">
+                <span />
+                <span>Время</span>
+                <span>Описание</span>
+                <span>Тип операции</span>
+                <span className="text-right">Сумма</span>
+                <span />
+              </div>
+            )}
             {!cashMovements.length && (
-              <div className="timeline-empty">Движений пока нет</div>
+              <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center before:grid before:size-14 before:place-items-center before:rounded-2xl before:border-2 before:border-primary/25 before:bg-base-200/60 before:text-3xl before:font-light before:leading-none before:text-base-content/35 before:content-['×'] p-4 text-sm text-base-content/60!">
+                Движений пока нет
+              </div>
             )}
             {cashMovements.map((movement) => (
-              <div className="operation-row" key={movement.id}>
-                <div
-                  className={`operation-icon ${movement.direction === "cash_out" ? "expense" : "income"}`}
+              <div
+                className="operation-row grid grid-cols-[24px_minmax(8rem,1.15fr)_minmax(0,2fr)_minmax(8rem,1fr)_auto_24px]! items-center gap-3 border-t border-primary/10! py-1 text-sm"
+                key={movement.id}
+              >
+                <ReceiptText size={14} className="text-base-content/60!" />
+                <time
+                  className="truncate text-xs text-base-content/65"
+                  dateTime={movement.created_at}
                 >
-                  <Banknote size={14} />
-                </div>
-                <div>
-                  <strong>{cashDirectionLabels[movement.direction]}</strong>
-                  <span>
-                    {movement.reason} ·{" "}
-                    {new Date(movement.created_at).toLocaleString("ru-RU")}
+                  {new Date(movement.created_at).toLocaleString("ru-RU")}
+                </time>
+                <span className="truncate text-sm">{movement.reason}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <div
+                    className={`grid size-6! place-items-center rounded-lg ${movement.direction === "cash_out" ? "bg-error/15! text-error!" : "bg-primary/15! text-primary!"}`}
+                  >
+                    <Banknote size={14} />
+                  </div>
+                  <span className="truncate text-xs text-base-content/65">
+                    {cashDirectionLabels[movement.direction]}
                   </span>
                 </div>
                 <b
                   className={
                     movement.direction === "cash_out" ||
                     movement.amount_cents < 0
-                      ? "expense-text"
-                      : "income-text"
+                      ? "whitespace-nowrap text-error!"
+                      : "whitespace-nowrap text-primary!"
                   }
                 >
                   {movement.direction === "cash_out"
@@ -348,40 +628,44 @@ export function CashView({
                       : ""}
                   {cashMoney(Math.abs(movement.amount_cents))}
                 </b>
+                <button
+                  className="btn btn-ghost btn-square btn-xs text-base-content/60!"
+                  aria-label={`Действия: ${movement.reason}`}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="white-card product-list-card">
-          <div className="timeline-empty">
-            <Banknote size={20} />
+        <div className="card mb-4 gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.12)] backdrop-blur-md">
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center p-4 text-sm text-base-content!">
+            <Banknote size={38} />
             <strong>Открытой смены нет</strong>
-            <span>Откройте смену перед приёмом наличных.</span>
+            <span className="text-xs">
+              Откройте смену перед приёмом наличных.
+            </span>
           </div>
         </div>
       )}
-      <div className="white-card product-list-card schedule-card">
-        <div className="card-heading">
+      <div className="card mb-4 gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.1)] backdrop-blur-md">
+        <div className="card-heading flex items-start justify-between gap-3">
           <div>
-            <h3>Автоматизация смен</h3>
-            <p>Ручное открытие и закрытие остаются доступными всегда.</p>
+            <h3 className="font-semibold">Автоматизация смен</h3>
+            <p className="text-sm text-base-content/65">
+              Ручное открытие и закрытие остаются доступными всегда.
+            </p>
           </div>
           <button
-            className="secondary-button"
+            className="secondary-button btn btn-outline btn-sm"
             onClick={() => setAddingSchedule(true)}
             disabled={addingSchedule}
           >
             <Plus size={15} /> Добавить кассу
           </button>
         </div>
-        <div className="schedule-note">
-          <Settings size={15} />
-          <span>
-            Автозакрытие использует ожидаемый остаток из ledger. Фактический
-            пересчёт наличных оператор подтверждает вручную.
-          </span>
-        </div>
+
         {cashShiftSchedules.map((schedule) => (
           <CashScheduleEditor
             key={schedule.register_id}
@@ -401,24 +685,29 @@ export function CashView({
           />
         )}
         {!cashShiftSchedules.length && !addingSchedule && (
-          <div className="timeline-empty">
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center  p-4 text-sm text-base-content/60!">
             Авторасписаний пока нет. Ручное управление сменой уже доступно выше.
           </div>
         )}
       </div>
-      <div className="white-card product-list-card">
-        <div className="card-heading">
+      <div className="card gap-3 border border-primary/25! bg-base-100/85! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.2),0_0_24px_rgba(49,217,120,0.1)] backdrop-blur-md">
+        <div className="card-heading flex items-start justify-between gap-3">
           <div>
-            <h3>История смен</h3>
-            <p>Закрытые смены доступны только для чтения.</p>
+            <h3 className="font-semibold">История смен</h3>
+            <p className="text-sm text-base-content/65">
+              Закрытые смены доступны только для чтения.
+            </p>
           </div>
         </div>
         {shifts
           .filter((shift) => shift.status === "closed")
           .map((shift) => (
-            <div className="settings-row" key={shift.id}>
-              <div>
-                <strong>{shift.register_id}</strong>
+            <div
+              className="settings-row flex flex-wrap items-center gap-3 border-t border-primary/15! py-3"
+              key={shift.id}
+            >
+              <div className="justify-self-start">
+                <strong className="mx-15">{shift.register_id}</strong>
                 <span>
                   {new Date(shift.opened_at).toLocaleDateString("ru-RU")} ·
                   закрыта{" "}
@@ -430,16 +719,20 @@ export function CashView({
                     : "—"}
                 </span>
               </div>
-              <b>
+              <b className="mx-15">
                 {shift.difference_cents === null
                   ? "—"
                   : `${shift.difference_cents >= 0 ? "+" : ""}${cashMoney(shift.difference_cents)}`}
               </b>
-              <span className="active-chip">Закрыта</span>
+              <span className="active-chip badge badge-success badge-soft">
+                Закрыта
+              </span>
             </div>
           ))}
         {!shifts.some((shift) => shift.status === "closed") && (
-          <div className="timeline-empty">Закрытых смен пока нет</div>
+          <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center before:grid before:size-14 before:place-items-center before:rounded-2xl before:border-2 before:border-primary/25 before:bg-base-200/60 before:text-3xl before:font-light before:leading-none before:text-base-content/35 before:content-['×'] p-4 text-sm text-base-content/60!">
+            Закрытых смен пока нет
+          </div>
         )}
       </div>
     </>
@@ -464,7 +757,7 @@ export function CashOpenPanel({
     event.preventDefault();
     const rubles = Number(openingBalance);
     if (!registerId.trim() || !Number.isFinite(rubles) || rubles < 0) {
-      setError("Укажите register и корректный остаток");
+      setError("Укажите название кассы и корректный остаток");
       return;
     }
     setSubmitting(true);
@@ -490,16 +783,17 @@ export function CashOpenPanel({
   };
 
   return (
-    <div className="panel-inner">
+    <div className="panel-inner flex flex-col gap-4 p-5">
       <PanelHeader
         title="Открыть смену"
         subtitle="Касса · новый рабочий день"
         onClose={onClose}
       />
-      <form className="booking-form" onSubmit={submit}>
+      <form className="booking-form flex flex-col gap-3" onSubmit={submit}>
         <label>
-          Register
+          Название кассы
           <input
+            className="input input-sm"
             value={registerId}
             onChange={(event) => setRegisterId(event.target.value)}
             autoFocus
@@ -508,6 +802,7 @@ export function CashOpenPanel({
         <label>
           Остаток на начало, ₽
           <input
+            className="input input-sm"
             type="number"
             min="0"
             step="0.01"
@@ -516,16 +811,21 @@ export function CashOpenPanel({
           />
         </label>
         {error && (
-          <div className="form-error" role="alert">
+          <div
+            className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!"
+            role="alert"
+          >
             {error}
           </div>
         )}
-        <button className="primary-button wide" disabled={submitting}>
+        <button
+          className="primary-button btn btn-primary btn-block w-full bg-primary! text-primary-content!"
+          disabled={submitting}
+        >
           {submitting ? "Открываем..." : "Открыть смену"}
         </button>
-        <p className="subheading">
-          Для одного register одновременно допускается только одна открытая
-          смена.
+        <p className="mt-1 text-sm text-base-content/70! text-sm text-base-content/65!">
+          Для одной кассы одновременно допускается только одна открытая смена.
         </p>
       </form>
     </div>
@@ -601,16 +901,17 @@ export function CashMovementPanel({
   };
 
   return (
-    <div className="panel-inner">
+    <div className="panel-inner flex flex-col gap-4 p-5">
       <PanelHeader
         title="Движение наличных"
         subtitle={`Смена · ${shift.register_id}`}
         onClose={onClose}
       />
-      <form className="booking-form" onSubmit={submit}>
+      <form className="booking-form flex flex-col gap-3" onSubmit={submit}>
         <label>
           Тип
           <select
+            className="select select-sm"
             value={direction}
             onChange={(event) =>
               setDirection(
@@ -624,7 +925,7 @@ export function CashMovementPanel({
           </select>
         </label>
         {direction === "correction" && (
-          <p className="subheading">
+          <p className="mt-1 text-sm text-base-content/70! text-sm text-base-content/65!">
             Для корректировки автоматически запрашивается отдельное supervisor
             approval и сохраняется audit.
           </p>
@@ -632,6 +933,7 @@ export function CashMovementPanel({
         <label>
           Сумма, ₽
           <input
+            className="input input-sm"
             type="number"
             step="0.01"
             value={amount}
@@ -641,17 +943,24 @@ export function CashMovementPanel({
         <label>
           Причина
           <input
+            className="input input-sm"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Приём наличных"
           />
         </label>
         {error && (
-          <div className="form-error" role="alert">
+          <div
+            className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!"
+            role="alert"
+          >
             {error}
           </div>
         )}
-        <button className="primary-button wide" disabled={submitting}>
+        <button
+          className="primary-button btn btn-primary btn-block w-full bg-primary! text-primary-content!"
+          disabled={submitting}
+        >
           {submitting ? "Сохраняем..." : "Записать движение"}
         </button>
       </form>
@@ -719,20 +1028,21 @@ export function CashClosePanel({
   };
 
   return (
-    <div className="panel-inner">
+    <div className="panel-inner flex flex-col gap-4 p-5">
       <PanelHeader
         title="Закрыть смену"
         subtitle={`Смена · ${shift.register_id}`}
         onClose={onClose}
       />
-      <form className="booking-form" onSubmit={submit}>
-        <div className="detail-row">
-          <span>Ожидаемый остаток</span>
+      <form className="booking-form flex flex-col gap-3" onSubmit={submit}>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm">
+          <span className="text-base-content/60!">Ожидаемый остаток</span>
           <strong>{cashMoney(shift.expected_close_cents)}</strong>
         </div>
         <label>
           Фактический остаток, ₽
           <input
+            className="input input-sm"
             type="number"
             min="0"
             step="0.01"
@@ -742,16 +1052,22 @@ export function CashClosePanel({
           />
         </label>
         {error && (
-          <div className="form-error" role="alert">
+          <div
+            className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!"
+            role="alert"
+          >
             {error}
           </div>
         )}
-        <button className="primary-button wide" disabled={submitting}>
+        <button
+          className="primary-button btn btn-primary btn-block w-full bg-primary! text-primary-content!"
+          disabled={submitting}
+        >
           {submitting ? "Закрываем..." : "Закрыть смену"}
         </button>
-        <p className="subheading">
-          После закрытия смена становится неизменяемой; расхождение сохраняется
-          в ledger.
+        <p className="mt-1 text-sm text-base-content/70! text-sm text-base-content/65!">
+          После закрытия смена становится неизменяемой, а разница попадает в
+          историю.
         </p>
       </form>
     </div>

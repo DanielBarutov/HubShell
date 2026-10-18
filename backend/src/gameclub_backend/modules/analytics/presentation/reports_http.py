@@ -71,7 +71,7 @@ def create_reports_router(
     service: ReportJobService,
     enqueue: typing.Callable[[str], typing.Any],
 ) -> APIRouter:
-    router = APIRouter(prefix="/api/v2/analytics/reports", tags=["analytics-reports"])
+    router = APIRouter(prefix="/api/analytics/reports", tags=["analytics-reports"])
 
     @router.post("", response_model=ReportJobResponse, status_code=status.HTTP_202_ACCEPTED)
     async def create_report(
@@ -98,7 +98,7 @@ def create_reports_router(
             enqueue(str(job.id))
         download_url = None
         if job.artifact_token:
-            download_url = f"/api/v2/analytics/reports/{job.id}/artifact?token={job.artifact_token}"
+            download_url = f"/api/analytics/reports/{job.id}/artifact?token={job.artifact_token}"
         return ReportJobResponse.from_domain(job, download_url=download_url)
 
     @router.get("/{job_id}", response_model=ReportJobResponse)

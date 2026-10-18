@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from gameclub_backend.config import Settings
+from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
 from gameclub_backend.presentation.http.app import create_app
 
 pytestmark = pytest.mark.api
@@ -46,6 +47,12 @@ async def test_operator_can_complete_core_api_flow() -> None:
                     "group_id": "vip",
                     "capabilities": ["theme.v1", "commands.v1", "theme.v1"],
                 },
+            )
+            legacy_workstation = await application.state.workstations.register(
+                "legacy-device-01",
+                "Legacy VIP-01",
+                group_id="vip",
+                session_mode=WorkstationSessionMode.SERVER_OWNED,
             )
             client_response = await client.post(
                 "/api/v1/clients",
@@ -122,7 +129,7 @@ async def test_operator_can_complete_core_api_flow() -> None:
                 headers=headers,
             )
             snapshot_response = await client.get("/api/v1/catalog/snapshot", headers=headers)
-            workstation_id = workstation_response.json()["id"]
+            workstation_id = str(legacy_workstation.id)
             client_id = client_response.json()["id"]
             tariff_id = tariff_response.json()["id"]
             command_response = await client.post(

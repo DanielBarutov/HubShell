@@ -7,6 +7,7 @@ import typing
 import uuid
 
 from fastapi import FastAPI, Request
+from faststream.kafka import KafkaBroker
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
@@ -44,6 +45,7 @@ from gameclub_backend.modules.catalog.presentation.http import (
     create_router as create_catalog_router,
 )
 from gameclub_backend.modules.clients.presentation.http import (
+    create_bonus_program_router,
     create_client_groups_router,
     create_guest_router,
 )
@@ -53,8 +55,22 @@ from gameclub_backend.modules.clients.presentation.http import (
 from gameclub_backend.modules.direct_payments.presentation.http import (
     create_router as create_guest_payment_router,
 )
+from gameclub_backend.modules.direct_payments.presentation.xbox import (
+    create_router as create_xbox_router,
+)
 from gameclub_backend.modules.entitlements.presentation.http import (
     create_router as create_entitlements_router,
+)
+from gameclub_backend.modules.eventing_v2.application.outbox import V2ServerOutboxService
+from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
+    PostgresV2ServerOutboxRepository,
+)
+from gameclub_backend.modules.eventing_v2.presentation.client_facts_http import (
+    V2ClientFactIngress,
+    create_v2_client_facts_router,
+)
+from gameclub_backend.modules.eventing_v2.presentation.server_events_http import (
+    create_v2_server_events_router,
 )
 from gameclub_backend.modules.notifications.presentation.http import (
     create_router as create_notification_rules_router,
@@ -81,10 +97,37 @@ from gameclub_backend.modules.workstations.presentation.groups import (
 from gameclub_backend.modules.workstations.presentation.http import (
     create_router as create_workstations_router,
 )
+from gameclub_backend.modules.workstations.presentation.v2_http import (
+    create_router as create_workstation_commands_router,
+)
 from gameclub_backend.presentation.http.audit import create_router as create_audit_router
 from gameclub_backend.presentation.http.auth import router as auth_router
 
 logger = logging.getLogger(__name__)
+
+
+def _start_pyroscope(settings: Settings) -> typing.Callable[[], None] | None:
+    if not settings.pyroscope_server_address:
+        return None
+
+    try:
+        import pyroscope
+
+        pyroscope.configure(
+            application_name=settings.pyroscope_application_name,
+            server_address=settings.pyroscope_server_address,
+            sample_rate=settings.pyroscope_sample_rate,
+            tags={"environment": settings.environment, "service": "backend-http"},
+        )
+    except Exception:
+        logger.exception("Failed to start Pyroscope profiler; continuing without profiles")
+        return None
+
+    logger.info(
+        "Pyroscope profiler started for %s",
+        settings.pyroscope_application_name,
+    )
+    return pyroscope.shutdown
 
 
 class HealthResponse(BaseModel):
@@ -100,6 +143,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     current_settings = settings or get_settings()
     resources = create_resources(current_settings)
     services: ApplicationServices = build_application_services(current_settings, resources)
+    v2_client_fact_ingress = (
+        V2ClientFactIngress(
+            KafkaBroker(
+                current_settings.kafka_bootstrap_servers,
+                client_id="gameclub-v2-http-ingress",
+            )
+        )
+        if current_settings.kafka_bootstrap_servers
+        else None
+    )
+    v2_server_events = None
+    if resources.engine is not None:
+        v2_engine = resources.engine
+        v2_server_events = V2ServerOutboxService(
+            PostgresV2ServerOutboxRepository(lambda: v2_engine)
+        )
     refresh_tokens = (
         RedisRefreshTokenRepository(lambda: resources.redis)
         if resources.redis is not None
@@ -108,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(application: FastAPI) -> typing.AsyncIterator[None]:
+        stop_pyroscope = _start_pyroscope(current_settings)
         application.state.settings = current_settings
         application.state.jwt_service = (
             JwtTokenService(current_settings) if current_settings.jwt_secret else None
@@ -115,8 +175,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.resources = resources
         try:
             await services.workstation_groups.restore_per_minute_tariffs()
+            await services.xbox.expire()
             yield
         finally:
+            if stop_pyroscope is not None:
+                try:
+                    stop_pyroscope()
+                except Exception:
+                    logger.exception("Failed to stop Pyroscope profiler cleanly")
+            if v2_client_fact_ingress is not None:
+                await v2_client_fact_ingress.close()
             await resources.close()
 
     application = FastAPI(
@@ -132,15 +200,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.workstations = services.workstations
     application.state.workstation_groups = services.workstation_groups
     application.state.clients = services.clients
+    application.state.v2_deposit_credits = services.v2_deposit_credits
     application.state.client_groups = services.client_groups
     application.state.notifications = services.notifications
     application.state.guests = services.guests
     application.state.catalog = services.catalog
     application.state.entitlements = services.entitlements
     application.state.offline = services.offline
+    application.state.xbox = services.xbox
     application.state.guest_payments = services.guest_payments
     application.state.reservations = services.reservations
     application.state.sessions = services.sessions
+    application.state.v2_client_fact_ingress = v2_client_fact_ingress
+    application.state.v2_server_events = v2_server_events
     application.state.billing = services.billing
     application.state.billing_reconciliation = services.billing_reconciliation
     application.state.cash_shifts = services.cash_shifts
@@ -162,15 +234,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.workstations,
             services.command_service,
             services.sessions,
+            services.xbox.pending_relay_workstations,
         )
     )
+    application.include_router(create_workstation_commands_router(services.command_service))
+    application.include_router(create_v2_client_facts_router())
+    application.include_router(create_v2_server_events_router())
     application.include_router(create_workstation_groups_router(services.workstation_groups))
-    application.include_router(create_clients_router(services.clients))
+    application.include_router(create_clients_router(services.clients, services.v2_deposit_credits))
+    application.include_router(create_bonus_program_router(services.clients))
     application.include_router(create_client_groups_router(services.client_groups))
     application.include_router(create_notification_rules_router(services.notifications))
     application.include_router(create_entitlements_router(services.entitlements))
     application.include_router(create_offline_router(services.offline))
-    application.include_router(create_guest_payment_router(services.guest_payments))
+    application.include_router(create_xbox_router(services.xbox))
+    application.include_router(
+        create_guest_payment_router(services.guest_payments, services.v2_guest_access)
+    )
     application.include_router(create_guest_router(services.guests))
     application.include_router(create_catalog_router(services.catalog))
     application.include_router(create_reservations_router(services.reservations))
@@ -222,6 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def audit_middleware(request: Request, call_next: typing.Callable) -> typing.Any:
         audited_prefixes = (
             "/api/v1/workstations",
+            "/api/workstations",
             "/api/v1/workstation-groups",
             "/api/v1/clients",
             "/api/v1/clients/",

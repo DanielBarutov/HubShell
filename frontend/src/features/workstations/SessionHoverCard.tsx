@@ -23,26 +23,28 @@ export function SessionHoverCard({ pc, id, style, endingProjection }: {
   const details = getSessionTooltipDetails(pc, endingProjection);
   if (!details) return null;
 
-  return <aside className="session-hover-card" id={id} role="tooltip" style={style}>
-    <div className="session-hover-card-head">
+  return <aside className="fixed z-50 w-80 rounded-xl border border-primary/30! bg-base-100/95! p-4 text-base-content! shadow-[0_14px_38px_rgba(0,0,0,0.35),0_0_24px_rgba(49,217,120,0.14)] backdrop-blur-xl" id={id} role="tooltip" style={style}>
+    <div className="flex items-center justify-between gap-3 border-b border-primary/15! pb-3 text-xs text-base-content/60!">
       <span>Текущая сессия</span>
-      {details.stale && <b>Данные устарели</b>}
+      {details.stale && <b className="text-warning!">Данные устарели</b>}
     </div>
-    <strong className="session-hover-client">{details.clientName}</strong>
-    <dl className="session-hover-summary">
-      {details.balanceCents != null && <><dt>Баланс</dt><dd>{(details.balanceCents / 100).toLocaleString("ru-RU")} ₽</dd></>}
-      <dt>По балансу</dt><dd>≈ {formatMinutes(details.balanceMinutes)}</dd>
-      <dt>Всего по пакетам</dt><dd>{formatMinutes(details.packageMinutes)}</dd>
-      <dt>Общее время</dt><dd>{formatMinutes(details.totalMinutes)}</dd>
-      {details.ending && <><dt>Окончание</dt><dd>{formatTime(details.ending)}</dd></>}
+    <strong className="mt-3 block text-lg font-bold">{details.clientName}</strong>
+    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      {details.balanceCents != null && <><dt className="text-base-content/60!">Баланс</dt><dd className="text-right font-semibold">{(details.balanceCents / 100).toLocaleString("ru-RU")} ₽</dd></>}
+      <dt className="text-base-content/60!">По балансу</dt><dd className="text-right font-semibold">≈ {formatMinutes(details.balanceMinutes)}</dd>
+      <dt className="text-base-content/60!">Всего по пакетам</dt><dd className="text-right font-semibold">{formatMinutes(details.packageMinutes)}</dd>
+      <dt className="text-base-content/60!">Общее время</dt><dd className="text-right font-semibold">{formatMinutes(details.totalMinutes)}</dd>
+      {details.ending && <><dt className="text-base-content/60!">Окончание</dt><dd className="text-right font-semibold text-primary!">{formatTime(details.ending)}</dd></>}
     </dl>
-    {details.packages.length > 0 && <div className="session-hover-packages">
-      <span>Пакеты</span>
-      {details.packages.map((item, index) => <div className="session-hover-package" key={`${item.status}-${index}`}>
-        <b>{item.tariffName ? `${item.tariffName} · ${formatMinutes(item.durationMinutes)}` : formatMinutes(item.durationMinutes)}</b>
-        <span>{item.status === "active" ? "Активный" : item.availableNow ? "В очереди" : "В очереди · недоступен до окна"} · осталось {formatMinutes(item.remainingMinutes)}</span>
+    {details.packages.length > 0 && <div className="mt-4 border-t border-primary/15! pt-3">
+      <span className="text-xs font-semibold text-base-content/60!">Пакеты</span>
+      <div className="mt-2 flex flex-col gap-2">
+      {details.packages.map((item, index) => <div className="rounded-lg border border-primary/15! bg-base-200/55! p-2 text-xs" key={`${item.status}-${index}`}>
+        <b className="block">{item.tariffName ? `${item.tariffName} · ${formatMinutes(item.durationMinutes)}` : formatMinutes(item.durationMinutes)}</b>
+        <span className="mt-1 block text-base-content/60!">{item.status === "active" ? "Активный" : item.availableNow ? "В очереди" : "В очереди · недоступен до окна"} · осталось {formatMinutes(item.remainingMinutes)}</span>
       </div>)}
+      </div>
     </div>}
-    {details.snapshotTime && <small>Снимок сервера: {formatTime(details.snapshotTime)}</small>}
+    {details.snapshotTime && <small className="mt-3 block text-[10px] text-base-content/45!">Снимок сервера: {formatTime(details.snapshotTime)}</small>}
   </aside>;
 }

@@ -5,8 +5,8 @@
 Фактические результаты проверок и непроверенные платформенные ограничения
 сведены в [`VERIFICATION.md`](VERIFICATION.md).
 
-Корневой [`docker-compose.yml`](../docker-compose.yml) является воспроизводимым
-dev-стеком для всех доступных серверных частей и frontend; отдельный
+Корневой [`docker-compose.yml`](../docker-compose.yml) поднимает воспроизводимый
+dev-стек для всех доступных серверных частей и frontend; отдельный
 `backend/docker-compose.yml` сохраняет infra-only сценарий.
 
 Текущий прикладной срез включает управление зонами и ПК, устойчивую spatial
@@ -76,6 +76,10 @@ Windows сохраняют свои короткие owner-level входы в `
 | 40 | [`40-avalonia-product-flows/PLAN.md`](40-avalonia-product-flows/PLAN.md) | portable transport и перенос access-gate/portal flows на Avalonia | `in_progress` |
 | 43 | [`43-manager-maintenance-hotkey/PLAN.md`](43-manager-maintenance-hotkey/PLAN.md) | менеджерский maintenance route и `Ctrl+Alt+P` | `in_progress` |
 | 44 | [`44-fixes-features/PLAN.md`](44-fixes-features/PLAN.md) | сводный backlog фиксов, фич и UI-правок из `fixes.md` | `in_progress` |
+| 46 | [`46-v2-offline-event-platform/PLAN.md`](46-v2-offline-event-platform/PLAN.md) | V2: автономная сессия, Kafka inbox/outbox, финансовая сверка, аналитика и Grafana | `in_progress` |
+
+| 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
+| 49 | [`49-bonus-program/PLAN.md`](49-bonus-program/PLAN.md) | начисление, оплата игры бонусами и V2-резерв | `in_progress` |
 
 Статусы:
 
@@ -125,11 +129,21 @@ backend/PLAN.md
 │   ├── plans/31-settlement-reconciliation
 │   ├── plans/35-frontend-contract-consumers
 │   └── plans/36-windows-client-contract-consumers
+├── plans/46-v2-offline-event-platform
+│   ├── 00-contracts-decisions
+│   ├── 01-kafka-event-contracts
+│   ├── 02-client-local-ledger
+│   ├── 03-server-reconciliation
+│   ├── 04-deposit-payments
+│   ├── 05-analytics-domain-events
+│   ├── 06-observability-grafana
+│   ├── 07-migration-rollout
+│   └── 08-verification-evidence
 ├── frontend/PLAN.md
 └── win-client/PLAN.md
 ```
 
-Auth является платформенной зависимостью для защищённых сценариев, но его базовые контракты можно проектировать параллельно с бизнес-модулями. Frontend и Windows-клиент не должны начинать интеграцию до фиксации необходимых protobuf/API-контрактов. Бронирование зависит от идентичности ПК, клиентов и правил тарифов. `plans/` является единственным canonical location для детальных планов.
+Auth нужна защищённым сценариям, но её базовые контракты можно проектировать параллельно с бизнес-модулями. Frontend и Windows-клиент не должны начинать интеграцию до фиксации нужных protobuf/API-контрактов. Бронирование зависит от идентичности ПК, клиентов и правил тарифов. `plans/` остаётся единственным местом для детальных планов.
 
 ## Общие правила планов
 

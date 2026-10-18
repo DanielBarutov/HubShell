@@ -94,12 +94,12 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const [backendPcs, backendClients, activeSessions, todayReservations, auditEvents, revenue, cashShifts, groups, sales, tariffs, products, productCategories, discountRules, paymentMethods, cashShiftSchedules, clientGroups, notificationRules] = await Promise.all([
+      const [backendPcs, backendClients, todayReservations, auditEvents, finance, revenue, cashShifts, groups, sales, tariffs, products, productCategories, discountRules, paymentMethods, cashShiftSchedules, clientGroups, notificationRules] = await Promise.all([
         api.listWorkstations(),
         api.listClients(),
-        api.listSessions(true),
         api.listReservations(today.toISOString(), tomorrow.toISOString()),
         api.listAuditEvents(),
+        api.getAnalyticsFinance({ startAt: today.toISOString(), endAt: tomorrow.toISOString() }).catch(() => null),
         api.getRevenue(today.toISOString(), tomorrow.toISOString()),
         api.listCashShifts(),
         api.listWorkstationGroups(),
@@ -115,16 +115,14 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
       ]);
       const openShift = cashShifts.find((shift) => shift.status === "open");
       const cashMovements = openShift ? await api.listCashMovements(openShift.id) : [];
-      const sessionsByWorkstation = new Map(activeSessions.map((session) => [session.workstation_id, session]));
       const groupNames = new Map(groups.map((group) => [group.id, group.name]));
       const clientNames = new Map(backendClients.map((client) => [client.id, client.nickname]));
       const tariffNames = new Map(tariffs.map((tariff) => [tariff.id, tariff.name]));
       return {
         workstations: backendPcs.map((pc) => {
-          const session = sessionsByWorkstation.get(pc.id);
+          const session = pc.session_snapshot?.session;
           return toUiWorkstation(
             pc,
-            session,
             pc.group_id ? groupNames.get(pc.group_id) : undefined,
             session?.client_id ? clientNames.get(session.client_id) : undefined,
             session?.tariff_id ? tariffNames.get(session.tariff_id) : undefined,
@@ -134,8 +132,13 @@ export const refreshWorkspace = createAsyncThunk<WorkspaceSnapshot | void, void,
         clients: backendClients.map(toUiClient),
         reservations: todayReservations,
         auditEvents,
-        revenueCents: revenue.amount_cents,
-        revenueChargeCount: revenue.charge_count,
+        revenueCents: finance?.flow.recognized_revenue_cents ?? revenue.amount_cents,
+        revenueChargeCount: finance
+          ? finance.payment_methods.reduce(
+              (count, method) => count + method.operation_count,
+              0,
+            )
+          : revenue.charge_count,
         cashShifts,
         cashShiftSchedules,
         cashMovements,

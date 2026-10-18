@@ -132,7 +132,7 @@ async def test_offline_replay_is_duplicate_safe_and_returns_snapshot() -> None:
         tariff_id=tariff.id,
         idempotency_key="offline-session",
     )
-    clock.current += datetime.timedelta(minutes=7)
+    clock.current += datetime.timedelta(minutes=3)
     operation = make_operation(
         session.id,
         workstation.device_id,
@@ -232,7 +232,7 @@ async def test_offline_replay_uses_server_clock_when_device_clock_is_skewed() ->
         tariff_id=tariff.id,
         idempotency_key="offline-clock-skew-session",
     )
-    clock.current += datetime.timedelta(minutes=7)
+    clock.current += datetime.timedelta(minutes=3)
     operation = OfflineOperation.create(
         session_id=session.id,
         device_id=workstation.device_id,

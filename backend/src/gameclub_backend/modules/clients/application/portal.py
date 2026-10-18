@@ -6,18 +6,29 @@ import typing
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.billing.domain import SessionCharge
 from gameclub_backend.modules.catalog.domain import (
     BillingMode,
+    Quote,
     Tariff,
     TariffAudience,
     TariffLifecycle,
     TariffSaleChannel,
 )
+from gameclub_backend.modules.clients.application.bonus import (
+    BonusGameQuote,
+    BonusPurchaseConfirmation,
+    BonusWalletSnapshot,
+)
 from gameclub_backend.modules.clients.application.ports import Clock
 from gameclub_backend.modules.clients.application.service import ClientService
 from gameclub_backend.modules.clients.domain import BalanceOperation, Client
-from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementSettlementStatus
+from gameclub_backend.modules.entitlements.domain import (
+    Entitlement,
+    EntitlementSettlementStatus,
+    EntitlementStatus,
+)
 from gameclub_backend.modules.payment_methods.domain import PaymentMethod
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 from gameclub_backend.modules.sales.domain import ProductSale
@@ -61,6 +72,23 @@ class ProductHistoryReader(typing.Protocol):
 
 
 class TariffReader(typing.Protocol):
+    async def quote_for_tariff(
+        self,
+        tariff_id: uuid.UUID,
+        group_id: str | None,
+        moment: datetime.datetime,
+        discount_category: str | None = None,
+        duration_minutes: int | None = None,
+        quantity: int = 1,
+        audience: TariffAudience = TariffAudience.ALL,
+    ) -> Quote:
+        """Return the price calculated by Catalog, including category discounts."""
+
+    async def find_per_minute_tariff(
+        self, group_id: str | None, moment: datetime.datetime
+    ) -> Tariff | None:
+        """Return the server-selected zone rate."""
+
     async def list_tariffs(self) -> list[Tariff]:
         """Return current tariff versions."""
 
@@ -92,8 +120,19 @@ class EntitlementReader(typing.Protocol):
         tariff_id: uuid.UUID,
         actor_id: str,
         idempotency_key: str,
+        use_bonus: bool = False,
+        expected_price_cents: int | None = None,
+        expected_bonus_cents: int | None = None,
+        expected_money_cents: int | None = None,
+        expected_earned_bonus_cents: int | None = None,
+        principal: Principal | None = None,
     ) -> Entitlement:
         """Purchase one tariff package for the client."""
+
+    async def quote_purchase(
+        self, client_id: uuid.UUID, tariff_id: uuid.UUID, use_bonus: bool = False
+    ) -> BonusGameQuote:
+        """Return the authoritative package payment split."""
 
 
 class WorkstationReader(typing.Protocol):
@@ -139,6 +178,9 @@ class ClientPortalSnapshot:
     entitlements: tuple[Entitlement, ...] = ()
     tariffs: tuple[Tariff, ...] = ()
     reservations: tuple[Reservation, ...] = ()
+    purchased_entitlement: Entitlement | None = None
+    purchased_tariff: Tariff | None = None
+    bonus_wallet: BonusWalletSnapshot | None = None
 
 
 class ClientPortalService:
@@ -174,6 +216,9 @@ class ClientPortalService:
 
     async def set_password(self, client_id: uuid.UUID, password: str) -> Client:
         return await self._clients.set_portal_password(client_id, password)
+
+    async def get_client(self, client_id: uuid.UUID) -> Client:
+        return await self._clients.get(client_id)
 
     async def snapshot(
         self,
@@ -226,8 +271,13 @@ class ClientPortalService:
             if self._reservations is not None
             else []
         )
+        wallet = await self._clients.get_bonus_wallet(client_id)
+        pending_bonus = await self._clients.get_pending_bonus_cents(client_id)
         return ClientPortalSnapshot(
             client=client,
+            bonus_wallet=BonusWalletSnapshot(
+                wallet.total_cents, wallet.available_cents, wallet.reserved_cents, pending_bonus
+            ),
             balance_operations=tuple(operations),
             sessions=tuple(sessions),
             charges=tuple(charges),
@@ -265,6 +315,70 @@ class ClientPortalService:
             client_id,
             limit,
             group_id=effective_workstation_group_id(workstation.group_id),
+        )
+
+    async def v2_offline_snapshot_for_device(
+        self,
+        client_id: uuid.UUID,
+        device_id: str,
+    ) -> ClientPortalSnapshot:
+        """Return only the durable, server-owned inputs allowed in a V2 snapshot."""
+        if self._entitlements is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "Entitlement service is not configured",
+            )
+        workstation = await self._workstation_for_device(device_id)
+        group_id = effective_workstation_group_id(workstation.group_id)
+        client = await self._clients.get(client_id)
+        if client.blocked_at is not None:
+            raise ApplicationError(ErrorCode.UNAUTHENTICATED, "Invalid client credentials")
+        now = self._clock.now()
+        entitlements = tuple(
+            item
+            for item in await self._entitlements.list_for_client(client_id)
+            if item.settlement_status is EntitlementSettlementStatus.SETTLED
+            and item.status in {EntitlementStatus.ACTIVE, EntitlementStatus.QUEUED}
+        )
+        per_minute_tariff = await self._tariffs.find_per_minute_tariff(group_id, now)
+        if per_minute_tariff is not None:
+            quote = await self._tariffs.quote_for_tariff(
+                per_minute_tariff.id,
+                group_id,
+                now,
+                discount_category=client.discount_category,
+                duration_minutes=per_minute_tariff.free_minutes + 1,
+                audience=TariffAudience.REGISTERED,
+            )
+            per_minute_tariff = dataclasses.replace(
+                per_minute_tariff, price_per_minute_cents=quote.price_cents
+            )
+        tariffs = tuple(
+            per_minute_tariff
+            if per_minute_tariff is not None and tariff.id == per_minute_tariff.id
+            else tariff
+            for tariff in await self._tariffs.list_tariffs()
+            if tariff.applies_at(now, group_id, TariffAudience.REGISTERED)
+            and (
+                tariff.billing_mode is BillingMode.BLOCK
+                or per_minute_tariff is not None
+                and tariff.id == per_minute_tariff.id
+            )
+        )
+        return ClientPortalSnapshot(
+            client=client,
+            balance_operations=(),
+            sessions=(),
+            charges=(),
+            purchases=(),
+            available_time_minutes=self._available_time_minutes(
+                client.balance_cents,
+                list(tariffs),
+                group_id,
+                now,
+            ),
+            entitlements=entitlements,
+            tariffs=tariffs,
         )
 
     async def resume_for_device(
@@ -315,6 +429,8 @@ class ClientPortalService:
         tariff_id: uuid.UUID,
         idempotency_key: str,
         device_id: str | None = None,
+        bonus_confirmation: BonusPurchaseConfirmation | None = None,
+        principal: Principal | None = None,
     ) -> ClientPortalSnapshot:
         if self._entitlements is None:
             raise ApplicationError(
@@ -337,13 +453,48 @@ class ClientPortalService:
                     ErrorCode.CONFLICT,
                     "Tariff is incompatible with this workstation zone",
                 )
-        await self._entitlements.purchase(
+        purchased = await self._entitlements.purchase(
             client_id=client_id,
             tariff_id=tariff_id,
             actor_id=f"client:{client_id}",
             idempotency_key=idempotency_key,
+            **(
+                {
+                    "use_bonus": True,
+                    "expected_price_cents": bonus_confirmation.price_cents,
+                    "expected_bonus_cents": bonus_confirmation.bonus_cents,
+                    "expected_money_cents": bonus_confirmation.money_cents,
+                    "expected_earned_bonus_cents": bonus_confirmation.earned_bonus_cents,
+                    "principal": principal,
+                }
+                if bonus_confirmation is not None
+                else {}
+            ),
         )
-        return await self.snapshot(client_id, group_id=group_id)
+        return dataclasses.replace(
+            await self.snapshot(client_id, group_id=group_id),
+            purchased_entitlement=purchased,
+            purchased_tariff=await self._tariffs.get_tariff(tariff_id),
+        )
+
+    async def quote_entitlement(
+        self, client_id: uuid.UUID, tariff_id: uuid.UUID, device_id: str, use_bonus: bool
+    ) -> BonusGameQuote:
+        if self._entitlements is None:
+            raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "Entitlements unavailable")
+        workstation = await self._workstation_for_device(device_id)
+        tariff = await self._tariffs.get_tariff(tariff_id)
+        if tariff is None or not tariff.is_sellable_through(TariffSaleChannel.SELF_SERVICE):
+            raise ApplicationError(ErrorCode.CONFLICT, "Tariff is unavailable for self-service")
+        group_id = effective_workstation_group_id(workstation.group_id)
+        if (
+            tariff.group_id is not None
+            and tariff.group_id.strip().lower() != (group_id or "").strip().lower()
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT, "Tariff is incompatible with this workstation zone"
+            )
+        return await self._entitlements.quote_purchase(client_id, tariff_id, use_bonus)
 
     async def activate_entitlement(
         self,

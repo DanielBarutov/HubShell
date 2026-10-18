@@ -124,9 +124,9 @@ class BillingService:
                 active_entitlement is None
                 and self._elapsed_minutes(session.started_at, moment) >= session.login_grant_minutes
             ):
-                # A package may still be queued when the fifth free minute ends:
-                # for example, after a purchase races with a worker tick. Give a
-                # compatible paid package precedence over balance exhaustion.
+                # Пакет может остаться в очереди после окончания login grant,
+                # например если покупка совпала с тиком worker. Совместимый
+                # оплаченный пакет имеет приоритет над исчерпанием баланса.
                 active_entitlement = await self._entitlements.activate_next_compatible(
                     session.client_id,
                     workstation.group_id,
@@ -147,9 +147,9 @@ class BillingService:
                 effective_workstation_group_id(workstation.group_id),
             )
         ):
-            # A session can outlive a replaced zone snapshot. Use the current
-            # zone snapshot for legacy sessions instead of retrying forever with
-            # an archived tariff that can no longer be quoted.
+            # Сессия может продолжиться после замены snapshot зоны. Для старой
+            # сессии используем текущий snapshot, а не пытаемся бесконечно
+            # рассчитать цену по архивному тарифу.
             tariff_id = None
 
         if tariff_id is None:
@@ -195,12 +195,11 @@ class BillingService:
         package_consumed_delta = 0
         package_coverage_end: datetime.datetime | None = None
         if self._entitlements is not None:
-            # Keep one stable package baseline for the whole entitlement. Using
-            # current.updated_at here loses seconds between reconnects: for
-            # example, two ticks at 15:18 and 15:34 would discard the 16
-            # seconds before the next full package minute. The entitlement's
-            # consumed amount is already persisted, so each tick can calculate
-            # the new delta from the same activation/grant boundary.
+            # Для всего entitlement нужен один исходный момент. Если брать
+            # current.updated_at, reconnect теряет секунды: например, между
+            # тиками в 15:18 и 15:34 пропадут 16 секунд до следующей полной
+            # минуты пакета. Расход уже сохранён, поэтому каждый тик считает
+            # новую дельту от той же границы активации или grant.
             package_anchor = session.started_at
             grant_end = session.started_at + datetime.timedelta(minutes=session.login_grant_minutes)
             package_anchor = max(package_anchor, grant_end)
@@ -379,9 +378,9 @@ class BillingService:
         if required_cents == 0 and (
             first_paid_minute_is_unavailable or package_finished_without_fallback_charge
         ):
-            # At the exact boundary there is no new debit yet, but the server
-            # must decide whether the next minute is affordable. Do not use
-            # the whole accumulated session price for this decision.
+            # На точной границе нового списания ещё нет, но сервер должен
+            # проверить доступность следующей минуты. Нельзя брать для этого
+            # всю накопленную стоимость сессии.
             required_cents = quote.price_cents
         if (
             required_cents > 0
@@ -565,8 +564,8 @@ class BillingService:
                     try:
                         await self._sessions.save(session.stop(self._clock.now()))
                     except ValueError:
-                        # Meter exhaustion remains authoritative even if a concurrent
-                        # stop won the session state transition.
+                        # Исчерпание meter остаётся окончательным результатом,
+                        # даже если параллельный stop уже изменил состояние сессии.
                         pass
             raise
 
@@ -879,8 +878,8 @@ class BillingService:
         try:
             await self._reconciliation.save(updated)
         except Exception:
-            # Keep the original billing error visible; the next API/worker attempt
-            # will reconstruct the durable state if the repository is available.
+            # Сохраняем исходную ошибку списания. Следующая попытка API или worker
+            # восстановит постоянное состояние, если репозиторий снова доступен.
             return
 
     @staticmethod

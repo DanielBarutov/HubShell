@@ -1,6 +1,11 @@
+export type RelaySettings = { ip: string; port: number; deviceid: string };
+
 export type BackendWorkstation = {
+  relay_off_pending?: boolean;
+  relay_settings?: RelaySettings | null;
   id: string;
-  device_id: string;
+  device_id: string | null;
+  equipment_type?: "pc" | "xbox";
   mac_address: string | null;
   installation_bound: boolean;
   name: string;
@@ -83,7 +88,22 @@ export type BackendPaymentPart = {
   reference?: string | null;
 };
 
+/** Результат server-side пополнения активной автономной сессии. */
+export type BackendV2Deposit = {
+  payment_operation_id: string;
+  balance_operation_id: string;
+  client_delivery_event_id: string;
+  confirmed_domain_event_id: string;
+  amount_delta_cents: number;
+  currency: string;
+  accepted_at: string;
+  delivery_status: "pending_delivery";
+  is_duplicate: boolean;
+};
+
 export type BackendEntitlement = {
+  bonus_amount_cents?: number;
+  bonus_requested?: boolean;
   id: string;
   client_id: string;
   tariff_id: string;
@@ -114,6 +134,7 @@ export type BackendEntitlement = {
 };
 
 export type BackendGuestSessionPayment = {
+  session_id: string | null;
   id: string;
   workstation_id: string;
   tariff_id: string;
@@ -129,6 +150,13 @@ export type BackendGuestSessionPayment = {
   attempts: number;
   next_attempt_at: string;
   settlement_error: string | null;
+};
+
+export type BackendGuestV2Access = {
+  payment_id: string;
+  grant_id: string;
+  status: "pending" | "redeemed";
+  expires_at: string;
 };
 
 export type BackendAuditEvent = {
@@ -155,7 +183,16 @@ export type BackendCommand = {
   acknowledgement_message: string | null;
 };
 
+export type BackendDeviceCommand = {
+  id: string;
+  workstation_id: string;
+  command_type: "display.lock" | "system.restart";
+  status: "queued" | "acknowledged" | "failed" | "expired";
+  expires_at: string;
+};
+
 export type BackendTariff = {
+  equipment_type?: "pc" | "xbox";
   id: string;
   name: string;
   group_id: string | null;
@@ -325,7 +362,7 @@ export type BackendAnalyticsComparison = {
   is_partial: boolean;
 };
 
-/** Generic additive read shape; the concrete finance response is typed below. */
+/** Общая расширяемая форма чтения; ниже описан конкретный финансовый ответ. */
 export type BackendAnalyticsReadQueryV2 = {
   start_at: string;
   end_at: string;
@@ -341,7 +378,7 @@ export type BackendAnalyticsReadMetric<T> = {
   coverage?: number;
 };
 
-/** Generic additive DTO shape for future read families; finance uses the concrete DTO below. */
+/** Общая расширяемая форма DTO; финансовый раздел использует тип ниже. */
 export type BackendAnalyticsReadV2 = {
   version: "v2";
   start_at: string;
@@ -418,6 +455,12 @@ export type BackendAnalyticsPaymentMethodAggregate = {
   refunds_cents: number;
 };
 
+export type BackendAnalyticsFinanceDailyBucket = {
+  key: string;
+  label: string;
+  recognized_revenue_cents: number;
+};
+
 export type BackendAnalyticsFinanceResponse = {
   api_version: "v2";
   period: BackendAnalyticsFinanceFilters;
@@ -426,6 +469,7 @@ export type BackendAnalyticsFinanceResponse = {
   metrics: Record<string, BackendAnalyticsFinanceMetric>;
   sources: Record<string, { state: BackendAnalyticsDataState }>;
   payment_methods: BackendAnalyticsPaymentMethodAggregate[];
+  daily: BackendAnalyticsFinanceDailyBucket[];
 };
 
 export type BackendAnalyticsV2Filter = {
@@ -630,6 +674,7 @@ export type ReservationAvailability = {
 };
 
 export type BackendSession = {
+  expires_at?: string | null;
   id: string;
   workstation_id: string;
   client_id: string | null;
@@ -661,6 +706,14 @@ export type BackendSessionSnapshot = {
   balance_bonus: number | null;
   active_entitlement: BackendSnapshotEntitlement | null;
   entitlements: BackendSnapshotEntitlement[];
+  guest_packages?: Array<{
+    id: string;
+    tariff_id: string;
+    tariff_name: string;
+    duration_minutes: number;
+    remaining_minutes: number;
+    status: "active" | "queued";
+  }>;
   meter: BackendSessionMeter | null;
   active_tariff: BackendSessionTariff | null;
   login_grant_remaining_minutes: number;
@@ -838,3 +891,64 @@ export type BackendEntryDecision = {
   starts_at: string | null;
   ends_at: string | null;
 };
+
+
+export type BackendBonusProgram = {
+  enabled: boolean;
+  game_rate_bps: number;
+  product_rate_bps: number;
+  payment_limit_bps: number;
+};
+
+export type BackendBonusWallet = {
+  total_cents: number;
+  available_cents: number;
+  reserved_cents: number;
+  pending_cents: number;
+};
+
+export type BackendBonusOperation = {
+  id: string; client_id: string; kind: string; amount_cents: number;
+  actor_id: string; reason: string; idempotency_key: string; session_id: string | null;
+  wallet_after: Omit<BackendBonusWallet, "pending_cents">;
+  total_delta_cents: number; reserved_delta_cents: number; created_at: string;
+};
+
+export type BackendBonusGameQuote = {
+  earning_rate_bps: number;
+  price_cents: number;
+  bonus_cents: number;
+  money_cents: number;
+  earned_bonus_cents: number;
+  payment_limit_bps: number;
+  available_bonus_cents: number;
+  reserved_bonus_cents: number;
+  bonus_allowed: boolean;
+  can_pay: boolean;
+};
+
+export type BonusPurchaseConfirmation = {
+  use_bonus: boolean;
+  expected_price_cents: number;
+  expected_bonus_cents: number;
+  expected_money_cents: number;
+  expected_earned_bonus_cents: number;
+};
+
+export interface BackendBonusReport {
+  start_at: string;
+  end_at: string;
+  observed_at: string;
+  period: {
+    credited_cents: number;
+    spent_cents: number;
+    adjustments_cents: number;
+    opening_cents: number;
+    reserved_in_cents: number;
+    released_cents: number;
+  };
+  total_cents: number;
+  available_cents: number;
+  reserved_cents: number;
+  pending_cents: number;
+}

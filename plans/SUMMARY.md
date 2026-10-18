@@ -1,5 +1,232 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-18 — проектирование самостоятельного V2-переноса места
+
+[Черновик плана 33 V2](33-session-transfer/V2-PLAN.md): кнопка клиента/гостя,
+выбор ПК, автоматическая авторизация, непрерывный расход времени, новая цена
+зоны, подтверждённое сгорание несовместимого активного пакета и обычные стартовые
+минуты при отсутствии тарифа. Закрепление target — 60 секунд с durable
+expiry/recovery; после успеха источник перезагружается. Старый план 33 помечен
+как V1-история. Реализация и контракты не изменены, проверки runtime не проводились.
+
+### 2026-10-17 — отдельная бонусная аналитика
+
+План 49: read-only owner-порт Clients, защищённый API и отчёт во вкладке
+«Продажи»: потоки за период отдельно от текущих остатков; бонусы отдельно от
+денежной выручки. 99 backend tests passed, 4 skips; 2 новых frontend tests и
+production build проходят. Прежний AnalyticsView.test.tsx:215 падает отдельно.
+Рабочая БД не менялась; ручная browser/Avalonia и Kafka проверка остаётся.
+
+
+### 2026-10-17 — политика старых сессий и точная корректировка
+
+[План 49](49-bonus-program/PLAN.md): новые сессии явно фиксируют программу,
+неизвестные старые сессии сохраняют отключённую политику и не получают новый
+grant молча. Операторская корректировка 0,01 с причиной/историей доступна
+во время V2-игры, резерв и деньги защищены. Неопределённый ответ повторяется
+с прежними данными/ключом. 159 backend / 16 frontend tests и production build
+проходят, 5 skips; scoped Ruff/format/diff проходят. Аналитика и ручные сквозные
+проверки ещё открыты; рабочая база не менялась.
+
+### 2026-10-17 — пользовательская бонусная поминутка
+
+[План 49](49-bonus-program/PLAN.md): переключатель Avalonia, серверный quote,
+обновление резерва и durable отмена при потере ответа. Cancelled marker
+блокирует запоздавший enable; повтор старой отмены не освобождает новый резерв.
+Прежний offline бюджет действует в прежних пределах при ожидании увеличения.
+177 backend / 186 client tests проходят, 6 skips; Windows-host build на Linux
+проходит. Остаются старые сессии/миграционная политика, точная операторская
+корректировка, аналитика и ручные сквозные проверки. Рабочая БД не менялась.
+
+### 2026-10-17 — ядро бонусной поминутки V2
+
+[План 49](49-bonus-program/PLAN.md): локальный signed бюджет, durable запрос,
+максимальный split 0–100%, подтверждение обеих частей одной транзакцией,
+ordered disable/release, серверный quote без резерва. 160 backend / 184 client
+tests проходят, 6 infrastructure/memory skips; Windows-host build на Linux,
+scoped Ruff/format/diff проходят. Пользовательский UI поминутки, отмена pending
+запроса и бонусная аналитика ещё не завершены; рабочая БД не менялась.
+
+### 2026-10-17 — серверная граница бонусного V2-бюджета
+
+[План 49](49-bonus-program/PLAN.md): `EnableMinuteBonus`, история grant и
+миграция 0082; выдача после подтверждения sequence/hash, атомарный резерв,
+неизменяемые повторы. Server stop/interrupt сохраняет резерв до ordered client
+stop. 113 tests passed / 5 skipped с отдельной PostgreSQL. Клиентское применение
+и minute split/reconciliation ещё не подключены; план остаётся `in_progress`.
+
+### 2026-10-17 — бонусная оплата пакетов и интерфейсы
+
+[План 49](49-bonus-program/PLAN.md): атомарная оплата пакета бонусами/депозитом
+после скидок, серверное подтверждение четырёх сумм, 100% бонусная оплата,
+операторские настройки/продажа/точный счёт и Avalonia-покупка. V2 quote защищён
+JWT/device/lease; подписанный receipt разделяет деньги и бонусы, pending выбор
+сохраняется при перезапуске. Миграции проверены до `20261017_0081` только на
+тестовой PostgreSQL. 190 backend / 179 client tests; 103 frontend passed и
+1 падение в неизменённом AnalyticsView.test.tsx:215. Scoped Ruff/format (46 файлов),
+frontend production и Windows-host build на Linux проходят. Поминутный signed
+бюджет, бонусная аналитика и ручные проверки интерфейсов остаются открытыми.
+
+### 2026-10-17 — подтверждённые начисления и FIFO долга
+
+[План 49](49-bonus-program/PLAN.md): подтверждённые начисления за товары/пакеты/V2-минуты, pending до окончания сессии, FIFO-погашение всех долгов, общие настройки и история изменений. Миграции `20261017_0079` / `0080` проверены на отдельной PostgreSQL; working DB не менялась. Подключены bootstrap и workers через owner-порты, денежные V2-обновления перенесены в Clients writer. Проверки: 150 passed / 4 skipped; scoped Ruff/format/diff. Широкий unit/API: 422 passed / 23 skipped / 1 прежнее нарушение docstring-conventions. Остаются открытыми: бонусная оплата, signed V2-бюджет, UI/аналитика и сквозная проверка не завершены.
+
+### 2026-10-17 — бонусный wallet, журнал и резерв
+
+[План 49](49-bonus-program/PLAN.md): wallet в сотых бонуса, журнал, reserve/consume/release, атомарное старое пополнение и ручные API. Миграция `20261017_0078` проверена на отдельной PostgreSQL 17, в рабочей базе не применялась. Локальный read-only аудит: 11 клиентов, бонусы/расхождения 0. 95 scoped test passed, 1 skipped; Ruff/format/diff. Широкий прогон: 411 passed, 23 skipped, 1 прежняя ошибка docstring-проверки на 8 guest/V2-тестах. Четыре старых PostgreSQL-сценария падают на несовместимом `server_owned`; client top-up проходит. Начисления по покупкам, FIFO долга, V2 и UI остаются открытыми.
+
+### 2026-10-16 — расчётное ядро бонусов и аудит остатков
+
+Начат [план 49](49-bonus-program/PLAN.md), статус `in_progress`: чистые расчёты бонусной оплаты/начисления и read-only SQL-аудит legacy-остатков. Согласованы ставки 0–100% с шагом 0,01%, накопление дробей начисления, округление оплаты вниз и погашение старых долгов первым. 46 тестов, включая настоящую временную PostgreSQL, Ruff/format/diff. Рабочая база не запущена; миграция, финансовая интеграция, V2 и UI ещё не реализованы. Пользовательская бонусная оплата пока недоступна.
+
+### 2026-10-16 — согласована бонусная программа
+
+Зафиксированы правила в [плане 49](49-bonus-program/PLAN.md) и трёх продуктовых контрактах: 5% за игру, 2% за товары, оплата только игры до настраиваемых 100%, точность 0,01, без сгорания, ожидание погашения долга и серверный V2-резерв. Статус `planned`; код, миграции и runtime не менялись. До реализации уточнить округление, границы ставок и распределение погашений; проверить единицы старых остатков.
+
+### 2026-10-15 — скидка категории в V2 поминутной игре
+
+Backend выдаёт подписанную цену минуты с учётом `discount_category`; новый
+`OfflineTariffSnapshot.is_per_minute = 11` позволяет клиенту продолжать игру
+при скидке 100% без списания. В виджете — «Бесплатно»/«∞». Обновлены три
+контракта, [план 46](46-v2-offline-event-platform/PLAN.md) и
+[проверки](VERIFICATION.md). Linux: 79 backend / 172 client tests,
+Windows-host build; Ruff/format/diff проходят. Runtime frontend не менялся.
+Развёртывание, PostgreSQL/Kafka и native Windows не проверены. Для применения
+обновить backend и клиент, затем войти заново; старые списания не пересчитаны.
+
+### 2026-10-12 — отрицательный баланс и пакетные V2-проекции
+
+- Поминутная reconciliation использует сохранённый signed debt limit; debit
+  и подтверждение остаются одной транзакцией. Повтор не списывает деньги вновь.
+- Package consume/burn обновляет entitlement через публичный transaction writer
+  владельца пакетов. Проверяются клиент, тариф, settlement, текущий остаток и
+  единственный active пакет; неоднозначный legacy UUID возвращает conflict.
+- Поле баланса активной клиентской сессии читает локальный ledger и обновляется
+  после minute commit, не дожидаясь portal snapshot.
+- Онлайн-покупка выдаёт подписанный пакет с реальным entitlement ID и ключом
+  покупки, поэтому тариф, созданный после входа, можно применить без замены
+  ledger. Protobuf расширен: `OfflinePortalSnapshot.purchased_package = 15`,
+  `OfflineSessionSnapshotPayload.purchase_idempotency_key = 32`.
+- Linux: 49 backend checks с настоящей временной PostgreSQL, 72 C# checks;
+  один live Kafka test пропущен. Windows host Release build на Linux: 0 ошибок,
+  0 предупреждений. Ruff, format и diff checks проходят.
+- Rollout: сначала backend-gRPC и v2-client-facts, затем клиент. Production
+  data, старые confirmed facts/DLQ и активные ledger не переписывались. Их
+  расхождения требуют отдельной сверки исходных событий; эти тесты не
+  подтверждают восстановление прежней продовой цепочки или Windows runtime.
+
+
+2026-10-12: Avalonia-клиент закрепляет тёмную Fluent-тему независимо от темы ОС,
+чтобы вводимый светлый текст оставался виден на тёмных полях. 14 Linux headless
+тестов прошли; ручная Windows-проверка ещё не выполнена. См. план 38.
+
+2026-10-11: переносимая self-contained папка `release/` для Windows x64.
+Адреса/публичные ключи — в `server.ini`, запуск watchdog на месте в `C:\GameClub`
+через `start-service.cmd` от администратора с защитой ACL. Учётные записи не меняются.
+Native Windows запуск/SCM/ACL остаются отдельной проверкой.
+
+2026-10-11: реализован постоянный desktop-виджет без изменения Windows-пользователя
+и kiosk policy. В Windows User-режиме Topmost выключен; foreground WinEvent скрывает
+виджет в других приложениях и возвращает на Explorer Desktop в прежнем состоянии.
+Обычное закрытие отменяется, выход убран из трея. Повторный Opened после Hide/Show
+не запускает host/recovery повторно и не сбрасывает геометрию HUD. Скрытие владельца
+отменяет незавершённое подтверждение и освобождает окно; история повторно показывается. Maintenance после существующей
+проверки пароля — обычное окно без Topmost, доступно скрытие через прежнюю кнопку.
+Добавлена опциональная LocalSystem-служба HubShell.Watchdog: проверка console-сессии,
+запуск GUI с токеном/окружением текущего пользователя, session-local mutex, retry delay,
+SCM recovery. Install/uninstall поддерживают службу с явными параметрами; Windows
+учётные записи/политики не меняются. Установка только в Program Files от администратора.
+Проверено на Linux: 148 .NET тестов, сборки Windows host и Avalonia/Linux;
+синтаксис install/uninstall проверен PowerShell Parser 7.4.6 без исполнения скриптов.
+Пользователь разрешил исключение из AGENTS.md: глобальный WH_KEYBOARD_LL только в
+Locked. Подавляются Win и Win+D/Win+R; при User/Maintenance/Dispose hook снимается.
+Unit-проверки: нажатия/отпускания, оба Win, снятие ограничения, доступность Ctrl+Alt+P.
+Реальное подавление системных сочетаний на Windows не проверено.
+Ctrl+Alt+Del не перехватывается. Native foreground/Win+D, SCM/WTS, restart с настоящим
+ledger, Event Log, PowerShell installation и режим менеджера в Windows не проверены.
+
+
+2026-10-11: крестик зарегистрированного и гостевого виджета сворачивает
+клиент в вертикальную HUD-кнопку по `ref/Неоновый Windows 11 с HUD-таймером.png`.
+Кнопка 68×280 DIP стоит вплотную к правому краю рабочей области, показывает
+остаток сессии ЧЧ:ММ и разворачивает виджет по клику. Переход 260 мс;
+закрытия клиента и изменения игровой сессии нет. Блокировка/maintenance
+отменяют анимацию и показывают access-gate. Реализация общая для Linux/Windows.
+Проверки: 137 .NET тестов (гость/аккаунт, сворачивание/разворачивание,
+сохранение сессии, отмена перехода блокировкой, обновление времени после допродажи),
+Skia headless-рендер и обе сборки на Linux. Native Windows/DPI и живой
+backend-сеанс не проверены.
+
+
+2026-10-11: история аккаунта, уведомление виджета (включая недостаток средств)
+и подтверждения покупки/переноса/выхода приведены к тёмно-бирюзовому оформлению.
+Подтверждения используют общую форму с высотой по содержимому, компактными кнопками,
+отменой по Escape и начальным фокусом на отмене. Предупреждения и серверные действия
+сохранены. История подстраивается по содержимому, длинный список прокручивается.
+Проверено: 135 .NET тестов; Skia headless-рендер подтверждения (390×149),
+истории и уведомления на Linux; сборки Avalonia/Linux и Windows host.
+Живые покупки и native Windows-окна в этой проверке не запускались.
+
+
+2026-10-11: гостевой V2-виджет оформлен по `ref/Синеокий рабочий стол с панелью HUBSHELL.png`.
+Использована общая оболочка 390×до 700 DIP: «Гость», соединение, активная сессия,
+оплаченные пакеты и выход. Данные аккаунта не показываются даже при старом portal
+snapshot; аккаунт не создаётся. Список берётся из guest ledger, обновляется после
+допродажи, скрывает exhausted/burned; отображает честный остаток в минутах.
+Сохранено отображение ошибки доставки обновлений. Кнопка переноса отключена:
+в референсе есть действие, но утверждённого V2 guest transfer use case/API нет;
+сценарий переноса и его правила должны быть определены отдельно.
+Проверено на Linux: 134 .NET теста (guest recovery, допродажа, уведомление UI,
+изоляция старого профиля, выход), Avalonia/Linux runtime и Windows-host build,
+Skia headless-рендер с тестовыми данными и без горизонтального переполнения.
+Живые гостевая оплата/допродажа/выход, Windows tray и native smoke не проверены.
+
+
+2026-10-11: post-login Avalonia widget оформлен по `ref/Панель HUBSHELL на рабочем столе Windows 11.png`.
+Добавлены графитово-бирюзовая поверхность, аватар, компактные карточки, строки тарифов
+и пакетов со статусами; перенос и история расположены рядом внизу. Существующие данные,
+покупка/выход с подтверждением, сброс пароля, бронь и уведомления сохранены.
+Окно 390 DIP, высота до 1000 DIP с учётом рабочей области и прокруткой.
+Проверено на Linux: 134 .NET теста, Avalonia и Windows-host build без предупреждений,
+Skia headless-рендер с тестовыми данными 390×1000 и 390×700, доступность нижних действий
+при прокрутке и отсутствие горизонтального переполнения. Пинг и отдельный экран
+«Все тарифы» не добавлены. Живые покупка/перенос/выход, Windows tray, позиционирование
+на реальном мониторе и прозрачность Windows не проверены.
+
+
+2026-10-11: регистрация Avalonia оформлена по `ref/Неоновая регистрация в GAMEHUB.png`:
+общий фон и карточка места, заголовок, неоновые поля с иконками, кнопки на всю ширину
+и отдельный текст справа. Поля, ограничения, маска телефона и V2 flow сохранены.
+Ссылка на правила клуба не добавлена: целевой документ отсутствует.
+Проверки: Linux runtime build, headless/Skia-рендер формы, 134 .NET теста.
+Регистрация через живой backend и Windows native smoke не проверены.
+
+
+2026-10-11: исправлен вход в аккаунт после завершённого гостевого V2 ledger:
+повторный stop использует guest endpoint с payment ID, не account endpoint с пустым client ID.
+Сохранён отказ при PermissionDenied; журнал не очищается. Иконки access-gate выровнены
+в фиксированных Canvas/Viewbox. Проверено: 133 .NET unit/headless теста и Skia-рендер;
+живой повторный вход и Windows smoke не выполнены.
+
+
+2026-10-11: access-gate Avalonia оформлен по `ref/Неоновый вход в игровой клуб HUBSHELL.png`.
+Фон `ref/фон для входа GAMEHUB.png` встроен в общий UI-ресурс Linux/Windows;
+центральная карточка места, неоновые кнопки и блок справа заменяют прежнюю двухколоночную форму.
+Сохранены вход по нику/телефону, регистрация, скрытый manager route, ошибки и серверная тема.
+Восстановление пароля и системные кнопки из картинки не добавлялись.
+Проверено: Linux build, 131 unit/headless тест, Skia headless-рендер 1120×680.
+Живой backend login, ручной Linux smoke и Windows fullscreen/tray не проверены.
+
+
+2026-10-11: размер карты мест по умолчанию изменён на 10 столбцов × 4 ряда.
+Сохранённые настройки браузера имеют приоритет; 8 тестов MapScreen и production
+build проходят. Контракт и frontend-план обновлены.
+
+2026-10-11: исправлена повторная попытка автозакрытия кассы после ручного
+открытия новой смены в тот же день (`uq_cash_shifts_close_idempotency_key`).
+Расписание проверяет точные ключи выполненных действий; 18 unit-тестов кассы
+и jobs проходят. Обновление работающего worker и PostgreSQL integration не выполнены.
+
 Дата среза: `2026-09-17`<br>
 Назначение: быстрый вход в проект без загрузки всего репозитория в контекст.
 
@@ -25,6 +252,345 @@
 - `source-level` — подтверждено чтением/статическим контрактным чеком, но не
   полноценным запуском целевой платформы;
 - `осталось` — следующая работа или ограничение, которое нельзя считать закрытым.
+
+## V2: запланированная автономная событийная платформа
+
+В ветке `V2` выполняется master-план
+[`46-v2-offline-event-platform`](46-v2-offline-event-platform/PLAN.md). Это
+целевая архитектура, не описание уже работающего кода. Она переводит только
+Windows business-session path с server-owned gRPC расчёта на автономную сессию
+после подписанного snapshot, Kafka, постоянные inbox/outbox и последующую
+сверку сервером. V2 будет поставлена атомарной заменой: в конечном релизе нет
+V1 runtime, режима workstation, fallback или постепенного переключения ПК.
+Существующая PostgreSQL с бизнес-данными сохраняется как server-owned источник
+snapshot и истории; V1-сессии не переносятся в V2 неявно.
+
+План разделён на контрактные решения, event contracts, client ledger, server
+reconciliation, deposit/payments, analytics, Grafana/Loki/Tempo/Prometheus,
+migration и verification. До его выполнения текущие gRPC/product-contract
+правила остаются действующими. Нельзя считать V2 реализованным по наличию схем
+Storm BPMN или этого плана: нужны реальные PostgreSQL, Kafka, browser и native
+Windows доказательства.
+
+Checkpoint `CP-001` от `2026-09-27`: product contracts получили V2-границу, а
+в backend добавлен изолированный `eventing_v2` foundation — канонический event
+envelope и in-memory inbox duplicate/conflict boundary. Это подтверждено
+4 focused unit-тестами и Ruff; Kafka, PostgreSQL outbox/inbox, Windows client,
+платёжная доставка и observability ещё не реализованы.
+
+Checkpoint `CP-002` от `2026-09-27`: добавлена additive migration
+`20260927_0063_v2_event_inbox` и PostgreSQL adapter с уникальным ключом
+producer/operation. 5 focused unit-тестов, Ruff и `alembic heads` прошли;
+настоящая PostgreSQL concurrency-проверка не запускалась, потому что в
+окружении нет `GAMECLUB_TEST_POSTGRES_DSN`.
+
+Checkpoint `CP-003` от `2026-09-27`: inbox разделён на логические границы по
+`consumer_name`, поэтому независимые worker groups смогут один раз обработать
+один confirmed event каждая. 6 focused unit-тестов подтверждают duplicate и
+fan-out in-memory; реальные Kafka workers и PostgreSQL concurrency evidence
+ещё отсутствуют.
+
+Checkpoint `CP-004` от `2026-09-27`: в backend добавлен FastStream поверх
+Kafka и постоянная server outbox. Она сохраняет неизменяемый V2-конверт и
+не отмечает его отправленным, пока Kafka не подтвердит публикацию; при ошибке
+запись остаётся ожидающей повторной отправки. Есть точка подключения группы
+`client_session_facts`, но настоящий процесс с PostgreSQL и Kafka ещё не
+запускался. 10 focused unit-тестов, Ruff, проверка миграции и `git diff --check`
+прошли; это не доказывает работу с реальным брокером или базой.
+
+Checkpoint `CP-005` от `2026-09-27`: V2-конверт получил обязательные связи
+причин (`causation_id`), сессии обработки (`correlation_id`) и W3C-трассу
+`traceparent`. Входящий Kafka-конверт проходит строгую проверку до вызова
+бизнес-обработчика, а FastStream передаёт trace context в заголовках Kafka.
+13 focused unit-тестов это проверяют; реальная Kafka/OpenTelemetry-проверка и
+совместимость с Windows-клиентом ещё не выполнялись.
+
+Checkpoint `CP-006` от `2026-09-27`: создан общий Protobuf-контракт
+`gameclub.events.v2.EventEnvelope`. FastStream теперь передаёт его bytes в
+Kafka, а C# transport-проект подключает тот же исходный `.proto`. Номера полей
+и reserved range защищены контрактным тестом. 36 Python-проверок и Linux-сборка
+C# прошли; они не подтверждают реальное подключение Kafka или запуск на
+Windows-ПК.
+
+Checkpoint `CP-007` от `2026-09-27`: в переносимом C# ядре Windows-клиента
+реализована V2-модель локального ledger. Она автономно расходует grant,
+пакеты и поминутный баланс, покупает известные пакеты, корректно ведёт себя при
+раннем выходе и применяет server balance delta один раз. 56 C# тестов прошли
+на Linux; долговременное локальное хранилище, Kafka и реальный Windows-ПК ещё
+не проверялись.
+
+Checkpoint `CP-008` от `2026-09-27`: V2 ledger и client outbox сохраняются
+одним DPAPI-защищённым Windows-файлом. Локальный координатор не позволит
+сначала изменить баланс, а потом отдельно пытаться добавить событие в outbox.
+58 C# тестов и Linux-сборка Windows-проекта прошли; DPAPI, сбой питания,
+диск и права файлов всё ещё требуют проверки на реальном Windows-ПК.
+
+Checkpoint `CP-009` от `2026-09-27`: в защищённый V2-снимок добавлен ClientInbox,
+а outbox-отправитель удаляет факт только после ответа транспорта и не нарушает
+порядок sequence при ошибке. C# сериализатор формирует полный общий Protobuf
+конверт из сохранённого факта. 61 C# тест прошёл; реальный Kafka client/gateway,
+retry и проверка Windows всё ещё не реализованы.
+
+Checkpoint `CP-010` от `2026-09-27`: определён подписываемый
+`OfflineSessionSnapshot` с balance, grant, пакетами и тарифными снимками.
+Клиент создаёт ledger только после проверки подписи; Python и C# проверяют
+одинаковые детерминированные bytes payload. 37 Python-проверок и 64 C# теста
+прошли. Реальная выдача, ключи подписи и V2 login ещё не реализованы.
+
+Checkpoint `CP-011` от `2026-09-27`: server domain проверяет непрерывность
+sequence и hash-chain V2-фактов. Он не может незаметно принять пропуск или
+подменённый предыдущий hash. 39 Python-тестов прошли; checkpoint пока не
+записан в PostgreSQL и не соединён с реальным FastStream consumer.
+
+Checkpoint `CP-012` от `2026-09-27`: `v2_session_chains` и PostgreSQL
+compare-and-save adapter добавляют постоянный checkpoint sequence/hash-chain.
+40 Python-тестов прошли. Нужна отдельная проверка на настоящей PostgreSQL с
+`GAMECLUB_TEST_POSTGRES_DSN`: локальные тесты не доказывают блокировки и гонки
+реальной базы.
+
+Checkpoint `CP-013` от `2026-09-27`: backend подготовлен к подписи snapshot
+через изолированный port, без хранения приватного ключа в V2-коде. 41 Python
+тест прошёл. Реальный ключ Ed25519, key rotation и выдача snapshot при входе
+ещё не реализованы.
+
+Checkpoint `CP-014` от `2026-09-27`: добавлен изолированный Compose profile
+`v2` с Kafka KRaft, явным созданием V2 topics и FastStream-процессом
+`v2-server-outbox`. Процесс доставляет постоянный server outbox только после
+подтверждения Kafka. Compose config, 42 Python-теста, Ruff и `git diff --check`
+прошли; consumer клиентских фактов намеренно не включён до готовой одной
+PostgreSQL-транзакции inbox+state.
+
+Checkpoint `CP-015` от `2026-09-27`: живой Compose smoke подтвердил цепочку
+PostgreSQL `v2_server_outbox` → FastStream → Kafka → Protobuf consumer. В ходе
+проверки исправлены отсутствие `faststream[cli]` в образе и передача Kafka key
+строкой вместо bytes; уже сохранённый pending факт был корректно доставлен.
+Это не доказывает consumer клиентских фактов, финансы, observability или
+Windows transport.
+
+Checkpoint `CP-016` от `2026-09-27`: подготовлен source-level контур
+наблюдаемости V2: FastStream получает OpenTelemetry/Prometheus middleware,
+Compose — Collector, Prometheus, Loki, Tempo, Alloy и Grafana с начальной
+панелью. Перед Loki типовые секреты маскируются. Конфигурация Compose и 42
+contract-теста прошли, но Docker daemon не смог скачать новые образы из-за
+недоступного IPv6 пути к registry; живое доказательство Grafana/метрик/логов/
+трасс и Windows instrumentation пока отсутствуют.
+
+Checkpoint `CP-017` от `2026-09-27`: добавлена атомарная server boundary V2
+для пополнения. Один PostgreSQL commit пишет balance ledger, payment parts,
+cash shift при наличном платеже, audit, immutable deposit и два outbox-факта;
+клиент получает только идемпотентную delta без абсолютного баланса и payment
+reference. В живой Compose PostgreSQL повтор изменил баланс ровно раз, Kafka
+прочитала оба Protobuf facts для клиента и аналитики, а ошибка cash shift
+откатила всё. Открыты HTTP/auth/session target, global ledger version,
+refund/correction, operator UI, analytics consumer и C# inbound dispatcher.
+
+Checkpoint `CP-018` от `2026-09-27`: исправлена V2 inbox-схема, чтобы один
+Kafka факт мог попасть в несколько логических consumer groups. Новый атомарный
+PostgreSQL reconciliation boundary проверяет тип/duplicate/hash-chain и одним
+commit создаёт inbox, confirmed source fact, audit и result outbox; live test
+подтвердил fan-out без второго side effect. Kafka consumer всё ещё намеренно
+не включён до device/snapshot/lease validation, controlled reject/DLQ и
+финансовых projections по фактам.
+
+Checkpoint `CP-019` от `2026-09-27`: reconciliation теперь требует
+server-owned активный неистёкший V2 lease, совпадающий по client/device/session;
+без него нельзя записать inbox или outbox side effect. Migration `0066`
+применена и PostgreSQL тест проходит. Выдача/revoke lease после device auth и
+подписанного snapshot, а также публичный V2 login, пока не реализованы.
+
+Checkpoint `CP-020` от `2026-09-27`: V2 deposit также требует matching active
+lease до единого финансового commit. PostgreSQL test доказал отказ без lease и
+однократный credit с повтором после lease. V1 UI top-up остаётся отдельным
+совместимым маршрутом, пока не появятся V2 login/snapshot и V2 operator API.
+
+Checkpoint `CP-021` от `2026-09-27`: V2 lease может быть бессрочным для
+длительного offline, issuer запрещает второй active lease client/device, а
+snapshot factory собирает новый подписываемый Protobuf payload из старых
+server-owned Client/Session/Entitlement/Tariff данных. Production signer,
+C# verifier и V2 login endpoint ещё отсутствуют.
+
+Checkpoint `CP-022` от `2026-09-27`: backend подписывает snapshot отдельным
+Ed25519 private key из server settings, а Windows transport проверяет его
+набором public keys по `key_id`. Python/C# подтвердили общий standard vector и
+подпись полного deterministic protobuf payload. Также `debt_limit_cents`
+исправлен на единый неотрицательный предел долга для server snapshot и client
+ledger. Ключи пока не подключены к production secret storage/deployment, а
+device-authenticated V2 login с atomic lease/outbox ещё отсутствует.
+
+Checkpoint `CP-023` от `2026-09-27`: migration `0068` сохраняет exact signed
+snapshot, key id и hash рядом с V2 lease. В одной PostgreSQL-транзакции
+создаются lease, `LoginSnapshotIssued` в outbox и audit; повтор возвращает те
+же bytes без второго side effect. Server теперь отвергает client fact, если
+его `snapshot_id`/версия не совпадают с lease. Реальный gRPC V2 login и выдача
+snapshot в Windows access-gate пока не подключены.
+
+Checkpoint `CP-024` от `2026-09-27`: migration `0069` вводит явный режим
+рабочего места — все существующие ПК остаются в V1, а `v2_local_ledger`
+включается отдельно. Новый V2 gRPC-вход требует совпадающую device identity и
+пароль клиента, создаёт только V2-сессию и возвращает signed snapshot из
+server-owned данных. Повтор после потери ответа возвращает сохранённый
+snapshot без второго outbox/audit; это проверено unit, gRPC и настоящей
+PostgreSQL. Новый proto подключён в C# transport, но access-gate его пока не
+вызывает.
+
+Checkpoint `CP-025` от `2026-09-27`: V2 login теперь сохраняет новую Session,
+signed snapshot, lease, audit и login outbox одной PostgreSQL-транзакцией.
+Sessions предоставляет узкий transaction writer, поэтому V2 не обращается к
+его таблице напрямую. Настоящая PostgreSQL-проверка принудительно создаёт
+конфликт lease после подготовки Session и подтверждает rollback без «висячей»
+активной сессии. Нужна новая сборка контейнеров и ручной V2 gRPC-сценарий;
+access-gate, public-key deployment, ротация и revoke пока не реализованы.
+
+Checkpoint `CP-026` от `2026-09-27`: режим V1/V2 проходит через API,
+операторский редактор и карту ПК. Backend сам запрещает смену режима при
+активной сессии, а UI отключает этот выбор заранее. TypeScript typecheck,
+11 frontend-тестов и backend-проверки прошли. Нужно открыть интерфейс в
+обычном браузере и вручную проверить сценарий; тесты не подтверждают
+расположение и читаемость элементов на экране.
+
+Checkpoint `CP-027` от `2026-09-27`: появился защищённый HTTP-маршрут
+V2-пополнения. Он требует operator permission, ключ идемпотентности и целевую
+V2 session/device, проверяет lease и возвращает `pending_delivery` без
+абсолютного баланса. API и PostgreSQL-проверки прошли. Операторский экран ещё
+не использует этот маршрут и не показывает доставку на ПК.
+
+Checkpoint `CP-028` от `2026-09-28`: пополнение из панели занятого V2-ПК
+передаёт его активные session/device только в защищённый V2-маршрут, фиксирует
+получателя и после server commit показывает `pending_delivery`. Экран не
+выдаёт это за факт получения Windows-клиентом. TypeScript typecheck, component
+test и frontend production build прошли; нужно открыть интерфейс в обычном
+браузере и вручную пройти сценарий с настоящим серверным lease.
+
+Checkpoint `CP-029` от `2026-09-28`: Windows-клиент проверяет адресный
+`BalanceCreditApplied` до изменения локального баланса: server producer,
+payload hash и client/session/device. ClientInbox применяет дельту ровно раз,
+а чужое событие отклоняется без изменения ledger. Linux `dotnet test` прошёл:
+69 тестов, включая отказ при подмене payload. Реального Kafka consumer и server-side подтверждения доставки ещё
+нет, поэтому операторский экран пока честно показывает только pending.
+
+Checkpoint `CP-030` от `2026-09-28`: Compose V2 получил отдельный FastStream
+worker `v2-client-facts`. Он передаёт факт в PostgreSQL reconciliation без
+server minute confirmation; accepted/duplicate завершают commit до Kafka
+offset, а invalid/conflict сначала переносятся в закрытый DLQ. Добавлены
+Prometheus/Grafana/Loki source configuration. Focused Python + PostgreSQL
+проверки: 29 passed. Worker собран и работает: реальный факт прошёл Kafka →
+PostgreSQL, consumer group имеет нулевой lag. Не проверены DLQ, restart между
+commit и offset, TLS/SASL/ACL и Windows Kafka transport.
+
+Checkpoint `CP-031` от `2026-09-28`: живой контур V2 наблюдаемости запущен в
+Compose. Grafana видит Prometheus/Loki/Tempo и V2-панели; Prometheus видит
+`v2-client-facts` как `up`. Реальный Kafka-факт дал два спана в Collector,
+одну трассу в Tempo и записи worker в Loki. Исправлены runtime-настройки
+Tempo, Collector, Loki и Alloy. Не доказаны redaction на реальном секрете,
+alerting, RBAC/backup, metric→trace→log→audit drill-down и Windows telemetry.
+
+Checkpoint `CP-032` от `2026-09-28`: confirmed серверное событие V2
+пополнения получило суммы по методам оплаты для будущей аналитики. В Windows
+сообщение эти суммы и платёжные ссылки не передаются. Переводчик создаёт по
+одному идемпотентному analytics outbox факту на метод оплаты и отвергает raw
+client event. Есть отдельный логический inbox `confirmed_analytics` с
+безопасным повтором. 6 проверок, Ruff и diff-check прошли; FastStream consumer
+и PostgreSQL-граница ещё впереди.
+
+Checkpoint `CP-033` от `2026-09-28`: запущен отдельный worker
+`v2-confirmed-analytics`. Он принимает только server-confirmed факты из
+`v2.confirmed-domain-events`, одной PostgreSQL-транзакцией пишет logical inbox
+и analytics outbox и не меняет деньги, сессии либо пакетные права. Повтор
+безопасен, а conflict и повреждённый/неподтверждённый факт перед offset commit
+попадают в `v2.failed-events`. 6 focused-тестов, Ruff, Compose config и
+diff-check прошли; живой Kafka → worker → PostgreSQL контур и Prometheus
+`up = 1` подтверждены. Backfill/projection, расходование депозита и следующие
+типы confirmed фактов остаются отдельной работой.
+
+Checkpoint `CP-034` от `2026-09-28`: `scheduler` ставит read-only
+`analytics-projection`, а новый `analytics-worker` обслуживает только
+analytics queues. Он переносит immutable analytics outbox в projection и не
+возвращает неиспользуемый результат Dramatiq. Живой Compose-путь Kafka →
+confirmed analytics inbox/outbox → Dramatiq projection подтвердил появление
+`analytics_projection_events`; 6 integration и 11 unit-проверок прошли.
+Backfill, метрики расходования депозита и новые типы confirmed фактов ещё не
+реализованы.
+
+Checkpoint `CP-035` от `2026-09-28`: подтверждённый сервером
+`PER_MINUTE_DEBIT` стал отдельным V2 analytics fact. В client payload теперь
+обязательны `amount_cents` и `tariff_id`; старый `debit_delta_cents` сервер
+отклоняет. После проверки lease/snapshot/цепочки сервер пишет public confirmed
+event без локального остатка баланса. Analytics считает его как
+`wallet_debit_cents`, не увеличивая доход или пополнение второй раз. Unit,
+настоящая PostgreSQL и Compose Kafka → outbox → analytics → Dramatiq projection
+проверки прошли. Не реализованы backfill и события package/session/refund/
+correction; также требуется отдельная проверка Kafka-транспорта на реальном
+Windows-ПК.
+
+Checkpoint `CP-036` от `2026-09-28`: backfill V2-поминутных списаний стал
+возобновляемым. PostgreSQL хранит историческую границу, cursor и durable skip;
+одна транзакция восстанавливает только server-owned факт, пишет analytics
+outbox и продвигает cursor. Legacy `debit_delta_cents` не угадывается и не
+считается. Настоящая PostgreSQL-проверка подтвердила skip, resume и повтор без
+второй метрики. Пересборка Docker-контейнеров с этим кодом пока не прошла из-за
+недоступного Docker Hub; действующие контейнеры ещё не выполняют новый actor.
+
+Checkpoint `CP-037` от `2026-09-28`: продуктовое решение заменило постепенную
+миграцию атомарным V2 cutover. Поставляемый релиз не поддерживает V1 runtime,
+feature flag, per-PC mode или fallback; PostgreSQL с бизнес-данными остаётся.
+До удаления V1 нужен полный V2-сценарий. В тестовом cutover server flow
+принудительно завершает active V1 sessions; автоматически переносить их в V2
+запрещено.
+
+Checkpoint `CP-038` от `2026-09-29`: Linux V2-клиент после входа получает
+отдельный V2-снимок кабинета через `OfflineSessionService`, поэтому тарифы,
+история, баланс и операции покупки больше не зависят от V1 portal RPC. Старый
+компактный размер Linux developer host восстановлен: после входа используется
+виджет 390×700, а содержимое кабинета прокручивается внутри него; Windows host
+продолжает применять собственный native window adapter. Сценарий сброса пароля
+теперь показывает ошибку прямо в форме, не очищает поля при неудаче и повторно
+входит после успешного сохранения нового пароля.
+Добавлена проверка gRPC-сценария входа, тарифного каталога и истории: backend
+5 focused-тестов, C# client 91 тест, сборка Avalonia без предупреждений.
+Контейнеры backend пересобраны, `/health/ready` подтверждает PostgreSQL/Redis.
+Остаётся ручная проверка в новом Linux-клиенте: купить тариф с достаточным
+балансом и открыть «История аккаунта»; автоматические тесты не подтверждают
+раскладку элементов native-окна.
+
+Checkpoint `CP-039` от `2026-09-30`: Linux Avalonia-клиент получил ранний
+локальный журнал запуска с ротацией 2 МБ и переменной
+`GAMECLUB_CLIENT_LOG_PATH`. В журнал попадают выбранные адреса V2, enrollment,
+состояние подключения, вход, сброс пароля и gRPC-код/причина ошибки; пароли,
+токены и содержимое авторизации не записываются. Проверены Linux-сборка без
+предупреждений, 91 C# тест и реальный старт с созданием `/tmp/hubshell-client.log`.
+
+Checkpoint `CP-040` от `2026-09-30`: по журналу Linux-входа найден зависший
+активный V2 lease, связанный уже с завершённой серверной сессией. В тестовой
+базе этот lease точечно отозван. Backend теперь переводит конфликт lease в
+понятный gRPC-код `ALREADY_EXISTS`, а consumer факта `SESSION_STOPPED` в одной
+транзакции завершает server session и отзывает lease. Backend gRPC и worker
+пересобраны, `/health/ready` подтверждает PostgreSQL/Redis; ручной повтор входа
+после обновления клиента ещё требуется.
+
+Checkpoint `CP-041` от `2026-09-30`: устранена причина отклонения всех Linux
+client facts. C# Protobuf-сериализатор больше не передаёт пустой
+`optional previous_hash` у первого события: в proto3 это считалось бы
+присутствующим значением и backend отклонял envelope как `invalid_envelope`,
+после чего следующие sequence получали `reconciliation_gap`. Worker теперь
+пишет в журнал точную причину invalid envelope и reconciliation rejection.
+Добавлен регрессионный C# assertion для отсутствия `previous_hash` у первого
+факта; 91 C# тест, 6 backend focused-тестов, Ruff и `git diff --check` прошли.
+Реальные Kafka/worker контейнеры пересобраны и запущены; повторный ручной вход
+и принятие первого факта новым session id ещё нужно подтвердить.
+
+Checkpoint `CP-042` от `2026-09-30`: добавлен отдельный поведенческий набор из
+33 тестов для расчёта времени, поминутного списания, пакетов, тарифных
+ограничений и гостевых продаж. 22 C# теста проверяют V2 runner/ledger: пять
+бесплатных минут, переход на поминутку, списание каждой due-minute, задержку и
+повторный tick, откат часов, лимит долга, exhaustion, приоритет пакета,
+покупку/идемпотентность и early exit. 11 Python-тестов проверяют гостевые
+наличные/безналичные и смешанные платежи, идемпотентность, аудит границ
+количества, аудиторию, канал продажи, зону, занятую станцию и кассовую смену.
+Полный C# набор прошёл `113` тестов, backend-срез поминутки/каталога — `53`,
+новый гостевой файл — `11`. В ручной Linux-сессии
+`582467e4-6726-4d5a-8c09-0b69e00b90f0` сервер принял sequence 1–9: пять
+`login_grant_consumed`, три `per_minute_debit` по 100 копеек и
+`session_stopped` после нулевого баланса; lease отозвана после завершения.
 
 ## 2. Назначение и границы продукта
 
@@ -108,6 +674,8 @@ runtime Windows-клиента и не служит доказательство
 - PostgreSQL `16-alpine` — источник истины бизнес-фактов;
 - Redis `7-alpine` — Dramatiq broker, refresh-token storage и технический cache;
 - Dramatiq — фоновые/retry-задачи;
+- FastStream поверх Kafka — V2 publisher/consumer для событий автономной
+  сессии; процесс и Kafka-инфраструктура пока не развернуты;
 - PyJWT — JWT access/refresh/device tokens;
 - Pydantic Settings — конфигурация через `GAMECLUB_*`;
 - pytest/pytest-asyncio/httpx — тесты; Ruff — lint и форматирование.
@@ -269,12 +837,15 @@ CSS сохранён в исходном каскадном порядке, но
   внутренним scroll-frame и отдельной легендой/панелью; grid не зависит от
   ширины окна так, как прежняя fluid-сетка;
 - polling карты и операционных данных с целевой задержкой до 5 секунд; backend snapshot cache
-  в Redis — ключ `gameclub:workstations:snapshot:v1`, bounded TTL 20 секунд;
-- карта/панель ПК, старт/стоп/interrupt session, выбор клиента или анонимного
-  гостя, тариф и товарный checkout; для занятого места пакетный тариф можно
-  купить с депозита текущего клиента с немедленной server-backed активацией или
-  постановкой в очередь, а кнопка пополнения депозита показывается только для
-  зарегистрированного клиента;
+  в Redis — ключ `gameclub:workstations:snapshot:v2`, bounded TTL 20 секунд;
+  кэш сохраняет `session_mode`, а новая версия ключа отбрасывает снимки старого формата;
+- карта/панель ПК с V2-командами блокировки и перезапуска; исторические V1-сессии
+  доступны только для чтения. Панель фиксирует режим активной сессии, не
+  переключает набор команд при polling и содержит одну точку входа в продажу;
+- причина чередования V1/V2 в панели была в Redis snapshot cache без `session_mode`;
+  новый формат сохраняет поле и использует новый ключ. Migration `20261002_0071`
+  переводит оставшиеся строки PostgreSQL в V2, но откажется идти дальше при
+  активной V1-сессии до подтверждённого cutover;
 - сохранение session/product idempotency keys в рамках одной попытки checkout,
   чтобы повторный запрос не создавал вторую сессию или второе списание;
 - один retry через refresh token для BFF `401/403`; stale operator permissions
@@ -287,8 +858,12 @@ CSS сохранён в исходном каскадном порядке, но
 - кассовые смены, движения, approvals для correction/close discrepancy;
 - настройки зон/ПК/тем Windows и CRUD способов оплаты: добавить, изменить,
   деактивировать или удалить;
-- analytics overview/client view, KPI, динамика, occupancy, разрезы, margin,
-  payment methods и CSV; ошибки показываются явно, без фиктивных чисел.
+- аналитика с отдельными отчётами «Обзор», «Посещаемость», «Занятость» и
+  «Продажи»; выбор периода, фильтры, сравнение и экспорт CSV. Графики показывают
+  выручку по дням, посещаемость по дням и игровое время по часам; таблицы — места,
+  залы, товары, оплаты и клиентов. Признанный доход и пополнения депозита берутся
+  из v2 финансового отчёта; сервис передаёт выбранный период в хранилище, а
+  списания с баланса не добавляются к выручке повторно.
 
 Бизнес-расчёты и финансовая истина не дублируются в React. Frontend отображает
 ответы BFF и управляет operator flow; окончательные проверки конфликтов,
@@ -455,6 +1030,7 @@ evidence — в
 | Изолированный PostgreSQL test stack | `docker-compose.postgres-test.yml`, `scripts/prepare-postgres-test.sh`, `scripts/run-postgres-tests.sh`; контейнер `hubshell-test-postgres` на `127.0.0.1:55434`, Alembic head `20260918_0061`, repeatable seed | проверено 2026-09-21: полный backend с `GAMECLUB_TEST_POSTGRES_DSN` — `234 passed`; PostgreSQL marker run — `21 passed, 213 deselected`; повторный seed не создаёт дубли | это отдельная локальная test-база; Redis-тесты требуют отдельного `GAMECLUB_TEST_REDIS_URL`, production backup policy не доказывается |
 | Backend static quality | `uv run --directory ./backend ruff check .`, `ruff format --check src tests alembic/versions`, `mypy src tests` | проверено 2026-09-21: все проверки успешны; mypy без ошибок в `253` файлах, форматирование `314` файлов | статические проверки не заменяют browser, Redis, Compose и native Windows evidence |
 | live `POST /api/v1/auth/device-enrollment` без назначенного MAC | `202 pending` | опубликованный BFF enrollment route и безопасный ответ без device/operator token |
+| Linux enrollment после Compose restart | успешно | клиент ограничил список MAC до 16 адресов, получил `200 approved`, а операторская карта получила свежий heartbeat `Avalonia Linux smoke`; native Windows-ПК этой проверкой не покрыт |
 | Live HTTP smoke | успешно | fresh operator token, `/auth/me`, payment methods, analytics 200, sales 200, auth-aware error path |
 | Redis cache smoke | TTL около `16 s` сразу после чтения | cache key created with bounded 20 s TTL; Redis не заменяет DB |
 | Playwright headed smoke | частично успешно | login, dashboard/map/PC context, bookings, clients, catalog sale confirmation, analytics, cash, settings, offline heartbeat lock и disabled sale/booking actions; полная contract/browser matrix ещё не закрыта |
@@ -640,3 +1216,60 @@ dotnet test win-client\GameClub.Client.sln --configuration Debug -p:Platform=x64
 
 Не считать задачу закрытой только потому, что она есть в плане или UI-кнопка
 видна: нужен проверяемый backend use case и подходящий чек уровня требования.
+
+### 2026-10-11 — стартовые бесплатные минуты
+
+`GAMECLUB_LOGIN_GRANT_MINUTES=1` вынесен в .env и общий backend environment Compose. Целое число от 0; применяется к новым сессиям через сохранённый серверный grant и V2 snapshot. Подробности: [30-entitlements-meter/PLAN.md](30-entitlements-meter/PLAN.md).
+
+### 2026-10-11 — V2 grant → per-minute и ошибка локального ledger
+
+Исправлен состав нового signed snapshot: пакетные тарифы имеют
+`per_minute_price_cents=0`; единственную поминутную ставку выбирает существующий
+`CatalogService.find_per_minute_tariff`. Клиент после ошибки minute commit
+сохраняет ссылку на ledger, приостанавливает новые списания, журналирует исходное
+исключение и разрешает явное завершение даже при закрытом access-gate.
+Защита от замены активного ledger и pending outbox сохранена.
+
+Linux воспроизводит ошибку старого snapshot с двумя положительными ставками:
+grant списывается, следующий debit бросает исключение, ledger остаётся Active.
+Это подтверждает дефект данных, но не устанавливает причину конкретного
+Windows-инцидента без исходного snapshot/исключения. Старый сохранённый snapshot
+не переписывается: завершить прежнюю сессию и получить новый signed snapshot.
+
+2026-10-11: отдельная категория `v2.minute` для диагностики
+`ConsumeV2DueMinutesAsync`: этап ошибки, ledger/snapshot контекст и stack trace;
+успешные minute commits без логирования пустых ticks. Проверено на Linux:
+39 V2 access-gate/billing тестов, сборка и `git diff --check`.
+Windows-запись client.log на реальном стенде ещё не проверена.
+
+<<<<<<< HEAD
+2026-10-12: гостевой operator interrupt теперь закрывает клиент при следующем успешном guest poll; запись server stop и сжигание всей очереди используют общий ledger-путь. Проверено на Linux (76 .NET / 2 backend); production smoke остаётся.
+=======
+2026-10-12: Windows User-виджет постоянно показан под обычными окнами
+(HWND_BOTTOM), вместо Hide/Show при переключении приложений. Проверка каждые
+250 мс восстанавливает окно после Win+D без фокуса, Topmost или смены HUD.
+Maintenance сохраняет ручное скрытие. Native Windows проверка остаётся обязательной.
+>>>>>>> 6eff53637abdbff36cfb5824892a9a82fb64b00b
+
+### 2026-10-13 — согласован первый этап Xbox
+
+[План 48](48-xbox-places/PLAN.md), первый этап `implemented`: Xbox на общей карте без
+клиента; только гостевая операторская оплата блочных Xbox-тарифов. Продажа
+запускает сессию, допродажа продлевает её; без депозитов, поминуток, пауз,
+переносов и бронирования. Backend хранит срок и закрывает просроченную сессию
+после рестарта. Продажи входят в общий финансовый и кассовый учёт с фильтрами
+Xbox/место/тариф. Три продуктовых контракта уточнены: V2-only применяется к ПК,
+серверный таймер Xbox не возвращает PC V1 runtime. Sonoff — второй этап.
+Код backend/frontend и миграция 0075 реализованы; protobuf и код win-client не менялись.
+PostgreSQL/API, frontend build, Chrome и 167 тестов клиента проверены.
+Миграция с существующими PC-данными проверена на отдельной базе;
+промышленный выпуск, Kafka/Redis worker, native Windows и Sonoff не проверены.
+Подробности и известные общие ошибки проверок — в плане 48.
+
+2026-10-13: временно скрыта кнопка «Заблокировать клиент» в панели ПК из-за активного V2 ledger после display.lock; «Прервать сессию» сохранено. Проверено: 8 frontend-тестов (PcPanel/Xbox), production build. Развёртывание и браузер не проверены; существующий зависший ledger этим изменением не исправляется.
+
+Проверка полного frontend набора после бонусной аналитики: 111 passed,
+1 прежнее падение AnalyticsView.test.tsx:215 (статус товарного блока).
+Изменение ожидания на асинхронное не устраняет ошибку; пробное изменение
+откачено. Новые бонусные UI-тесты проходят. Graphify обновлён (прежние
+предупреждения парсинга/метаданных сохраняются).

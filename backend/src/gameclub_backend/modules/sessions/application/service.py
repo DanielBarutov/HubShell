@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import builtins
+import dataclasses
 import datetime
+import math
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.catalog.domain import TariffAudience
-from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus
+from gameclub_backend.modules.clients.application.bonus import BonusEarningsPort
+from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus, GuestSessionPayment
 from gameclub_backend.modules.entitlements.domain import Entitlement
 from gameclub_backend.modules.reservations.domain import ReservationStatus
 from gameclub_backend.modules.sessions.application.ports import (
@@ -20,9 +24,11 @@ from gameclub_backend.modules.sessions.application.ports import (
     SessionRepository,
     TariffLookup,
     TimeNotificationLookup,
+    V2SessionLeaseRevoker,
     WorkstationLookup,
 )
 from gameclub_backend.modules.sessions.domain import (
+    GuestPackageSnapshot,
     Session,
     SessionSnapshot,
     SessionStatus,
@@ -30,6 +36,7 @@ from gameclub_backend.modules.sessions.domain import (
     SessionTimeNotification,
 )
 from gameclub_backend.modules.workstations.domain import (
+    WorkstationSessionMode,
     WorkstationStatus,
     effective_workstation_group_id,
 )
@@ -41,7 +48,9 @@ class UtcClock:
 
 
 class SessionService:
-    LOGIN_GRANT_MINUTES = 5
+    LOCAL_LEDGER_SOURCE = "local_ledger"
+    GUEST_LOCAL_LEDGER_SOURCE = "guest_local_ledger"
+    LOCAL_SOURCES = frozenset({LOCAL_LEDGER_SOURCE, GUEST_LOCAL_LEDGER_SOURCE})
 
     def __init__(
         self,
@@ -56,7 +65,13 @@ class SessionService:
         meters: MeterLookup | None = None,
         tariffs: TariffLookup | None = None,
         notifications: TimeNotificationLookup | None = None,
+        v2_session_leases: V2SessionLeaseRevoker | None = None,
+        login_grant_minutes: int = 1,
+        bonuses: BonusEarningsPort | None = None,
     ) -> None:
+        if not 0 <= login_grant_minutes <= 4_294_967_295:
+            raise ValueError("Login grant minutes must fit an unsigned 32-bit integer")
+        self._login_grant_minutes = login_grant_minutes
         self._repository = repository
         self._workstations = workstations
         self._clients = clients
@@ -67,6 +82,8 @@ class SessionService:
         self._meters = meters
         self._tariffs = tariffs
         self._notifications = notifications
+        self._v2_session_leases = v2_session_leases
+        self._bonuses = bonuses
         self._clock = clock or UtcClock()
 
     async def start(
@@ -84,6 +101,7 @@ class SessionService:
         tariff_quantity: int = 1,
         guest_payment_id: uuid.UUID | None = None,
         entitlement_id: uuid.UUID | None = None,
+        persist: bool = True,
     ) -> Session:
         normalized_idempotency_key = idempotency_key.strip() if idempotency_key else None
         if idempotency_key is not None and (
@@ -95,14 +113,34 @@ class SessionService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Session author is required")
         normalized_guest_name = guest_name.strip() if guest_name else None
         normalized_source = source.strip() or "operator"
-        login_grant_minutes = self.LOGIN_GRANT_MINUTES if normalized_source == "device" else 0
+        login_grant_minutes = (
+            self._login_grant_minutes if normalized_source in {"device"} | self.LOCAL_SOURCES else 0
+        )
         if tariff_quantity <= 0:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Tariff quantity must be positive")
         workstation = await self._workstations.get(workstation_id)
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.equipment_type is EquipmentType.XBOX:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox sessions require a paid Xbox sale")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
+        if (
+            workstation.session_mode is WorkstationSessionMode.LOCAL_LEDGER
+            and normalized_source not in self.LOCAL_SOURCES
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Local-ledger workstation requires a local ledger source",
+            )
+        if (
+            workstation.session_mode is WorkstationSessionMode.SERVER_OWNED
+            and normalized_source == self.LOCAL_LEDGER_SOURCE
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                "Server-owned workstation does not accept local ledger sessions",
+            )
         effective_group_id = effective_workstation_group_id(workstation.group_id)
         if device_id is not None and workstation.device_id != device_id:
             raise ApplicationError(
@@ -307,6 +345,10 @@ class SessionService:
             login_grant_minutes=login_grant_minutes,
             entitlement_id=entitlement_id,
         )
+        if client_id is not None and self._bonuses is not None:
+            await self._bonuses.begin_bonus_session(client_id, session.id)
+        if not persist:
+            return session
         try:
             saved = await self._repository.save(session)
         except ValueError as error:
@@ -328,6 +370,72 @@ class SessionService:
                 entitlement_id=entitlement_id,
             )
         return saved
+
+    async def apply_xbox_payment(self, payment: GuestSessionPayment) -> Session:
+        """Apply a confirmed sale while the caller holds the place transaction lock."""
+        workstation = await self._workstations.get(payment.workstation_id)
+        if workstation is None or workstation.equipment_type is not EquipmentType.XBOX:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox place is required")
+        if payment.status is not DirectPaymentStatus.CONFIRMED or not payment.duration_minutes:
+            raise ApplicationError(ErrorCode.CONFLICT, "Confirmed time payment is required")
+        if payment.guest_id is not None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox only accepts anonymous guests")
+        key = f"xbox:{payment.id}"
+        session = (
+            await self._repository.get(payment.session_id)
+            if payment.session_id
+            else await self._repository.get_by_idempotency_key(key)
+        )
+        if session is not None and str(payment.id) in session.applied_payment_ids:
+            return session
+        now = self._clock.now()
+        duration = datetime.timedelta(minutes=payment.duration_minutes * payment.tariff_quantity)
+        if payment.session_id:
+            if (
+                session is None
+                or session.source != "xbox"
+                or session.workstation_id != payment.workstation_id
+                or session.status is not SessionStatus.ACTIVE
+                or session.expires_at is None
+                or session.expires_at <= now
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Xbox session has already ended")
+            session = dataclasses.replace(
+                session,
+                expires_at=session.expires_at + duration,
+                applied_payment_ids=(*session.applied_payment_ids, str(payment.id)),
+            )
+        else:
+            if await self._repository.get_active_for_workstation(payment.workstation_id):
+                raise ApplicationError(ErrorCode.CONFLICT, "Xbox already has an active session")
+            session = Session(
+                id=uuid.uuid4(),
+                workstation_id=payment.workstation_id,
+                client_id=None,
+                guest_name="Гость",
+                status=SessionStatus.ACTIVE,
+                started_at=now,
+                ended_at=None,
+                source="xbox",
+                created_by=payment.created_by,
+                created_at=now,
+                idempotency_key=key,
+                tariff_id=payment.tariff_id,
+                tariff_quantity=payment.tariff_quantity,
+                guest_payment_id=payment.id,
+                expires_at=now + duration,
+                applied_payment_ids=(str(payment.id),),
+            )
+        return await self._repository.save(session)
+
+    async def stop_xbox(self, session_id: uuid.UUID, expired_only: bool = False) -> Session:
+        session = await self.get(session_id)
+        if session.source != "xbox" or session.expires_at is None:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox session is required")
+        now = self._clock.now()
+        if session.status is SessionStatus.COMPLETED or (expired_only and session.expires_at > now):
+            return session
+        return await self._repository.save(session.stop(min(now, session.expires_at)))
 
     async def get(self, session_id: uuid.UUID) -> Session:
         session = await self._repository.get(session_id)
@@ -407,6 +515,70 @@ class SessionService:
             session.started_at,
             session.ended_at or server_time,
         )
+        guest_packages: list[GuestPackageSnapshot] = []
+        if (
+            session.client_id is None
+            and session.guest_payment_id is not None
+            and session.status is SessionStatus.ACTIVE
+            and self._guest_payments is not None
+        ):
+            first = await self._guest_payments.get(session.guest_payment_id)
+            payments = (
+                [first] if first is not None else []
+            ) + await self._guest_payments.list_for_session(session.id)
+            # V2 consumes at UTC minute boundaries, not by rounding a partial minute up.
+            end = (
+                (session.ended_at or server_time)
+                .astimezone(datetime.UTC)
+                .replace(second=0, microsecond=0)
+            )
+            start = session.started_at.astimezone(datetime.UTC).replace(second=0, microsecond=0)
+            consumed_minutes = max(0, int((end - start).total_seconds() // 60))
+            for payment in payments:
+                if payment.status is not DirectPaymentStatus.CONFIRMED:
+                    continue
+                duration = payment.duration_minutes
+                name = payment.tariff_name
+                if duration is None and self._tariffs is not None:
+                    tariff = await self._tariffs.get_tariff(payment.tariff_id)
+                    if tariff is not None:
+                        duration, name = tariff.duration_minutes, tariff.name
+                total = (duration or 0) * payment.tariff_quantity
+                remaining = max(0, total - consumed_minutes)
+                consumed_minutes = max(0, consumed_minutes - total)
+                if remaining > 0:
+                    guest_packages.append(
+                        GuestPackageSnapshot(
+                            id=payment.id,
+                            tariff_id=payment.tariff_id,
+                            tariff_name=name or "Гостевой тариф",
+                            duration_minutes=total,
+                            remaining_minutes=remaining,
+                            status="active" if not guest_packages else "queued",
+                        )
+                    )
+        if session.source == "xbox" and session.expires_at is not None:
+            remaining = (
+                max(0, math.ceil((session.expires_at - server_time).total_seconds() / 60))
+                if session.status is SessionStatus.ACTIVE
+                else 0
+            )
+            total = max(1, int((session.expires_at - session.started_at).total_seconds() // 60))
+            first = (
+                await self._guest_payments.get(session.guest_payment_id)
+                if self._guest_payments and session.guest_payment_id
+                else None
+            )
+            active_tariff = SessionTariffSnapshot(
+                id=session.tariff_id,
+                name=first.tariff_name if first and first.tariff_name else "Xbox",
+                billing_mode="block",
+                duration_minutes=total,
+                quantity=1,
+                elapsed_minutes=max(0, total - remaining),
+                remaining_minutes=remaining,
+            )
+            guest_packages = []
         balance_remaining_minutes = None
         if client is not None and self._tariffs is not None:
             per_minute_tariff = (
@@ -475,6 +647,7 @@ class SessionService:
             tariff_names=tariff_names,
             balance_remaining_minutes=balance_remaining_minutes,
             time_notifications=time_notifications,
+            guest_packages=tuple(guest_packages),
         )
 
     @staticmethod
@@ -526,6 +699,8 @@ class SessionService:
 
     async def stop(self, session_id: uuid.UUID, device_id: str | None = None) -> Session:
         session = await self.get(session_id)
+        if session.source == "xbox":
+            raise ApplicationError(ErrorCode.CONFLICT, "Use the Xbox completion endpoint")
         if device_id is not None:
             workstation = await self._workstations.get(session.workstation_id)
             if workstation is None or workstation.device_id != device_id:
@@ -533,12 +708,35 @@ class SessionService:
                     ErrorCode.PERMISSION_DENIED,
                     "Device identity does not match workstation",
                 )
+        if session.status is SessionStatus.COMPLETED and session.source in self.LOCAL_SOURCES:
+            if (
+                session.client_id is not None
+                and self._bonuses is not None
+                and session.source != self.LOCAL_LEDGER_SOURCE
+            ):
+                await self._bonuses.finish_bonus_session(session.client_id, session.id)
+            if self._v2_session_leases is not None:
+                await self._v2_session_leases.revoke(
+                    session.id,
+                    session.ended_at or self._clock.now(),
+                )
+            return session
+        now = self._clock.now()
         try:
-            saved = await self._repository.save(session.stop(self._clock.now()))
+            saved = await self._repository.save(session.stop(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        if saved.source in self.LOCAL_SOURCES and self._v2_session_leases is not None:
+            await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, "session_stop")
+        # V2 releases only after its ordered stop fact, after all pending debits.
+        if (
+            saved.client_id is not None
+            and self._bonuses is not None
+            and saved.source != self.LOCAL_LEDGER_SOURCE
+        ):
+            await self._bonuses.finish_bonus_session(saved.client_id, saved.id)
         return saved
 
     async def interrupt(
@@ -559,10 +757,19 @@ class SessionService:
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Idempotency key is required")
 
         session = await self.get(session_id)
+        now = self._clock.now()
         try:
-            saved = await self._repository.save(session.interrupt(self._clock.now()))
+            saved = await self._repository.save(session.interrupt(now))
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+        if saved.source == self.LOCAL_LEDGER_SOURCE and self._v2_session_leases is not None:
+            await self._v2_session_leases.revoke(saved.id, saved.ended_at or now)
         if saved.client_id is not None and self._entitlements is not None:
             await self._entitlements.burn_active_for_client(saved.client_id, normalized_reason)
+        if (
+            saved.client_id is not None
+            and self._bonuses is not None
+            and saved.source != self.LOCAL_LEDGER_SOURCE
+        ):
+            await self._bonuses.finish_bonus_session(saved.client_id, saved.id)
         return saved

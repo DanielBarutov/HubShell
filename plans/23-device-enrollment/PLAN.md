@@ -22,6 +22,9 @@ JWT. `device_id` не требуется вводить на клиентско�
 - [ ] Добавить rate limit и production pairing/rotation policy.
 - [x] Покрыть MAC normalization и mismatch installation memory-сценарием.
 - [x] Добавить API checks для pending/approved/disabled и device-token scope.
+- [x] Ограничить список MAC на Linux-клиенте 16 адресами — пределом
+  enrollment API — чтобы Docker и другие виртуальные интерфейсы не превращали
+  регистрацию устройства в ошибку валидации `422`.
 
 ## Security boundary
 
@@ -35,3 +38,9 @@ installation id клиента; другой installation id получает о
 `POST /api/v1/auth/device-enrollment` без совпадения возвращает `202 pending`,
 после назначения — `200 approved`, для disabled — `409`. Ни один ответ не
 содержит operator permissions.
+
+Linux developer-host также проверен после перезапуска Compose: при большом
+числе Docker-интерфейсов клиент отправил допустимые 16 MAC, получил `200` и
+снова начал heartbeat назначенного места. Для production Windows всё ещё нужна
+отдельная проверка на реальном игровом ПК: Linux-проверка не доказывает работу
+EXE, Windows-сетевых адаптеров и kiosk-политик.

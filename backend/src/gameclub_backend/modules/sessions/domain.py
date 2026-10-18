@@ -41,6 +41,8 @@ class Session:
     guest_payment_id: uuid.UUID | None = None
     login_grant_minutes: int = 0
     entitlement_id: uuid.UUID | None = None
+    expires_at: datetime.datetime | None = None
+    applied_payment_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.tariff_quantity <= 0:
@@ -66,6 +68,8 @@ class Session:
         return self.stop(now)
 
     def transfer(self, workstation_id: uuid.UUID) -> "Session":
+        if self.source == "xbox":
+            raise ValueError("Xbox sessions cannot be transferred")
         if self.status is not SessionStatus.ACTIVE:
             raise ValueError("Only an active session can be transferred")
         if self.workstation_id == workstation_id:
@@ -118,6 +122,16 @@ class SessionTimeNotification:
 
 
 @dataclasses.dataclass(frozen=True)
+class GuestPackageSnapshot:
+    id: uuid.UUID
+    tariff_id: uuid.UUID
+    tariff_name: str
+    duration_minutes: int
+    remaining_minutes: int
+    status: str
+
+
+@dataclasses.dataclass(frozen=True)
 class SessionSnapshot:
     """Server-owned, versioned state sent to operator and device consumers."""
 
@@ -125,7 +139,7 @@ class SessionSnapshot:
     server_time: datetime.datetime
     session: Session
     workstation_id: uuid.UUID
-    device_id: str
+    device_id: str | None
     zone_id: str | None
     client_id: uuid.UUID | None
     balance_cents: int | None
@@ -139,6 +153,7 @@ class SessionSnapshot:
     tariff_names: dict[uuid.UUID, str] = dataclasses.field(default_factory=dict)
     balance_remaining_minutes: int | None = None
     time_notifications: tuple[SessionTimeNotification, ...] = ()
+    guest_packages: tuple[GuestPackageSnapshot, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version < 1:

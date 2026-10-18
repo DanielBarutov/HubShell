@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Avalonia.Threading;
 using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Controls;
@@ -6,25 +8,45 @@ using GameClub.Client.Application.Ports;
 using GameClub.Client.Avalonia.Hosting;
 using GameClub.Client.Domain;
 using GameClub.Client.Infrastructure;
+using GameClub.Client.Presentation;
 
 namespace GameClub.Client.Windows;
 
 /// <summary>
-/// Native desktop behavior for the Windows deployment only. Avalonia owns the
-/// shared view while this adapter restores the previous access-gate/widget
-/// modes and makes the compact widget recoverable through the Windows tray.
+/// Нативное поведение рабочего стола только для Windows-развёртывания. Avalonia
+/// владеет общим представлением, а адаптер восстанавливает режимы access-gate и
+/// виджета и позволяет вернуть компактное окно через трей Windows.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNotificationPresenter
 {
     private const double WidgetWidth = 390;
-    private const double WidgetHeight = 700;
+    private const double WidgetHeight = 1000;
     private const double WidgetCornerRadius = 14;
     private Window? _window;
     private Border? _windowContentSurface;
     private NativeTrayIcon? _trayIcon;
     private ClientWindowMode _windowMode = ClientWindowMode.Locked;
     private bool _disposed;
+    private IntPtr _foregroundHook;
+    private readonly ForegroundCallback _foregroundCallback;
+    private readonly KeyboardCallback _keyboardCallback;
+    private readonly AccessGateKeyboardGuard _keyboardGuard = new();
+    private IntPtr _keyboardHook;
+    private readonly DispatcherTimer _desktopVisibilityTimer;
+
+    public WindowsClientWindowAdapter()
+    {
+        _foregroundCallback = OnForegroundChanged;
+        _keyboardCallback = OnKeyboardEvent;
+        // Explorer can minimize the widget after the foreground event for Win+D.
+        // Reconcile on the UI thread even when the desktop stays in the foreground.
+        _desktopVisibilityTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        _desktopVisibilityTimer.Tick += OnDesktopVisibilityTick;
+    }
 
     public bool UsesTransparentWindow => true;
 
@@ -49,15 +71,22 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
             return;
         }
 
+        _foregroundHook = SetWinEventHook(3, 3, IntPtr.Zero, _foregroundCallback, 0, 0, 0);
+        if (_foregroundHook == IntPtr.Zero)
+        {
+            StartupDiagnostics.Error("Desktop foreground tracking failed", new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
+        }
+        window.ShowActivated = false;
+        UpdateKeyboardHook();
         try
         {
-            _trayIcon = new NativeTrayIcon(windowHandle, RestoreFromTray, ExitFromTray);
+            _trayIcon = new NativeTrayIcon(windowHandle, RestoreFromTray);
             StartupDiagnostics.Info("Avalonia Windows tray initialized");
         }
         catch (Exception error)
         {
-            // A tray failure must not prevent the access gate from protecting
-            // the station. Native Windows smoke validates the tray separately.
+            // Ошибка трея не должна лишить станцию защиты access-gate.
+            // Работу трея отдельно проверяют на Windows.
             Trace.TraceError($"HubShell tray initialization failed: {error}");
             StartupDiagnostics.Error("Avalonia Windows tray initialization failed", error);
         }
@@ -72,21 +101,57 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
 
         _window.SystemDecorations = SystemDecorations.None;
         _window.CanResize = false;
-        _window.Topmost = true;
+        _window.Topmost = mode == ClientWindowMode.Locked;
         _windowMode = mode;
-
-        if (mode is ClientWindowMode.Locked or ClientWindowMode.Maintenance)
+        if (mode == ClientWindowMode.User)
         {
+            _desktopVisibilityTimer.Start();
+        }
+        else
+        {
+            _desktopVisibilityTimer.Stop();
+        }
+        UpdateKeyboardHook();
+
+        if (mode == ClientWindowMode.Locked)
+        {
+            _window.MinHeight = 520;
             SetWindowContentCornerRadius(0);
+            _window.Show();
             _window.WindowState = WindowState.FullScreen;
+            _window.Activate();
+            return;
+        }
+
+        if (mode == ClientWindowMode.Maintenance)
+        {
+            SetWindowContentCornerRadius(14);
+            _window.WindowState = WindowState.Normal;
+            _window.MinHeight = 520;
+            _window.Width = 1120;
+            _window.Height = 680;
+            var maintenanceScreen = _window.Screens.ScreenFromWindow(_window) ?? _window.Screens.Primary;
+            if (maintenanceScreen is not null)
+            {
+                _window.Position = new PixelPoint(
+                    maintenanceScreen.WorkingArea.X + Math.Max(0, (maintenanceScreen.WorkingArea.Width - (int)(_window.Width * maintenanceScreen.Scaling)) / 2),
+                    maintenanceScreen.WorkingArea.Y + Math.Max(0, (maintenanceScreen.WorkingArea.Height - (int)(_window.Height * maintenanceScreen.Scaling)) / 2));
+            }
+            _window.Show();
+            _window.Activate();
             return;
         }
 
         SetWindowContentCornerRadius(WidgetCornerRadius);
         _window.WindowState = WindowState.Normal;
         _window.Width = WidgetWidth;
-        _window.Height = WidgetHeight;
+        var widgetHeight = _window.DataContext is MainViewModel { IsGuestWidgetVisible: true } ? 700 : WidgetHeight;
+        var screen = _window.Screens.ScreenFromWindow(_window) ?? _window.Screens.Primary;
+        var availableHeight = screen is null ? widgetHeight : screen.WorkingArea.Height / screen.Scaling - 36;
+        _window.MinHeight = Math.Min(520, Math.Max(0, availableHeight));
+        _window.Height = Math.Clamp(availableHeight, _window.MinHeight, widgetHeight);
         PlaceWidgetNearRightEdge(_window);
+        UpdateDesktopVisibility();
     }
 
     public void HideToTray()
@@ -96,7 +161,10 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
             return;
         }
 
-        _window.Hide();
+        if (_windowMode == ClientWindowMode.Maintenance)
+        {
+            _window.Hide();
+        }
     }
 
     public void Present(TimeNotificationCandidate candidate)
@@ -130,6 +198,14 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
             return;
         }
 
+        if (_foregroundHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_foregroundHook);
+            _foregroundHook = IntPtr.Zero;
+        }
+        RemoveKeyboardHook();
+        _desktopVisibilityTimer.Stop();
+        _desktopVisibilityTimer.Tick -= OnDesktopVisibilityTick;
         _trayIcon?.Dispose();
         _trayIcon = null;
         _windowContentSurface = null;
@@ -144,19 +220,116 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
             return;
         }
 
+        if (_windowMode == ClientWindowMode.User)
+        {
+            UpdateDesktopVisibility();
+            return;
+        }
         _window.Show();
         _window.Activate();
     }
 
-    private void ExitFromTray()
+    private void UpdateKeyboardHook()
     {
-        if (_disposed)
+        if (_windowMode != ClientWindowMode.Locked)
+        {
+            RemoveKeyboardHook();
+            return;
+        }
+        if (_keyboardHook != IntPtr.Zero)
         {
             return;
         }
-
-        _window?.Close();
+        _keyboardHook = SetWindowsHookEx(13, _keyboardCallback, GetModuleHandle(null), 0);
+        if (_keyboardHook == IntPtr.Zero)
+        {
+            StartupDiagnostics.Error("Access-gate keyboard hook failed",
+                new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
+        }
     }
+
+    private void RemoveKeyboardHook()
+    {
+        if (_keyboardHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_keyboardHook);
+            _keyboardHook = IntPtr.Zero;
+        }
+        _keyboardGuard.Reset();
+    }
+
+    private IntPtr OnKeyboardEvent(int code, IntPtr message, IntPtr data)
+    {
+        if (code == 0)
+        {
+            var keyboardMessage = unchecked((uint)message.ToInt64());
+            if (keyboardMessage is 0x100 or 0x101 or 0x104 or 0x105
+                && _keyboardGuard.ShouldSuppress(_windowMode == ClientWindowMode.Locked,
+                    keyboardMessage is 0x100 or 0x104, unchecked((uint)Marshal.ReadInt32(data))))
+            {
+                return new IntPtr(1);
+            }
+        }
+        return CallNextHookEx(_keyboardHook, code, message, data);
+    }
+
+    private delegate IntPtr KeyboardCallback(int code, IntPtr message, IntPtr data);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int hookType, KeyboardCallback callback, IntPtr module, uint threadId);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hook);
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr GetModuleHandle(string? moduleName);
+
+    private void OnForegroundChanged(IntPtr hook, uint eventType, IntPtr hwnd, int objectId, int childId, uint threadId, uint time) =>
+        Dispatcher.UIThread.Post(UpdateDesktopVisibility);
+
+    private void OnDesktopVisibilityTick(object? sender, EventArgs args) =>
+        UpdateDesktopVisibility();
+
+    private void UpdateDesktopVisibility()
+    {
+        if (_disposed || _window is null || _windowMode != ClientWindowMode.User)
+        {
+            return;
+        }
+        var handle = _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var restoreNativeWindow = handle != IntPtr.Zero
+            && (!IsWindowVisible(handle) || IsIconic(handle));
+        _window.Show();
+        if (_window.WindowState == WindowState.Minimized)
+        {
+            _window.WindowState = WindowState.Normal;
+        }
+        if (handle != IntPtr.Zero)
+        {
+            if (restoreNativeWindow)
+            {
+                // Restore after Show Desktop without taking keyboard focus.
+                ShowWindow(handle, 4); // SW_SHOWNOACTIVATE
+            }
+            // HWND_BOTTOM: ordinary applications cover the widget. Never activate
+            // it or change the current HUD geometry while reconciling visibility.
+            SetWindowPos(handle, new IntPtr(1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+        }
+    }
+
+    private delegate void ForegroundCallback(IntPtr hook, uint eventType, IntPtr hwnd, int objectId, int childId, uint threadId, uint time);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetWinEventHook(uint minimum, uint maximum, IntPtr module, ForegroundCallback callback, uint processId, uint threadId, uint flags);
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     private static void PlaceWidgetNearRightEdge(Window window)
     {
@@ -167,8 +340,8 @@ public sealed class WindowsClientWindowAdapter : IClientWindowAdapter, ITimeNoti
         }
 
         var scale = screen.Scaling;
-        var width = (int)Math.Ceiling(WidgetWidth * scale);
-        var height = (int)Math.Ceiling(WidgetHeight * scale);
+        var width = (int)Math.Ceiling(window.Width * scale);
+        var height = (int)Math.Ceiling(window.Height * scale);
         var workArea = screen.WorkingArea;
         window.Position = new PixelPoint(
             workArea.X + Math.Max(18, workArea.Width - width - 18),

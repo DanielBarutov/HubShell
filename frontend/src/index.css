@@ -1,16 +1,38 @@
 @import "tailwindcss";
-@import "./styles/003-base.css";
-@import "./styles/010-map-overrides.css";
-@import "./styles/020-catalog-overrides.css";
-@import "./styles/030-theme-foundation.css";
-@import "./styles/040-map-layout.css";
-@import "./styles/050-operator-refresh.css";
-@import "./styles/060-map-final.css";
-@import "./styles/070-dark-theme.css";
-@import "./styles/080-catalog-dense.css";
-@import "./styles/090-analytics.css";
-@import "./styles/100-controls.css";
-@import "./styles/110-checkout.css";
-@import "./styles/120-hubshell.css";
-@import "./styles/130-bookings.css";
-@import "./styles/140-operator-theme.css";
+@plugin "daisyui" {
+    themes: false;
+}
+@plugin "daisyui/theme" {
+    name: "gameclub";
+    default: true;
+    prefersdark: true;
+    color-scheme: dark;
+    --color-base-100: #07181b;
+    --color-base-200: #082126;
+    --color-base-300: #12343c;
+    --color-base-content: #edf7f2;
+    --color-primary: #a8ff4d;
+    --color-primary-content: #0b1a0d;
+    --color-secondary: #6be85e;
+    --color-secondary-content: #0b1a0d;
+    --color-accent: #31d978;
+    --color-accent-content: #061a13;
+    --color-neutral: #062328;
+    --color-neutral-content: #edf7f2;
+    --color-info: #55d6a2;
+    --color-info-content: #071b16;
+    --color-success: #9cff73;
+    --color-success-content: #102016;
+    --color-warning: #f5c24e;
+    --color-warning-content: #f1ba66;
+    --color-error: #ec8c86;
+    --color-error-content: #ffffff;
+    --radius-selector: 0.5rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.75rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0.12;
+}

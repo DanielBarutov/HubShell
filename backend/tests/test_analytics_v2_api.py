@@ -8,7 +8,7 @@ async def test_analytics_v2_dashboard_exposes_blocks_filters_and_explicit_states
 ) -> None:
     """Проверяет блоки dashboard v2, фильтры и явные состояния данных."""
     response = await api_context.client.get(
-        "/api/v2/analytics/dashboard",
+        "/api/analytics/dashboard",
         headers=api_context.headers,
         params={
             "start_at": "2026-09-20T00:00:00Z",
@@ -41,7 +41,7 @@ async def test_analytics_v2_dashboard_exposes_blocks_filters_and_explicit_states
 async def test_analytics_v2_drill_down_is_permission_aware(api_context) -> None:
     """Проверяет permission-aware доступ к операторской детализации."""
     response = await api_context.client.get(
-        "/api/v2/analytics/drill-down",
+        "/api/analytics/drill-down",
         headers=api_context.headers,
         params={
             "start_at": "2026-09-20T00:00:00Z",

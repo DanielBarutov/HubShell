@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package gameclub.devices.v2;
+
+option csharp_namespace = "GameClub.Client.Contracts.Devices.V2";
+
+// Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
+// состояние сессии V2 и списания остаются в подписанном локальном ledger.
+service DeviceControlService {
+  rpc GetHealth(DeviceHealthRequest) returns (DeviceHealthResponse);
+  rpc Enroll(DeviceEnrollmentRequest) returns (DeviceEnrollmentResponse);
+  rpc Heartbeat(DeviceHeartbeatRequest) returns (DeviceHeartbeatResponse);
+  rpc WatchCommands(DeviceCommandWatchRequest) returns (stream DeviceCommand);
+  rpc AcknowledgeCommand(DeviceCommandAcknowledgementRequest) returns (DeviceCommand);
+}
+
+message DeviceHealthRequest {}
+
+message DeviceHealthResponse {
+  string service = 1;
+  string status = 2;
+  string version = 3;
+}
+
+message DeviceEnrollmentRequest {
+  repeated string mac_addresses = 1;
+  string installation_id = 2;
+}
+
+message DeviceEnrollmentResponse {
+  string state = 1;
+  string device_id = 2;
+  string workstation_id = 3;
+  string workstation_name = 4;
+  string access_token = 5;
+  int32 expires_in = 6;
+}
+
+message DeviceHeartbeatRequest {
+  string device_id = 1;
+  string client_version = 2;
+  repeated string capabilities = 3;
+}
+
+message DeviceHeartbeatResponse {
+  string device_id = 1;
+  string workstation_id = 2;
+  string workstation_name = 3;
+  string group_id = 4;
+  string theme = 5;
+  string manager_password_verifier = 6;
+  WorkstationLockdownPolicy lockdown_policy = 7;
+}
+
+// Безопасные команды оператора для оболочки клиента V2. Для создания и
+// завершения сессии, а также для meter нет формы команды V2.
+message DeviceCommandWatchRequest {
+  string device_id = 1;
+}
+
+message DeviceCommandAcknowledgementRequest {
+  string command_id = 1;
+  string device_id = 2;
+  bool success = 3;
+  string message = 4;
+}
+
+message DeviceCommand {
+  string id = 1;
+  string command_type = 2;
+  string payload_json = 3;
+  string idempotency_key = 4;
+  string status = 5;
+  string acknowledgement_message = 6;
+  string expires_at = 7;
+}
+
+message WorkstationLockdownPolicy {
+  string deployment_mode = 1;
+  bool shell_enabled = 2;
+  bool user_self_login_enabled = 3;
+  bool lock_after_session = 4;
+  bool restart_after_session = 5;
+  repeated string hidden_drives = 6;
+  bool block_external_storage = 7;
+  bool disable_start_menu = 8;
+  bool disable_desktop_switching = 9;
+  repeated string blocked_window_rules = 10;
+  repeated string allowed_application_ids = 11;
+  int32 version = 12;
+}

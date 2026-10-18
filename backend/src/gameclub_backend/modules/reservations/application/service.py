@@ -6,6 +6,7 @@ import typing
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.reservations.application.ports import (
     ClientLookup,
     Clock,
@@ -122,8 +123,8 @@ class ReservationService:
                     else "reservation_client_required"
                 )
             else:
-                # Guest reservations are intentionally anonymous. No guest identity
-                # may bypass the protection window.
+                # Бронь гостя остаётся анонимной. Нельзя обходить защитное окно
+                # через идентификатор гостя.
                 reason = "guest_reservation_protected"
             return EntryDecision(
                 allowed=False,
@@ -387,6 +388,8 @@ class ReservationService:
             workstation = await self._workstations.get(workstation_id)
             if workstation is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+            if workstation.equipment_type is EquipmentType.XBOX:
+                raise ApplicationError(ErrorCode.CONFLICT, "Xbox reservations are not supported")
             if workstation.status is WorkstationStatus.DISABLED:
                 return ReservationAvailability(
                     available=False,

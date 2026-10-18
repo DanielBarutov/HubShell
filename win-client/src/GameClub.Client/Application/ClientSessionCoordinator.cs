@@ -23,6 +23,14 @@ public sealed class ClientSessionCoordinator
 
     public IClientPortalGateway ClientPortal => _backendClient;
 
+    /// <summary>
+    /// Доступен только в V2-совместимой transport composition. К V1 portal API
+    /// этот путь не обращается.
+    /// </summary>
+    public IV2OfflineSessionGateway? V2OfflineSession => _backendClient as IV2OfflineSessionGateway;
+
+    public IV2ClientPortalGateway? V2ClientPortal => _backendClient as IV2ClientPortalGateway;
+
     public async Task QueueOfflineOperationAsync(
         SessionSnapshot session,
         OfflineOperationSnapshot operation,
@@ -155,9 +163,11 @@ public sealed class ClientSessionCoordinator
         Action<WorkstationLockdownPolicySnapshot>? onLockdownPolicyReceived = null,
         Action<SessionSnapshot>? onSessionSnapshotReceived = null,
         Action<ClientConnectionState>? onConnectionStateChanged = null,
+        Action? onWorkstationDisabled = null,
         Func<Task>? refreshSessionSnapshot = null,
         CancellationToken cancellationToken = default)
     {
+        ClientConnectionState? lastLoggedHeartbeatState = null;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -168,6 +178,11 @@ public sealed class ClientSessionCoordinator
                     clientVersion,
                     capabilities,
                     cancellationToken);
+                if (lastLoggedHeartbeatState != ClientConnectionState.Online)
+                {
+                    ClientLog.Info("heartbeat", $"device_id={deviceId} status=online");
+                    lastLoggedHeartbeatState = ClientConnectionState.Online;
+                }
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Online);
                 if (!string.IsNullOrWhiteSpace(heartbeat.Theme))
                 {
@@ -198,8 +213,21 @@ public sealed class ClientSessionCoordinator
             {
                 return;
             }
-            catch (Exception)
+            catch (DeviceEnrollmentDisabledException)
             {
+                ClientLog.Warning("heartbeat", $"device_id={deviceId} status=disabled");
+                lastLoggedHeartbeatState = ClientConnectionState.Offline;
+                onWorkstationDisabled?.Invoke();
+                onConnectionStateChanged?.Invoke(ClientConnectionState.Offline);
+                return;
+            }
+            catch (Exception error)
+            {
+                if (lastLoggedHeartbeatState != ClientConnectionState.Reconnecting)
+                {
+                    ClientLog.Exception("heartbeat", error, $"device_id={deviceId} status=reconnecting");
+                    lastLoggedHeartbeatState = ClientConnectionState.Reconnecting;
+                }
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Reconnecting);
             }
 
@@ -220,13 +248,13 @@ public sealed class ClientSessionCoordinator
         {
             try
             {
-                await foreach (var command in _backendClient.WatchCommandsAsync(
+                await foreach (var command in _backendClient.WatchDeviceCommandsAsync(
                     deviceId,
                     cancellationToken))
                 {
                     if (command.IsExpired(DateTimeOffset.UtcNow))
                     {
-                        await _backendClient.AcknowledgeCommandAsync(
+                        await _backendClient.AcknowledgeDeviceCommandAsync(
                             command.Id,
                             deviceId,
                             success: false,
@@ -250,13 +278,13 @@ public sealed class ClientSessionCoordinator
                             result = new CommandExecutionResult(false, "Выполнение команды завершилось ошибкой");
                         }
 
-                        // If the acknowledgement response is lost, the server may redeliver
-                        // this command after reconnect. Reuse the result instead of running
-                        // a side effect twice; the server still remains authoritative.
+                        // Если ответ на подтверждение потерян, сервер может повторить
+                        // команду после reconnect. Возвращаем сохранённый результат,
+                        // чтобы не выполнить побочный эффект дважды.
                         RememberPendingAcknowledgement(command.Id, result);
                     }
 
-                    await _backendClient.AcknowledgeCommandAsync(
+                    await _backendClient.AcknowledgeDeviceCommandAsync(
                         command.Id,
                         deviceId,
                         result.Success,

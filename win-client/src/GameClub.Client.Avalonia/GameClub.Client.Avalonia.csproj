@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>GameClub.Client.Avalonia</RootNamespace>
     <RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers>
+    <DefineConstants>$(DefineConstants);GAMECLUB_V2_ONLY;GAMECLUB_LINUX_V2</DefineConstants>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -15,11 +16,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
+    <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" GlobalPropertiesToRemove="GameClubV2Only" />
     <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
+    <Compile Remove="obj\**\*.cs;obj-v2\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Development\LocalBackendClientHost.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\HubShell.ico" />
+    <AvaloniaResource Include="Assets\LoginBackground.png" />
   </ItemGroup>
 </Project>

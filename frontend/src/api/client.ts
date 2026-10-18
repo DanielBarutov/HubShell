@@ -1,16 +1,27 @@
 import { normalizePhoneQuery } from "./normalizers";
 import type {
+  BackendBonusReport,
+  BackendBonusProgram,
+  BackendBonusWallet,
+  BackendBonusOperation,
+  BackendBonusGameQuote,
+  BonusPurchaseConfirmation,
   BackendWorkstation,
+  RelaySettings,
   BackendLockdownPolicy,
   BackendWorkstationGroup,
   BackendClient,
   BackendGuest,
   BackendBalanceOperation,
   BackendPaymentPart,
+  BackendV2Deposit,
   BackendEntitlement,
   BackendGuestSessionPayment,
+  BackendGuestV2Access,
+  BackendSession,
   BackendAuditEvent,
   BackendCommand,
+  BackendDeviceCommand,
   BackendTariff,
   BackendDiscountRule,
   BackendQuote,
@@ -29,20 +40,14 @@ import type {
   Reservation,
   ReservationWritePayload,
   ReservationAvailability,
-  BackendSession,
-  BackendSessionSnapshot,
   TokenResponse,
-  BackendSessionMeter,
   BackendTransferOffer,
   BackendTransferResult,
-  BackendSessionCharge,
   BackendRevenueSummary,
   BackendCashShift,
   BackendCashMovement,
   BackendCashApproval,
   BackendCashShiftSchedule,
-  StartSessionPayload,
-  BackendEntryDecision,
 } from "./types";
 
 export class ApiError extends Error {
@@ -59,7 +64,7 @@ export class ApiError extends Error {
 
 export class GameClubApi {
   private readonly baseUrl: string;
-  private readonly analyticsV2BaseUrl: string;
+  private readonly analyticsBaseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private refreshInFlight: Promise<boolean> | null = null;
@@ -68,7 +73,7 @@ export class GameClubApi {
 
   constructor(baseUrl = import.meta.env.VITE_API_URL ?? "/api/v1") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
-    this.analyticsV2BaseUrl = this.baseUrl.replace(/\/api\/v1$/, "/api/v2");
+    this.analyticsBaseUrl = `${this.baseUrl.replace(/\/api\/v1$/, "")}/api`;
   }
 
   async login(username: string, password: string): Promise<void> {
@@ -104,7 +109,7 @@ export class GameClubApi {
     try {
       window.localStorage.removeItem(GameClubApi.refreshStorageKey);
     } catch {
-      // Storage can be disabled by browser privacy settings.
+      // Браузер может отключить хранилище настройками приватности.
     }
     if (notify) {
       for (const listener of this.sessionExpiredListeners) {
@@ -119,7 +124,7 @@ export class GameClubApi {
         window.localStorage.setItem(GameClubApi.refreshStorageKey, this.refreshToken);
       }
     } catch {
-      // The in-memory session still works when persistent storage is unavailable.
+      // Сессия в памяти продолжает работать, если постоянное хранилище недоступно.
     }
   }
 
@@ -132,8 +137,10 @@ export class GameClubApi {
   }
 
   async registerWorkstation(payload: {
+    relay_settings?: RelaySettings | null;
+    equipment_type?: "pc" | "xbox";
     device_id?: string;
-    mac_address: string;
+    mac_address?: string;
     name: string;
     group_id: string | null;
     position: number | null;
@@ -152,7 +159,13 @@ export class GameClubApi {
     });
   }
 
-  async updateWorkstation(workstationId: string, payload: { name: string; mac_address: string | null; group_id: string | null; position: number | null }): Promise<BackendWorkstation> {
+  async updateWorkstation(workstationId: string, payload: {
+    relay_settings?: RelaySettings | null;
+    name: string;
+    mac_address: string | null;
+    group_id: string | null;
+    position: number | null;
+  }): Promise<BackendWorkstation> {
     return this.request<BackendWorkstation>(`/workstations/${workstationId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
@@ -161,6 +174,10 @@ export class GameClubApi {
 
   async enableWorkstation(workstationId: string): Promise<BackendWorkstation> {
     return this.request<BackendWorkstation>(`/workstations/${workstationId}/enable`, { method: "POST" });
+  }
+
+  async testWorkstationRelay(workstationId: string, state: "on" | "off"): Promise<{ state: "on" | "off" }> {
+    return this.request(`/workstations/${workstationId}/relay/${state}`, { method: "POST" });
   }
 
   async deleteWorkstation(workstationId: string): Promise<void> {
@@ -206,18 +223,6 @@ export class GameClubApi {
     });
   }
 
-  async listSessions(activeOnly = false, workstationId?: string): Promise<BackendSession[]> {
-    const params = new URLSearchParams({ active_only: String(activeOnly) });
-    if (workstationId) {
-      params.set("workstation_id", workstationId);
-    }
-    return this.request<BackendSession[]>(`/sessions?${params}`);
-  }
-
-  async getSessionSnapshot(sessionId: string): Promise<BackendSessionSnapshot> {
-    return this.request<BackendSessionSnapshot>(`/sessions/${sessionId}/snapshot`);
-  }
-
   async createTransferOffer(
     sessionId: string,
     targetWorkstationId: string,
@@ -230,6 +235,18 @@ export class GameClubApi {
         session_id: sessionId,
         target_workstation_id: targetWorkstationId,
       }),
+    });
+  }
+
+  async interruptSession(
+    sessionId: string,
+    reason: string,
+    idempotencyKey: string,
+  ): Promise<BackendSession> {
+    return this.request<BackendSession>(`/sessions/${sessionId}/interrupt`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ reason }),
     });
   }
 
@@ -246,59 +263,6 @@ export class GameClubApi {
 
   async getTransferRestartStatus(offerId: string): Promise<BackendCommand> {
     return this.request<BackendCommand>(`/session-transfers/offers/${offerId}/restart`);
-  }
-
-  async checkEntry(
-    workstationId: string,
-    clientId?: string,
-    guestId?: string,
-  ): Promise<BackendEntryDecision> {
-    const params = new URLSearchParams({ workstation_id: workstationId });
-    if (clientId) params.set("client_id", clientId);
-    if (guestId) params.set("guest_id", guestId);
-    return this.request<BackendEntryDecision>(`/reservations/entry-decision?${params}`);
-  }
-
-  async chargeSession(sessionId: string, idempotencyKey: string): Promise<BackendSessionCharge> {
-    return this.request<BackendSessionCharge>(`/billing/sessions/${sessionId}/charge`, {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-    });
-  }
-
-  async startSession(
-    payload: StartSessionPayload,
-    idempotencyKey: string,
-  ): Promise<BackendSession> {
-    return this.request<BackendSession>("/sessions", {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify(payload),
-    });
-  }
-
-  async stopSession(sessionId: string): Promise<BackendSession> {
-    return this.request<BackendSession>(`/sessions/${sessionId}/stop`, { method: "POST" });
-  }
-
-  async interruptSession(
-    sessionId: string,
-    reason: string,
-    idempotencyKey: string,
-  ): Promise<BackendSession> {
-    return this.request<BackendSession>(`/sessions/${sessionId}/interrupt`, {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async getSessionCharge(sessionId: string): Promise<BackendSessionCharge> {
-    return this.request<BackendSessionCharge>(`/billing/sessions/${sessionId}/charge`);
-  }
-
-  async getSessionMeter(sessionId: string): Promise<BackendSessionMeter> {
-    return this.request<BackendSessionMeter>(`/billing/sessions/${sessionId}/meter`);
   }
 
   async getRevenue(startAt: string, endAt: string): Promise<BackendRevenueSummary> {
@@ -386,6 +350,23 @@ export class GameClubApi {
 
   async getWorkstationCommand(workstationId: string, commandId: string): Promise<BackendCommand> {
     return this.request<BackendCommand>(`/workstations/${workstationId}/commands/${commandId}`);
+  }
+
+  async dispatchDeviceCommand(
+    workstationId: string,
+    commandType: BackendDeviceCommand["command_type"],
+    idempotencyKey: string,
+  ): Promise<BackendDeviceCommand> {
+    return this.request<BackendDeviceCommand>(
+      `/workstations/${workstationId}/device-commands`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ command_type: commandType, payload: {} }),
+      },
+      true,
+      `${this.baseUrl.replace(/\/api\/v1$/, "")}/api`,
+    );
   }
 
   async searchClients(query: string, field: "nickname" | "phone"): Promise<BackendClient[]> {
@@ -483,6 +464,56 @@ export class GameClubApi {
     return response.client;
   }
 
+  async createV2Deposit(
+    clientId: string,
+    payload: {
+      session_id: string;
+      device_id: string;
+      amount_cents: number;
+      currency: string;
+      reason: string;
+      payment_parts: BackendPaymentPart[];
+      cash_shift_id?: string;
+    },
+    idempotencyKey: string,
+  ): Promise<BackendV2Deposit> {
+    return this.request<BackendV2Deposit>(`/clients/${clientId}/v2-deposits`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getBonusProgram(): Promise<BackendBonusProgram> {
+    return this.request<BackendBonusProgram>("/bonus-program");
+  }
+
+  async updateBonusProgram(body: BackendBonusProgram, key: string): Promise<BackendBonusProgram> {
+    return this.request<BackendBonusProgram>("/bonus-program", {
+      method: "PUT", headers: { "Idempotency-Key": key }, body: JSON.stringify(body),
+    });
+  }
+
+  async getBonusWallet(clientId: string): Promise<BackendBonusWallet> {
+    return this.request<BackendBonusWallet>(`/clients/${clientId}/bonuses`);
+  }
+
+  async adjustBonus(clientId: string, amountCents: number, reason: string, key: string): Promise<BackendBonusOperation> {
+    return this.request<BackendBonusOperation>(`/clients/${clientId}/bonus-adjustments`, {
+      method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify({ amount_cents: amountCents, reason }),
+    });
+  }
+
+  async listBonusOperations(clientId: string, limit = 20): Promise<BackendBonusOperation[]> {
+    return this.request<BackendBonusOperation[]>(`/clients/${clientId}/bonus-operations?limit=${limit}`);
+  }
+
+  async quoteEntitlement(clientId: string, tariffId: string, useBonus: boolean): Promise<BackendBonusGameQuote> {
+    return this.request<BackendBonusGameQuote>(`/clients/${clientId}/entitlements/quote`, {
+      method: "POST", body: JSON.stringify({ tariff_id: tariffId, use_bonus: useBonus }),
+    });
+  }
+
   async listClientEntitlements(clientId: string): Promise<BackendEntitlement[]> {
     return this.request<BackendEntitlement[]>(`/clients/${clientId}/entitlements`);
   }
@@ -493,11 +524,12 @@ export class GameClubApi {
     idempotencyKey: string,
     paymentParts: BackendPaymentPart[] = [],
     cashShiftId?: string,
+    bonusConfirmation?: BonusPurchaseConfirmation,
   ): Promise<BackendEntitlement> {
     return this.request<BackendEntitlement>(`/clients/${clientId}/entitlements`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId }),
+      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId, ...bonusConfirmation }),
     });
   }
 
@@ -517,6 +549,7 @@ export class GameClubApi {
 
   async confirmGuestSessionPayment(
     payload: {
+      session_id?: string;
       workstation_id: string;
       tariff_id: string;
       tariff_quantity?: number;
@@ -531,6 +564,23 @@ export class GameClubApi {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
+    });
+  }
+
+  async confirmXboxSale(payload: Parameters<GameClubApi["confirmGuestSessionPayment"]>[0], idempotencyKey: string): Promise<BackendGuestSessionPayment> {
+    return this.request<BackendGuestSessionPayment>("/xbox/sales", {
+      method: "POST", headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({workstation_id: payload.workstation_id, tariff_id: payload.tariff_id, session_id: payload.session_id, cash_shift_id: payload.cash_shift_id, payment_parts: payload.payment_parts}),
+    });
+  }
+
+  async stopXboxSession(sessionId: string): Promise<BackendSession & {relay_off_pending?: boolean}> {
+    return this.request<BackendSession & {relay_off_pending?: boolean}>(`/xbox/sessions/${sessionId}/stop`, {method: "POST"});
+  }
+
+  async prepareGuestSessionAccess(paymentId: string): Promise<BackendGuestV2Access> {
+    return this.request<BackendGuestV2Access>(`/guest-payments/${paymentId}/v2-access`, {
+      method: "POST",
     });
   }
 
@@ -557,6 +607,7 @@ export class GameClubApi {
   }
 
   async createTariff(payload: {
+    equipment_type?: "pc" | "xbox";
     name: string;
     group_id: string | null;
     duration_minutes: number;
@@ -654,9 +705,15 @@ export class GameClubApi {
     return this.request<BackendAnalyticsOverview>(`/analytics/overview?${query}`);
   }
 
+  async getBonusReport(startAt: string, endAt: string): Promise<BackendBonusReport> {
+    const query = new URLSearchParams({ start_at: startAt, end_at: endAt });
+    return this.request<BackendBonusReport>(`/analytics/bonuses?${query}`, undefined, true, this.analyticsBaseUrl);
+  }
+
   async getAnalyticsFinance(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -668,6 +725,7 @@ export class GameClubApi {
   }): Promise<BackendAnalyticsFinanceResponse> {
     const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
     const filters: Array<[string, string | undefined]> = [
+      ["equipment_type", params.equipmentType],
       ["zone_key", params.zoneKey],
       ["workstation_key", params.workstationKey],
       ["tariff_key", params.tariffKey],
@@ -684,13 +742,14 @@ export class GameClubApi {
       `/analytics/finance?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
   async getAnalyticsDashboard(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -708,13 +767,14 @@ export class GameClubApi {
       `/analytics/dashboard?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
   async getAnalyticsDrillDown(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -732,13 +792,14 @@ export class GameClubApi {
       `/analytics/drill-down?${query}`,
       {},
       true,
-      this.analyticsV2BaseUrl,
+      this.analyticsBaseUrl,
     );
   }
 
   private analyticsQuery(params: {
     startAt: string;
     endAt: string;
+    equipmentType?: "pc" | "xbox";
     zoneKey?: string;
     workstationKey?: string;
     tariffKey?: string;
@@ -751,6 +812,7 @@ export class GameClubApi {
   }): URLSearchParams {
     const query = new URLSearchParams({ start_at: params.startAt, end_at: params.endAt });
     const filters: Array<[string, string | undefined]> = [
+      ["equipment_type", params.equipmentType],
       ["zone_key", params.zoneKey],
       ["workstation_key", params.workstationKey],
       ["tariff_key", params.tariffKey],
@@ -1064,7 +1126,7 @@ export class GameClubApi {
           this.persistRefreshToken();
           return true;
         } catch {
-          // A temporary network/backend outage must not destroy a valid long-lived session.
+          // Временный сбой сети или backend не должен завершать действующую сессию.
           return false;
         }
       })().finally(() => {

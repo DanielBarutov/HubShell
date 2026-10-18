@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: GameClub V2
+    orgId: 1
+    folder: GameClub V2
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

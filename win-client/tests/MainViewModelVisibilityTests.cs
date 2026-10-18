@@ -40,6 +40,9 @@ public sealed class MainViewModelVisibilityTests
             nameof(MainViewModel.IsMaintenanceVisible),
             nameof(MainViewModel.IsManagerEntryVisible),
             nameof(MainViewModel.IsPortalContentVisible),
+            nameof(MainViewModel.IsGuestWidgetVisible),
+            nameof(MainViewModel.IsWidgetContentVisible),
+            nameof(MainViewModel.IsAccountWidgetReadyVisible),
             nameof(MainViewModel.IsPortalPasswordSetupVisible),
             nameof(MainViewModel.IsPortalReadyVisible),
             nameof(MainViewModel.IsAccessFeedbackVisible),
@@ -143,12 +146,14 @@ public sealed class MainViewModelVisibilityTests
 
         Assert.True(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
         Assert.True(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+        Assert.True(viewModel.TrySuppressLockedSystemShortcut(false, false, true, false, dPressed: true));
 
         viewModel.UserAccessCode = "4826";
         Assert.True(viewModel.TryUnlockUser());
 
         Assert.False(viewModel.TrySuppressLockedSystemShortcut(true, true, false, false));
         Assert.False(viewModel.TrySuppressLockedSystemShortcut(false, false, true, true));
+        Assert.False(viewModel.TrySuppressLockedSystemShortcut(false, false, true, false, dPressed: true));
     }
 
     [Fact]
@@ -260,7 +265,7 @@ public sealed class MainViewModelVisibilityTests
             BalanceRemainingMinutes: 120));
 
         Assert.Equal("Пакет времени", viewModel.CurrentSessionModeSummary);
-        Assert.Equal("Осталось 30 мин", viewModel.ActiveTimeSummary);
+        Assert.Equal("Осталось 2 ч 30 мин", viewModel.ActiveTimeSummary);
     }
 
     [Fact]
@@ -447,6 +452,14 @@ public sealed class MainViewModelVisibilityTests
                 "Ночной пакет · В очереди · 60 из 60 мин",
             },
             viewModel.PortalEntitlementQueue);
+        Assert.Equal(
+            new[]
+            {
+                new PortalEntitlementRow("Дневной пакет", "Активен", "20 из 60 мин", true),
+                new PortalEntitlementRow("Ночной пакет", "В очереди", "60 из 60 мин", false),
+            },
+            viewModel.PortalEntitlementRows);
+        Assert.Equal(viewModel.PortalEntitlementRows, viewModel.WidgetEntitlementRows);
         Assert.False(viewModel.CanActivatePortalEntitlement);
         Assert.False(viewModel.IsPortalBalanceTimeVisible);
     }

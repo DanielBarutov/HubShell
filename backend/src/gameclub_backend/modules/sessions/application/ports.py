@@ -45,6 +45,24 @@ class SessionRepository(typing.Protocol):
         """Persist a session or its lifecycle transition."""
 
 
+class V2SessionLeaseRevoker(typing.Protocol):
+    async def revoke(self, session_id: uuid.UUID, revoked_at: datetime.datetime) -> None:
+        """Revoke the V2 lease when its server session completes."""
+
+
+class SessionTransactionWriter(typing.Protocol):
+    async def save(self, transaction: typing.Any, session: Session) -> Session:
+        """Save a session in a transaction owned by a cross-module use case."""
+
+    async def complete(
+        self,
+        transaction: typing.Any,
+        session_id: uuid.UUID,
+        ended_at: datetime.datetime,
+    ) -> Session | None:
+        """Complete one session in a transaction owned by a cross-module use case."""
+
+
 class SessionTransferRepository(typing.Protocol):
     async def get(self, offer_id: uuid.UUID) -> SessionTransferOffer | None:
         """Return a transfer offer by ID."""
@@ -75,6 +93,9 @@ class GuestLookup(typing.Protocol):
 
 
 class GuestPaymentLookup(typing.Protocol):
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        """Return confirmed additional guest payments in sale order."""
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment | None:
         """Return a confirmed direct payment for a guest session."""
 

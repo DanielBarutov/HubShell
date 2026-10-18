@@ -9,6 +9,7 @@ from gameclub_backend.modules.analytics.finance import (
     FinancialFact,
     WalletFact,
 )
+from gameclub_backend.modules.clients.application.bonus_reporting import BonusReport
 
 
 class AnalyticsRepository(typing.Protocol):
@@ -31,9 +32,16 @@ class AnalyticsRepository(typing.Protocol):
 
 
 class FinanceAnalyticsRepository(typing.Protocol):
-    async def snapshot(self, filters: FinanceFilters | None = None) -> FinanceFactsSnapshot:
+    async def snapshot(self, filters: FinanceFilters) -> FinanceFactsSnapshot:
         """Return analytics-owned immutable facts or None for unavailable sources."""
         ...
+
+
+class BonusFinanceReadPort(typing.Protocol):
+    async def read_bonus_report(
+        self, start_at: datetime.datetime, end_at: datetime.datetime
+    ) -> BonusReport:
+        """Read confirmed bonus facts through the Clients owner boundary."""
 
 
 class ClientFinanceReadPort(typing.Protocol):

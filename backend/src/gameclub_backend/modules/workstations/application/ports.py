@@ -4,6 +4,12 @@ import uuid
 
 from gameclub_backend.modules.workstations.domain import Workstation, WorkstationGroup
 from gameclub_backend.modules.workstations.domain_commands import WorkstationCommand
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
+
+
+class RelayControl(typing.Protocol):
+    async def set_state(self, settings: RelaySettings, on: bool) -> str:
+        """Set and verify the relay output; raise if its state is not confirmed."""
 
 
 class WorkstationGroupRepository(typing.Protocol):
@@ -60,6 +66,11 @@ class WorkstationSnapshotCache(typing.Protocol):
 
     async def invalidate(self) -> None:
         """Remove the snapshot after a workstation mutation."""
+
+
+class ActiveWorkstationSessionReader(typing.Protocol):
+    async def get_active_for_workstation(self, workstation_id: uuid.UUID) -> typing.Any | None:
+        """Return an active session when a workstation mode cannot be changed."""
 
 
 class WorkstationCommandRepository(typing.Protocol):

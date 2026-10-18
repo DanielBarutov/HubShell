@@ -3,8 +3,9 @@ import typing
 import uuid
 
 from fastapi import APIRouter, Depends, Header, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.auth.domain import Principal
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.domain import SessionSnapshot
@@ -13,17 +14,36 @@ from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
 from gameclub_backend.modules.workstations.application.service import WorkstationService
-from gameclub_backend.modules.workstations.domain import Workstation, WorkstationStatus
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    WorkstationSessionMode,
+    WorkstationStatus,
+)
 from gameclub_backend.modules.workstations.domain_commands import (
     WorkstationCommand,
     WorkstationCommandStatus,
 )
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
 from gameclub_backend.presentation.http.auth import require_permissions
 
 Operator = typing.Annotated[Principal, Depends(require_permissions("workstations.manage"))]
 
 
+class RelaySettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ip: str = Field(min_length=1, max_length=45)
+    port: int = Field(ge=1, le=65535, strict=True)
+    deviceid: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_settings(self) -> "RelaySettingsRequest":
+        RelaySettings(**self.model_dump())
+        return self
+
+
 class RegisterWorkstationRequest(BaseModel):
+    equipment_type: EquipmentType = EquipmentType.PC
+    relay_settings: RelaySettingsRequest | None = None
     device_id: str | None = Field(default=None, max_length=128)
     mac_address: str | None = Field(default=None, max_length=32)
     name: str = Field(min_length=1, max_length=128)
@@ -34,6 +54,7 @@ class RegisterWorkstationRequest(BaseModel):
 
 
 class UpdateWorkstationRequest(BaseModel):
+    relay_settings: RelaySettingsRequest | None = None
     name: str = Field(min_length=1, max_length=128)
     group_id: str | None = Field(default=None, max_length=128)
     position: int | None = Field(default=None, ge=0)
@@ -86,8 +107,11 @@ class WorkstationCommandResponse(BaseModel):
 
 
 class WorkstationResponse(BaseModel):
+    relay_off_pending: bool = False
+    relay_settings: RelaySettingsRequest | None = None
     id: uuid.UUID
-    device_id: str
+    device_id: str | None
+    equipment_type: EquipmentType = EquipmentType.PC
     name: str
     group_id: str | None
     position: int | None
@@ -110,10 +134,22 @@ class WorkstationResponse(BaseModel):
         cls,
         workstation: Workstation,
         session_snapshot: SessionSnapshot | None = None,
+        relay_off_pending: bool = False,
     ) -> "WorkstationResponse":
         return cls(
+            relay_off_pending=relay_off_pending,
+            relay_settings=(
+                RelaySettingsRequest(
+                    ip=workstation.relay_settings.ip,
+                    port=workstation.relay_settings.port,
+                    deviceid=workstation.relay_settings.deviceid,
+                )
+                if workstation.relay_settings
+                else None
+            ),
             id=workstation.id,
             device_id=workstation.device_id,
+            equipment_type=workstation.equipment_type,
             name=workstation.name,
             group_id=workstation.group_id,
             position=workstation.position,
@@ -143,6 +179,7 @@ def create_router(
     service: WorkstationService,
     command_service: WorkstationCommandService | None = None,
     session_service: SessionService | None = None,
+    pending_relay_workstations: typing.Callable[[], typing.Awaitable[set[uuid.UUID]]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/workstations", tags=["workstations"])
     operator = Depends(require_permissions("workstations.manage"))
@@ -150,6 +187,7 @@ def create_router(
     @router.get("", response_model=list[WorkstationResponse], dependencies=[operator])
     async def list_workstations() -> list[WorkstationResponse]:
         workstations = await service.list()
+        pending = await pending_relay_workstations() if pending_relay_workstations else set()
         snapshots_by_workstation_id: dict[uuid.UUID, SessionSnapshot] = {}
         if session_service is not None:
             for active_session in await session_service.list(active_only=True):
@@ -160,6 +198,7 @@ def create_router(
             WorkstationResponse.from_domain(
                 item,
                 snapshots_by_workstation_id.get(item.id),
+                relay_off_pending=item.id in pending,
             )
             for item in workstations
         ]
@@ -170,7 +209,13 @@ def create_router(
         principal: Operator,
     ) -> WorkstationResponse:
         del principal
-        workstation = await service.register(**body.model_dump())
+        workstation = await service.register(
+            **body.model_dump(exclude={"relay_settings"}),
+            relay_settings=RelaySettings(**body.relay_settings.model_dump())
+            if body.relay_settings
+            else None,
+            session_mode=WorkstationSessionMode.LOCAL_LEDGER,
+        )
         return WorkstationResponse.from_domain(workstation)
 
     @router.post("/heartbeat", response_model=WorkstationResponse)
@@ -212,8 +257,24 @@ def create_router(
     ) -> WorkstationResponse:
         del principal
         return WorkstationResponse.from_domain(
-            await service.update(workstation_id, **body.model_dump())
+            await service.update(
+                workstation_id,
+                **body.model_dump(exclude={"relay_settings"}),
+                relay_settings=RelaySettings(**body.relay_settings.model_dump())
+                if body.relay_settings
+                else None,
+                relay_settings_provided="relay_settings" in body.model_fields_set,
+            )
         )
+
+    @router.post("/{workstation_id}/relay/{state}")
+    async def test_relay(
+        workstation_id: uuid.UUID,
+        state: typing.Literal["on", "off"],
+        principal: Operator,
+    ) -> dict[str, str]:
+        del principal
+        return {"state": await service.test_relay(workstation_id, on=state == "on")}
 
     @router.post("/{workstation_id}/enable", response_model=WorkstationResponse)
     async def enable_workstation(

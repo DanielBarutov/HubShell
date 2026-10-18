@@ -37,7 +37,7 @@ from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.workstations.application.ports import WorkstationGroupRepository
 from gameclub_backend.modules.workstations.application.service import WorkstationService
-from gameclub_backend.modules.workstations.domain import WorkstationStatus
+from gameclub_backend.modules.workstations.domain import WorkstationSessionMode, WorkstationStatus
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
@@ -74,6 +74,19 @@ async def test_workstation_lifecycle_and_duplicate_device_are_guarded() -> None:
         await service.register("device-01", "VIP-01")
 
     assert error.value.code is ErrorCode.CONFLICT
+
+
+async def test_workstation_registration_defaults_to_local_ledger() -> None:
+    """Проверяет, что новый ПК получает канонический локальный журнал."""
+    repository = InMemoryWorkstationRepository()
+    service = WorkstationService(repository)
+
+    workstation = await service.register(
+        "mode-device",
+        "Mode PC",
+        session_mode=WorkstationSessionMode.LOCAL_LEDGER,
+    )
+    assert workstation.session_mode is WorkstationSessionMode.LOCAL_LEDGER
 
 
 async def test_legacy_group_can_be_repositioned_without_saved_group_configuration() -> None:
@@ -268,6 +281,7 @@ async def test_guest_tariff_requires_confirmed_direct_payment_before_session_sta
         "guest-payment-device",
         "Guest payment PC",
         group_id="main",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     catalog = CatalogService(InMemoryCatalogRepository())
     tariff = await catalog.create_tariff(
@@ -336,6 +350,7 @@ async def test_guest_tariff_is_rejected_on_workstation_with_registered_session()
         "guest-busy-device",
         "Busy guest PC",
         group_id="main",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     clients = InMemoryClientRepository()
     client = await ClientService(clients).create("RegisteredFox")
@@ -499,6 +514,7 @@ async def test_guest_profile_search_and_booking_session_links() -> None:
     workstation = await WorkstationService(workstation_repository).register(
         "guest-device",
         "Guest PC",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
     )
     reservation = await ReservationService(
         InMemoryReservationRepository(),
@@ -585,8 +601,12 @@ async def test_guest_mode_management_and_catalog_categories() -> None:
     await workstation_service.archive(workstation.id)
     assert await workstation_service.list() == []
 
-    # A separate workstation is needed because the archived one must not start a session.
-    session_workstation = await workstation_service.register("device-management-02", "PC 02")
+    # Нужен отдельный ПК: архивное рабочее место не должно запускать сессию.
+    session_workstation = await workstation_service.register(
+        "device-management-02",
+        "PC 02",
+        session_mode=WorkstationSessionMode.SERVER_OWNED,
+    )
     session = await SessionService(
         InMemorySessionRepository(),
         workstations=workstation_repository,

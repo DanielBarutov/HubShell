@@ -51,15 +51,51 @@ class Entitlement:
     settlement_attempts: int = 0
     next_settlement_attempt_at: datetime.datetime | None = None
 
+    purchase_reason: str | None = None
+    purchase_actor_id: str | None = None
+    bonus_rate_bps: int = 0
+    bonus_session_id: uuid.UUID | None = None
+    bonus_requested: bool = False
+    bonus_amount_cents: int = 0
+    bonus_limit_bps: int = 0
+
     def __post_init__(self) -> None:
+        if not isinstance(self.bonus_requested, bool):
+            raise ValueError("Bonus payment choice must be a boolean")
+        if (
+            isinstance(self.bonus_rate_bps, bool)
+            or not isinstance(self.bonus_rate_bps, int)
+            or not 0 <= self.bonus_rate_bps <= 10000
+        ):
+            raise ValueError("Invalid bonus earning rate")
         if self.duration_minutes <= 0:
             raise ValueError("Entitlement duration must be positive")
         if not 0 <= self.remaining_minutes <= self.duration_minutes:
             raise ValueError("Entitlement remaining minutes are invalid")
         if self.price_cents < 0:
             raise ValueError("Entitlement price cannot be negative")
+        if (
+            isinstance(self.bonus_amount_cents, bool)
+            or not isinstance(self.bonus_amount_cents, int)
+            or not 0 <= self.bonus_amount_cents <= self.price_cents
+        ):
+            raise ValueError("Invalid bonus payment amount")
+        if (
+            isinstance(self.bonus_limit_bps, bool)
+            or not isinstance(self.bonus_limit_bps, int)
+            or not 0 <= self.bonus_limit_bps <= 10000
+        ):
+            raise ValueError("Invalid bonus payment limit")
+        if self.bonus_amount_cents and not self.bonus_requested:
+            raise ValueError("Bonus payment requires explicit choice")
+        if self.bonus_amount_cents * 10000 > self.price_cents * self.bonus_limit_bps:
+            raise ValueError("Bonus payment exceeds its saved limit")
         parts = tuple(self.payment_parts)
-        if parts and sum(part.amount_cents for part in parts) != self.price_cents:
+        if (
+            parts
+            and sum(part.amount_cents for part in parts)
+            != self.price_cents - self.bonus_amount_cents
+        ):
             raise ValueError("Payment parts total must match entitlement price")
         if any(part.method not in {"balance", "cash", "transfer"} for part in parts):
             raise ValueError("Unsupported entitlement payment method")

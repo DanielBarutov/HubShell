@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
@@ -113,6 +114,7 @@ async def test_postgres_persists_tariff_windows_audience_and_entitlement_snapsho
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},

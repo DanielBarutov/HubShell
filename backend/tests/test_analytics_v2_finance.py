@@ -10,6 +10,7 @@ from gameclub_backend.modules.analytics.application.finance import FinanceAnalyt
 from gameclub_backend.modules.analytics.finance import (
     AnalyticsDataState,
     ComparisonKind,
+    FinanceFactsSnapshot,
     FinanceFactType,
     FinanceFilters,
     FinancialFact,
@@ -157,6 +158,26 @@ async def test_finance_service_returns_metric_states_for_missing_sources() -> No
 
 
 @pytest.mark.asyncio
+async def test_finance_service_passes_the_selected_period_to_repository() -> None:
+    """Проверяет, что финансовый запрос читает факты именно за выбранный период."""
+
+    class RecordingRepository:
+        def __init__(self) -> None:
+            self.received_filters: FinanceFilters | None = None
+
+        async def snapshot(self, filters: FinanceFilters) -> FinanceFactsSnapshot:
+            self.received_filters = filters
+            return FinanceFactsSnapshot(financial_facts=(), wallet_facts=())
+
+    filters = period()
+    repository = RecordingRepository()
+
+    await FinanceAnalyticsService(repository).finance(filters)
+
+    assert repository.received_filters == filters
+
+
+@pytest.mark.asyncio
 async def test_finance_report_separates_cash_wallet_revenue_refunds_and_adjustments() -> None:
     """Финансовый отчёт не смешивает независимые виды денежных фактов."""
     service = FinanceAnalyticsService(
@@ -197,6 +218,11 @@ async def test_finance_report_separates_cash_wallet_revenue_refunds_and_adjustme
     assert report.flow.refunds_cents is None
     assert report.flow.adjustments_cents is None
     assert report.flow.recognized_revenue_cents == 1_500
+    assert [(item.key, item.recognized_revenue_cents) for item in report.daily] == [
+        ("2026-09-20", 1_500),
+        ("2026-09-21", 0),
+        ("2026-09-22", 0),
+    ]
 
 
 @pytest.mark.asyncio
@@ -299,7 +325,7 @@ async def test_finance_v2_endpoint_is_additive_and_explicit_about_missing_facts(
             )
             headers = {"Authorization": f"Bearer {token.json()['access_token']}"}
             response = await client.get(
-                "/api/v2/analytics/finance",
+                "/api/analytics/finance",
                 headers=headers,
                 params={
                     "start_at": "2026-09-20T00:00:00Z",

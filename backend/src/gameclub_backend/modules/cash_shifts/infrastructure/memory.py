@@ -38,6 +38,16 @@ class InMemoryCashShiftRepository:
         shift_id = self._open_keys.get(idempotency_key)
         return self._shifts.get(shift_id) if shift_id else None
 
+    async def get_by_close_key(self, idempotency_key: str) -> CashShift | None:
+        return next(
+            (
+                shift
+                for shift in self._shifts.values()
+                if shift.close_idempotency_key == idempotency_key
+            ),
+            None,
+        )
+
     async def get_open(self, register_id: str) -> CashShift | None:
         return next(
             (

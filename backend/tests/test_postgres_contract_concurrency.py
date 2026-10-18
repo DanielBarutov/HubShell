@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.infrastructure.postgres import (
@@ -134,6 +135,7 @@ async def test_postgres_parallel_package_consumers_preserve_locked_delta(
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -217,7 +219,8 @@ async def test_postgres_transfer_confirms_once_and_rejects_other_key(
                 offer_key,
             ),
         )
-        # Offer creation must converge before confirmations race.
+        # Сначала создание предложения должно прийти к одному состоянию,
+        # только потом могут одновременно начаться подтверждения.
         if offer_results[0].id != offer_results[1].id:
             raise AssertionError("Concurrent offer creation did not converge")
         offer = offer_results[0]
@@ -262,6 +265,7 @@ async def test_postgres_transfer_confirms_once_and_rejects_other_key(
                     {"session_id": session_id},
                 )
             if client_id is not None:
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -396,7 +400,7 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
             "applied",
             "duplicate",
         }
-        # Device sessions receive the five-minute login grant; only two of the
+        # Сессии устройства получают login grant на пять минут, но только две из
         # seven elapsed minutes are billable.
         assert (await clients.get(client.id)).balance_cents == 480
         meter = await BillingService(
@@ -429,6 +433,7 @@ async def test_postgres_offline_duplicate_delivery_does_not_debit_twice(
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -550,6 +555,7 @@ async def test_postgres_transfer_to_two_targets_commits_only_one_owner(
                     {"session_id": session_id},
                 )
             if client_id is not None:
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},

@@ -45,7 +45,16 @@ class ProductSale:
     attempts: int = 0
     next_attempt_at: datetime.datetime | None = None
 
+    bonus_rate_bps: int = 0
+    bonus_session_id: uuid.UUID | None = None
+
     def __post_init__(self) -> None:
+        if (
+            isinstance(self.bonus_rate_bps, bool)
+            or not isinstance(self.bonus_rate_bps, int)
+            or not 0 <= self.bonus_rate_bps <= 10000
+        ):
+            raise ValueError("Invalid bonus earning rate")
         if not self.product_name.strip():
             raise ValueError("Product sale name is required")
         if self.quantity <= 0:

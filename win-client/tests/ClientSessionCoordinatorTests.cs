@@ -94,7 +94,7 @@ public sealed class ClientSessionCoordinatorTests
                 null,
                 null));
 
-        public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchCommandsAsync(
+        public async IAsyncEnumerable<WorkstationCommandSnapshot> WatchDeviceCommandsAsync(
             string deviceId,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -102,7 +102,7 @@ public sealed class ClientSessionCoordinatorTests
             yield break;
         }
 
-        public Task<WorkstationCommandSnapshot> AcknowledgeCommandAsync(
+        public Task<WorkstationCommandSnapshot> AcknowledgeDeviceCommandAsync(
             string commandId,
             string deviceId,
             bool success,

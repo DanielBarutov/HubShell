@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\src\GameClub.Client.Core\GameClub.Client.Core.csproj" />
     <ProjectReference Include="..\src\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
+    <ProjectReference Include="..\src\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="WindowsCommandExecutorTests.cs" />
+    <Compile Remove="ServerEventConsumerTests.cs" />
+    <Compile Include="..\src\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="DeploymentSettings.cs" />
+    <Compile Include="..\src\GameClub.Client.Windows\AccessGateKeyboardGuard.cs" Link="AccessGateKeyboardGuard.cs" />
+    <Compile Include="..\src\GameClub.Client.Windows\ClientProcessRecovery.cs" Link="ClientProcessRecovery.cs" />
+    <Compile Include="..\src\GameClub.Client.Windows\V2WindowsCommandExecutor.cs" Link="V2WindowsCommandExecutor.cs" />
   </ItemGroup>
 </Project>

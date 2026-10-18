@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.application.audit import AuditEvent
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, commit_session, open_session
 
 
 class AuditBase(DeclarativeBase):
@@ -58,7 +58,7 @@ class PostgresAuditRepository:
     async def record(self, event: AuditEvent) -> AuditEvent:
         async with open_session(self._engine_provider) as session:
             session.add(AuditEventModel.from_domain(event))
-            await session.commit()
+            await commit_session(session)
             return event
 
     async def list_recent(self, limit: int = 100) -> list[AuditEvent]:

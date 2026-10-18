@@ -9,6 +9,7 @@ import dramatiq
 from gameclub_backend.application.errors import ApplicationError
 from gameclub_backend.config import get_settings
 from gameclub_backend.infrastructure.audit_postgres import PostgresAuditRepository
+from gameclub_backend.infrastructure.database import application_transaction
 from gameclub_backend.infrastructure.resources import create_resources
 from gameclub_backend.jobs.broker import broker as shared_broker
 from gameclub_backend.modules.billing.application.service import BillingService
@@ -97,6 +98,8 @@ async def meter_sessions_once(
     """Meter active sessions and queue stop commands when their paid time ends."""
     stopped = 0
     for session in await session_reader.list(active_only=True):
+        if session.source in SessionService.LOCAL_SOURCES or session.source == "xbox":
+            continue
         try:
             await billing.meter_session(session.id)
         except ApplicationError as error:
@@ -191,6 +194,8 @@ async def reconcile_billing_charges(
             clients=clients,
             active_sessions=sessions,
             workstations=workstations,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         billing = BillingService(
             PostgresChargeRepository(engine_provider),
@@ -261,6 +266,8 @@ async def meter_active_sessions() -> None:
             clients=clients,
             active_sessions=session_repository,
             workstations=workstation_repository,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         sessions = SessionService(
             session_repository,
@@ -268,6 +275,8 @@ async def meter_active_sessions() -> None:
             clients=client_repository,
             entitlements=entitlements,
             meters=PostgresMeterRepository(engine_provider),
+            login_grant_minutes=settings.login_grant_minutes,
+            bonuses=clients,
         )
         commands = WorkstationCommandService(
             PostgresWorkstationCommandRepository(engine_provider),
@@ -288,6 +297,36 @@ async def meter_active_sessions() -> None:
             meter_repository=PostgresMeterRepository(engine_provider),
             entitlements=entitlements,
         )
+        from gameclub_backend.modules.direct_payments.application.xbox import XboxService
+        from gameclub_backend.modules.direct_payments.infrastructure.xbox_relay import (
+            PostgresXboxRelayRepository,
+        )
+        from gameclub_backend.modules.direct_payments.infrastructure.xbox_transaction import (
+            PostgresXboxTransaction,
+        )
+        from gameclub_backend.modules.workstations.application.service import UtcClock
+        from gameclub_backend.modules.workstations.infrastructure.relay_http import (
+            DiyHttpRelayControl,
+        )
+
+        xbox_payments = GuestSessionPaymentService(
+            PostgresGuestSessionPaymentRepository(engine_provider),
+            tariffs=catalog,
+            cash=CashShiftGuestPaymentSettlement(
+                CashShiftService(PostgresCashShiftRepository(engine_provider))
+            ),
+        )
+        xbox = XboxService(
+            xbox_payments,
+            sessions,
+            workstation_repository,
+            PostgresXboxTransaction(engine_provider),
+            UtcClock(),
+            audit=PostgresAuditRepository(engine_provider),
+            relay=DiyHttpRelayControl(),
+            relay_repository=PostgresXboxRelayRepository(engine_provider),
+        )
+        await xbox.expire()
         stopped = await meter_sessions_once(
             billing,
             session_repository,
@@ -345,6 +384,9 @@ async def reconcile_pending_settlements(
             clients=clients,
             cash=CashShiftSaleSettlement(cash_shifts),
             audit=audit,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
+            active_sessions=session_repository,
         )
         entitlements = EntitlementService(
             PostgresEntitlementRepository(engine_provider),
@@ -353,6 +395,8 @@ async def reconcile_pending_settlements(
             cash=CashShiftEntitlementSettlement(cash_shifts),
             active_sessions=session_repository,
             workstations=workstation_repository,
+            bonuses=clients,
+            transaction=lambda: application_transaction(engine_provider),
         )
         sweep_now = _parse_sweep_time(now_iso)
         recovered_payments = 0

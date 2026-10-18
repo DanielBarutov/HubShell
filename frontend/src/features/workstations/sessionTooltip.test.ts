@@ -3,6 +3,40 @@ import { getSessionTooltipDetails, sessionTooltip, SessionEndingProjection } fro
 import type { Workstation } from "../../types";
 
 describe("sessionTooltip", () => {
+  it("показывает точный серверный срок Xbox без округления до лишней минуты", () => {
+    const xbox: Workstation = {
+      id: "xbox", name: "Xbox", group: "Зал", status: "busy", equipmentType: "xbox",
+      sessionSnapshot: {
+        server_time: "2026-10-13T10:00:35Z",
+        session: { id: "session", expires_at: "2026-10-13T10:30:02Z" },
+        entitlements: [], active_tariff: { remaining_minutes: 30 },
+      } as never,
+    };
+    expect(getSessionTooltipDetails(xbox)?.ending?.toISOString()).toBe("2026-10-13T10:30:02.000Z");
+  });
+  it("суммирует текущий пакет и все допроданные гостевые пакеты без двойного счёта", () => {
+    const pc: Workstation = {
+      id: "guest-pc", name: "Guest PC", group: "Зал", status: "busy", client: "Гость",
+      sessionSnapshot: {
+        server_time: "2026-10-11T11:14:00Z", session: { id: "guest-session" },
+        entitlements: [], balance_cents: null, balance_remaining_minutes: null,
+        login_grant_remaining_minutes: 0,
+        active_tariff: { remaining_minutes: 2 },
+        guest_packages: [
+          { id: "first", tariff_id: "three", tariff_name: "Три минуты", duration_minutes: 3,
+            remaining_minutes: 2, status: "active" },
+          { id: "second", tariff_id: "six", tariff_name: "Шесть минут", duration_minutes: 6,
+            remaining_minutes: 6, status: "queued" },
+        ],
+      } as never,
+    };
+    const details = getSessionTooltipDetails(pc)!;
+    expect(details.packageMinutes).toBe(8);
+    expect(details.totalMinutes).toBe(8);
+    expect(details.packages.map(item => item.tariffName)).toEqual(["Три минуты", "Шесть минут"]);
+    expect(details.ending?.toISOString()).toBe("2026-10-11T11:22:00.000Z");
+  });
+
   it("показывает snapshot, только активные пакеты и расчетное окончание", () => {
     const pc: Workstation = {
       id: "pc-1",
@@ -31,6 +65,41 @@ describe("sessionTooltip", () => {
     expect(tooltip).toContain("В очереди");
     expect(tooltip).not.toContain("exhausted");
     expect(tooltip).toContain("Окончание");
+  });
+
+  it("обновляет баланс, но не переносит окончание вперёд между минутными тиками", () => {
+    const projection = new SessionEndingProjection();
+    const snapshot = (serverTime: string, balanceCents: number): Workstation => ({
+      id: "pc-v2-minute",
+      name: "VIP-09",
+      group: "VIP-зона",
+      status: "busy",
+      sessionSnapshot: {
+        server_time: serverTime,
+        session: { id: "session-v2-minute" },
+        balance_cents: balanceCents,
+        balance_remaining_minutes: Math.floor(balanceCents / 100),
+        login_grant_remaining_minutes: 0,
+        active_entitlement: null,
+        active_tariff: null,
+        entitlements: [],
+      } as never,
+    });
+
+    const first = sessionTooltip(
+      snapshot("2026-10-01T15:00:00Z", 4_400),
+      projection,
+    )!;
+    const nextMinute = sessionTooltip(
+      snapshot("2026-10-01T15:01:00Z", 4_300),
+      projection,
+    )!;
+
+    expect(first).toContain("Баланс: 44");
+    expect(nextMinute).toContain("Баланс: 43");
+    expect(nextMinute.match(/Окончание: .+/)?.[0]).toBe(
+      first.match(/Окончание: .+/)?.[0],
+    );
   });
 
   it("не включает ночной пакет вне окна расходования в окончание сессии", () => {

@@ -24,14 +24,14 @@ describe("analytics v2 read API", () => {
       comparison: true,
     });
 
-    expect(fetchMock.mock.calls[0]?.[0]).toContain("http://backend/api/v2/analytics/dashboard?");
+      expect(fetchMock.mock.calls[0]?.[0]).toContain("http://backend/api/analytics/dashboard?");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("category_key=drinks");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("product_key=product-1");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("operator_key=operator-1");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("comparison=previous_equal_period");
   });
 
-  it("keeps drill-down on the v2 endpoint", async () => {
+  it("keeps drill-down on the analytics endpoint", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(jsonResponse({ state: "empty", items: [] }));
 
@@ -41,7 +41,7 @@ describe("analytics v2 read API", () => {
       operationType: "return",
     });
 
-    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v2/analytics/drill-down?");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/analytics/drill-down?");
     expect(fetchMock.mock.calls[0]?.[0]).toContain("operation_type=return");
   });
 });

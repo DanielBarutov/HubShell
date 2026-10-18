@@ -5,6 +5,23 @@ import uuid
 from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
 
 
+class EntitlementTransactionWriter(typing.Protocol):
+    async def apply_local_usage(
+        self,
+        transaction: typing.Any,
+        client_id: uuid.UUID,
+        package_id: uuid.UUID,
+        tariff_id: uuid.UUID,
+        remaining_minutes: int,
+        occurred_at: datetime.datetime,
+        *,
+        burned: bool,
+        purchase_idempotency_key: str | None,
+        purchased_since: datetime.datetime,
+    ) -> bool:
+        """Project a validated local package fact in the caller's transaction."""
+
+
 class EntitlementRepository(typing.Protocol):
     async def get(self, entitlement_id: uuid.UUID) -> Entitlement | None:
         """Return one entitlement by ID."""
@@ -69,6 +86,9 @@ class EntitlementRepository(typing.Protocol):
 
 
 class ClientEntitlementDebit(typing.Protocol):
+    async def get(self, client_id: uuid.UUID):
+        """Read the registered customer's server-owned discount category."""
+
     async def debit(
         self,
         client_id: uuid.UUID,
@@ -106,6 +126,16 @@ class CashEntitlementSettlement(typing.Protocol):
 class TariffLookup(typing.Protocol):
     async def get_tariff(self, tariff_id: uuid.UUID):
         """Return a tariff snapshot used for the entitlement."""
+
+    async def quote_for_tariff(
+        self,
+        tariff_id: uuid.UUID,
+        group_id: str | None,
+        moment: datetime.datetime,
+        discount_category: str | None = None,
+        **kwargs,
+    ):
+        """Quote the selected package with the customer's existing catalog discounts."""
 
 
 class ActiveSessionLookup(typing.Protocol):

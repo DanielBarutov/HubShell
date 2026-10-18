@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.direct_payments.domain import (
     DirectPaymentStatus,
     GuestSessionPayment,
@@ -22,6 +22,9 @@ class GuestSessionPaymentModel(DirectPaymentBase):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    tariff_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     tariff_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     tariff_quantity: Mapped[int] = mapped_column(Integer())
     guest_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -41,10 +44,20 @@ class GuestSessionPaymentModel(DirectPaymentBase):
     )
     settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
 
+    equipment_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pc", server_default="pc"
+    )
+    zone_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     def to_domain(self) -> GuestSessionPayment:
         return GuestSessionPayment(
             id=self.id,
             workstation_id=self.workstation_id,
+            session_id=self.session_id,
+            duration_minutes=self.duration_minutes,
+            tariff_name=self.tariff_name,
+            equipment_type=self.equipment_type,
+            zone_id=self.zone_id,
             tariff_id=self.tariff_id,
             tariff_quantity=self.tariff_quantity,
             guest_id=self.guest_id,
@@ -66,6 +79,11 @@ class GuestSessionPaymentModel(DirectPaymentBase):
         return cls(
             id=payment.id,
             workstation_id=payment.workstation_id,
+            session_id=payment.session_id,
+            duration_minutes=payment.duration_minutes,
+            tariff_name=payment.tariff_name,
+            equipment_type=payment.equipment_type,
+            zone_id=payment.zone_id,
             tariff_id=payment.tariff_id,
             tariff_quantity=payment.tariff_quantity,
             guest_id=payment.guest_id,
@@ -87,6 +105,18 @@ class PostgresGuestSessionPaymentRepository:
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
 
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        async with open_session(self._engine_provider) as session:
+            models = await session.scalars(
+                select(GuestSessionPaymentModel)
+                .where(
+                    GuestSessionPaymentModel.session_id == session_id,
+                    GuestSessionPaymentModel.status == DirectPaymentStatus.CONFIRMED.value,
+                )
+                .order_by(GuestSessionPaymentModel.created_at)
+            )
+            return [model.to_domain() for model in models]
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment | None:
         async with open_session(self._engine_provider) as session:
             model = await session.get(GuestSessionPaymentModel, payment_id)
@@ -103,7 +133,7 @@ class PostgresGuestSessionPaymentRepository:
 
     async def save(self, payment: GuestSessionPayment) -> GuestSessionPayment:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"guest-payment:{payment.idempotency_key}"},
@@ -117,6 +147,7 @@ class PostgresGuestSessionPaymentRepository:
                     existing = model.to_domain()
                     if (
                         existing.workstation_id != payment.workstation_id
+                        or existing.session_id != payment.session_id
                         or existing.tariff_id != payment.tariff_id
                         or existing.tariff_quantity != payment.tariff_quantity
                         or existing.guest_id != payment.guest_id

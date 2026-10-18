@@ -4,11 +4,12 @@ import builtins
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy import JSON, DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
@@ -50,6 +51,13 @@ class SessionModel(SessionBase):
     login_grant_minutes: Mapped[int] = mapped_column(Integer(), default=0)
     entitlement_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    applied_payment_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+
     def to_domain(self) -> Session:
         return Session(
             id=self.id,
@@ -70,6 +78,8 @@ class SessionModel(SessionBase):
             guest_payment_id=self.guest_payment_id,
             login_grant_minutes=self.login_grant_minutes,
             entitlement_id=self.entitlement_id,
+            expires_at=self.expires_at,
+            applied_payment_ids=tuple(self.applied_payment_ids or []),
         )
 
     @classmethod
@@ -93,6 +103,8 @@ class SessionModel(SessionBase):
             guest_payment_id=session.guest_payment_id,
             login_grant_minutes=session.login_grant_minutes,
             entitlement_id=session.entitlement_id,
+            expires_at=session.expires_at,
+            applied_payment_ids=list(session.applied_payment_ids),
         )
 
 
@@ -170,59 +182,88 @@ class PostgresSessionRepository:
 
     async def save(self, session: Session) -> Session:
         async with open_session(self._engine_provider) as db_session:
-            async with db_session.begin():
-                await db_session.execute(
-                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                    {"lock_key": f"gaming-session-workstation:{session.workstation_id}"},
-                )
-                model = await db_session.get(SessionModel, session.id)
-                if model is None and session.idempotency_key:
-                    await db_session.execute(
-                        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                        {"lock_key": f"gaming-session-key:{session.idempotency_key}"},
-                    )
-                    repeated = await db_session.scalar(
-                        select(SessionModel).where(
-                            SessionModel.idempotency_key == session.idempotency_key
-                        )
-                    )
-                    if repeated is not None:
-                        if repeated.workstation_id != session.workstation_id:
-                            raise ValueError("Idempotency key belongs to another workstation")
-                        return repeated.to_domain()
-                if model is None:
-                    if session.status is SessionStatus.ACTIVE:
-                        if session.client_id is not None:
-                            await db_session.execute(
-                                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                                {"lock_key": (f"gaming-session-client:{session.client_id}")},
-                            )
-                        active = await db_session.scalar(
-                            select(SessionModel)
-                            .where(
-                                SessionModel.workstation_id == session.workstation_id,
-                                SessionModel.status == SessionStatus.ACTIVE.value,
-                            )
-                            .with_for_update()
-                        )
-                        if active is not None:
-                            raise ValueError("Workstation already has an active session")
-                        if session.client_id is not None:
-                            active_client = await db_session.scalar(
-                                select(SessionModel)
-                                .where(
-                                    SessionModel.client_id == session.client_id,
-                                    SessionModel.status == SessionStatus.ACTIVE.value,
-                                )
-                                .with_for_update()
-                            )
-                            if active_client is not None:
-                                raise ValueError("Client already has an active session")
-                    db_session.add(SessionModel.from_domain(session))
-                    return session
+            async with begin_session(db_session):
+                return await PostgresSessionTransactionWriter().save(db_session, session)
 
-                self._copy_values(model, session)
-                return session
+
+class PostgresSessionTransactionWriter:
+    """Public transaction writer; it hides gaming_sessions storage from V2."""
+
+    async def save(self, transaction: AsyncSession, session: Session) -> Session:
+        await transaction.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": f"gaming-session-workstation:{session.workstation_id}"},
+        )
+        model = await transaction.get(SessionModel, session.id)
+        if model is None and session.idempotency_key:
+            await transaction.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"gaming-session-key:{session.idempotency_key}"},
+            )
+            repeated = await transaction.scalar(
+                select(SessionModel).where(SessionModel.idempotency_key == session.idempotency_key)
+            )
+            if repeated is not None:
+                if repeated.workstation_id != session.workstation_id:
+                    raise ValueError("Idempotency key belongs to another workstation")
+                return repeated.to_domain()
+        if model is None:
+            if session.status is SessionStatus.ACTIVE:
+                if session.client_id is not None:
+                    await transaction.execute(
+                        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                        {"lock_key": f"gaming-session-client:{session.client_id}"},
+                    )
+                active = await transaction.scalar(
+                    select(SessionModel)
+                    .where(
+                        SessionModel.workstation_id == session.workstation_id,
+                        SessionModel.status == SessionStatus.ACTIVE.value,
+                    )
+                    .with_for_update()
+                )
+                if active is not None:
+                    raise ValueError("Workstation already has an active session")
+                if session.client_id is not None:
+                    active_client = await transaction.scalar(
+                        select(SessionModel)
+                        .where(
+                            SessionModel.client_id == session.client_id,
+                            SessionModel.status == SessionStatus.ACTIVE.value,
+                        )
+                        .with_for_update()
+                    )
+                    if active_client is not None:
+                        raise ValueError("Client already has an active session")
+            transaction.add(SessionModel.from_domain(session))
+            return session
+
+        self._copy_values(model, session)
+        return session
+
+    async def complete(
+        self,
+        transaction: AsyncSession,
+        session_id: uuid.UUID,
+        ended_at: datetime.datetime,
+    ) -> Session | None:
+        model = await transaction.get(SessionModel, session_id, with_for_update=True)
+        if model is None:
+            return None
+        for lock_key in (
+            f"gaming-session-workstation:{model.workstation_id}",
+            *([f"gaming-session-client:{model.client_id}"] if model.client_id else []),
+        ):
+            await transaction.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": lock_key},
+            )
+        if model.status == SessionStatus.ACTIVE.value:
+            if ended_at.tzinfo is None:
+                raise ValueError("Session end time must include timezone")
+            model.status = SessionStatus.COMPLETED.value
+            model.ended_at = ended_at
+        return model.to_domain()
 
     @staticmethod
     def _copy_values(model: SessionModel, session: Session) -> None:

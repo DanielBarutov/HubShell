@@ -1,6 +1,5 @@
 import datetime
 
-from gameclub.v1 import workstations_pb2
 from gameclub_backend.modules.workstations.application.groups import WorkstationGroupService
 from gameclub_backend.modules.workstations.domain import (
     LockdownDeploymentMode,
@@ -13,13 +12,9 @@ from gameclub_backend.modules.workstations.infrastructure.groups_postgres import
     policy_from_json,
     policy_to_json,
 )
-from gameclub_backend.presentation.grpc.services import (
-    from_lockdown_policy_proto,
-    to_lockdown_policy_proto,
-)
 
 
-def test_lockdown_policy_round_trips_through_storage_and_proto() -> None:
+def test_lockdown_policy_round_trips_through_storage() -> None:
     """
     Проверяет сценарий «test_lockdown_policy_round_trips_through_storage_and_proto» и
     подтверждает ожидаемый публичный результат согласно соответствующему бизнес-правилу.
@@ -39,12 +34,7 @@ def test_lockdown_policy_round_trips_through_storage_and_proto() -> None:
     )
 
     restored = policy_from_json(policy_to_json(policy))
-    proto = to_lockdown_policy_proto(restored)
-    from_proto = from_lockdown_policy_proto(proto)
-
     assert restored == policy
-    assert proto.deployment_mode == "shell_launcher"
-    assert from_proto == policy
 
 
 def test_malformed_or_permissive_policy_data_falls_back_to_safe_app_gate() -> None:
@@ -76,13 +66,3 @@ async def test_group_policy_is_preserved_when_only_theme_changes() -> None:
     assert updated.lockdown_policy == policy
     assert updated.updated_at is not None
     assert updated.updated_at >= datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5)
-
-
-def test_empty_policy_proto_uses_safe_defaults() -> None:
-    """
-    Проверяет сценарий «test_empty_policy_proto_uses_safe_defaults» и подтверждает ожидаемый
-    публичный результат согласно соответствующему бизнес-правилу.
-    """
-    policy = from_lockdown_policy_proto(workstations_pb2.WorkstationLockdownPolicy())
-
-    assert policy == LockdownPolicy()

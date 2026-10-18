@@ -3,10 +3,14 @@ import typing
 import uuid
 
 from gameclub_backend.modules.direct_payments.domain import GuestSessionPayment
+from gameclub_backend.modules.sessions.domain import Session
 from gameclub_backend.modules.workstations.domain import Workstation
 
 
 class GuestSessionPaymentRepository(typing.Protocol):
+    async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
+        """Return confirmed additional guest payments in sale order."""
+
     async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment | None:
         """Return one confirmed guest payment."""
 
@@ -35,7 +39,7 @@ class WorkstationLookup(typing.Protocol):
 
 
 class ActiveSessionLookup(typing.Protocol):
-    async def get_active_for_workstation(self, workstation_id: uuid.UUID) -> object | None:
+    async def get_active_for_workstation(self, workstation_id: uuid.UUID) -> Session | None:
         """Return the active server session for one workstation, if any."""
 
 

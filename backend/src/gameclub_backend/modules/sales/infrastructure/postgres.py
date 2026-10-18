@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Integer, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
 from gameclub_backend.modules.sales.domain import (
     ProductPaymentMethod,
@@ -55,8 +55,13 @@ class ProductSaleModel(SalesBase):
         DateTime(timezone=True), nullable=False, index=True
     )
 
+    bonus_rate_bps: Mapped[int] = mapped_column(default=0)
+    bonus_session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     def to_domain(self) -> ProductSale:
         return ProductSale(
+            bonus_rate_bps=self.bonus_rate_bps,
+            bonus_session_id=self.bonus_session_id,
             id=self.id,
             product_id=self.product_id,
             product_name=self.product_name,
@@ -84,6 +89,8 @@ class ProductSaleModel(SalesBase):
     @classmethod
     def from_domain(cls, sale: ProductSale) -> ProductSaleModel:
         return cls(
+            bonus_rate_bps=sale.bonus_rate_bps,
+            bonus_session_id=sale.bonus_session_id,
             **{
                 key: value
                 for key, value in {
@@ -110,7 +117,7 @@ class ProductSaleModel(SalesBase):
                     "attempts": sale.attempts,
                     "next_attempt_at": sale.next_attempt_at,
                 }.items()
-            }
+            },
         )
 
 
@@ -132,7 +139,7 @@ class PostgresProductSaleRepository:
 
     async def create_pending(self, sale: ProductSale) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                     {"lock_key": f"product-sale:{sale.idempotency_key}"},
@@ -180,7 +187,7 @@ class PostgresProductSaleRepository:
 
     async def complete(self, sale: ProductSale) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
                 if model is None:
                     raise ValueError("Product sale not found")
@@ -194,7 +201,7 @@ class PostgresProductSaleRepository:
 
     async def cancel(self, sale: ProductSale) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
                 if model is None:
                     raise ValueError("Product sale not found")
@@ -219,7 +226,7 @@ class PostgresProductSaleRepository:
         now: datetime.datetime | None = None,
     ) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
                 if model is None:
                     raise ValueError("Product sale not found")
@@ -239,7 +246,7 @@ class PostgresProductSaleRepository:
         now: datetime.datetime,
     ) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
                 if model is None:
                     raise ValueError("Product sale not found")
@@ -258,7 +265,7 @@ class PostgresProductSaleRepository:
         now: datetime.datetime,
     ) -> ProductSale:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ProductSaleModel, sale.id, with_for_update=True)
                 if model is None:
                     raise ValueError("Product sale not found")

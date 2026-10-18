@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package gameclub.events.v2;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GameClub.Client.Contracts.Events.V2";
+option java_multiple_files = true;
+
+// Не менять номера полей и не использовать их повторно: сообщения хранятся в
+// Kafka и могут быть прочитаны клиентом более старой версии.
+enum V2EventType {
+  V2_EVENT_TYPE_UNSPECIFIED = 0;
+  V2_EVENT_TYPE_LOGIN_REQUESTED = 1;
+  V2_EVENT_TYPE_LOGIN_SNAPSHOT_ISSUED = 2;
+  V2_EVENT_TYPE_LOGIN_GRANT_CONSUMED = 3;
+  V2_EVENT_TYPE_PACKAGE_PURCHASED = 4;
+  V2_EVENT_TYPE_PACKAGE_CONSUMED = 5;
+  V2_EVENT_TYPE_PER_MINUTE_DEBIT = 6;
+  V2_EVENT_TYPE_PACKAGE_BURNED = 7;
+  V2_EVENT_TYPE_SESSION_STOPPED = 8;
+  V2_EVENT_TYPE_BALANCE_CREDIT_APPLIED = 9;
+  V2_EVENT_TYPE_RECONCILIATION_COMPLETED = 10;
+  V2_EVENT_TYPE_LOGIN_GRANT_BURNED = 11;
+  V2_EVENT_TYPE_BONUS_PAYMENT_DISABLED = 12;
+}
+
+// Общий неизменяемый V2-конверт для Kafka. payload_json — канонический JSON
+// конкретного типа факта; его SHA-256 хранится в payload_hash.
+message EventEnvelope {
+  string event_id = 1;
+  string operation_id = 2;
+  V2EventType event_type = 3;
+  uint32 schema_version = 4;
+  string producer_id = 5;
+  string client_id = 6;
+  string session_id = 7;
+  string device_id = 8;
+  uint64 sequence = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+  optional string causation_id = 11;
+  string correlation_id = 12;
+  string traceparent = 13;
+  string payload_hash = 14;
+  optional string previous_hash = 15;
+  string payload_json = 16;
+
+  reserved 17 to 31;
+}
+
+// Статус обработки нужен для адресного server event и не заменяет финансовый
+// audit или локальный ledger клиента.
+enum V2EventProcessingStatus {
+  V2_EVENT_PROCESSING_STATUS_UNSPECIFIED = 0;
+  V2_EVENT_PROCESSING_STATUS_ACCEPTED = 1;
+  V2_EVENT_PROCESSING_STATUS_DUPLICATE = 2;
+  V2_EVENT_PROCESSING_STATUS_REJECTED = 3;
+  V2_EVENT_PROCESSING_STATUS_NEEDS_REVIEW = 4;
+}
+
+message EventProcessingResult {
+  string event_id = 1;
+  string operation_id = 2;
+  V2EventProcessingStatus status = 3;
+  string reason_code = 4;
+  string message = 5;
+  google.protobuf.Timestamp processed_at = 6;
+}

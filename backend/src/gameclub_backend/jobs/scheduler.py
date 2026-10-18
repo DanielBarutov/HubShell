@@ -8,7 +8,24 @@ from gameclub_backend.jobs.billing import (
     reconcile_pending_settlements,
 )
 from gameclub_backend.jobs.cash_shifts import run_cash_shift_schedule
+from gameclub_backend.jobs.reports import (
+    backfill_v2_confirmed_per_minute_debits,
+    project_analytics_events,
+)
 from gameclub_backend.jobs.reservations import sweep_reservation_no_shows
+
+
+def dispatch_periodic_jobs() -> None:
+    """Поставить независимые периодические задачи без решений в scheduler."""
+
+    sweep_reservation_no_shows.send()
+    reconcile_billing_charges.send()
+    reconcile_pending_settlements.send()
+    meter_active_sessions.send()
+    run_cash_shift_schedule.send()
+    # Analytics outbox содержит только неизменяемые факты; проекция не меняет write-path.
+    backfill_v2_confirmed_per_minute_debits.send()
+    project_analytics_events.send()
 
 
 async def run() -> None:
@@ -22,11 +39,7 @@ async def run() -> None:
 
     try:
         while True:
-            sweep_reservation_no_shows.send()
-            reconcile_billing_charges.send()
-            reconcile_pending_settlements.send()
-            meter_active_sessions.send()
-            run_cash_shift_schedule.send()
+            dispatch_periodic_jobs()
             await asyncio.sleep(
                 min(
                     settings.reservation_sweep_interval_seconds,

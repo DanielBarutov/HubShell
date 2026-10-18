@@ -18,26 +18,29 @@
     <NuGetAudit>false</NuGetAudit>
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
     <GameClubEnvironment Condition="'$(GameClubEnvironment)' == ''">production</GameClubEnvironment>
-    <GameClubAuthAddress Condition="'$(GameClubAuthAddress)' == ''">https://api.gameclub.local:8100</GameClubAuthAddress>
     <GameClubGrpcAddress Condition="'$(GameClubGrpcAddress)' == ''">https://api.gameclub.local:51051</GameClubGrpcAddress>
+    <GameClubV2EventsHttpAddress Condition="'$(GameClubV2EventsHttpAddress)' == ''"></GameClubV2EventsHttpAddress>
+    <GameClubV2SnapshotPublicKeys Condition="'$(GameClubV2SnapshotPublicKeys)' == ''"></GameClubV2SnapshotPublicKeys>
   </PropertyGroup>
 
   <ItemGroup>
     <AssemblyMetadata Include="GameClubEnvironment" Value="$(GameClubEnvironment)" />
-    <AssemblyMetadata Include="GameClubAuthAddress" Value="$(GameClubAuthAddress)" />
     <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />
+    <AssemblyMetadata Include="GameClubV2EventsHttpAddress" Value="$(GameClubV2EventsHttpAddress)" />
+    <AssemblyMetadata Include="GameClubV2SnapshotPublicKeys" Value="$(GameClubV2SnapshotPublicKeys)" />
     <ProjectReference Include="..\GameClub.Client.Avalonia\GameClub.Client.Avalonia.csproj" />
     <ProjectReference Include="..\GameClub.Client.Core\GameClub.Client.Core.csproj" />
     <ProjectReference Include="..\GameClub.Client.Transport.Grpc\GameClub.Client.Transport.Grpc.csproj" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="Infrastructure\DeploymentSettings.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\JsonlOfflineJournal.cs" Link="Infrastructure\JsonlOfflineJournal.cs" />
+    <Compile Include="..\GameClub.Client\Infrastructure\ProtectedV2LocalLedgerStore.cs" Link="Infrastructure\ProtectedV2LocalLedgerStore.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\NativeTrayIcon.cs" Link="Infrastructure\NativeTrayIcon.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\StartupDiagnostics.cs" Link="Infrastructure\StartupDiagnostics.cs" />
-    <Compile Include="..\GameClub.Client\Infrastructure\WindowsCommandExecutor.cs" Link="Infrastructure\WindowsCommandExecutor.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\WindowsWorkstationPowerController.cs" Link="Infrastructure\WindowsWorkstationPowerController.cs" />
   </ItemGroup>
 </Project>

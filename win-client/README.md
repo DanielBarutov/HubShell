@@ -1,51 +1,77 @@
 # GameClub Windows client
 
-`GameClub.Client.Avalonia` содержит общий Avalonia UI. Linux использует его как
-developer host для build/test/UI-smoke. `GameClub.Client.Windows` — отдельный
+`GameClub.Client.Avalonia` содержит общий Avalonia UI и Linux V2 developer
+composition для build/test/UI-smoke. `GameClub.Client.Windows` — отдельный
 production composition: он подключает тот же UI к Windows-only DPAPI journal,
 restart, command stream, fullscreen/compact window adapter и native tray.
 `GameClub.Client.Windows` — единственная production entry point для Windows.
 
 Продуктовой flow не меняется: до авторизации клиент показывает fullscreen Locked
 access-gate; после входа — компактный borderless виджет без замены Windows shell.
-Backend остаётся источником истины для сессий, тарифов, баланса, списаний и
-команд.
+Backend остаётся источником истины для snapshot, тарифов и server facts; active
+V2 session decisions и minute debit выполняются локальным ledger.
 
 ## Linux developer host
 
 Linux-first solution находится в `GameClub.Client.sln`; Windows Avalonia
 production solution — `GameClub.Client.Windows.sln`. После установки
-.NET SDK версии из [`../global.json`](../global.json) первый host запускается так:
+.NET SDK версии из [`../global.json`](../global.json) V2 host запускается так:
 
 ```bash
 cd /home/daniel/HubShell
 dotnet restore win-client/GameClub.Client.sln --disable-parallel
 dotnet build win-client/GameClub.Client.sln --configuration Debug --no-restore
 dotnet test win-client/GameClub.Client.sln --configuration Debug --no-build
-dotnet run --project win-client/src/GameClub.Client.Avalonia --configuration Debug --no-build
+dotnet run --project win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj --configuration Debug --runtime linux-x64 --no-build
 ```
 
-Это Linux developer host с настоящим access-gate и portable gRPC transport.
+Это Linux V2 developer host с настоящим access-gate, V2 gRPC transport,
+server-event polling и локальным ledger. Старый V1 client host для ручного
+тестирования больше не используется.
+
+Актуальная команда запуска конкретного Linux-проекта (передавать каталог
+проекта без имени \`.csproj\` больше нельзя, потому что в нём несколько проектов):
+
+```bash
+GAMECLUB_V2_DEV_LEDGER_PATH=/tmp/hubshell-v2-manual.json dotnet run --project win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj --configuration Debug --runtime linux-x64
+```
 Для локального integration-smoke сначала поднять только backend-контур:
 
 ```bash
 cd /home/daniel/HubShell
-docker compose up -d --build postgres redis backend-migrate backend-http backend-grpc worker meter-worker scheduler
+docker compose up -d --build
+docker compose ps
 curl --fail --silent --show-error http://127.0.0.1:8100/health/ready
 ```
 
-Затем один раз создать в локальной dev-базе игровое место с MAC текущей Linux
-машины. После первого запуска Avalonia enrollment свяжет installation identity
-с этим местом; register/login в окне используют реальные localhost HTTP/gRPC
-контракты и создают server-backed session. Тест перехода register → portal
-запускается только явно и создаёт отдельный случайный dev-аккаунт:
+Затем в локальной dev-базе нужно один раз создать или одобрить игровое место
+с MAC текущей Linux-машины. После enrollment окно использует V2 offline
+login/register и подписанный server snapshot. Для чистого ручного прогона
+запускайте клиент с временным ledger:
 
 ```bash
 cd /home/daniel/HubShell
-GAMECLUB_RUN_LOCAL_INTEGRATION=1 \
-  /home/daniel/.local/share/dotnet-sdk-8/dotnet test win-client/GameClub.Client.sln \
-  --configuration Debug --no-build --filter LocalAvaloniaBackendIntegrationTests
+GAMECLUB_V2_DEV_LEDGER_PATH=/tmp/hubshell-v2-manual.json \
+  dotnet run --project win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj \
+  --configuration Debug --runtime linux-x64
 ```
+
+Клиент пишет локальный журнал запуска и сетевых ошибок без паролей и токенов.
+По умолчанию Linux-файл находится в `~/.local/share/HubShell/logs/client.log`.
+Для отдельного ручного прогона можно задать явный путь и сразу смотреть новые
+строки:
+
+```bash
+cd /home/daniel/HubShell
+GAMECLUB_CLIENT_LOG_PATH=/tmp/hubshell-client.log \
+GAMECLUB_V2_DEV_LEDGER_PATH=/tmp/hubshell-v2-manual.json \
+  dotnet run --project win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.csproj \
+  --configuration Debug --runtime linux-x64
+tail -f /tmp/hubshell-client.log
+```
+
+Журнал ограничен размером 2 МБ и автоматически переносит старый файл в
+`client.log.1`.
 
 Linux не реализует DPAPI, tray, restart или kiosk-policy. Для Windows-target
 compile из Linux использовать:
@@ -56,7 +82,7 @@ dotnet publish win-client/src/GameClub.Client.Avalonia/GameClub.Client.Avalonia.
   --configuration Debug --runtime win-x64 --self-contained false
 ```
 
-Полученный artifact не является доказательством Windows runtime.
+Полученный artifact сам по себе не подтверждает работу в Windows runtime.
 
 ## Windows Avalonia host
 
@@ -131,6 +157,35 @@ C:\Git\HubShell\win-client\artifacts
 - `scripts\new-access-hash.ps1` — только developer helper для PBKDF2 verifier,
   не часть обычной установки клиента.
 
+Для установки восстановления процесса в PowerShell **от администратора**:
+
+```powershell
+.\win-client\scripts\install-windows.ps1 -PublishPath "C:\HubShellPublish" -RegisterWatchdogService
+```
+
+Клиент и служба устанавливаются в `Program Files\GameClub\Client`. Служба
+`HubShell.Watchdog` запускает GUI под уже вошедшим пользователем; системные
+политики и учётные записи не меняются. Старые HKCU Run/recovery task удаляются
+для текущего пользователя, вместо них запуском владеет служба.
+Перед обновлением завершите игровые сессии, остановите службу и клиент.
+Для диагностики смотрите Windows Application Event Log (`HubShell.Watchdog`).
+Для обслуживания: `Stop-Service HubShell.Watchdog`, после него оператор может
+остановить процесс; возобновление: `Start-Service HubShell.Watchdog`.
+Удаление этой установки: `uninstall-windows.ps1 -RemoveWatchdogService -ConfirmRemoval`.
+
+Крестик/Alt+F4 не завершают UI; крестик сворачивает в HUD. На рабочем столе
+виджет показывается, в других приложениях скрывается. Режим менеджера остаётся
+отдельным входом по Ctrl+Alt+P с проверкой пароля и позволяет скрыть окно обслуживания.
+На экране входа WH_KEYBOARD_LL подавляет клавиши Win и Win+D/Win+R; после входа
+или допуска менеджера hook снимается. Ctrl+Alt+P и обычный ввод остаются доступны.
+Ctrl+Alt+Del не блокируется. Это ограничение приложения, не системная защита Windows.
+
+Native-проверка после установки: рабочий стол → HUD → оконная/полноэкранная игра →
+Win+D/возврат на рабочий стол; вход → Alt+F4 → менеджер → скрытие → восстановление;
+завершение UI через диспетчер задач → единственный восстановленный процесс с тем
+же V2 ledger; остановка/запуск службы, перезагрузка, выход пользователя и DPI/мониторы.
+Эти сценарии не подтверждаются Linux-сборкой и headless-тестами.
+
 `build-installer.ps1` удалён: это не был установщик, а дублирующий упаковочный
 скрипт без отдельного installer-формата.
 
@@ -150,3 +205,32 @@ C:\Git\HubShell\win-client\artifacts
 После запуска клиент определяет MAC, ждёт назначения workstation в админке,
 получает device identity и тему группы через backend. Подробный пользовательский
 flow проверяется по `REAL-PC-VERIFICATION.md`.
+
+## Готовая папка release для C:\GameClub
+
+1. Скопируйте **содержимое** `release/` в `C:\GameClub` на Windows x64.
+2. Заполните `server.ini`: `GrpcAddress` (обычно `http://IP:51051`),
+   `V2EventsHttpAddress` (обычно `http://IP:8100`) и `V2SnapshotPublicKeys`
+   (`key_id=base64` публичного Ed25519-ключа сервера). Секретные ключи не переносите.
+3. Нажмите правой кнопкой `start-service.cmd` → **Запуск от имени администратора**.
+   Скрипт установит и запустит `HubShell.Watchdog` на месте. Каталог будет доступен
+   пользователю только для чтения/запуска; администратор и SYSTEM могут его менять.
+4. Назначьте MAC каждого ПК в операторской админке. Не копируйте AppData,
+   device tokens или ledger с другого ПК.
+
+Адреса читаются рядом с EXE, независимо от рабочего каталога, один раз при запуске.
+Существующие `GAMECLUB_*` env overrides имеют приоритет. Для изменения INI запустите
+редактор от администратора, завершите игровую сессию, остановите watchdog,
+завершите GUI, измените файл и запустите службу вновь. При обновлении EXE также
+сначала остановите службу и GUI. Не перезаписывайте свой INI пустым шаблоном.
+
+Сборка из корня на Linux (.NET 8 SDK):
+
+```bash
+dotnet publish win-client/src/GameClub.Client.Windows/GameClub.Client.Windows.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -o release
+cp win-client/scripts/{install-windows.ps1,uninstall-windows.ps1,start-service.ps1,start-service.cmd} release/
+# Только при первой сборке, чтобы не затереть настроенный адрес:
+cp -n win-client/server.ini.example release/server.ini
+```
+
+Публикация на Linux создаёт Windows EXE, но не доказывает запуск SCM/WTS/ACL на Windows.

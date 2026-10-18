@@ -3,6 +3,7 @@ import json
 import uuid
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.domain.equipment import EquipmentType
 from gameclub_backend.modules.workstations.application.ports import (
     Clock,
     CommandNotifier,
@@ -15,7 +16,14 @@ from gameclub_backend.modules.workstations.domain_commands import (
     WorkstationCommandStatus,
 )
 
-ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
+DEVICE_COMMAND_TYPES: frozenset[str] = frozenset(
+    {
+        "display.lock",
+        "system.restart",
+    }
+)
+
+LEGACY_COMMAND_TYPES: frozenset[str] = frozenset(
     {
         "session.start",
         "session.stop",
@@ -24,6 +32,7 @@ ALLOWED_COMMAND_TYPES: frozenset[str] = frozenset(
         "system.restart",
     }
 )
+ALLOWED_COMMAND_TYPES = LEGACY_COMMAND_TYPES | DEVICE_COMMAND_TYPES
 
 
 class UtcClock:
@@ -73,6 +82,8 @@ class WorkstationCommandService:
         workstation = await self._workstations.get(workstation_id)
         if workstation is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation not found")
+        if workstation.equipment_type is EquipmentType.XBOX:
+            raise ApplicationError(ErrorCode.CONFLICT, "Xbox does not accept PC commands")
         if workstation.status is WorkstationStatus.DISABLED:
             raise ApplicationError(ErrorCode.CONFLICT, "Workstation is disabled")
 
@@ -118,6 +129,20 @@ class WorkstationCommandService:
             self._clock.now(),
         )
 
+    async def acknowledge_v2(
+        self,
+        command_id: uuid.UUID,
+        device_id: str,
+        success: bool,
+        message: str | None,
+    ) -> WorkstationCommand:
+        command = await self._repository.get(command_id)
+        if command is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Workstation command not found")
+        if command.command_type not in DEVICE_COMMAND_TYPES:
+            raise ApplicationError(ErrorCode.PERMISSION_DENIED, "Command is not available to V2")
+        return await self.acknowledge(command_id, device_id, success, message)
+
     async def get(
         self,
         workstation_id: uuid.UUID,
@@ -144,6 +169,13 @@ class WorkstationCommandService:
         now = self._clock.now()
         await self._repository.expire_queued_before(now)
         return await self._repository.list_pending(workstation.id)
+
+    async def pending_v2_for_device(self, device_id: str) -> list[WorkstationCommand]:
+        return [
+            command
+            for command in await self.pending_for_device(device_id)
+            if command.command_type in DEVICE_COMMAND_TYPES
+        ]
 
     async def wait_for_commands(self, device_id: str, wait_seconds: float = 15.0) -> None:
         try:

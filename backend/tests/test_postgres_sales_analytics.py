@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from bonus_cleanup import clear_client_bonus_records
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.catalog.application.service import CatalogService
 from gameclub_backend.modules.catalog.infrastructure.postgres import PostgresCatalogRepository
@@ -122,6 +123,7 @@ async def test_postgres_product_sale_reserves_stock_and_debits_once(postgres_dsn
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -214,6 +216,7 @@ async def test_postgres_concurrent_sale_key_with_different_payload_is_conflict(
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},
@@ -310,6 +313,7 @@ async def test_postgres_mixed_sale_fault_between_parts_retries_cash_and_transfer
                     text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                     {"client_id": client_id},
                 )
+                await clear_client_bonus_records(connection, client_id)
                 await connection.execute(
                     text("DELETE FROM clients WHERE id = :client_id"),
                     {"client_id": client_id},

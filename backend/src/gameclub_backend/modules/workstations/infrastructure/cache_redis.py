@@ -5,13 +5,19 @@ import uuid
 
 import redis.asyncio as redis_asyncio
 
-from gameclub_backend.modules.workstations.domain import Workstation, WorkstationStatus
+from gameclub_backend.domain.equipment import EquipmentType
+from gameclub_backend.modules.workstations.domain import (
+    Workstation,
+    WorkstationSessionMode,
+    WorkstationStatus,
+)
+from gameclub_backend.modules.workstations.domain_relay import RelaySettings
 
 RedisProvider = typing.Callable[[], redis_asyncio.Redis | None]
 
 
 class RedisWorkstationSnapshotCache:
-    _key = "gameclub:workstations:snapshot:v1"
+    _key = "gameclub:workstations:snapshot:v4"
 
     def __init__(self, redis_provider: RedisProvider) -> None:
         self._redis_provider = redis_provider
@@ -31,8 +37,8 @@ class RedisWorkstationSnapshotCache:
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
         except Exception:
-            # Redis is an optimization for the operator map, never its source
-            # of truth. A Redis outage falls back to PostgreSQL on this request.
+            # Redis ускоряет карту оператора, но не хранит источник истины.
+            # При сбое Redis этот запрос читает данные из PostgreSQL.
             return None
 
     async def set(self, workstations: list[Workstation], ttl_seconds: int) -> None:
@@ -74,6 +80,17 @@ class RedisWorkstationSnapshotCache:
             "capabilities": list(workstation.capabilities),
             "theme": workstation.theme,
             "archived_at": workstation.archived_at.isoformat() if workstation.archived_at else None,
+            "session_mode": workstation.session_mode.value,
+            "equipment_type": workstation.equipment_type.value,
+            "relay_settings": (
+                {
+                    "ip": workstation.relay_settings.ip,
+                    "port": workstation.relay_settings.port,
+                    "deviceid": workstation.relay_settings.deviceid,
+                }
+                if workstation.relay_settings
+                else None
+            ),
         }
 
     @staticmethod
@@ -91,7 +108,11 @@ class RedisWorkstationSnapshotCache:
             raise ValueError("Invalid workstation capabilities")
         return Workstation(
             id=uuid.UUID(str(payload["id"])),
-            device_id=str(payload["device_id"]),
+            device_id=payload["device_id"],
+            equipment_type=EquipmentType(payload.get("equipment_type", "pc")),
+            relay_settings=RelaySettings(**payload["relay_settings"])
+            if payload.get("relay_settings")
+            else None,
             name=str(payload["name"]),
             group_id=payload.get("group_id"),
             position=payload.get("position"),
@@ -102,4 +123,5 @@ class RedisWorkstationSnapshotCache:
             capabilities=tuple(capabilities),
             theme=str(payload.get("theme", "standard")),
             archived_at=parse_datetime(payload.get("archived_at")),
+            session_mode=WorkstationSessionMode(str(payload["session_mode"])),
         )

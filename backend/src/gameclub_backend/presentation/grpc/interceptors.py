@@ -1,5 +1,6 @@
 import datetime
 import logging
+import time
 import typing
 import uuid
 
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 _AUDITED_OPERATIONS = frozenset(
     {
         "Register",
+        "Login",
+        "ResumePortal",
         "Heartbeat",
         "Disable",
         "DispatchCommand",
@@ -37,6 +40,7 @@ _AUDITED_OPERATIONS = frozenset(
         "ConfirmTransfer",
         "ReplayOfflineBatch",
         "CheckEntry",
+        "Start",
     }
 )
 
@@ -59,9 +63,7 @@ class GrpcAuditInterceptor(grpc.aio.ServerInterceptor):
     ) -> grpc.RpcMethodHandler | None:
         operation = handler_call_details.method.rsplit("/", maxsplit=1)[-1]
         handler = await continuation(handler_call_details)
-        if handler is None or operation not in _AUDITED_OPERATIONS:
-            return handler
-        if handler.unary_unary is None:
+        if handler is None or handler.unary_unary is None:
             return handler
 
         async def audited_unary_unary(
@@ -69,18 +71,26 @@ class GrpcAuditInterceptor(grpc.aio.ServerInterceptor):
             context: grpc.aio.ServicerContext,
         ) -> typing.Any:
             status_code = grpc.StatusCode.OK
+            started_at = time.perf_counter()
             try:
                 return await handler.unary_unary(request, context)
             except Exception:
                 status_code = context.code() or grpc.StatusCode.UNKNOWN
                 raise
             finally:
-                await self._record(
-                    method=handler_call_details.method,
-                    operation=operation,
-                    context=context,
-                    status_code=status_code,
+                logger.info(
+                    "grpc_rpc_completed method=%s status=%s duration_ms=%d",
+                    handler_call_details.method,
+                    status_code.name,
+                    round((time.perf_counter() - started_at) * 1_000),
                 )
+                if operation in _AUDITED_OPERATIONS:
+                    await self._record(
+                        method=handler_call_details.method,
+                        operation=operation,
+                        context=context,
+                        status_code=status_code,
+                    )
 
         return grpc.unary_unary_rpc_method_handler(
             audited_unary_unary,

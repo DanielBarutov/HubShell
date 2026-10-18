@@ -14,7 +14,6 @@ from gameclub_backend.modules.workstations.infrastructure.groups_memory import (
 from gameclub_backend.modules.workstations.infrastructure.memory import (
     InMemoryWorkstationRepository,
 )
-from gameclub_backend.presentation.grpc.services import to_proto
 
 
 @pytest.mark.asyncio
@@ -52,11 +51,6 @@ async def test_manager_password_is_stored_as_verifier_and_reaches_device_config(
     service = WorkstationService(workstations, groups=groups)
     workstation = await service.register("device-vip", "VIP-01", group_id="vip")
     assert workstation.manager_password_verifier == updated.manager_password_verifier
-    assert to_proto(workstation).manager_password_verifier == ""
-    assert (
-        to_proto(workstation, include_manager_password_verifier=True).manager_password_verifier
-        == updated.manager_password_verifier
-    )
 
 
 @pytest.mark.asyncio

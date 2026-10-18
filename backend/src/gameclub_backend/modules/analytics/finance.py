@@ -39,6 +39,7 @@ class WalletFactType(enum.StrEnum):
 class FinanceFilters:
     start_at: datetime.datetime
     end_at: datetime.datetime
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None
@@ -49,6 +50,8 @@ class FinanceFilters:
     operator_key: str | None = None
 
     def __post_init__(self) -> None:
+        if self.equipment_type not in {None, "pc", "xbox"}:
+            raise ValueError("Invalid equipment type")
         if self.start_at.tzinfo is None or self.end_at.tzinfo is None:
             raise ValueError("Analytics period requires aware timestamps")
         start_at = self.start_at.astimezone(datetime.UTC)
@@ -62,6 +65,7 @@ class FinanceFilters:
         if not self.start_at <= fact.occurred_at < self.end_at:
             return False
         dimensions = (
+            (self.equipment_type, fact.equipment_type),
             (self.zone_key, fact.zone_key),
             (self.workstation_key, fact.workstation_key),
             (self.tariff_key, fact.tariff_key),
@@ -84,6 +88,7 @@ class FinancialFact:
     source_reference: str | None = None
     payment_method_key: str | None = None
     operation_type: str | None = None
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None
@@ -118,6 +123,7 @@ class WalletFact:
     source_reference: str | None = None
     payment_method_key: str | None = None
     operation_type: str | None = None
+    equipment_type: str | None = None
     zone_key: str | None = None
     workstation_key: str | None = None
     tariff_key: str | None = None
@@ -204,6 +210,13 @@ class FinanceTotals:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class FinanceDailyBucket:
+    key: str
+    label: str
+    recognized_revenue_cents: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class FinanceFactsSnapshot:
     financial_facts: tuple[FinancialFact, ...] | None
     wallet_facts: tuple[WalletFact, ...] | None
@@ -244,6 +257,7 @@ class FinanceReport:
     metrics: dict[str, MetricResult]
     sources: dict[str, AnalyticsDataState]
     payment_methods: tuple[PaymentMethodAggregate, ...] = ()
+    daily: tuple[FinanceDailyBucket, ...] = ()
 
 
 FINANCE_METRIC_INFO: dict[str, MetricInfo] = {
@@ -381,6 +395,25 @@ def aggregate_payment_methods(
             refunds_cents=refunds.get(method, 0),
         )
         for method in sorted(amounts)
+    )
+
+
+def aggregate_daily_finance_facts(
+    financial_facts: typing.Iterable[FinancialFact] | None,
+    wallet_facts: typing.Iterable[WalletFact] | None,
+    filters: FinanceFilters,
+) -> tuple[FinanceDailyBucket, ...]:
+    return tuple(
+        FinanceDailyBucket(
+            key=bucket.key,
+            label=bucket.label,
+            recognized_revenue_cents=aggregate_finance_facts(
+                financial_facts,
+                wallet_facts,
+                dataclasses.replace(filters, start_at=bucket.start_at, end_at=bucket.end_at),
+            ).recognized_revenue_cents,
+        )
+        for bucket in moscow_day_boundaries(filters.start_at, filters.end_at)
     )
 
 
