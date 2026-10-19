@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from gameclub_backend.application.errors import ApplicationError
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.jobs.billing import meter_sessions_once
 from gameclub_backend.modules.billing.application.service import BillingService
 from gameclub_backend.modules.billing.domain import MeterStatus
@@ -2292,6 +2292,140 @@ async def test_package_cash_failure_is_persisted_for_explicit_reconciliation() -
     assert pending.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW
     assert pending.status is EntitlementStatus.QUEUED
     cash.fail = False
+    with pytest.raises(ApplicationError):
+        await service.purchase(
+            review_client.id,
+            stored_tariff.id,
+            "operator",
+            "cash-review-package-1",
+            payment_parts=[{"method": "cash", "amount_cents": 100}],
+            cash_shift_id=pending.cash_shift_id,
+        )
+    assert cash.calls == ["cash-review-package-1:0"]
     reconciled = await service.retry_settlement_review(pending.id, "supervisor")
     assert reconciled.settlement_status is EntitlementSettlementStatus.SETTLED
     assert cash.calls == ["cash-review-package-1:0", "cash-review-package-1:0"]
+
+
+@pytest.mark.asyncio
+async def test_cash_sale_retry_during_active_game_resumes_same_payment_once() -> None:
+    """Потерянный ответ кассы повторяется по прежнему ключу без второй продажи."""
+    from dataclasses import replace
+
+    from gameclub_backend.modules.cash_shifts.application.service import CashShiftService
+    from gameclub_backend.modules.cash_shifts.infrastructure.memory import (
+        InMemoryCashShiftRepository,
+    )
+    from gameclub_backend.modules.entitlements.infrastructure.cash import (
+        CashShiftEntitlementSettlement,
+    )
+    from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
+
+    clock = FixedClock()
+    cash_shifts = CashShiftService(InMemoryCashShiftRepository(), clock=clock)
+    shift = await cash_shifts.open("main", 0, "operator", "open-cash-retry")
+    cash = CashShiftEntitlementSettlement(cash_shifts)
+
+    class LostCashReply:
+        calls = 0
+
+        async def settle(self, **arguments) -> None:
+            self.calls += 1
+            await cash.settle(**arguments)
+            if self.calls == 1:
+                raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "Cash reply lost")
+
+    lost_reply = LostCashReply()
+    (
+        workstation,
+        client,
+        tariff,
+        sessions,
+        _,
+        _,
+        clients,
+        entitlements,
+    ) = await build_package_metered_services(clock, cash_settlement=lost_reply)
+    await sessions._workstations.save(
+        replace(workstation, session_mode=WorkstationSessionMode.LOCAL_LEDGER)
+    )
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="local_ledger",
+        device_id=workstation.device_id,
+        idempotency_key="active-cash-retry",
+    )
+    arguments = dict(
+        client_id=client.id,
+        tariff_id=tariff.id,
+        actor_id="operator",
+        idempotency_key="cash-sale-retry",
+        payment_parts=[{"method": "cash", "amount_cents": 100}],
+        cash_shift_id=shift.id,
+    )
+    with pytest.raises(ApplicationError, match="Cash reply lost"):
+        await entitlements.purchase(**arguments)
+    pending = (await entitlements.list_for_client(client.id))[0]
+    assert pending.settlement_status is EntitlementSettlementStatus.PENDING
+    with pytest.raises(ApplicationError):
+        await entitlements.purchase(**{**arguments, "cash_shift_id": uuid.uuid4()})
+    assert lost_reply.calls == 1
+    purchased = await entitlements.purchase(**arguments)
+    assert purchased.settlement_status is EntitlementSettlementStatus.SETTLED
+    assert purchased.status is EntitlementStatus.ACTIVE
+    assert purchased.id == pending.id
+    assert (await entitlements.purchase(**arguments)).id == purchased.id
+    assert lost_reply.calls == 2
+    assert len(await entitlements.list_for_client(client.id)) == 1
+    assert (await cash_shifts.get(shift.id)).expected_close_cents == 100
+    assert len(await cash_shifts.list_movements(shift.id)) == 1
+    assert (await clients.get(client.id)).balance_cents == 1000
+    assert (await sessions.get(session.id)).status.value == "active"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cash_retries_do_not_bypass_required_review() -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class UncertainCash:
+        calls = 0
+
+        async def settle(self, **arguments) -> None:
+            self.calls += 1
+            if self.calls == 1:
+                raise ApplicationError(ErrorCode.DEPENDENCY_UNAVAILABLE, "cash unavailable")
+            entered.set()
+            await release.wait()
+            raise RuntimeError("cash result unknown")
+
+    cash = UncertainCash()
+    _, client, tariff, _, _, _, _, service = await build_package_metered_services(
+        FixedClock(), cash_settlement=cash
+    )
+    with pytest.raises(ApplicationError):
+        await service.purchase(
+            client.id,
+            tariff.id,
+            "operator",
+            "concurrent-cash-retry",
+            payment_parts=[{"method": "cash", "amount_cents": 100}],
+            cash_shift_id=uuid.uuid4(),
+        )
+    pending = (await service.list_for_client(client.id))[0]
+    first = asyncio.create_task(service.retry_pending_settlement(pending.id))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    second = asyncio.create_task(service.retry_pending_settlement(pending.id))
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.wait_for(
+        asyncio.gather(first, second, return_exceptions=True), timeout=1
+    )
+    assert isinstance(results[0], RuntimeError)
+    assert isinstance(results[1], ApplicationError)
+    assert cash.calls == 2
+    assert (
+        await service.get(pending.id)
+    ).settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW

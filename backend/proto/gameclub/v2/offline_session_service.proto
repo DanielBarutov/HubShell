@@ -188,6 +188,8 @@ message OfflinePortalSnapshot {
   // Подписанное право только на купленный пакет; не заменяет активный ledger.
   SignedOfflineSessionSnapshot purchased_package = 15;
   OfflineBonusWallet bonus_wallet = 16;
+  // Подтверждённая активация без повторной покупки или замены ledger.
+  SignedOfflineSessionSnapshot active_package = 17;
 }
 
 message OfflineBonusWallet {

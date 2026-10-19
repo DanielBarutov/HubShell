@@ -11,6 +11,152 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2LocalLedgerTests
 {
+    [Theory]
+    [InlineData(480)]
+    [InlineData(0)]
+    public void SignedNightPackageCarriesWindowAndRejectsTampering(int endMinute)
+    {
+        var ledger = CreateLedger();
+        var closesAt = DateTimeOffset.Parse("2026-10-20T00:00:00Z").AddMinutes(endMinute);
+        var payload = new OfflineSessionSnapshotPayload
+        {
+            SnapshotId = Guid.NewGuid().ToString(), SchemaVersion = 1, SnapshotVersion = 1,
+            IssuedAt = Timestamp.FromDateTime(DateTime.Parse("2026-10-19T23:00:00Z").ToUniversalTime()),
+            ClientId = ledger.ClientId.ToString(), SessionId = ledger.SessionId.ToString(), DeviceId = ledger.DeviceId,
+        };
+        payload.Packages.Add(new OfflinePackageSnapshot
+        {
+            PackageId = "night", TariffId = "package", RemainingMinutes = 660, Status = OfflinePackageStatus.Active,
+            UsageWindowStartMinute = 1320, UsageWindowEndMinute = (uint)endMinute,
+            WindowTimezone = "Etc/UTC", UsageWindowClosesAt = Timestamp.FromDateTimeOffset(closesAt),
+        });
+        var verifier = new SnapshotVerifier(V2OfflineSessionSnapshotReader.SerializeDeterministic(payload), accepts: true);
+        var signed = new SignedOfflineSessionSnapshot { Payload = payload, SigningKeyId = "club-key", Signature = ByteString.CopyFrom([1]) };
+        var decoded = V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier);
+        var package = Assert.Single(decoded.Packages);
+        Assert.Equal(1320, package.UsageWindowStartMinute);
+        Assert.Equal(endMinute, package.UsageWindowEndMinute);
+        Assert.Equal(closesAt, package.UsageWindowClosesAt);
+        payload.Packages[0].UsageWindowEndMinute = 1;
+        Assert.Throws<InvalidOperationException>(() => V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier));
+        payload.Packages[0].ClearUsageWindowEndMinute();
+        var resigned = new SnapshotVerifier(V2OfflineSessionSnapshotReader.SerializeDeterministic(payload), accepts: true);
+        Assert.Throws<InvalidOperationException>(() => V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, resigned));
+    }
+
+    [Fact]
+    public async Task SignedNightPurchaseChargesOnceAndStartsPackageWithItsServerDeadline()
+    {
+        var now = DateTimeOffset.Parse("2026-10-19T23:00:00Z");
+        var ledger = CreateLedger();
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(ledger);
+        await coordinator.BeginPortalPackagePurchaseAsync("night");
+        var receipt = ledger with
+        {
+            SnapshotId = Guid.NewGuid(),
+            Packages = [new("night-package", "night", null, 660, V2LocalPackageStatus.Active,
+                1320, 480, "Etc/UTC", now.AddHours(9))],
+            Tariffs = [new("night", "Night", null, 660, 500, 0, true, false, 1320, 480, "Etc/UTC")],
+        };
+        var purchase = await coordinator.CompletePortalPackagePurchaseAsync("night", now, purchasedPackage: receipt);
+        Assert.Equal(500, purchase.Ledger.BalanceCents);
+        Assert.Equal(now.AddHours(9), purchase.Ledger.Packages[0].UsageWindowClosesAt);
+        var consumed = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), now.AddMinutes(1));
+        Assert.Equal("package_consumed", Assert.Single(consumed.OutboxFacts).EventType);
+        Assert.Equal(659, consumed.Ledger.Packages[0].RemainingMinutes);
+        Assert.Equal(500, consumed.Ledger.BalanceCents);
+        Assert.True((await coordinator.ApplyActivePackageAsync(receipt)).IsDuplicate);
+        Assert.Equal(659, (await coordinator.ReadLedgerAsync()).Packages[0].RemainingMinutes);
+    }
+
+    [Theory]
+    [InlineData("2026-10-19T21:59:00Z", "per_minute_debit")]
+    [InlineData("2026-10-19T22:00:00Z", "package_consumed")]
+    [InlineData("2026-10-20T07:59:00Z", "package_consumed")]
+    [InlineData("2026-10-20T08:00:00Z", "per_minute_debit")]
+    public void QueuedNightPackageConsumesOnlyInsideItsWindow(string timestamp, string eventType)
+    {
+        var package = new V2LocalPackage("night", "package", null, 660,
+            V2LocalPackageStatus.Queued, 1320, 480, "Etc/UTC");
+        var ledger = CreateLedger(packages: [package]);
+        var transition = V2LocalLedgerEngine.ConsumeOneMinute(ledger, Guid.NewGuid(), DateTimeOffset.Parse(timestamp));
+        Assert.Equal(eventType, Assert.Single(transition.OutboxFacts).EventType);
+        Assert.Equal(eventType == "package_consumed" ? 659 : 660, transition.Ledger.Packages[0].RemainingMinutes);
+        Assert.Equal(eventType == "package_consumed" ? 1000 : 940, transition.Ledger.BalanceCents);
+    }
+
+    [Fact]
+    public async Task ActiveNightWindowClosesAfterRestartAndBurnsWithoutMinuteDebit()
+    {
+        var closesAt = DateTimeOffset.Parse("2026-10-20T08:00:00Z");
+        var ledger = CreateLedger(packages: [new("night", "package", null, 660,
+            V2LocalPackageStatus.Active, 1320, 480, "Etc/UTC", closesAt)]) with
+        { ActivatedAtUtc = closesAt.AddHours(-2) };
+        Assert.Equal(120, V2LocalLedgerEngine.RemainingMinutes(ledger));
+        var path = Path.Combine(Path.GetTempPath(), $"hubshell-night-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new GameClub.Client.Avalonia.Development.JsonV2LocalLedgerStore(path);
+            var coordinator = new V2LocalLedgerCoordinator(store);
+            await coordinator.InitializeAsync(ledger);
+            await coordinator.ConsumeMinuteBoundaryAsync(Guid.NewGuid(), closesAt.AddMinutes(-1));
+            coordinator = new V2LocalLedgerCoordinator(new GameClub.Client.Avalonia.Development.JsonV2LocalLedgerStore(path));
+            var transition = await coordinator.ConsumeMinuteBoundaryAsync(Guid.NewGuid(), closesAt);
+            Assert.True(transition.LockWorkstation);
+            Assert.Equal(V2LocalSessionStatus.Stopped, transition.Ledger.Status);
+            Assert.Equal(1000, transition.Ledger.BalanceCents);
+            Assert.Equal(V2LocalPackageStatus.Burned, transition.Ledger.Packages[0].Status);
+            Assert.Equal(0, transition.Ledger.Packages[0].RemainingMinutes);
+            Assert.Equal(new[] { "package_burned", "session_stopped" }, transition.OutboxFacts.Select(item => item.EventType));
+            Assert.True((await coordinator.ConsumeMinuteBoundaryAsync(Guid.NewGuid(), closesAt)).IsDuplicate);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ConfirmedActivationPreservesMoneyPendingFactsAndSpentMinutes()
+    {
+        var now = DateTimeOffset.Parse("2026-10-19T23:00:00Z");
+        var ledger = CreateLedger();
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(ledger);
+        var debit = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), now.AddMinutes(-1));
+        var receipt = ledger with { SnapshotId = Guid.NewGuid(), Packages = [new("night", "package", null,
+            2, V2LocalPackageStatus.Active, 1320, 480, "Etc/UTC", now.AddHours(9))] };
+        await coordinator.ApplyActivePackageAsync(receipt);
+        var consumed = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), now);
+        coordinator = new V2LocalLedgerCoordinator(store);
+        Assert.True((await coordinator.ApplyActivePackageAsync(receipt)).IsDuplicate);
+        Assert.Equal(1, (await coordinator.ReadLedgerAsync()).Packages[0].RemainingMinutes);
+        Assert.Equal(debit.Ledger.BalanceCents, consumed.Ledger.BalanceCents);
+        Assert.Equal(ledger.SnapshotId, consumed.Ledger.SnapshotId);
+        var exhausted = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), now.AddMinutes(1));
+        Assert.True((await coordinator.ApplyActivePackageAsync(receipt with { SnapshotId = Guid.NewGuid() })).IsDuplicate);
+        Assert.Equal(0, (await coordinator.ReadLedgerAsync()).Packages[0].RemainingMinutes);
+        Assert.Equal(3, (await coordinator.ReadSnapshotAsync())!.PendingOutbox.Count);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.ApplyActivePackageAsync(
+            receipt with { SessionId = Guid.NewGuid() }));
+    }
+
+    [Fact]
+    public void NightForecastExcludesClosedQueueAndUsesLocalTimezoneIncludingMidnight()
+    {
+        var now = DateTimeOffset.Parse("2026-10-19T18:00:00Z"); // 21:00 Moscow
+        var package = new V2LocalPackage("night", "package", null, 660,
+            V2LocalPackageStatus.Queued, 1320, 0, "Europe/Moscow");
+        var ledger = CreateLedger(balanceCents: 60, packages: [package]);
+        Assert.Equal(1, V2LocalLedgerEngine.RemainingMinutes(ledger, now));
+        var started = V2LocalLedgerEngine.ConsumeOneMinute(ledger, Guid.NewGuid(), now.AddHours(1));
+        Assert.Equal(DateTimeOffset.Parse("2026-10-19T21:00:00Z"), started.Ledger.Packages[0].UsageWindowClosesAt);
+        Assert.Equal(120, V2LocalLedgerEngine.RemainingMinutes(started.Ledger, now.AddHours(1)));
+        Assert.Equal(0, V2LocalLedgerEngine.RemainingMinutes(started.Ledger, now.AddHours(3)));
+    }
+
     [Fact]
     public async Task MinuteBonusCanReenableAfterDisabledMinuteWithoutDebitingMoney()
     {

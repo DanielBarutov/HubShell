@@ -21,6 +21,11 @@ message OfflinePackageSnapshot {
   optional string zone_id = 3;
   uint32 remaining_minutes = 4;
   OfflinePackageStatus status = 5;
+  optional uint32 usage_window_start_minute = 6;
+  optional uint32 usage_window_end_minute = 7;
+  optional string window_timezone = 8;
+  // Фиксированный срок уже активного пакета, сохраняется после restart.
+  google.protobuf.Timestamp usage_window_closes_at = 9;
 }
 
 message OfflineTariffSnapshot {

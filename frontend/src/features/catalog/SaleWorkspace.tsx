@@ -19,6 +19,7 @@ import {
 import { ApiError, GameClubApi, normalizePhoneQuery } from "../../api";
 import type {
   BackendCashShift,
+  BackendEntitlement,
   BackendProduct,
   BackendProductCategory,
   BackendTariff,
@@ -500,6 +501,17 @@ export function SaleWorkspace({
       setPaymentMethod("cash");
   };
 
+  const confirmTariffPurchase = (key: string, purchase: BackendEntitlement) => {
+    if (purchase.settlement_status && purchase.settlement_status !== "settled") {
+      setError(purchase.settlement_status === "needs_review"
+        ? `Продажа тарифа сохранена для ручной сверки: ${purchase.settlement_error ?? "оплата не подтверждена"}`
+        : "Покупка тарифа ожидает подтверждения оплаты. Повтор не создаст новый пакет.");
+      return false;
+    }
+    completedTariffPurchases.current.add(key);
+    return true;
+  };
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -657,6 +669,20 @@ export function SaleWorkspace({
         let remainingTransferPartCents =
           paymentMethod === "mixed" ? transferPartCents : 0;
         for (const purchaseKey of purchaseKeys.slice(0, tariffLine.quantity)) {
+          const unitCashPartCents =
+            paymentMethod === "mixed"
+              ? Math.min(tariffLine.priceCents, remainingCashPartCents)
+              : paymentMethod === "cash"
+                ? tariffLine.priceCents
+                : 0;
+          const unitTransferPartCents =
+            paymentMethod === "mixed"
+              ? tariffLine.priceCents - unitCashPartCents
+              : paymentMethod === "transfer"
+                ? tariffLine.priceCents
+                : 0;
+          remainingCashPartCents -= unitCashPartCents;
+          remainingTransferPartCents -= unitTransferPartCents;
           if (completedTariffPurchases.current.has(purchaseKey)) continue;
           if ((useBonus && paymentMethod === "balance") || confirmedBonusPurchases.current.has(purchaseKey)) {
             let confirmation = confirmedBonusPurchases.current.get(purchaseKey);
@@ -674,28 +700,14 @@ export function SaleWorkspace({
               confirmedBonusPurchases.current.set(purchaseKey, confirmation);
             }
             try {
-              await api.purchaseEntitlement(client.id, tariffLine.sourceId, purchaseKey, undefined, undefined, confirmation);
-              completedTariffPurchases.current.add(purchaseKey);
+              const purchase = await api.purchaseEntitlement(client.id, tariffLine.sourceId, purchaseKey, undefined, undefined, confirmation);
+              if (!confirmTariffPurchase(purchaseKey, purchase)) return;
             } catch (purchaseError) {
               if (purchaseError instanceof ApiError && purchaseError.status === 409) confirmedBonusPurchases.current.delete(purchaseKey);
               throw purchaseError;
             }
             continue;
           }
-          const unitCashPartCents =
-            paymentMethod === "mixed"
-              ? Math.min(tariffLine.priceCents, remainingCashPartCents)
-              : paymentMethod === "cash"
-                ? tariffLine.priceCents
-                : 0;
-          const unitTransferPartCents =
-            paymentMethod === "mixed"
-              ? tariffLine.priceCents - unitCashPartCents
-              : paymentMethod === "transfer"
-                ? tariffLine.priceCents
-                : 0;
-          remainingCashPartCents -= unitCashPartCents;
-          remainingTransferPartCents -= unitTransferPartCents;
           const paymentParts =
             paymentMethod === "mixed"
               ? [
@@ -717,7 +729,7 @@ export function SaleWorkspace({
                     amount_cents: tariffLine.priceCents,
                   },
                 ];
-          await api.purchaseEntitlement(
+          const purchase = await api.purchaseEntitlement(
             client.id,
             tariffLine.sourceId,
             purchaseKey,
@@ -726,6 +738,7 @@ export function SaleWorkspace({
               ? activeShift?.id
               : undefined,
           );
+          if (!confirmTariffPurchase(purchaseKey, purchase)) return;
         }
       }
       for (const line of productLines) {

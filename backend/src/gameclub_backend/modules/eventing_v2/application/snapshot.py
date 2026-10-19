@@ -102,6 +102,16 @@ class V2OfflineSnapshotFactory:
         )
         if value.zone_id:
             result.zone_id = value.zone_id
+        if value.time_restricted:
+            result.usage_window_start_minute = value.usage_window_start_minute
+            result.usage_window_end_minute = value.usage_window_end_minute
+            result.window_timezone = value.window_timezone
+            if value.status is EntitlementStatus.ACTIVE and value.activated_at is not None:
+                closes_at = value.usage_window_ends_at(value.activated_at)
+                if closes_at is not None:
+                    result.usage_window_closes_at.CopyFrom(
+                        V2OfflineSnapshotFactory._timestamp(closes_at)
+                    )
         return result
 
     @staticmethod

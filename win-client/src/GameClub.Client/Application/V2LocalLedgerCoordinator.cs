@@ -291,6 +291,13 @@ public sealed class V2LocalLedgerCoordinator
                 packageId: packageId,
                 purchaseIdempotencyKey: pending.IdempotencyKey,
                 payment: purchasedPackage?.PurchasePayment);
+            if (purchasedPackage?.Packages.Single().Status == V2LocalPackageStatus.Active)
+            {
+                transition = transition with
+                {
+                    Ledger = V2LocalLedgerEngine.ApplyActivePackage(transition.Ledger, purchasedPackage).Ledger,
+                };
+            }
             await _store.WriteAsync(
                 current with
                 {
@@ -348,6 +355,10 @@ public sealed class V2LocalLedgerCoordinator
         ApplyClientActionAsync(
             ledger => V2LocalLedgerEngine.StopEarly(ledger, actionId, occurredAt),
             cancellationToken);
+
+    public Task<V2LocalLedgerTransition> ApplyActivePackageAsync(
+        V2LocalSessionLedger signedPackage, CancellationToken cancellationToken = default) =>
+        ApplyClientActionAsync(ledger => V2LocalLedgerEngine.ApplyActivePackage(ledger, signedPackage), cancellationToken);
 
     public Task<V2LocalLedgerTransition> ApplyGuestPackageAsync(
         V2LocalSessionLedger signedPackage,

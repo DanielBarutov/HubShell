@@ -53,6 +53,18 @@ describe("Карта игровых мест", () => {
     expect(onSalePc).toHaveBeenCalledWith(workstations[0]);
   });
 
+  it.each(["outside", "Escape"])("закрывает меню без выбора действия: %s", (dismiss) => {
+    const onSalePc = vi.fn();
+    render(<MapView onPc={vi.fn()} onSalePc={onSalePc} onBookPc={vi.fn()} onEditPc={vi.fn()} pcs={workstations} />);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "VIP-01: Свободен" }));
+    fireEvent.pointerDown(screen.getByRole("menu"));
+    expect(screen.getByRole("menu")).toBeVisible();
+    if (dismiss === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+    else fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onSalePc).not.toHaveBeenCalled();
+  });
+
   it("открывает продажу товара верхней кнопкой карты", () => {
     const onSellProduct = vi.fn();
 

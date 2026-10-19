@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api";
 import { SaleWorkspace } from "./SaleWorkspace";
 import type { BackendProduct, BackendProductCategory, BackendTariff, GameClubApi } from "../../api";
 import type { Workstation } from "../../types";
@@ -26,11 +27,11 @@ const categories: BackendProductCategory[] = [{ id: "drinks", name: "Напит�
 const api = {} as GameClubApi;
 beforeAll(() => { HTMLDialogElement.prototype.showModal = function () { this.open = true; }; });
 
-function renderBonusSale(purchase = vi.fn().mockResolvedValue({ id: "package" })) {
+function renderBonusSale(purchase = vi.fn().mockResolvedValue({ id: "package" }), withCashShift = false) {
   const client = { id: "client-1", nickname: "NightFox", phone: "+79990000000", balance: 1250, bonus: 200, category: "Обычная" };
   const quote = vi.fn().mockResolvedValue({ earning_rate_bps: 500, price_cents: 400, bonus_cents: 400, money_cents: 0, earned_bonus_cents: 0, payment_limit_bps: 10000, available_bonus_cents: 1000, reserved_bonus_cents: 0, bonus_allowed: true, can_pay: true });
   const saved = vi.fn();
-  render(<SaleWorkspace api={{ listAvailableTariffs: vi.fn().mockResolvedValue(tariffs), searchClients: vi.fn().mockResolvedValue([]), quoteEntitlement: quote, purchaseEntitlement: purchase } as unknown as GameClubApi} pc={{ ...pc, status: "busy", clientId: client.id, client: client.nickname }} initialClient={client} initialProduct={null} clients={[client]} cashShifts={[]} tariffs={tariffs} products={products} categories={categories} onClose={vi.fn()} onSaved={saved} />);
+  render(<SaleWorkspace api={{ listAvailableTariffs: vi.fn().mockResolvedValue(tariffs), searchClients: vi.fn().mockResolvedValue([]), quoteEntitlement: quote, purchaseEntitlement: purchase } as unknown as GameClubApi} pc={{ ...pc, status: "busy", clientId: client.id, client: client.nickname }} initialClient={client} initialProduct={null} clients={[client]} cashShifts={withCashShift ? [{ id: "shift-1", register_id: "cash-1", opened_by: "operator", opened_at: "2026-10-19T08:00:00Z", opening_balance_cents: 0, expected_close_cents: 0, status: "open", closed_by: null, closed_at: null, actual_close_cents: null, difference_cents: null }] : []} tariffs={tariffs} products={products} categories={categories} onClose={vi.fn()} onSaved={saved} />);
   return { quote, purchase, saved };
 }
 
@@ -53,6 +54,42 @@ function renderSale() {
 }
 
 describe("Окно продажи", () => {
+  it.each(["cash", "balance", "mixed"])("повторяет только неподтверждённый пакет с прежней оплатой: %s", async (payment) => {
+    const purchase = vi.fn()
+      .mockResolvedValueOnce({ id: "first", settlement_status: "settled" })
+      .mockRejectedValueOnce(new ApiError(503, "Временный сбой"))
+      .mockResolvedValue({ id: "second", settlement_status: "settled" });
+    const { saved } = renderBonusSale(purchase, payment !== "balance");
+    fireEvent.click(await screen.findByRole("button", { name: /Час в основном зале/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Увеличить Час в основном зале" }));
+    if (payment === "cash") fireEvent.click(screen.getByRole("button", { name: /Наличные/ }));
+    if (payment === "mixed") {
+      fireEvent.click(screen.getByRole("button", { name: /Смешанная/ }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Сумма наличными" }), { target: { value: "4" } });
+      fireEvent.change(screen.getByRole("textbox", { name: "Сумма переводом" }), { target: { value: "4" } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+    await screen.findByText("Временный сбой");
+    expect(saved).not.toHaveBeenCalled();
+    expect(purchase).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(purchase).toHaveBeenCalledTimes(3);
+    expect(purchase.mock.calls[2]).toEqual(purchase.mock.calls[1]);
+  });
+
+  it.each(["pending", "needs_review"])("не показывает успех продажи пакета до завершения оплаты: %s", async (settlement) => {
+    const purchase = vi.fn().mockResolvedValue({ id: "package", settlement_status: settlement, settlement_error: "оплата не подтверждена" });
+    const { saved } = renderBonusSale(purchase);
+    fireEvent.click(await screen.findByRole("button", { name: /Час в основном зале/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(settlement === "pending" ? /ожидает подтверждения/ : /ручной сверки/));
+    expect(saved).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Оформить продажу/ }));
+    await waitFor(() => expect(purchase).toHaveBeenCalledTimes(2));
+    expect(purchase.mock.calls[0]).toEqual(purchase.mock.calls[1]);
+  });
+
   it("подтверждает каждый пакет серверным расчётом и сохраняет количество", async () => {
     const { quote, purchase, saved } = renderBonusSale();
     fireEvent.click(await screen.findByRole("button", { name: /Час в основном зале/ }));

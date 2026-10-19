@@ -177,7 +177,11 @@ public static class V2OfflineSessionSnapshotReader
                 OfflinePackageStatus.Exhausted => V2LocalPackageStatus.Exhausted,
                 OfflinePackageStatus.Burned => V2LocalPackageStatus.Burned,
                 _ => throw new InvalidOperationException("V2 offline package status is invalid"),
-            });
+            },
+            package.HasUsageWindowStartMinute ? checked((int)package.UsageWindowStartMinute) : null,
+            package.HasUsageWindowEndMinute ? checked((int)package.UsageWindowEndMinute) : null,
+            package.HasWindowTimezone ? package.WindowTimezone : null,
+            package.UsageWindowClosesAt is null ? null : new DateTimeOffset(package.UsageWindowClosesAt.ToDateTime()));
 
     private static V2LocalTariff ToTariff(OfflineTariffSnapshot tariff) =>
         new(
@@ -188,7 +192,10 @@ public static class V2OfflineSessionSnapshotReader
             tariff.PackagePriceCents,
             tariff.PerMinutePriceCents,
             tariff.IsPurchasable,
-            tariff.IsPerMinute);
+            tariff.IsPerMinute,
+            tariff.HasUsageWindowStartMinute ? checked((int)tariff.UsageWindowStartMinute) : null,
+            tariff.HasUsageWindowEndMinute ? checked((int)tariff.UsageWindowEndMinute) : null,
+            tariff.HasWindowTimezone ? tariff.WindowTimezone : null);
 
     private static Guid ParseGuid(string value, string fieldName) =>
         Guid.TryParse(value, out var result)

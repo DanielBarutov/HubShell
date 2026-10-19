@@ -198,7 +198,7 @@ class EntitlementService:
                 "Bonus payment uses the deposit for its monetary remainder",
             )
         async with self._transaction() if use_bonus else contextlib.nullcontext():
-            return await self._purchase(
+            purchased = await self._purchase(
                 client_id,
                 tariff_id,
                 actor_id,
@@ -208,6 +208,9 @@ class EntitlementService:
                 use_bonus,
                 expected,
             )
+            if purchased.settlement_status is EntitlementSettlementStatus.PENDING:
+                return await self.retry_pending_settlement(purchased.id)
+            return purchased
 
     async def _purchase(
         self,
@@ -388,7 +391,10 @@ class EntitlementService:
                     raise ValueError("Payment parts have changed")
             except ValueError as error:
                 raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-        if existing.settlement_status is not EntitlementSettlementStatus.SETTLED:
+        if existing.settlement_status is not EntitlementSettlementStatus.SETTLED and not (
+            existing.settlement_status is EntitlementSettlementStatus.PENDING
+            and existing.settlement_error is not None
+        ):
             raise ApplicationError(
                 ErrorCode.CONFLICT,
                 existing.settlement_error or "Package payment has not completed",
@@ -396,16 +402,13 @@ class EntitlementService:
         return existing
 
     async def retry_pending_settlement(self, entitlement_id: uuid.UUID) -> Entitlement:
-        entitlement = await self.get(entitlement_id)
-        if entitlement.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW:
-            raise ApplicationError(
-                ErrorCode.CONFLICT,
-                "Entitlement settlement requires explicit supervisor review",
-            )
-        if entitlement.settlement_status is EntitlementSettlementStatus.SETTLED:
-            return entitlement
         async with self._reconciliation_lock:
             current = await self.get(entitlement_id)
+            if current.settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT,
+                    "Entitlement settlement requires explicit supervisor review",
+                )
             if current.settlement_status is EntitlementSettlementStatus.SETTLED:
                 return current
             return await self._settle_pending(current, current.idempotency_key)

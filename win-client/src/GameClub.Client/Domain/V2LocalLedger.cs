@@ -33,7 +33,33 @@ public sealed record V2LocalPackage(
     string TariffId,
     string? ZoneId,
     int RemainingMinutes,
-    V2LocalPackageStatus Status);
+    V2LocalPackageStatus Status,
+    int? UsageWindowStartMinute = null,
+    int? UsageWindowEndMinute = null,
+    string? WindowTimezone = null,
+    DateTimeOffset? UsageWindowClosesAt = null)
+{
+    public bool IsAvailableAt(DateTimeOffset at)
+    {
+        if (UsageWindowStartMinute is null) return true;
+        var local = TimeZoneInfo.ConvertTime(at, TimeZoneInfo.FindSystemTimeZoneById(WindowTimezone!));
+        var minute = local.Hour * 60 + local.Minute;
+        return UsageWindowStartMinute < UsageWindowEndMinute
+            ? minute >= UsageWindowStartMinute && minute < UsageWindowEndMinute
+            : minute >= UsageWindowStartMinute || minute < UsageWindowEndMinute;
+    }
+
+    public DateTimeOffset? WindowClosesAt(DateTimeOffset at)
+    {
+        if (UsageWindowClosesAt is not null) return UsageWindowClosesAt;
+        if (UsageWindowStartMinute is null || !IsAvailableAt(at)) return null;
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(WindowTimezone!);
+        var local = TimeZoneInfo.ConvertTime(at, zone);
+        var end = local.Date.AddMinutes(UsageWindowEndMinute!.Value);
+        if (end <= local.DateTime) end = end.AddDays(1);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(end, zone));
+    }
+}
 
 public sealed record V2LocalTariff(
     string Id,
@@ -43,7 +69,10 @@ public sealed record V2LocalTariff(
     long PackagePriceCents,
     long PerMinutePriceCents,
     bool IsPurchasable,
-    bool IsPerMinute = false);
+    bool IsPerMinute = false,
+    int? UsageWindowStartMinute = null,
+    int? UsageWindowEndMinute = null,
+    string? WindowTimezone = null);
 
 public sealed record V2LocalFact(
     Guid EventId,
@@ -135,6 +164,10 @@ public sealed record V2LocalSessionLedger(
         {
             throw new ArgumentException("Only one package can be active", nameof(packages));
         }
+        foreach (var package in packages)
+        {
+            ValidatePackageWindow(package);
+        }
         if (packages.Any(item => item.RemainingMinutes < 0))
         {
             throw new ArgumentException("Package minutes cannot be negative", nameof(packages));
@@ -171,6 +204,17 @@ public sealed record V2LocalSessionLedger(
             null,
             guestName?.Trim(),
             guestPaymentId);
+    }
+
+    public static void ValidatePackageWindow(V2LocalPackage package)
+    {
+        var start = package.UsageWindowStartMinute;
+        var end = package.UsageWindowEndMinute;
+        if (start is null && end is null && package.WindowTimezone is null && package.UsageWindowClosesAt is null) return;
+        if (start is null || end is null || start is < 0 or >= 1440 || end is < 0 or >= 1440
+            || start == end || string.IsNullOrWhiteSpace(package.WindowTimezone))
+            throw new InvalidOperationException("Package usage window is invalid");
+        _ = TimeZoneInfo.FindSystemTimeZoneById(package.WindowTimezone);
     }
 
     public static bool IsZoneCompatible(string? tariffZoneId, string? workstationZoneId) =>
@@ -259,7 +303,7 @@ public static class V2LocalLedgerEngine
         ledger.Status == V2LocalSessionStatus.Active
         && FindPerMinuteTariff(ledger) is { IsPerMinute: true, PerMinutePriceCents: 0 };
 
-    public static long RemainingMinutes(V2LocalSessionLedger ledger)
+    public static long RemainingMinutes(V2LocalSessionLedger ledger, DateTimeOffset? now = null)
     {
         if (ledger.Status != V2LocalSessionStatus.Active)
         {
@@ -279,11 +323,27 @@ public static class V2LocalLedgerEngine
             }
             paidMinutes = low;
         }
-        return ledger.LoginGrantRemainingMinutes + paidMinutes
-            + ledger.Packages.Where(item =>
-                item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued
-                && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId))
-                .Sum(item => (long)item.RemainingMinutes);
+        if (ledger.LoginGrantRemainingMinutes > 0) return ledger.LoginGrantRemainingMinutes;
+        var at = now ?? ledger.LastConsumedMinuteUtc ?? ledger.ActivatedAtUtc ?? DateTimeOffset.UtcNow;
+        long minutes = 0;
+        var packages = ledger.Packages.Where(item =>
+            item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued
+            && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId))
+            .OrderBy(item => item.Status == V2LocalPackageStatus.Active ? 0 : 1);
+        foreach (var package in packages)
+        {
+            var startsAt = at.AddMinutes(minutes);
+            if (!package.IsAvailableAt(startsAt))
+            {
+                if (package.Status == V2LocalPackageStatus.Active) return minutes;
+                continue;
+            }
+            var available = package.WindowClosesAt(startsAt) is { } end
+                ? Math.Max(0, (long)Math.Ceiling((end - startsAt).TotalMinutes)) : long.MaxValue;
+            minutes += Math.Min(package.RemainingMinutes, available);
+            if (package.RemainingMinutes >= available) return minutes;
+        }
+        return minutes + paidMinutes;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -291,7 +351,7 @@ public static class V2LocalLedgerEngine
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    public static V2TimeSource CurrentSource(V2LocalSessionLedger ledger)
+    public static V2TimeSource CurrentSource(V2LocalSessionLedger ledger, DateTimeOffset? now = null)
     {
         if (ledger.Status != V2LocalSessionStatus.Active)
         {
@@ -301,7 +361,7 @@ public static class V2LocalLedgerEngine
         {
             return V2TimeSource.LoginGrant;
         }
-        if (FindActivePackage(ledger) is not null || FindQueuedPackage(ledger) is not null)
+        if (FindActivePackage(ledger) is not null || FindQueuedPackage(ledger, now ?? ledger.LastConsumedMinuteUtc ?? ledger.ActivatedAtUtc ?? DateTimeOffset.UtcNow) is not null)
         {
             return V2TimeSource.Package;
         }
@@ -321,6 +381,21 @@ public static class V2LocalLedgerEngine
         }
         EnsureActive(ledger);
 
+        if (FindActivePackage(ledger) is { } active
+            && (active.WindowClosesAt(ledger.LastConsumedMinuteUtc ?? ledger.ActivatedAtUtc ?? occurredAt) is { } closesAt
+                && occurredAt >= closesAt || !active.IsAvailableAt(occurredAt)))
+        {
+            return AppendClientFacts(ledger with
+            {
+                Status = V2LocalSessionStatus.Stopped,
+                Packages = ledger.Packages.Select(item => item.Id == active.Id
+                    ? item with { RemainingMinutes = 0, Status = V2LocalPackageStatus.Burned } : item).ToArray(),
+            }, actionId, occurredAt,
+            [("package_burned", Payload(("package_id", active.Id), ("tariff_id", active.TariffId),
+                ("remaining_minutes", active.RemainingMinutes))),
+             ("session_stopped", Payload(("reason", "usage_window_closed")))], lockWorkstation: true);
+        }
+
         if (ledger.LoginGrantRemainingMinutes > 0)
         {
             return AppendClientFacts(
@@ -330,7 +405,7 @@ public static class V2LocalLedgerEngine
                 [("login_grant_consumed", Payload(("remaining_minutes", ledger.LoginGrantRemainingMinutes - 1)))]);
         }
 
-        var package = FindActivePackage(ledger) ?? FindQueuedPackage(ledger);
+        var package = FindActivePackage(ledger) ?? FindQueuedPackage(ledger, occurredAt);
         if (package is not null)
         {
             var remaining = package.RemainingMinutes - 1;
@@ -340,6 +415,7 @@ public static class V2LocalLedgerEngine
                     {
                         Status = remaining == 0 ? V2LocalPackageStatus.Exhausted : V2LocalPackageStatus.Active,
                         RemainingMinutes = remaining,
+                        UsageWindowClosesAt = item.WindowClosesAt(occurredAt),
                     }
                     : item)
                 .ToArray();
@@ -445,7 +521,9 @@ public static class V2LocalLedgerEngine
             tariff.Id,
             tariff.ZoneId,
             tariff.PackageMinutes,
-            V2LocalPackageStatus.Queued);
+            V2LocalPackageStatus.Queued,
+            tariff.UsageWindowStartMinute, tariff.UsageWindowEndMinute, tariff.WindowTimezone);
+        V2LocalSessionLedger.ValidatePackageWindow(package);
         return AppendClientFacts(
             ledger with
             {
@@ -566,6 +644,34 @@ public static class V2LocalLedgerEngine
             LockWorkstation: true);
     }
 
+    public static V2LocalLedgerTransition ApplyActivePackage(
+        V2LocalSessionLedger ledger, V2LocalSessionLedger signedPackage)
+    {
+        EnsureActive(ledger);
+        if (ledger.IsGuest || signedPackage.IsGuest || ledger.ClientId != signedPackage.ClientId
+            || ledger.SessionId != signedPackage.SessionId || ledger.DeviceId != signedPackage.DeviceId
+            || ledger.ZoneId != signedPackage.ZoneId || signedPackage.Packages.Count != 1)
+            throw new InvalidOperationException("Active package belongs to another session");
+        var package = signedPackage.Packages.Single();
+        V2LocalSessionLedger.ValidatePackageWindow(package);
+        if (package.Status != V2LocalPackageStatus.Active || package.RemainingMinutes <= 0
+            || !V2LocalSessionLedger.IsZoneCompatible(package.ZoneId, ledger.ZoneId))
+            throw new InvalidOperationException("Signed active package is invalid");
+        var existing = ledger.Packages.SingleOrDefault(item => item.Id == package.Id);
+        // Server projections can lag local consumption, including exhaustion and burn.
+        if (existing is { Status: V2LocalPackageStatus.Exhausted or V2LocalPackageStatus.Burned }
+            || ledger.AppliedServerOperationIds.Contains(signedPackage.SnapshotId))
+            return new(ledger, [], false, IsDuplicate: true);
+        if (ledger.Packages.Any(item => item.Id != package.Id && item.Status == V2LocalPackageStatus.Active))
+            throw new InvalidOperationException("Another local package is active");
+        if (existing is not null) package = package with { RemainingMinutes = Math.Min(existing.RemainingMinutes, package.RemainingMinutes) };
+        return new(ledger with
+        {
+            Packages = ledger.Packages.Where(item => item.Id != package.Id).Append(package).ToArray(),
+            AppliedServerOperationIds = ledger.AppliedServerOperationIds.Append(signedPackage.SnapshotId).ToArray(),
+        }, [], false);
+    }
+
     public static V2LocalLedgerTransition ApplyGuestPackage(
         V2LocalSessionLedger ledger,
         V2LocalSessionLedger signedPackage)
@@ -680,10 +786,11 @@ public static class V2LocalLedgerEngine
         ledger.Packages.SingleOrDefault(item =>
             item.Status == V2LocalPackageStatus.Active && item.RemainingMinutes > 0);
 
-    private static V2LocalPackage? FindQueuedPackage(V2LocalSessionLedger ledger) =>
+    private static V2LocalPackage? FindQueuedPackage(V2LocalSessionLedger ledger, DateTimeOffset at) =>
         ledger.Packages.FirstOrDefault(item =>
             item.Status == V2LocalPackageStatus.Queued
             && item.RemainingMinutes > 0
+            && item.IsAvailableAt(at)
             && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId));
 
     private static V2LocalTariff? FindPerMinuteTariff(V2LocalSessionLedger ledger) =>
