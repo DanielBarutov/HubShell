@@ -1,5 +1,9 @@
 ﻿[CmdletBinding()]
-param()
+param(
+    [string]$UpdaterEnrollmentFile,
+    [string]$UpdateBackendAddress,
+    [string]$UpdatePublicKeyPath
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -16,4 +20,6 @@ if ($grpcLine.Count -ne 1 -or [string]::IsNullOrWhiteSpace(($grpcLine[0] -split 
     throw "Заполните GrpcAddress в server.ini перед установкой службы."
 }
 & (Join-Path $PSScriptRoot "install-windows.ps1") -PublishPath $PSScriptRoot `
-    -InstallPath $PSScriptRoot -RegisterWatchdogService
+    -InstallPath $PSScriptRoot -RegisterWatchdogService `
+    -UpdaterEnrollmentFile $UpdaterEnrollmentFile -UpdateBackendAddress $UpdateBackendAddress `
+    -UpdatePublicKeyPath $UpdatePublicKeyPath

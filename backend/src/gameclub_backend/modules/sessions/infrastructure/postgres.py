@@ -4,17 +4,40 @@ import builtins
 import datetime
 import uuid
 
-from sqlalchemy import JSON, DateTime, Integer, String, select, text
+from sqlalchemy import JSON, DateTime, Integer, String, delete, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
 class SessionBase(DeclarativeBase):
     pass
+
+
+# All session creators/transfers share this lock with the deployment barrier.
+_ADMISSION_LOCK = 5099317750
+
+
+class SessionAdmissionBlockModel(SessionBase):
+    __tablename__ = "session_admission_blocks"
+
+    workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    deployment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+
+
+async def lock_session_admission(transaction: AsyncSession) -> None:
+    await transaction.execute(
+        text("SELECT pg_advisory_xact_lock_shared(:key)"), {"key": _ADMISSION_LOCK}
+    )
+
+
+async def require_session_admission(transaction: AsyncSession, workstation_id: uuid.UUID) -> None:
+    if await transaction.get(SessionAdmissionBlockModel, workstation_id) is not None:
+        raise ApplicationError(ErrorCode.CONFLICT, "Client update blocks new sessions")
 
 
 class SessionModel(SessionBase):
@@ -189,12 +212,30 @@ class PostgresSessionRepository:
 class PostgresSessionTransactionWriter:
     """Public transaction writer; it hides gaming_sessions storage from V2."""
 
+    async def require_access(self, transaction: AsyncSession, session_id: uuid.UUID) -> None:
+        await lock_session_admission(transaction)
+        model = await transaction.get(SessionModel, session_id)
+        if model is not None:
+            await require_session_admission(transaction, model.workstation_id)
+        elif (
+            await transaction.scalar(select(SessionAdmissionBlockModel.workstation_id).limit(1))
+            is not None
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Client update blocks new access grants")
+
     async def save(self, transaction: AsyncSession, session: Session) -> Session:
+        await lock_session_admission(transaction)
         await transaction.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
             {"lock_key": f"gaming-session-workstation:{session.workstation_id}"},
         )
         model = await transaction.get(SessionModel, session.id)
+        if session.status is SessionStatus.ACTIVE and (
+            model is None
+            or model.status != SessionStatus.ACTIVE.value
+            or model.workstation_id != session.workstation_id
+        ):
+            await require_session_admission(transaction, session.workstation_id)
         if model is None and session.idempotency_key:
             await transaction.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
@@ -271,3 +312,58 @@ class PostgresSessionTransactionWriter:
         for key, value in values.items():
             if not key.startswith("_"):
                 setattr(model, key, value)
+
+
+class PostgresSessionAdmission:
+    """Public Sessions port for atomic deployment admission barriers."""
+
+    def __init__(self, engine_provider: EngineProvider) -> None:
+        self._engine_provider = engine_provider
+
+    async def block(self, deployment_id: uuid.UUID, workstation_ids: tuple[uuid.UUID, ...]) -> None:
+        if not workstation_ids or len(set(workstation_ids)) != len(workstation_ids):
+            raise ValueError("Deployment must contain unique workstations")
+        async with open_session(self._engine_provider) as transaction:
+            async with begin_session(transaction):
+                await transaction.execute(
+                    text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMISSION_LOCK}
+                )
+                existing = list(await transaction.scalars(select(SessionAdmissionBlockModel)))
+                own = {row.workstation_id for row in existing if row.deployment_id == deployment_id}
+                if own and own != set(workstation_ids):
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT, "Deployment workstation list changed"
+                    )
+                if any(row.deployment_id != deployment_id for row in existing):
+                    raise ApplicationError(ErrorCode.CONFLICT, "Another deployment blocks sessions")
+                active = await transaction.scalar(
+                    select(SessionModel.id)
+                    .where(
+                        SessionModel.workstation_id.in_(workstation_ids),
+                        SessionModel.status == SessionStatus.ACTIVE.value,
+                    )
+                    .limit(1)
+                )
+                if active is not None:
+                    raise ApplicationError(
+                        ErrorCode.CONFLICT, "An active session blocks deployment"
+                    )
+                for workstation_id in workstation_ids:
+                    if workstation_id not in own:
+                        transaction.add(
+                            SessionAdmissionBlockModel(
+                                workstation_id=workstation_id, deployment_id=deployment_id
+                            )
+                        )
+
+    async def unblock(self, deployment_id: uuid.UUID) -> None:
+        async with open_session(self._engine_provider) as transaction:
+            async with begin_session(transaction):
+                await transaction.execute(
+                    text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMISSION_LOCK}
+                )
+                await transaction.execute(
+                    delete(SessionAdmissionBlockModel).where(
+                        SessionAdmissionBlockModel.deployment_id == deployment_id
+                    )
+                )

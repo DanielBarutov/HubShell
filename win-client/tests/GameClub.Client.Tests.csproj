@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <Compile Remove="ServerEventConsumerTests.cs" />
+    <Compile Remove="UpdateAgentHost/**/*.cs" />
+    <Compile Include="..\src\GameClub.Client\Infrastructure\Updates\*.cs" Link="Updates\%(Filename)%(Extension)" />
     <Compile Include="..\src\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="DeploymentSettings.cs" />
     <Compile Include="..\src\GameClub.Client.Windows\AccessGateKeyboardGuard.cs" Link="AccessGateKeyboardGuard.cs" />
     <Compile Include="..\src\GameClub.Client.Windows\ClientProcessRecovery.cs" Link="ClientProcessRecovery.cs" />

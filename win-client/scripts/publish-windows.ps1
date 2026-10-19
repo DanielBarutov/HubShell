@@ -10,7 +10,8 @@ param(
     [ValidateSet("dev", "staging", "production")]
     [string]$EnvironmentName = "production",
     [string]$AuthAddress,
-    [string]$GrpcAddress
+    [string]$GrpcAddress,
+    [string]$ReleaseId = "development"
 )
 
 Set-StrictMode -Version Latest
@@ -100,10 +101,21 @@ if ($CleanOutput) {
 Write-Host "Публикация HubShell: $runtime / $Configuration"
 Write-Host "Каталог результата: $outputPath"
 
-& $dotnetCommand.Source publish $projectPath --configuration $Configuration --runtime $runtime --self-contained true --output $outputPath -p:Platform=$Architecture -p:SelfContained=true -p:GameClubEnvironment=$EnvironmentName -p:GameClubAuthAddress=$AuthAddress -p:GameClubGrpcAddress=$GrpcAddress -p:IncludeAllContentForSelfExtract=false -p:IncludeNativeLibrariesForSelfExtract=$singleFileValue -p:EnableCompressionInSingleFile=$singleFileValue -p:PublishTrimmed=false `
+& $dotnetCommand.Source publish $projectPath --configuration $Configuration --runtime $runtime --self-contained true --output $outputPath -p:Platform=$Architecture -p:SelfContained=true -p:HubShellReleaseId=$ReleaseId -p:GameClubEnvironment=$EnvironmentName -p:GameClubAuthAddress=$AuthAddress -p:GameClubGrpcAddress=$GrpcAddress -p:IncludeAllContentForSelfExtract=false -p:IncludeNativeLibrariesForSelfExtract=$singleFileValue -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false `
     -p:PublishSingleFile=$singleFileValue
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish завершился с кодом $LASTEXITCODE."
+}
+
+$watchdogProject = Join-Path $clientRoot "win-client\src\GameClub.Client.Watchdog\GameClub.Client.Watchdog.csproj"
+$watchdogOutput = Join-Path ([IO.Path]::GetTempPath()) ("hubshell-watchdog-" + [Guid]::NewGuid().ToString("N"))
+try {
+    & $dotnetCommand.Source publish $watchdogProject --configuration $Configuration --runtime $runtime --self-contained true --output $watchdogOutput -p:Platform=$Architecture -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false
+    if ($LASTEXITCODE -ne 0) { throw "Публикация watchdog завершилась с кодом $LASTEXITCODE." }
+    Copy-Item -LiteralPath (Join-Path $watchdogOutput "HubShell.Watchdog.exe") -Destination $outputPath -Force
+}
+finally {
+    if (Test-Path -LiteralPath $watchdogOutput) { Remove-Item -LiteralPath $watchdogOutput -Recurse -Force }
 }
 
 $executablePath = Join-Path $outputPath "HubShell.exe"

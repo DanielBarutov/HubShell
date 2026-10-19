@@ -234,3 +234,21 @@ cp -n win-client/server.ini.example release/server.ini
 ```
 
 Публикация на Linux создаёт Windows EXE, но не доказывает запуск SCM/WTS/ACL на Windows.
+
+### Отдельный host службы (план 50)
+
+Полная новая поставка содержит `HubShell.exe` и `HubShell.Watchdog.exe` рядом.
+`publish-windows.ps1` и `build-portable-exe.ps1` публикуют оба EXE.
+Для Linux cross-publish службы:
+
+```bash
+dotnet publish win-client/src/GameClub.Client.Watchdog/GameClub.Client.Watchdog.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -p:PublishTrimmed=false -o win-client/artifacts/watchdog
+```
+
+При первичном переходе завершить игровые сеансы, остановить старую службу и GUI,
+скопировать полную поставку и запустить `start-service.cmd` от администратора.
+Installer принимает старую и новую команду службы только из выбранного каталога
+и перерегистрирует её на отдельный EXE. Старый режим `--watchdog-service` сохранён
+для существующих установок. ZIP обычного обновления по-прежнему содержит только
+`HubShell.exe`; первый переход службы этим ZIP не выполняется. Автообновление
+и общий серверный барьер ещё не реализованы.

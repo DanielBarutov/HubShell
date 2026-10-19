@@ -18,6 +18,7 @@ import { themeLabels } from "../../shared/constants";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import type { Workstation } from "../../types";
 import { BonusProgramSettings } from "./BonusProgramSettings";
+import { ClientUpdateStatus } from "./ClientUpdateStatus";
 import { SettingsResourceEditors } from "./SettingsResourceEditors";
 
 export function SettingsView({
@@ -144,6 +145,7 @@ export function SettingsView({
   return (
     <LiveSettingsLayout
       api={api}
+      pcs={pcs}
       groups={visibleGroups}
       paymentMethods={paymentMethods}
       clientGroups={clientGroups}
@@ -160,6 +162,7 @@ export function SettingsView({
 
 function LiveSettingsLayout({
   api,
+  pcs = [],
   groups,
   paymentMethods,
   clientGroups,
@@ -172,6 +175,7 @@ function LiveSettingsLayout({
   onRefresh,
 }: {
   api?: GameClubApi;
+  pcs?: Workstation[];
   groups: BackendWorkstationGroup[];
   paymentMethods: BackendPaymentMethod[];
   clientGroups: BackendClientGroup[];
@@ -421,6 +425,7 @@ function LiveSettingsLayout({
       {api ? (
         <div className="mt-4">
           <BonusProgramSettings api={api} />
+          <ClientUpdateStatus api={api} pcs={pcs} />
           <SettingsResourceEditors
             api={api}
             clientGroups={clientGroups}

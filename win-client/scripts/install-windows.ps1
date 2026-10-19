@@ -4,11 +4,29 @@ param(
     [string]$InstallPath = (Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "GameClub\Client"),
     [switch]$NoStartup,
     [switch]$RegisterRecoveryTask,
-    [switch]$RegisterWatchdogService
+    [switch]$RegisterWatchdogService,
+    [string]$UpdaterEnrollmentFile,
+    [string]$UpdateBackendAddress,
+    [string]$UpdatePublicKeyPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$provisionUpdater = -not [string]::IsNullOrWhiteSpace($UpdaterEnrollmentFile) -or
+    -not [string]::IsNullOrWhiteSpace($UpdateBackendAddress) -or
+    -not [string]::IsNullOrWhiteSpace($UpdatePublicKeyPath)
+if ($provisionUpdater) {
+    if (-not $RegisterWatchdogService -or [string]::IsNullOrWhiteSpace($UpdaterEnrollmentFile) -or
+        [string]::IsNullOrWhiteSpace($UpdateBackendAddress) -or [string]::IsNullOrWhiteSpace($UpdatePublicKeyPath)) {
+        throw "Для настройки обновлений укажите службу, enrollment JSON, HTTP-адрес backend и публичный ключ."
+    }
+    foreach ($name in @("UpdaterEnrollmentFile", "UpdatePublicKeyPath")) {
+        $value = Get-Variable -Name $name -ValueOnly
+        if (-not [IO.Path]::IsPathRooted($value)) { $value = Join-Path $PSScriptRoot $value }
+        Set-Variable -Name $name -Value (Resolve-Path -LiteralPath $value -ErrorAction Stop).Path
+    }
+}
 
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows)) {
@@ -44,12 +62,17 @@ if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
     throw "В каталоге публикации не найден HubShell.exe: $resolvedPublishPath"
 }
 
+if ($RegisterWatchdogService -and -not (Test-Path -LiteralPath (
+        Join-Path $resolvedPublishPath "HubShell.Watchdog.exe") -PathType Leaf)) {
+    throw "Не найден HubShell.Watchdog.exe. Используйте полную новую поставку службы."
+}
+
 if ($RegisterRecoveryTask -and -not $NoStartup) {
     throw "Выберите один механизм запуска: обычный HKCU Run или -RegisterRecoveryTask с -NoStartup."
 }
 
 $resolvedInstallPath = [System.IO.Path]::GetFullPath($InstallPath)
-if ($RegisterWatchdogService -and $portablePath -and (Test-Path -LiteralPath $resolvedInstallPath)) {
+if ($RegisterWatchdogService -and (Test-Path -LiteralPath $resolvedInstallPath)) {
     if (Get-ChildItem -LiteralPath $resolvedInstallPath -Recurse -Force | Where-Object {
             $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) {
         throw "Каталог службы не должен содержать ссылки/reparse points."
@@ -60,8 +83,13 @@ if ($RegisterWatchdogService -and $portablePath -and (Test-Path -LiteralPath $re
 }
 if ($RegisterWatchdogService -and (Get-Service -Name "HubShell.Watchdog" -ErrorAction SilentlyContinue)) {
     $existingService = Get-CimInstance -ClassName Win32_Service -Filter "Name='HubShell.Watchdog'"
-    $expectedCommand = '"{0}" --watchdog-service' -f (Join-Path $resolvedInstallPath "HubShell.exe")
-    if (-not [string]::Equals($existingService.PathName, $expectedCommand, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($existingService.StartName -ne "LocalSystem") {
+        throw "Watchdog должен работать от LocalSystem. Исправьте существующую службу перед установкой."
+    }
+    $legacyCommand = '"{0}" --watchdog-service' -f (Join-Path $resolvedInstallPath "HubShell.exe")
+    $serviceCommand = '"{0}"' -f (Join-Path $resolvedInstallPath "HubShell.Watchdog.exe")
+    if (-not [string]::Equals($existingService.PathName, $legacyCommand, [StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals($existingService.PathName, $serviceCommand, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Служба HubShell.Watchdog уже зарегистрирована для другой папки. Сначала удалите прежнюю установку."
     }
     Stop-Service -Name "HubShell.Watchdog" -ErrorAction Stop
@@ -71,11 +99,17 @@ if (-not [string]::Equals($resolvedPublishPath.TrimEnd('\'), $resolvedInstallPat
         [StringComparison]::OrdinalIgnoreCase)) {
     Copy-Item -Path (Join-Path $resolvedPublishPath "*") -Destination $resolvedInstallPath -Recurse -Force
 }
-if ($RegisterWatchdogService -and $portablePath) {
-    & icacls.exe $resolvedInstallPath /reset /T /Q
+if ($RegisterWatchdogService) {
+    & icacls.exe $resolvedInstallPath /reset /Q
     if ($LASTEXITCODE -ne 0) { throw "Не удалось сбросить ACL каталога службы." }
     & icacls.exe $resolvedInstallPath /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX'
     if ($LASTEXITCODE -ne 0) { throw "Не удалось защитить каталог службы." }
+    # Machine DPAPI requires the credential file to remain unreadable by ordinary users.
+    foreach ($item in Get-ChildItem -LiteralPath $resolvedInstallPath -Recurse -Force) {
+        if ($item.FullName -eq (Join-Path $resolvedInstallPath ".client-updater.json")) { continue }
+        & icacls.exe $item.FullName /reset /Q
+        if ($LASTEXITCODE -ne 0) { throw "Не удалось сбросить ACL файла службы." }
+    }
     & icacls.exe $resolvedInstallPath /setowner '*S-1-5-32-544' /T /Q
     if ($LASTEXITCODE -ne 0) { throw "Не удалось назначить владельца каталога службы." }
 }
@@ -100,7 +134,16 @@ if ($RegisterRecoveryTask) {
 
 if ($RegisterWatchdogService) {
     $serviceName = "HubShell.Watchdog"
-    $serviceCommand = '"{0}" --watchdog-service' -f $installedExecutable
+    $watchdogExecutable = Join-Path $resolvedInstallPath "HubShell.Watchdog.exe"
+    $serviceCommand = '"{0}"' -f $watchdogExecutable
+    if ($provisionUpdater) {
+        & $watchdogExecutable --configure-updater $UpdaterEnrollmentFile $UpdateBackendAddress $UpdatePublicKeyPath
+        if ($LASTEXITCODE -ne 0) { throw "Не удалось сохранить защищённые настройки обновления." }
+    }
+    elseif (Test-Path -LiteralPath (Join-Path $resolvedInstallPath ".client-updater.json")) {
+        & $watchdogExecutable --validate-updater-config
+        if ($LASTEXITCODE -ne 0) { throw "Настройки обновления не прошли проверку. Служба оставлена остановленной." }
+    }
     if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
         & sc.exe config $serviceName binPath= $serviceCommand start= auto
         if ($LASTEXITCODE -ne 0) { throw "Не удалось обновить службу watchdog." }

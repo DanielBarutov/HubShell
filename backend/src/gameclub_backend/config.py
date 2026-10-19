@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     )
 
     environment: str = "dev"
+    client_release_root: str | None = None
     postgres_dsn: str | None = None
     redis_url: str | None = None
     http_host: str = "127.0.0.1"

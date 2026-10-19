@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import typing
 import uuid
@@ -49,6 +51,9 @@ class WorkstationRepository(typing.Protocol):
 
     async def list(self) -> list[Workstation]:
         """Return all workstations."""
+
+    async def list_including_archived(self) -> list[Workstation]:
+        """Read every PC identity so deployment cannot miss an archived active session."""
 
     async def save(self, workstation: Workstation) -> Workstation:
         """Persist a workstation."""
@@ -113,3 +118,11 @@ class CommandNotifier(typing.Protocol):
 class Clock(typing.Protocol):
     def now(self) -> datetime.datetime:
         """Return an aware UTC datetime."""
+
+
+class WorkstationDeploymentFreeze(typing.Protocol):
+    async def freeze(self, deployment_id: uuid.UUID) -> None:
+        """Freeze PC membership and identity until this deployment completes."""
+
+    async def unfreeze(self, deployment_id: uuid.UUID) -> None:
+        """Release only the matching deployment's membership freeze."""

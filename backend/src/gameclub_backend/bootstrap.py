@@ -78,6 +78,14 @@ from gameclub_backend.modules.client_groups.infrastructure.memory import (
 from gameclub_backend.modules.client_groups.infrastructure.postgres import (
     PostgresClientGroupRepository,
 )
+from gameclub_backend.modules.client_updates.application.identity import UpdaterIdentityService
+from gameclub_backend.modules.client_updates.application.service import ClientUpdateService
+from gameclub_backend.modules.client_updates.infrastructure.credentials_postgres import (
+    PostgresUpdaterCredentialRepository,
+)
+from gameclub_backend.modules.client_updates.infrastructure.postgres import (
+    PostgresDeploymentRepository,
+)
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.ports import ClientRepository, GuestRepository
@@ -121,6 +129,9 @@ from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCr
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import V2SnapshotIssueService
+from gameclub_backend.modules.eventing_v2.application.update_readiness import (
+    V2ClientUpdateReadiness,
+)
 from gameclub_backend.modules.eventing_v2.infrastructure.bonus_budget_postgres import (
     PostgresBonusBudgetRepository,
 )
@@ -135,6 +146,9 @@ from gameclub_backend.modules.eventing_v2.infrastructure.guest_access_postgres i
 )
 from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import (
     PostgresV2SessionLeaseRepository,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
+    PostgresV2SessionChainRepository,
 )
 from gameclub_backend.modules.eventing_v2.infrastructure.snapshot_ed25519 import (
     create_v2_snapshot_signer,
@@ -186,6 +200,7 @@ from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.infrastructure.postgres import (
+    PostgresSessionAdmission,
     PostgresSessionRepository,
     PostgresSessionTransactionWriter,
 )
@@ -214,6 +229,9 @@ from gameclub_backend.modules.workstations.infrastructure.commands_postgres impo
     PostgresWorkstationCommandRepository,
 )
 from gameclub_backend.modules.workstations.infrastructure.commands_redis import RedisCommandNotifier
+from gameclub_backend.modules.workstations.infrastructure.deployment_freeze import (
+    PostgresWorkstationDeploymentFreeze,
+)
 from gameclub_backend.modules.workstations.infrastructure.groups_memory import (
     InMemoryWorkstationGroupRepository,
 )
@@ -260,6 +278,8 @@ class ApplicationServices:
     v2_deposit_credits: V2DepositCreditService | None
     command_service: WorkstationCommandService
     audit_repository: AuditRepository
+    client_updates: ClientUpdateService | None = None
+    updater_identity: UpdaterIdentityService | None = None
 
 
 def build_application_services(
@@ -563,7 +583,29 @@ def build_application_services(
             signing_key_id=signing_key_id,
             signer=signer,
         )
+    client_updates = None
+    updater_identity = None
+    if settings.postgres_dsn:
+        client_updates = ClientUpdateService(
+            PostgresDeploymentRepository(postgres_engine_provider),
+            PostgresSessionAdmission(postgres_engine_provider),
+            workstation_repository,
+            PostgresWorkstationDeploymentFreeze(postgres_engine_provider),
+            V2ClientUpdateReadiness(PostgresV2SessionChainRepository(postgres_engine_provider)),
+        )
+        if settings.jwt_secret:
+            updater_identity = UpdaterIdentityService(
+                PostgresUpdaterCredentialRepository(postgres_engine_provider),
+                workstation_repository,
+                JwtTokenService(
+                    settings.model_copy(
+                        update={"jwt_access_ttl_seconds": min(settings.jwt_access_ttl_seconds, 900)}
+                    )
+                ),
+            )
     return ApplicationServices(
+        client_updates=client_updates,
+        updater_identity=updater_identity,
         xbox=xbox,
         workstations=workstations,
         workstation_groups=workstation_groups,

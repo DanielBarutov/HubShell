@@ -80,6 +80,8 @@ class PostgresV2SnapshotIssueRepository:
         lease = value.lease
         async with open_session(self._engine_provider) as session:
             async with session.begin():
+                if self._session_writer is not None:
+                    await self._session_writer.require_access(session, lease.session_id)
                 for lock_key in (
                     f"v2-lease-client:{lease.client_id}",
                     f"v2-lease-device:{lease.device_id}",
@@ -136,9 +138,7 @@ class PostgresV2SnapshotIssueRepository:
                     ):
                         active_lease.status = "revoked"
                         active_lease.revoked_at = (
-                            previous_session.ended_at
-                            if previous_session is not None
-                            else None
+                            previous_session.ended_at if previous_session is not None else None
                         ) or lease.issued_at
                     else:
                         has_live_lease = True

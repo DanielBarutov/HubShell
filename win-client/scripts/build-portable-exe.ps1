@@ -7,7 +7,8 @@ param(
     [ValidateSet("dev", "staging", "production")]
     [string]$EnvironmentName = "production",
     [string]$AuthAddress,
-    [string]$GrpcAddress
+    [string]$GrpcAddress,
+    [string]$ReleaseId = "development"
 )
 
 Set-StrictMode -Version Latest
@@ -37,7 +38,7 @@ if (-not (Test-Path -LiteralPath $distributionPath)) {
 
 try {
     & $publishScript -Architecture $Architecture -Configuration $Configuration -OutputPath $temporaryPath -SingleFile `
-        -EnvironmentName $EnvironmentName -AuthAddress $AuthAddress -GrpcAddress $GrpcAddress
+        -EnvironmentName $EnvironmentName -AuthAddress $AuthAddress -GrpcAddress $GrpcAddress -ReleaseId $ReleaseId
     if ($LASTEXITCODE -ne 0) {
         throw "Публикация portable EXE завершилась с кодом $LASTEXITCODE."
     }
@@ -54,10 +55,12 @@ try {
     $hash = (Get-FileHash -LiteralPath $stagedExecutable -Algorithm SHA256).Hash
     Move-Item -LiteralPath $stagedExecutable -Destination $targetExecutable -Force
     Get-ChildItem -LiteralPath $distributionPath -Force |
-        Where-Object { $_.FullName -ne $targetExecutable } |
+        Where-Object { $_.Name -notin @("HubShell.exe", "HubShell.Watchdog.exe") } |
         Remove-Item -Recurse -Force
 
-    Write-Host "Готово. Один переносимый файл:"
+    Copy-Item -LiteralPath (Join-Path $temporaryPath "HubShell.Watchdog.exe") -Destination $distributionPath -Force
+
+    Write-Host "Готово. Клиент и отдельная служба watchdog:"
     Write-Host $targetExecutable
     Write-Host "SHA-256: $hash"
     Write-Host "На клиентском ПК не нужны Visual Studio или .NET SDK."

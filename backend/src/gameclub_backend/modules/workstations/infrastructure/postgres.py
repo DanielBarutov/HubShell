@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import uuid
 
@@ -13,6 +15,9 @@ from gameclub_backend.modules.workstations.domain import (
     WorkstationStatus,
 )
 from gameclub_backend.modules.workstations.domain_relay import RelaySettings
+from gameclub_backend.modules.workstations.infrastructure.deployment_freeze import (
+    require_membership_change_allowed,
+)
 
 
 class WorkstationBase(DeclarativeBase):
@@ -76,7 +81,7 @@ class WorkstationModel(WorkstationBase):
         )
 
     @classmethod
-    def from_domain(cls, workstation: Workstation) -> "WorkstationModel":
+    def from_domain(cls, workstation: Workstation) -> WorkstationModel:
         return cls(
             id=workstation.id,
             device_id=workstation.device_id,
@@ -140,9 +145,31 @@ class PostgresWorkstationRepository:
             )
             return [model.to_domain() for model in result]
 
+    async def list_including_archived(self) -> list[Workstation]:
+        async with open_session(self._engine_provider) as session:
+            rows = await session.scalars(select(WorkstationModel).order_by(WorkstationModel.id))
+            return [row.to_domain() for row in rows]
+
     async def save(self, workstation: Workstation) -> Workstation:
         async with open_session(self._engine_provider) as session:
             model = await session.get(WorkstationModel, workstation.id)
+            membership_fields = (
+                "device_id",
+                "equipment_type",
+                "archived_at",
+                "installation_id",
+                "mac_address",
+            )
+            affects_pc = workstation.equipment_type is EquipmentType.PC or (
+                model is not None and model.equipment_type == EquipmentType.PC.value
+            )
+            if affects_pc and (
+                model is None
+                or any(
+                    getattr(model, key) != getattr(workstation, key) for key in membership_fields
+                )
+            ):
+                await require_membership_change_allowed(session)
             if model is None:
                 session.add(WorkstationModel.from_domain(workstation))
             else:
@@ -156,5 +183,7 @@ class PostgresWorkstationRepository:
         async with open_session(self._engine_provider) as session:
             model = await session.get(WorkstationModel, workstation_id)
             if model is not None:
+                if model.equipment_type == EquipmentType.PC.value:
+                    await require_membership_change_allowed(session)
                 await session.delete(model)
                 await session.commit()

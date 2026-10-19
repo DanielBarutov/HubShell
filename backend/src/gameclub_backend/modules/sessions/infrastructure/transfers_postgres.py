@@ -9,7 +9,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.sessions.domain import Session, SessionTransferOffer, TransferStatus
-from gameclub_backend.modules.sessions.infrastructure.postgres import SessionModel
+from gameclub_backend.modules.sessions.infrastructure.postgres import (
+    SessionModel,
+    lock_session_admission,
+    require_session_admission,
+)
 
 
 class TransferBase(DeclarativeBase):
@@ -157,6 +161,7 @@ class PostgresSessionTransferRepository:
         """Atomically move session ownership and confirm the durable offer."""
         async with open_session(self._engine_provider) as db:
             async with db.begin():
+                await lock_session_admission(db)
                 current_offer = await db.scalar(
                     select(SessionTransferOfferModel)
                     .where(SessionTransferOfferModel.id == offer.id)
@@ -177,6 +182,8 @@ class PostgresSessionTransferRepository:
                         raise ValueError("Transfer already confirmed")
                     return current_offer.to_domain(), current_session.to_domain()
 
+                await require_session_admission(db, target_id)
+                await require_session_admission(db, offer.source_workstation_id)
                 for workstation_id in sorted({session.workstation_id, target_id}, key=str):
                     await db.execute(
                         text("SELECT id FROM workstations WHERE id = :workstation_id FOR UPDATE"),

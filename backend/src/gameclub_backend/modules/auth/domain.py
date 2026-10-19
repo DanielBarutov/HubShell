@@ -6,6 +6,7 @@ import enum
 class SubjectType(enum.StrEnum):
     OPERATOR = "operator"
     DEVICE = "device"
+    UPDATER = "updater"
     CLIENT = "client"
 
 

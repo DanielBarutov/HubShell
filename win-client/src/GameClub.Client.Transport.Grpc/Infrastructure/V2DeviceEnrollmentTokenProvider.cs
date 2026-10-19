@@ -35,6 +35,8 @@ public sealed class V2DeviceEnrollmentTokenProvider : ITokenProvider, IDisposabl
         _installationId = LoadOrCreateInstallationId();
     }
 
+    public string InstallationId => _installationId;
+
     public string? DeviceId { get; private set; }
     public string? WorkstationId { get; private set; }
     public string? WorkstationName { get; private set; }

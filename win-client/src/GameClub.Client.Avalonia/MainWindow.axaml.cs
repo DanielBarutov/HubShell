@@ -65,7 +65,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs args)
     {
-        if (args.CloseReason != WindowCloseReason.OSShutdown)
+        if (args.CloseReason != WindowCloseReason.OSShutdown && !ViewModel.AllowUpdateShutdown)
         {
             args.Cancel = true;
             if (ViewModel.IsWidgetContentVisible)

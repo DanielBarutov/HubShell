@@ -1,5 +1,95 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-19 — Linux .NET HTTP E2E (50)
+
+Два настоящих агента проходят TCP HTTP/PostgreSQL доставку: busy/missing gate,
+restart backend под barrier, pilot, rollback/failed, retry и отчёт 2/2.
+GUI/process/IPC test host симулирует; подписи/ZIP/auth/файлы настоящие.
+65 scoped backend и 236 .NET tests прошли. Native Windows/Compose NAS остаются;
+публикация ветки и CI запрошена, ответа ещё нет.
+
+### 2026-10-19 — статус доставки в настройках (50)
+
+Operator-only /current отдаёт последнюю доставку и server-owned confirmed/total/
+статусы всех PC. Карточка показывает версии/ошибки, обновляется и снимает старые
+данные при error/timeout. 64 scoped backend и 18 frontend tests, build прошли.
+Браузеры CUA недоступны; visual/native/сквозная доставка остаются непроверенными.
+
+### 2026-10-19 — запускаемый CD исполнитель (50)
+
+CLI соединяет mirror/server stage/backend barrier/report с durable job/lock,
+auth refresh и merge digest в Dockhand. Автовыбор возобновляет unfinished job,
+затем GitHub latest; checkout только signed commit без dirty replacement.
+57 scoped backend, 4 real loopback HTTP и 8 runner tests прошли. Host/cron,
+полная Compose проверка, NAS и Windows остаются; реальная доставка не включена.
+
+### 2026-10-19 — зеркало и части CD (50)
+
+CI подписывает server image manifest того же release/commit. Добавлены проверяемое
+атомарное зеркало, его read-only mount, ядро фаз CD и полный JSON/text отчёт.
+Серверный stage включает dump/restore обеих БД, migration и app-only up/smoke.
+56 scoped backend и 236 .NET tests прошли; 6 mirror/6 coordinator/4 server-order
+tests, real PostgreSQL restore с контрольной строкой. Полный runner, постоянная
+настройка Dockhand, Compose stage целиком и Windows pilot ещё не завершены.
+
+### 2026-10-19 — служба обновления и bootstrap (50)
+
+Standalone watchdog подключает HTTP loop, signed staging, begin-install,
+pause/close/replace/health/rollback и восстановление. Machine secret защищён
+DPAPI/ACL; установщик принимает индивидуальный enrollment и публичный ключ.
+Добавлен HubShell.Setup.zip, HubShell.zip остаётся EXE-only. Проверено:
+236 .NET tests, обе Windows-сборки на Linux, 5 ZIP/OpenSSL packager tests.
+Native Windows/PowerShell не проверены. CD executor/mirror, статус оператора,
+публикация и финальная пересборка EXE остаются в цели; план 50 активен.
+
+### 2026-10-19 — HTTP и GUI обновлений (50)
+
+Client updates подключён к bootstrap/HTTP: updater-only JWT <=900s, hashed credential,
+ротация/отзыв, два раунда, конечный begin-install, независимое GUI confirmation.
+Миграции 0085/86 защищают состав парка и identity; heartbeat разрешён. Готовность
+требует confirmed V2 checkpoint, пустого Kafka outbox недостаточно. Добавлены GUI
+блок входа/Windows pipe server и переносимый EXE install/rollback/recovery.
+Проверено: 55 backend, 13 admission/snapshot, 227 .NET tests; Linux build, миграции,
+Ruff/actionlint. Agent loop/secure config, CD, UI status, публикация и финальные EXE
+ещё не готовы; план активен. Текущая сводка — план 50/STATUS.md.
+
+### 2026-10-19 — подписанный пакет обновления (50)
+
+Portable validator службы: RSA/SHA-256, совместимость, размеры/хеши, EXE-only ZIP,
+отказ на ссылки/чужие пути/лишние файлы. Packager проверяет PE x64, детерминированно
+создаёт ZIP <100 MB и подписанный manifest; CI использует внешний signing secret
+и создаёт draft Release. 210 .NET tests, 4 Python/OpenSSL tests, actionlint прошли.
+HTTP/auth/IPC/updater/CD и финальная пересборка EXE остаются; план активен.
+
+### 2026-10-19 — ядро общего обновления ПК (50)
+
+Миграции 0083/0084: постоянный Sessions barrier и deployment JSONB reports.
+Защищены start/reactivation/transfer; общий lock устраняет гонку входа с барьером.
+Доменный/application слой: два раунда всех ПК, пробный ПК, два подтверждения,
+ошибка удерживает парк, operator retry не открывает его. 41 тест включая
+реальную PostgreSQL/concurrency и session/transfer regression прошёл; scoped
+Ruff и downgrade/upgrade новых миграций прошли в отдельной тестовой БД.
+HTTP/bootstrap, auth службы, IPC/updater и доставка ещё не подключены.
+Полный план остаётся активным; финальная сборка EXE/ZIP — после реализации.
+
+### 2026-10-19 — первый срез CI/CD (50)
+
+Отдельный watchdog host, source install/uninstall и publish/portable scripts;
+старый host сохранён. Подготовлены Actions workflow и isolated TrueNAS Compose
+по digest, пока без signed release и auto-deploy. Через Dockhand MCP проверены
+окружение/repository/registry; сервер не менялся. 201 .NET tests, сборки GUI/службы,
+win-x64 publish службы, Compose self-check и Ruff проходят.
+План 50 `in_progress`; барьер, updater и отчёт CD ещё не реализованы.
+Политика: недоступный ПК блокирует всех; ошибка одного удерживает весь парк.
+
+### 2026-10-19 — план CI/CD и общего обновления ПК
+
+[План 50](50-cicd-client-updates/PLAN.md), `planned`: выпуск сервера и ZIP,
+отдельная служба updater, общий опрос всех ПК и разрешение замены только
+при отсутствии сеансов на всех ПК. Предложен сохраняемый барьер новых входов,
+повторный опрос, подпись пакета, откат EXE и отчёт CD по каждому устройству.
+Код и продуктовые контракты не менялись; runtime не проверялся.
+
 ### 2026-10-19 — повтор наличной продажи и меню карты
 
 Повтор временно не завершившейся оплаты пакета возобновляет исходный settlement

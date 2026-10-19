@@ -8,6 +8,11 @@ const jsonResponse = (body: unknown, status = 200) =>
   });
 
 describe("GameClubApi", () => {
+  it("читает статус доставки через HTTP BFF", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ deployment: null }));
+    expect(await new GameClubApi("http://backend/api/v1").getClientUpdateStatus()).toEqual({ deployment: null });
+    expect(fetch).toHaveBeenCalledWith("http://backend/api/v1/client-updates/current", expect.anything());
+  });
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
   });

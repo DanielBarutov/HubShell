@@ -10,6 +10,25 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2AccessGateTests
 {
+    [Fact]
+    public async Task UpdateReadinessCannotDropAnActiveLedgerOrCloseItsGui()
+    {
+        var saved = CreateLedger();
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(),
+            deviceId: saved.DeviceId, v2Ledger: coordinator,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator),
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier());
+        await vm.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+        Assert.True(vm.HasActiveGameSession);
+        vm.ApplyDeploymentBlock(true);
+        Assert.True(vm.HasActiveGameSession);
+        Assert.Throws<InvalidOperationException>(vm.AuthorizeUpdateShutdown);
+        Assert.Equal(saved, await coordinator.ReadLedgerAsync());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

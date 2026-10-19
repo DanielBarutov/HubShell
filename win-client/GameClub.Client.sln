@@ -12,6 +12,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Tests", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Transport.Tests", "tests\Transport.Tests.csproj", "{EF8DD001-9CFC-4D78-A760-9FB6E4260336}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A82DFA1B-C1BB-43B1-BF03-DBCC1CE3BE60}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Watchdog", "src\GameClub.Client.Watchdog\GameClub.Client.Watchdog.csproj", "{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -38,8 +42,15 @@ Global
 		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Debug|x64.Build.0 = Debug|Any CPU
 		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Release|x64.ActiveCfg = Release|Any CPU
 		{EF8DD001-9CFC-4D78-A760-9FB6E4260336}.Release|x64.Build.0 = Release|Any CPU
+		{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC}.Debug|x64.ActiveCfg = Debug|x64
+		{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC}.Debug|x64.Build.0 = Debug|x64
+		{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC}.Release|x64.ActiveCfg = Release|x64
+		{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A33D99CD-88B4-4FBD-A464-D3C51D6D6EAC} = {A82DFA1B-C1BB-43B1-BF03-DBCC1CE3BE60}
 	EndGlobalSection
 EndGlobal

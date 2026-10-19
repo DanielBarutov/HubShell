@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 
 from gameclub_backend.modules.workstations.domain import Workstation
@@ -27,6 +29,9 @@ class InMemoryWorkstationRepository:
             self._items.values(),
             key=lambda item: (item.position is None, item.position or 0),
         )
+
+    async def list_including_archived(self) -> list[Workstation]:
+        return await self.list()
 
     async def save(self, workstation: Workstation) -> Workstation:
         self._items[workstation.id] = workstation

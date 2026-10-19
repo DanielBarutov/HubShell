@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Windows", "src\GameClub.Client.Windows\GameClub.Client.Windows.csproj", "{E417B43C-6A26-4DC6-BD32-6A1BFE04B0CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameClub.Client.Watchdog", "src\GameClub.Client.Watchdog\GameClub.Client.Watchdog.csproj", "{961D24B4-0608-444D-8158-5BA29473B58D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -14,6 +16,10 @@ Global
 		{E417B43C-6A26-4DC6-BD32-6A1BFE04B0CA}.Debug|x64.Build.0 = Debug|x64
 		{E417B43C-6A26-4DC6-BD32-6A1BFE04B0CA}.Release|x64.ActiveCfg = Release|x64
 		{E417B43C-6A26-4DC6-BD32-6A1BFE04B0CA}.Release|x64.Build.0 = Release|x64
+		{961D24B4-0608-444D-8158-5BA29473B58D}.Debug|x64.ActiveCfg = Debug|x64
+		{961D24B4-0608-444D-8158-5BA29473B58D}.Debug|x64.Build.0 = Debug|x64
+		{961D24B4-0608-444D-8158-5BA29473B58D}.Release|x64.ActiveCfg = Release|x64
+		{961D24B4-0608-444D-8158-5BA29473B58D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

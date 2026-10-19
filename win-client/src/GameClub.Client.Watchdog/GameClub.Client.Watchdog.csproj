@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>HubShell.Watchdog</AssemblyName>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../GameClub.Client/Infrastructure/Updates/*.cs" Link="Updates/%(Filename)%(Extension)" />
+    <Compile Include="../GameClub.Client/Infrastructure/EndpointPolicy.cs" Link="EndpointPolicy.cs" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <Compile Include="../GameClub.Client.Windows/ClientWatchdogService.cs" Link="ClientWatchdogService.cs" />
+    <Compile Include="../GameClub.Client.Windows/ClientProcessRecovery.cs" Link="ClientProcessRecovery.cs" />
+  </ItemGroup>
+</Project>

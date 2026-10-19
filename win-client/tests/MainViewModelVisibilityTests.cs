@@ -570,6 +570,42 @@ public sealed class MainViewModelVisibilityTests
         Assert.Equal("VIP-02", viewModel.CurrentWorkstationLabel);
     }
 
+    [Fact]
+    public async Task DeploymentBlockDisablesEveryUserStartUntilExplicitRelease()
+    {
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new StubCredentials());
+        vm.UserAccessCode = "4826";
+        vm.PortalIdentifier = "player";
+        Assert.True(vm.CanUnlockUser);
+        Assert.Throws<InvalidOperationException>(vm.AuthorizeUpdateShutdown);
+        vm.ApplyDeploymentBlock(true);
+        Assert.True(vm.IsDeploymentBlocked);
+        Assert.False(vm.CanUnlockUser);
+        Assert.False(vm.CanLoginPortal);
+        Assert.False(vm.CanRegisterPortal);
+        Assert.False(vm.TryUnlockUser());
+        Assert.False(await vm.LoginPortalAsync());
+        Assert.False(await vm.RegisterPortalAsync());
+        vm.AuthorizeUpdateShutdown();
+        Assert.True(vm.AllowUpdateShutdown);
+        vm.ApplyDeploymentBlock(false);
+        Assert.True(vm.CanUnlockUser);
+        Assert.False(vm.AllowUpdateShutdown);
+        Assert.DoesNotContain("Обновление", vm.AccessMessage);
+    }
+
+    [Fact]
+    public async Task DeploymentBlockPreservesAuthorizedMaintenanceForRepair()
+    {
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new StubCredentials());
+        vm.ManagerPassword = "manager-secret";
+        Assert.True(vm.TryEnterMaintenance());
+        vm.ApplyDeploymentBlock(true);
+        Assert.True(vm.IsMaintenanceMode);
+        Assert.True(vm.IsDeploymentBlocked);
+        Assert.False(vm.TryUnlockUser());
+    }
+
     private static IBackendClient CreateBackend() =>
         DispatchProxy.Create<IBackendClient, UnconfiguredBackendProxy>();
 

@@ -6,6 +6,14 @@ namespace GameClub.Client.Tests;
 public sealed class ClientProcessRecoveryTests
 {
     [Fact]
+    public void SeparateWatchdogLaunchesTheGuiFromItsOwnInstallationDirectory()
+    {
+        var installation = Path.Combine(Path.GetTempPath(), "GameClub");
+        Assert.Equal(Path.Combine(installation, "HubShell.exe"),
+            ClientProcessRecovery.ClientExecutable(installation));
+    }
+
+    [Fact]
     public void NoUserSessionDoesNotStartAClientInTheServiceSession()
     {
         Assert.False(ClientProcessRecovery.RestoreIfMissing(null,

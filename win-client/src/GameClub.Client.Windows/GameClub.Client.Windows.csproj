@@ -24,6 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="HubShellReleaseId" Value="$(HubShellReleaseId)" />
     <AssemblyMetadata Include="GameClubEnvironment" Value="$(GameClubEnvironment)" />
     <AssemblyMetadata Include="GameClubGrpcAddress" Value="$(GameClubGrpcAddress)" />
     <AssemblyMetadata Include="GameClubV2EventsHttpAddress" Value="$(GameClubV2EventsHttpAddress)" />
@@ -36,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\GameClub.Client\Infrastructure\Updates\*.cs" Link="Infrastructure\Updates\%(Filename)%(Extension)" />
     <Compile Include="..\GameClub.Client\Infrastructure\DeploymentSettings.cs" Link="Infrastructure\DeploymentSettings.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\JsonlOfflineJournal.cs" Link="Infrastructure\JsonlOfflineJournal.cs" />
     <Compile Include="..\GameClub.Client\Infrastructure\ProtectedV2LocalLedgerStore.cs" Link="Infrastructure\ProtectedV2LocalLedgerStore.cs" />

@@ -44,6 +44,43 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         WorkstationLockdownPolicySnapshot.SafeDefault;
     private SessionSnapshot? _activeSession;
     private V2LocalSessionLedger? _activeV2Ledger;
+    private bool _deploymentBlocked;
+    public bool AllowUpdateShutdown { get; private set; }
+    public bool IsDeploymentBlocked => _deploymentBlocked;
+    public bool HasActiveGameSession => _activeSession is not null
+        || _activeV2Ledger is { Status: V2LocalSessionStatus.Active or V2LocalSessionStatus.NeedsReview };
+
+    public void ApplyDeploymentBlock(bool blocked)
+    {
+        _deploymentBlocked = blocked;
+        if (blocked)
+        {
+            _portalMessage = "Обновление клиентов клуба. Ожидайте завершения на всех ПК.";
+            if (!HasActiveGameSession && !IsMaintenanceMode) _accessGate.Lock(_portalMessage);
+        }
+        else
+        {
+            AllowUpdateShutdown = false;
+            if (_portalMessage == "Обновление клиентов клуба. Ожидайте завершения на всех ПК.")
+            {
+                _portalMessage = string.Empty;
+                if (!HasActiveGameSession && _accessGate.IsLocked)
+                    _accessGate.Lock("Войдите в аккаунт клуба");
+            }
+        }
+        OnPropertyChanged(nameof(IsDeploymentBlocked));
+        OnPropertyChanged(nameof(CanUnlockUser));
+        OnPropertyChanged(nameof(CanLoginPortal));
+        OnPropertyChanged(nameof(CanRegisterPortal));
+        PublishAccessState();
+    }
+
+    public void AuthorizeUpdateShutdown()
+    {
+        if (!_deploymentBlocked || HasActiveGameSession)
+            throw new InvalidOperationException("An active session prevents client update shutdown");
+        AllowUpdateShutdown = true;
+    }
     private bool _isV2MinuteBillingPaused;
     private int _portalResumeInFlight;
     private ClientPortalSnapshot? _portalSnapshot;
@@ -202,12 +239,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ? "Создайте аккаунт клуба — он будет привязан к этому месту"
                     : "Войдите по нику или телефону, чтобы начать сессию на этом ПК"
                 : "Вход пользователя отключён политикой зоны. Обратитесь к администратору клуба.";
-    public bool CanUnlockUser => _userAccessCode.Trim().Length >= 4;
+    public bool CanUnlockUser => !_deploymentBlocked && _userAccessCode.Trim().Length >= 4;
     public bool CanEnterMaintenance => _managerPassword.Length >= 8;
-    public bool CanLoginPortal => _portalIdentifier.Trim().Length >= 3
+    public bool CanLoginPortal => !_deploymentBlocked && _portalIdentifier.Trim().Length >= 3
         && (_portalPassword.Length == 0 || _portalPassword.Length >= 4);
     public bool CanSetPortalPassword => _portalPasswordSetup.Length is >= 4 and <= 128;
-    public bool CanRegisterPortal => _portalNickname.Trim().Length >= 3
+    public bool CanRegisterPortal => !_deploymentBlocked && _portalNickname.Trim().Length >= 3
         && _portalPhone.Trim().Length >= 4
         && _portalRegistrationPassword.Length >= 4;
     public bool IsUserAccessConfigured => _accessCredentials.IsUserAccessConfigured;
@@ -823,6 +860,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task PollGuestAccessAsync()
     {
+        if (_deploymentBlocked) return;
         if (_v2GuestSession is null || _v2SignatureVerifier is null || string.IsNullOrWhiteSpace(DeviceId))
         {
             return;
@@ -970,6 +1008,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> LoginPortalAsync()
     {
+        if (_deploymentBlocked) return false;
         ClientLog.Info("auth", $"login requested mode={(_v2OfflineLogin is not null ? "v2" : "legacy")} identifierLength={PortalIdentifier.Length}");
         if (!IsOnline)
         {
@@ -1134,6 +1173,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> RegisterPortalAsync()
     {
+        if (_deploymentBlocked) return false;
         if (!IsOnline)
         {
             _portalMessage = _connection.State == ClientConnectionState.Reconnecting
@@ -1789,6 +1829,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public bool TryUnlockUser()
     {
+        if (_deploymentBlocked) return false;
         var unlocked = _accessGate.TryUnlockUser(UserAccessCode);
         if (unlocked)
         {

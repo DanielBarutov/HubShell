@@ -51,6 +51,9 @@ class V2SessionLeaseRevoker(typing.Protocol):
 
 
 class SessionTransactionWriter(typing.Protocol):
+    async def require_access(self, transaction: typing.Any, session_id: uuid.UUID) -> None:
+        """Check durable admission before issuing or recovering a signed access grant."""
+
     async def save(self, transaction: typing.Any, session: Session) -> Session:
         """Save a session in a transaction owned by a cross-module use case."""
 
@@ -150,3 +153,11 @@ class TimeNotificationLookup(typing.Protocol):
         now: datetime.datetime,
     ) -> list[SessionTimeNotification]:
         """Return server-backed time notifications for a current snapshot."""
+
+
+class SessionAdmission(typing.Protocol):
+    async def block(self, deployment_id: uuid.UUID, workstation_ids: tuple[uuid.UUID, ...]) -> None:
+        """Block starts atomically only when every target has no active session."""
+
+    async def unblock(self, deployment_id: uuid.UUID) -> None:
+        """Release only this deployment's barrier after verified completion."""

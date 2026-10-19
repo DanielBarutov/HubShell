@@ -1,5 +1,52 @@
 # Verification matrix
 
+### 2026-10-19 — update HTTP/auth и GUI/file recovery (50)
+
+55 scoped backend tests passed с GAMECLUB_TEST_POSTGRES_DSN на отдельной PostgreSQL
+55439, включая 9 real HTTP-проверок JWT rotation/no secret echo, начала установки,
+финального опроса, GUI/agent separation, membership race, confirmed chain.
+13 admission/snapshot checks passed (test_session_admission_postgres и snapshot subset
+существующего V2 integration suite). 227 .NET tests passed, включая блок входа,
+сохранение активного ledger, испорченный journal, EXE replacement и rollback.
+GUI/watchdog build на Linux — без предупреждений; тесты сохраняют прежний warning
+xUnit1031 в AvaloniaHostSmokeTests.cs:289. Downgrade/upgrade 0085/86, scoped Ruff/format,
+actionlint/diff прошли. Native Windows pipe/SCM/WTS/file locks и полный agent/CD ещё
+не проверены и не выдаются за готовые; поставляемый release пока не менялся.
+
+### 2026-10-19 — signed client package (50)
+
+210 .NET tests passed, включая 9 новых проверок signature/archive/staging.
+Standalone watchdog build — 0 warnings/errors. Python/OpenSSL packager: 4 tests
+passed (хеши/подпись, x64, запрет перезаписи, детерминированный результат/пути).
+Scoped Ruff и actionlint прошли. Это не Windows runtime или запущенный GitHub CI:
+нет проверки SCM/WTS/IPC/замены EXE и ещё не подключён backend API.
+
+### 2026-10-19 — client updates core, PostgreSQL (50)
+
+41 passed: test_client_update_domain, test_client_update_postgres,
+test_session_admission_postgres, test_session_transfer,
+test_modules_reservations_sessions. Новые DB-тесты реально используют отдельную
+PostgreSQL 16 в hubshell-cicd-postgres, loopback 55439: обе гонки вход/барьер,
+атомарный откат раунда/барьера, сохранение отчётов, защита operation_id и прав.
+Новые миграции 0083/0084: upgrade, downgrade до 0082 и повторный upgrade прошли.
+Scoped Ruff check/format прошли. API/bootstrap/GUI/updater/TrueNAS эти проверки
+не покрывают; стадии плана по ним не закрыты.
+
+### 2026-10-19 — CI/CD, отдельная служба и Compose (50)
+
+201 .NET tests passed; GUI/служба build без предупреждений, standalone watchdog
+self-contained single-file win-x64 publish прошёл на Linux. Compose self-check
+подтверждает отдельные тома, отсутствие source build и loopback ports; scoped
+Ruff check/format и diff-check проходят. Dockhand MCP read-only inventory прошёл.
+GitHub workflow/GHCR, запуск TrueNAS и PowerShell/SCM/WTS/Windows не проверены.
+Барьер и обновление GUI пока отсутствуют; этапы плана не закрыты этим срезом.
+
+### 2026-10-19 — план CI/CD (50)
+
+Подготовлен [план 50](50-cicd-client-updates/PLAN.md). Проверены исходники
+watchdog/Program, текущая поставка и Compose; проверена целостность diff.
+Реализация, тесты runtime, TrueNAS/Dockhand и Windows pilot не выполнялись.
+
 ### 2026-10-19 — ночная активация и расход пакетов V2
 
 - Постоянный `NightActivationMustSwitchLocalMinuteSource` до исправления
@@ -560,3 +607,61 @@ BURNED не расширен. Терминальный статус/причин
 потерянного включения не приводит к повторному включению при refresh. XAML
 скомпилирован в составе test build. Внешний вид увеличенного переключателя
 на Windows вручную не проверен. Прежнее предупреждение xUnit1031 остаётся.
+
+2026-10-19: actionlint 1.7.7 проверил `.github/workflows/release.yml` без ошибок.
+
+2026-10-19: план 50, watchdog loop/bootstrap — 236 .NET tests passed на Linux,
+включая 9 новых agent scenarios (idle/active, разрешение до закрытия, потеря
+begin/installed ответов, изменение готовности при закрытии, signature rejection,
+health rollback и отказ запуска повреждённого EXE). Процессы/HTTP в этих тестах
+подменены, файловая замена и криптография настоящие. GUI и standalone watchdog
+собираются без предупреждений; прежний xUnit1031 остаётся только при test build.
+5 packager tests с настоящими ZIP/OpenSSL, scoped Ruff/format, diff check прошли.
+PowerShell отсутствует; SCM/DPAPI/ACL/WTS/file-lock на Windows не проверены.
+Публикация/TrueNAS не выполнялись, финальные release binaries ещё не заменены.
+
+2026-10-19: план 50, server manifest/mirror/CD parts — 56 scoped backend tests
+на PostgreSQL (включая сохранение original/running client release), 236 .NET
+tests; 6 real ZIP/RSA mirror checks, 6 CD phase/report checks, 4 server-order
+checks с fake Compose subprocess. Отдельно реальный pg_dump/pg_restore в
+hubshell-cicd-postgres восстановил контрольную строку 42, удалил временную restore
+БД и повторно использовал проверенный dump без повторного restore. Исходная
+контрольная таблица удалена; рабочие данные не затрагивались. Compose config
+validator проверил read-only mirror volume. Scoped Ruff/format, actionlint и
+diff check прошли. Полный server Compose stage и новый GitHub job ещё не запускались;
+CLI daemon/постоянные digest в Dockhand/реальный mirror mount остаются следующими.
+
+2026-10-19: план 50 CLI — 57 scoped backend tests passed на тестовой PostgreSQL,
+4 real loopback HTTP checks (JWT refresh rotation/private persistence, redirects,
+Dockhand variables merge) и 8 runner checks (fake backend/process boundary,
+настоящие job/report files). Проверены resume после потери create response,
+timeout без снятия barrier, server failure, unfinished-job priority и signed
+checkout/dirty refusal. CLI --help, scoped Ruff/format/actionlint/diff check прошли.
+Checkout/fetch в runner tests подменены: рабочий checkout агента не переключался.
+Полный CLI на TrueNAS, cron, реальный Dockhand merge и весь Compose pipeline
+не запускались; опубликованного нового выпуска пока нет.
+
+2026-10-19: статус обновления в Settings — 64 scoped backend tests passed на
+реальной тестовой PostgreSQL (operator-only /current, полный знаменатель,
+not_ready/stale/obsolete различия и двойной успех), 18 frontend API/settings tests,
+7 CD report tests, production build, scoped Ruff/format/actionlint/diff check.
+Проверены loading/empty/error/rollback, потеря прежнего успеха при ошибке,
+таймаут зависшего запроса, polling/unmount. Production build сохраняет прежнее
+предупреждение о размере JS chunk. В CUA browsers=[]; попытка открыть iab вернула
+Browser is not available. Browser layout, NAS и Windows runtime не проверены.
+
+2026-10-19: 65 scoped backend tests passed, включая два .NET ClientUpdateAgent
+через настоящий TCP HTTP/Uvicorn/PostgreSQL. Подтверждены busy/missing gate,
+финальный round, restart отдельного backend process (проверен другой PID) и сохранение
+barrier/reports в PostgreSQL, network failure
+с durable local block, pilot order, rollback/whole-fleet failed, retry/2-из-2,
+finish/local unblock, целостность server.ini/контрольного ledger-файла и JSON/text report.
+Подписи/ZIP/HTTP/auth/файлы настоящие; GUI/process/IPC и локальные финансовые
+показания симулируются. Финансовый V2 chain проверяется другими PG tests;
+этот E2E не доказывает Kafka/native Windows поведение. 236 .NET tests passed,
+UpdateAgentHost собран без warnings/errors. Повторная NAS inventory — без mutations.
+
+2026-10-19: финальный аудит agent reports — 238 .NET tests passed и повторный
+real TCP/HTTP/PostgreSQL E2E passed. После общего failed повторные ticks сохраняют
+installed pilot и rolled_back второго PC; общий barrier держится до explicit retry.
+Это исправляет потерю результата отката/установки при фоновых опросах.

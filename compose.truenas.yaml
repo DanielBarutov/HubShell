@@ -1,0 +1,166 @@
+# Isolated TrueNAS copy. Published images; Docker Compose 2.24.4+ required.
+name: hubshell-test
+
+services:
+  kafka:
+    extends:
+      file: docker-compose.yml
+      service: kafka
+    ports: !reset []
+  kafka-v2-topics:
+    extends:
+      file: docker-compose.yml
+      service: kafka-v2-topics
+  steam-guest-postgres:
+    extends:
+      file: docker-compose.yml
+      service: steam-guest-postgres
+    ports: !reset []
+  steam-guest-server:
+    extends:
+      file: docker-compose.yml
+      service: steam-guest-server
+    build: !reset null
+    image: ${HUBSHELL_STEAM_GUEST_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    ports: !override
+      - "${HUBSHELL_TEST_BIND_HOST:-127.0.0.1}:${HUBSHELL_TEST_STEAM_GUEST_PORT:-8200}:8200"
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    ports: !reset []
+  redis:
+    extends:
+      file: docker-compose.yml
+      service: redis
+    ports: !reset []
+  backend-migrate:
+    extends:
+      file: docker-compose.yml
+      service: backend-migrate
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  v2-server-outbox:
+    extends:
+      file: docker-compose.yml
+      service: v2-server-outbox
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  v2-client-facts:
+    extends:
+      file: docker-compose.yml
+      service: v2-client-facts
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  v2-confirmed-analytics:
+    extends:
+      file: docker-compose.yml
+      service: v2-confirmed-analytics
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  otel-collector:
+    extends:
+      file: docker-compose.yml
+      service: otel-collector
+  prometheus:
+    extends:
+      file: docker-compose.yml
+      service: prometheus
+  loki:
+    extends:
+      file: docker-compose.yml
+      service: loki
+  tempo:
+    extends:
+      file: docker-compose.yml
+      service: tempo
+  pyroscope:
+    extends:
+      file: docker-compose.yml
+      service: pyroscope
+    ports: !reset []
+  alloy:
+    extends:
+      file: docker-compose.yml
+      service: alloy
+  grafana:
+    extends:
+      file: docker-compose.yml
+      service: grafana
+    ports: !reset []
+  backend-http:
+    extends:
+      file: docker-compose.yml
+      service: backend-http
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    environment:
+      GAMECLUB_CLIENT_RELEASE_ROOT: /var/lib/hubshell/client-releases
+    volumes:
+      - gameclub-client-releases:/var/lib/hubshell/client-releases:ro
+    ports: !override
+      - "${HUBSHELL_TEST_BIND_HOST:-127.0.0.1}:${HUBSHELL_TEST_HTTP_PORT:-8100}:8100"
+  backend-grpc:
+    extends:
+      file: docker-compose.yml
+      service: backend-grpc
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    ports: !override
+      - "${HUBSHELL_TEST_BIND_HOST:-127.0.0.1}:${HUBSHELL_TEST_GRPC_PORT:-51051}:51051"
+  worker:
+    extends:
+      file: docker-compose.yml
+      service: worker
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  analytics-worker:
+    extends:
+      file: docker-compose.yml
+      service: analytics-worker
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  meter-worker:
+    extends:
+      file: docker-compose.yml
+      service: meter-worker
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  scheduler:
+    extends:
+      file: docker-compose.yml
+      service: scheduler
+    build: !reset null
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+  frontend:
+    extends:
+      file: docker-compose.yml
+      service: frontend
+    build: !reset null
+    image: ${HUBSHELL_FRONTEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    ports: !override
+      - "${HUBSHELL_TEST_BIND_HOST:-127.0.0.1}:${HUBSHELL_TEST_FRONTEND_PORT:-3100}:80"
+
+volumes:
+  gameclub-client-releases:
+  gameclub-grafana-data:
+  gameclub-kafka-data:
+  gameclub-loki-data:
+  gameclub-postgres-data:
+  gameclub-pyroscope-data:
+  gameclub-prometheus-data:
+  gameclub-redis-data:
+  steam-guest-postgres-data:
+  gameclub-tempo-data:

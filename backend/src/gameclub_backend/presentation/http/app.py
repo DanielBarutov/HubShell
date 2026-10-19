@@ -44,6 +44,9 @@ from gameclub_backend.modules.cash_shifts.presentation.http import (
 from gameclub_backend.modules.catalog.presentation.http import (
     create_router as create_catalog_router,
 )
+from gameclub_backend.modules.client_updates.presentation.http import (
+    create_router as create_client_updates_router,
+)
 from gameclub_backend.modules.clients.presentation.http import (
     create_bonus_program_router,
     create_client_groups_router,
@@ -239,6 +242,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(create_workstation_commands_router(services.command_service))
     application.include_router(create_v2_client_facts_router())
+    application.include_router(
+        create_client_updates_router(
+            services.client_updates, services.updater_identity, current_settings.client_release_root
+        )
+    )
     application.include_router(create_v2_server_events_router())
     application.include_router(create_workstation_groups_router(services.workstation_groups))
     application.include_router(create_clients_router(services.clients, services.v2_deposit_credits))
@@ -301,6 +309,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.middleware("http")
     async def audit_middleware(request: Request, call_next: typing.Callable) -> typing.Any:
         audited_prefixes = (
+            "/api/v1/client-updates",
             "/api/v1/workstations",
             "/api/workstations",
             "/api/v1/workstation-groups",

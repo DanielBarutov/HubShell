@@ -80,6 +80,24 @@ Windows сохраняют свои короткие owner-level входы в `
 
 | 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
 | 49 | [`49-bonus-program/PLAN.md`](49-bonus-program/PLAN.md) | начисление, оплата игры бонусами и V2-резерв | `in_progress` |
+| 50 | [`50-cicd-client-updates/PLAN.md`](50-cicd-client-updates/PLAN.md) | CI/CD TrueNAS/Dockhand, общий барьер и обновление всех Windows-ПК | `in_progress` |
+
+План 50: watchdog loop/bootstrap реализованы в исходниках; 236 .NET и 5
+packager tests прошли на Linux. CD executor/mirror, публикация и Windows pilot
+ещё не завершены; актуальная граница — [STATUS.md](50-cicd-client-updates/STATUS.md).
+
+Добавлены signed server manifest, atomic mirror, coordinator/report и server stage;
+56 scoped backend tests и реальный backup/restore тестовой PostgreSQL прошли.
+Полный CD runner и его подключение к Dockhand ещё не завершены.
+
+CD runner теперь запускается как host CLI; 57 scoped backend, 4 loopback HTTP
+и 8 runner tests прошли. Live конфигурация/cron на NAS ещё не выполнялись.
+
+Карточка доставки в существующих настройках реализована; 64 scoped backend,
+18 frontend tests и production build прошли. Браузер CUA недоступен, layout не проверен.
+
+Linux E2E двух .NET агентов с TCP HTTP/PostgreSQL прошёл: всего 65 backend и
+236 .NET tests. GUI/process/IPC в dev host simulated, native Windows не проверен.
 
 Статусы:
 

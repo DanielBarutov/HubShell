@@ -927,6 +927,30 @@ export type BackendBonusGameQuote = {
   can_pay: boolean;
 };
 
+export type ClientUpdateDeviceStatus = "confirmed" | "unreachable" | "failed" | "rolled_back"
+  | "active_session" | "pending_facts" | "not_ready" | "waiting_gui" | "ready" | "installing" | "verifying";
+
+export interface BackendClientUpdateStatus {
+  deployment: null | {
+    id: string;
+    release_id: string;
+    phase: "polling" | "preparing" | "authorized" | "failed" | "completed";
+    created_at: string;
+    observed_at: string;
+    confirmed: number;
+    total: number;
+    devices: Array<{
+      device_id: string;
+      workstation_id: string;
+      status: ClientUpdateDeviceStatus;
+      old_release_id: string | null;
+      running_release_id: string | null;
+      received_at: string | null;
+      error_code: string | null;
+    }>;
+  };
+}
+
 export type BonusPurchaseConfirmation = {
   use_bonus: boolean;
   expected_price_cents: number;

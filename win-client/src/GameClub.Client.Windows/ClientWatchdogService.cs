@@ -12,9 +12,15 @@ internal sealed class ClientWatchdogService : ServiceBase
 {
     private CancellationTokenSource? _stop;
     private Task? _loop;
+    private Task? _updates;
+    private readonly Func<ClientWatchdogService, CancellationToken, Task>? _updateWorker;
+    private readonly SemaphoreSlim _recoveryGate = new(1, 1);
+    private volatile bool _paused;
 
-    public ClientWatchdogService()
+    public ClientWatchdogService(Func<ClientWatchdogService, CancellationToken, Task>? updateWorker = null, bool startPaused = false)
     {
+        _updateWorker = updateWorker;
+        _paused = startPaused;
         ServiceName = "HubShell.Watchdog";
         CanShutdown = true;
         AutoLog = true;
@@ -24,23 +30,23 @@ internal sealed class ClientWatchdogService : ServiceBase
     {
         _stop = new CancellationTokenSource();
         _loop = Task.Run(() => WatchAsync(_stop.Token));
+        _updates = _updateWorker is null ? Task.CompletedTask : Task.Run(() => _updateWorker(this, _stop.Token));
     }
 
     protected override void OnStop()
     {
         _stop?.Cancel();
-        _loop?.GetAwaiter().GetResult();
+        Task.WhenAll(_loop ?? Task.CompletedTask, _updates ?? Task.CompletedTask).GetAwaiter().GetResult();
         _stop?.Dispose();
         _stop = null;
         _loop = null;
+        _updates = null;
     }
 
     protected override void OnShutdown() => OnStop();
 
     private async Task WatchAsync(CancellationToken cancellationToken)
     {
-        var executable = Environment.ProcessPath
-            ?? throw new InvalidOperationException("Cannot locate watchdog executable");
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         try
         {
@@ -48,10 +54,7 @@ internal sealed class ClientWatchdogService : ServiceBase
             {
                 try
                 {
-                    var sessionId = WTSGetActiveConsoleSessionId();
-                    if (ClientProcessRecovery.RestoreIfMissing(sessionId == uint.MaxValue ? null : sessionId,
-                            session => ClientIsRunning(executable, session),
-                            session => LaunchInUserSession(executable, session)))
+                    if (await RestoreGuiAsync(cancellationToken))
                     {
                         // shortcut: one local console user, add WTS session enumeration for RDP deployments.
                         WriteRecoveryLog("Клиент восстановлен в пользовательской сессии.", EventLogEntryType.Information);
@@ -73,6 +76,53 @@ internal sealed class ClientWatchdogService : ServiceBase
         {
         }
     }
+
+    internal static uint? ConsoleSessionId
+    {
+        get { var id = WTSGetActiveConsoleSessionId(); return id is 0 or uint.MaxValue ? null : id; }
+    }
+
+    internal async Task PauseRecoveryAsync(CancellationToken token)
+    {
+        await _recoveryGate.WaitAsync(token);
+        try { _paused = true; }
+        finally { _recoveryGate.Release(); }
+    }
+
+    internal async Task ResumeRecoveryAsync(CancellationToken token)
+    {
+        await _recoveryGate.WaitAsync(token);
+        try { _paused = false; }
+        finally { _recoveryGate.Release(); }
+    }
+
+    private async Task<bool> RestoreGuiAsync(CancellationToken token)
+    {
+        await _recoveryGate.WaitAsync(token);
+        try
+        {
+            if (_paused) return false;
+            var executable = ClientProcessRecovery.ClientExecutable(AppContext.BaseDirectory);
+            return ClientProcessRecovery.RestoreIfMissing(ConsoleSessionId,
+                session => ClientIsRunning(executable, session),
+                session => LaunchInUserSession(executable, session));
+        }
+        finally { _recoveryGate.Release(); }
+    }
+
+    internal async Task StartGuiForUpdateAsync(CancellationToken token)
+    {
+        await _recoveryGate.WaitAsync(token);
+        try
+        {
+            var id = ConsoleSessionId ?? throw new InvalidOperationException("No interactive console session");
+            var executable = ClientProcessRecovery.ClientExecutable(AppContext.BaseDirectory);
+            if (!ClientIsRunning(executable, id)) LaunchInUserSession(executable, id);
+        }
+        finally { _recoveryGate.Release(); }
+    }
+
+    internal void WriteUpdateLog(string code) => WriteRecoveryLog("Client updater: " + code, EventLogEntryType.Warning);
 
     private void WriteRecoveryLog(string message, EventLogEntryType type)
     {

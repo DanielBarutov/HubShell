@@ -1,5 +1,6 @@
 import { normalizePhoneQuery } from "./normalizers";
 import type {
+  BackendClientUpdateStatus,
   BackendBonusReport,
   BackendBonusProgram,
   BackendBonusWallet,
@@ -482,6 +483,10 @@ export class GameClubApi {
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     });
+  }
+
+  async getClientUpdateStatus(signal?: AbortSignal): Promise<BackendClientUpdateStatus> {
+    return this.request<BackendClientUpdateStatus>("/client-updates/current", { signal });
   }
 
   async getBonusProgram(): Promise<BackendBonusProgram> {
