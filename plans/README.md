@@ -80,7 +80,7 @@ Windows сохраняют свои короткие owner-level входы в `
 
 | 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
 | 49 | [`49-bonus-program/PLAN.md`](49-bonus-program/PLAN.md) | начисление, оплата игры бонусами и V2-резерв | `in_progress` |
-| 50 | [`50-cicd-client-updates/PLAN.md`](50-cicd-client-updates/PLAN.md) | CI/CD TrueNAS/Dockhand, общий барьер и обновление всех Windows-ПК | `in_progress` |
+| 50 | [`50-cicd-client-updates/PLAN.md`](50-cicd-client-updates/PLAN.md) | CI/CD TrueNAS/Dockhand, общий барьер и обновление всех Windows-ПК | `blocked` |
 
 План 50: watchdog loop/bootstrap реализованы в исходниках; 236 .NET и 5
 packager tests прошли на Linux. CD executor/mirror, публикация и Windows pilot
@@ -98,6 +98,10 @@ CD runner теперь запускается как host CLI; 57 scoped backend
 
 Linux E2E двух .NET агентов с TCP HTTP/PostgreSQL прошёл: всего 65 backend и
 236 .NET tests. GUI/process/IPC в dev host simulated, native Windows не проверен.
+
+Локальная поставка обновлена из source 0c9d514: EXE-only ZIP 46,5 MB,
+Setup ZIP 76,3 MB, server.ini сохранён. После финального report fix — 238 .NET tests.
+Remote push и запуск CI ожидают ответа; TrueNAS/native Windows не проверены.
 
 Статусы:
 

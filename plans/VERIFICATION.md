@@ -665,3 +665,23 @@ UpdateAgentHost собран без warnings/errors. Повторная NAS inve
 real TCP/HTTP/PostgreSQL E2E passed. После общего failed повторные ticks сохраняют
 installed pilot и rolled_back второго PC; общий barrier держится до explicit retry.
 Это исправляет потерю результата отката/установки при фоновых опросах.
+
+2026-10-19: локальный publish из source 0c9d514a9d18c0cd7b36bf07e2ea8b55b3c0452a:
+Windows GUI и watchdog Release win-x64 self-contained single-file, compression=false,
+без warnings/errors. GUI 108204802 bytes, SHA256
+5ab457346121b12ddb61bc3af7c7c9beeddebe5852fda61039bcac92cecd28a7;
+EXE-only HubShell.zip 46524393 bytes, SHA256
+c29e3ddc739139cf5d74192cff2e5615727efd253f8619656605297efeba1dca.
+Watchdog 68688118 bytes; Setup ZIP 76279360 bytes, оба ZIP variants <100000000.
+PE x64/embedded releaseId, RSA4096 signature, testzip/embedded hash, SHA256SUMS,
+source/release installer parity и неизменность server.ini проверены. Бывший release
+сохранён под output/cicd-release-0c9d514/previous-release. Private key вне Git;
+public/signature/BUILD-INFO.json доступны в release. Native Windows/SCM не запускались.
+
+2026-10-19: финальная PG матрица admission — 11 passed: клиентский и гостевой
+вход в обоих порядках commit/barrier, transfer commit в обоих порядках с настоящим
+PostgresSessionTransferRepository. При отказе target session/offer не изменяются;
+при transfer-first barrier ждёт commit и замечает активный moved session.
+Общий scoped backend набор — 69 passed (11.54s). Runtime C# после publish не менялся;
+размеры/хеши текущих release files повторно совпали с BUILD-INFO, INI с backup.
+Оставшиеся незакрытые критерии и ограничения сведены в плане 50/AUDIT.md.

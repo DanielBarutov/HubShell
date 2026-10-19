@@ -1,6 +1,7 @@
 # Текущее состояние плана 50
 
-Статус: in_progress. Полная цель и финальная сборка EXE/ZIP ещё не выполнены.
+Статус: blocked — ожидаются ответ на публикацию/CI и внешний доступ для Windows pilot.
+EXE/ZIP пересобраны локально; полная цель не завершена. Аудит: [AUDIT.md](AUDIT.md).
 Согласовано: ждём все PC; при ошибке одного весь парк закрыт до исправления;
 TrueNAS — отдельная пустая копия, volumes пользователь перенесёт позднее;
 GitHub Actions + публичные GHCR images.
@@ -59,13 +60,13 @@ GitHub Actions + публичные GHCR images.
    Проверить весь server stage на отдельном Compose-стенде
    (пока реальным был только PostgreSQL dump/restore).
    Браузерная проверка карточки статуса; публикация/настройка pipeline и стенда.
-4. Сквозные Linux/dev-host проверки, затем доступный Windows pilot; не выдавать source/build
-   за SCM/WTS/file-lock proof. В самом конце пересобрать EXE, >100 MB упаковать;
-   HubShell.zip оставлять EXE-only. Текущий release пока не заменён.
+4. Доступный Windows pilot; не выдавать source/build за SCM/WTS/file-lock proof.
+   Локальный release обновлён из source commit 0c9d514a9d18c0cd7b36bf07e2ea8b55b3c0452a;
+   при дальнейших runtime изменениях пересобрать его повторно.
 
 Тестовая PostgreSQL: отдельный контейнер hubshell-cicd-postgres, 127.0.0.1:55439,
 DSN postgresql+asyncpg://postgres@127.0.0.1:55439/postgres. Рабочие базы/TrueNAS не менялись.
-Последняя проверка: 238 .NET tests; 65 scoped backend tests, включая .NET HTTP E2E,
+Последняя проверка: 238 .NET tests; 69 scoped backend tests, включая .NET HTTP E2E,
 с реальной PostgreSQL; 18 scoped frontend tests и production build;
 5 packager, 6 signed mirror, 7 CD coordinator/report,
 4 server-order, 4 real loopback HTTP/auth/merge и 8 CD runner tests.
@@ -84,5 +85,18 @@ Windows GUI host и standalone watchdog компилируются на Linux, n
 Финальный локальный аудит: failed park polls сохраняют принятые installed/rolled_back
 отчёты до explicit retry; прежняя ветка агента могла затереть их общим failed.
 Добавлены два unit cases и проверка повторного опроса обоих hosts в E2E.
-238 .NET и обновлённый TCP/HTTP E2E прошли. Готовится локальная поставка из
-зафиксированного source commit; Windows/TrueNAS/публикация по-прежнему не завершены.
+238 .NET и обновлённый TCP/HTTP E2E прошли. Локальная поставка обновлена из
+source commit 0c9d514a9d18c0cd7b36bf07e2ea8b55b3c0452a (ветка ci/client-updates):
+GUI 108204802 bytes → EXE-only HubShell.zip 46524393 bytes; watchdog 68688118;
+HubShell.Setup.zip 76279360 bytes. Оба win-x64 self-contained single-file без
+внутреннего сжатия. PE, embedded release id, RSA signature, ZIP/checksums,
+installer parity проверены; server.ini сохранён. Старый bundle — output/cicd-release-0c9d514/previous-release.
+Signing key — вне Git в ~/.config/hubshell-cicd (private 600, dir 700);
+в release только public key/signature. Signed server manifest/images отсутствуют
+до CI; эта локальная поставка не включает реальную автодоставку.
+Windows/TrueNAS/публикация по-прежнему не завершены.
+
+Завершены прямые PG races client/guest/transfer с barrier в обоих порядках;
+11 admission checks, общий scoped набор 69 passed. C# runtime/готовые EXE
+после этой проверки не менялись. Дальнейшая самостоятельная локальная работа
+не закрывает live CI/NAS/Windows evidence; нужны ответ и внешний доступ.

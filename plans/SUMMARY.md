@@ -1,5 +1,22 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-19 — аудит оставшихся условий (50)
+
+69 scoped backend tests прошли; закрыта прямая PG concurrency матрица для
+клиента/гостя/переноса. Runtime клиента после сборки не менялся, артефакты совпали
+с BUILD-INFO. Полный план не завершён: публикация/CI ожидает ответа, затем нужны
+live NAS/Compose и native Windows pilot. Проверенная граница — план 50/AUDIT.md;
+цель blocked по внешним условиям, не complete.
+
+### 2026-10-19 — локальная Windows-поставка (50)
+
+Исходники зафиксированы локально: ci/client-updates, source 0c9d514.
+Оба EXE пересобраны без внутреннего сжатия; GUI 108204802 bytes упакован
+в EXE-only HubShell.zip 46524393 bytes. Setup ZIP 76279360 bytes;
+PE/RSA/ZIP/hash/INI проверки прошли. 238 .NET tests и повторный E2E прошли,
+failed polls сохраняют принятые installed/rolled_back результаты. Remote push,
+CI/NAS и native Windows ещё не выполнены; публикация ожидает ответа пользователя.
+
 ### 2026-10-19 — Linux .NET HTTP E2E (50)
 
 Два настоящих агента проходят TCP HTTP/PostgreSQL доставку: busy/missing gate,
