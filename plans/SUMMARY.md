@@ -1,5 +1,13 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-19 — CI и отдельная копия NAS (50)
+
+Ветка ci/client-updates опубликована, CI 39296815640 success. Dockhand
+hubshell-test: 22 сервиса работают, migrations/topics exit 0; HTTP/auth/frontend
+proxy и gRPC проверены. Отдельные пустые тома и секреты, auto-update off.
+release/ обновлён из CI, подписи/hash/ZIP/INI проверены. Windows pilot завтра;
+полный CD server-stage/cron ещё не проверен. Подробнее: план 50/STATUS.md.
+
 ### 2026-10-19 — аудит оставшихся условий (50)
 
 69 scoped backend tests прошли; закрыта прямая PG concurrency матрица для

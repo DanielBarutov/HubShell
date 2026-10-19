@@ -1,7 +1,8 @@
 # Проверка готовности плана 50
 
 Полная цель не достигнута. Локальная реализация и поставка готовы;
-публикация/инфраструктура и native-проверки требуют внешних действий.
+CI и первый запуск NAS выполнены; полный server-stage/cron и native-проверки ещё требуются.
+Актуальные свидетельства: [STATUS.md](STATUS.md), раздел первого запуска NAS.
 
 | Требование | Проверенное свидетельство | Итог |
 | --- | --- | --- |
@@ -12,7 +13,7 @@
 | Pilot, отказ второго PC, explicit retry, 2/2, restart | Два .NET agents через TCP HTTP; остановка/новый PID backend; PostgreSQL; JSON/text report | GUI/process/IPC simulated, не production fleet proof |
 | Настройки оператора | 18 scoped frontend tests и production build; server-owned numerator/denominator | Browser layout не проверен: CUA browsers=[] / iab unavailable |
 | Локальная поставка | release/BUILD-INFO.json, PE x64, RSA, SHA256SUMS, ZIP entry/hash, сохранённый server.ini | Выполнено; native запуск не проверен |
-| CI и согласованный server/client release | Workflow/actionlint и packager tests; source в локальной ci/client-updates | Не опубликовано, Actions не запускались, GHCR images этого выпуска не подтверждены |
+| CI и согласованный server/client release | Workflow/actionlint и packager tests; source в локальной ci/client-updates | CI 39296815640 success, три публичных digest проверены |
 | TrueNAS Git stack, host executor/cron, mirror, backups/migration/readiness | Compose config validator, server ordering tests; реальный pg_dump/restore отдельной PostgreSQL | Полный Compose stage и live Dockhand merge не выполнялись |
 | Windows bootstrap, SCM/WTS/ACL/DPAPI/pipe/file locks | Компиляция GUI/watchdog, source installer, инструкция обратного перехода | Требуется Windows pilot, Linux этого не доказывает |
 
@@ -28,7 +29,7 @@ GUI/source build: 0c9d514a9d18c0cd7b36bf07e2ea8b55b3c0452a.
 - Private signing key находится вне Git; server release manifest/images не подменены
   фиктивными digest. Локальные артефакты не означают включённую CD доставку.
 
-## Почему дальнейшее завершение требует ответа/доступа
+## История блокировки до разрешения публикации
 
 Вопрос о публикации отдельной ветки ci/client-updates и запуске CI отправлен,
 ответ не получен. Ожидание этого ответа повторилось в трёх последовательных

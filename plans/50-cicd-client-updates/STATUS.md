@@ -1,7 +1,7 @@
 # Текущее состояние плана 50
 
-Статус: blocked — ожидаются ответ на публикацию/CI и внешний доступ для Windows pilot.
-EXE/ZIP пересобраны локально; полная цель не завершена. Аудит: [AUDIT.md](AUDIT.md).
+Статус: in_progress — ветка опубликована, CI прошёл, копия в Dockhand запущена.
+Windows pilot отложен пользователем до 2026-10-20; полная цель не завершена. Аудит: [AUDIT.md](AUDIT.md).
 Согласовано: ждём все PC; при ошибке одного весь парк закрыт до исправления;
 TrueNAS — отдельная пустая копия, volumes пользователь перенесёт позднее;
 GitHub Actions + публичные GHCR images.
@@ -59,13 +59,14 @@ GitHub Actions + публичные GHCR images.
    проверить mirror mount и сохранение digest на установленном Dockhand.
    Проверить весь server stage на отдельном Compose-стенде
    (пока реальным был только PostgreSQL dump/restore).
-   Браузерная проверка карточки статуса; публикация/настройка pipeline и стенда.
+   Браузерная проверка карточки статуса. CI и начальный запуск стенда выполнены;
+   полный CD server-stage/cron ещё не проверен.
 4. Доступный Windows pilot; не выдавать source/build за SCM/WTS/file-lock proof.
-   Локальный release обновлён из source commit 0c9d514a9d18c0cd7b36bf07e2ea8b55b3c0452a;
+   Папка release обновлена из CI commit e300b4b2e03092fdb195ecfd3f7212cd513b82d1;
    при дальнейших runtime изменениях пересобрать его повторно.
 
 Тестовая PostgreSQL: отдельный контейнер hubshell-cicd-postgres, 127.0.0.1:55439,
-DSN postgresql+asyncpg://postgres@127.0.0.1:55439/postgres. Рабочие базы/TrueNAS не менялись.
+DSN postgresql+asyncpg://postgres@127.0.0.1:55439/postgres. Рабочие базы не менялись; на TrueNAS создана отдельная пустая копия.
 Последняя проверка: 238 .NET tests; 69 scoped backend tests, включая .NET HTTP E2E,
 с реальной PostgreSQL; 18 scoped frontend tests и production build;
 5 packager, 6 signed mirror, 7 CD coordinator/report,
@@ -100,3 +101,29 @@ Windows/TrueNAS/публикация по-прежнему не завершен
 11 admission checks, общий scoped набор 69 passed. C# runtime/готовые EXE
 после этой проверки не менялись. Дальнейшая самостоятельная локальная работа
 не закрывает live CI/NAS/Windows evidence; нужны ответ и внешний доступ.
+
+## 2026-10-19 — опубликованный выпуск и первый запуск NAS
+
+Пользователь разрешил публикацию и запуск контейнеров, Windows PC будет завтра.
+Ветка ci/client-updates опубликована. CI run 39296815640 — success, commit
+ e300b4b2e03092fdb195ecfd3f7212cd513b82d1. Signing secret настроен вне Git.
+Ручной dispatch нового workflow без файла в main вернул 404; добавлен push trigger
+только для этой ветки. Первый CI выявил наследование PostgreSQL DSN старыми
+in-memory API tests; DSN миграций ограничен командой alembic, повтор прошёл полностью.
+
+Dockhand: git stack 1 hubshell-test, environment 1, compose.truenas.yaml,
+branch override ci/client-updates. Auto-update/webhook выключены. Отдельные
+случайные секреты сохранены в Dockhand secret storage, рабочие volumes не переносились.
+Все три GHCR image доступны анонимно; digest совпали с подписанным server manifest.
+Deploy run 59 success: 22 running, два init-контейнера exit 0, restart count 0.
+Проверены HTTP live/ready, operator login, workstations=[], current deployment=null,
+frontend proxy ready и настоящий gRPC SystemService.GetHealth (ok).
+Kafka consumers получили partition assignment, Dramatiq выполняет периодические jobs.
+
+Порты пока привязаны к 127.0.0.1 NAS: 3100/8100/51051/8200. Для LAN ожидается
+локальный IP от пользователя; 0.0.0.0 автоматически не выставляется.
+CI artifacts скачаны в output/ci-e300b4b, подписи обоих manifests/commit/hash/ZIP
+проверены закреплённым ключом. release/ обновлён из этого CI без изменения server.ini:
+HubShell.exe 108233738 bytes, EXE-only HubShell.zip 46550584 bytes,
+HubShell.Setup.zip 76326753 bytes. BUILD-INFO содержит provenance и hashes.
+Это первый запуск копии, не сквозная CD-проверка server-stage/cron/Windows update.

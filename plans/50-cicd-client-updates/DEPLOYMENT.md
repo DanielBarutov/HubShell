@@ -1,4 +1,13 @@
-# Отдельная копия на TrueNAS — первый срез
+# Отдельная копия на TrueNAS
+
+Текущий запуск 2026-10-19: Git stack 1 hubshell-test, env 1, ветка
+ci/client-updates, compose.truenas.yaml. CI 39296815640 success; deploy 59 success.
+22 running, два init exit 0, HTTP/auth/frontend proxy/gRPC проверены.
+Порты на loopback NAS; ожидается локальный IP для LAN. Auto-update/webhook off.
+Подробности и оставшиеся критерии: [STATUS.md](STATUS.md).
+
+Ниже первоначальный план и процедуры, исторические сведения об отсутствии
+стека относятся к инвентаризации до первого запуска.
 
 Согласовано 2026-10-19: рабочий backend находится на другом ПК. На TrueNAS
 создаётся отдельная копия; перенос рабочих volumes пользователь выполнит позже.

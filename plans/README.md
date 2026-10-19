@@ -80,7 +80,7 @@ Windows сохраняют свои короткие owner-level входы в `
 
 | 48 | [`48-xbox-places/PLAN.md`](48-xbox-places/PLAN.md) | Xbox на общей карте, гостевые продажи времени; Sonoff отдельным этапом | `implemented` |
 | 49 | [`49-bonus-program/PLAN.md`](49-bonus-program/PLAN.md) | начисление, оплата игры бонусами и V2-резерв | `in_progress` |
-| 50 | [`50-cicd-client-updates/PLAN.md`](50-cicd-client-updates/PLAN.md) | CI/CD TrueNAS/Dockhand, общий барьер и обновление всех Windows-ПК | `blocked` |
+| 50 | [`50-cicd-client-updates/PLAN.md`](50-cicd-client-updates/PLAN.md) | CI/CD TrueNAS/Dockhand, общий барьер и обновление всех Windows-ПК | `in_progress` |
 
 План 50: watchdog loop/bootstrap реализованы в исходниках; 236 .NET и 5
 packager tests прошли на Linux. CD executor/mirror, публикация и Windows pilot

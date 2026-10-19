@@ -2,7 +2,7 @@
 
 Текущий итог: [STATUS.md](STATUS.md). Контракт протокола: [PROTOCOL.md](PROTOCOL.md).
 
-Дата: 2026-10-19. Статус: `blocked` — локальная реализация готова, ожидаются публикация и native pilot.
+Дата: 2026-10-19. Статус: `in_progress` — CI и первый запуск NAS выполнены; Windows pilot ожидается 2026-10-20.
 Владельцы: backend, win-client, инфраструктура; frontend — только отображение состояния.
 Связи: [portable delivery](../27-portable-deployment/PLAN.md), [V2](../46-v2-offline-event-platform/PLAN.md).
 

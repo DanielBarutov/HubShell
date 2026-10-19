@@ -685,3 +685,19 @@ PostgresSessionTransferRepository. При отказе target session/offer не
 Общий scoped backend набор — 69 passed (11.54s). Runtime C# после publish не менялся;
 размеры/хеши текущих release files повторно совпали с BUILD-INFO, INI с backup.
 Оставшиеся незакрытые критерии и ограничения сведены в плане 50/AUDIT.md.
+
+
+### 2026-10-19 — план 50: live CI и Dockhand
+
+- GitHub Actions run 39296815640 success, commit e300b4b2e03092fdb195ecfd3f7212cd513b82d1.
+- Signed client/server manifests, SHA256SUMS, archive entries/hash проверены после download.
+- Три GHCR images anonymous HEAD 200; backend anonymous pull на NAS выполнен;
+  полный Dockhand deploy 59 success получил все images и создал 24 контейнера.
+- 22 running/restarts 0, migration и topics exit 0. HTTP ready/live 200,
+  operator login 200, workstations=[], current deployment=null; frontend proxy ready;
+  настоящий SystemService.GetHealth: status ok, service gameclub-backend.
+- Kafka consumers получили partitions, Dramatiq workers выполняют периодические jobs.
+- release/ обновлён из CI, server.ini сохранён; HubShell.zip только HubShell.exe,
+  46550584 bytes, Setup ZIP 76326753 bytes; полный provenance в BUILD-INFO.json.
+- Не проверены native Windows, браузер, полный CD server-stage/cron и Windows rollout.
+  Это отдельная пустая копия; рабочие volumes и ПК не переключались.
