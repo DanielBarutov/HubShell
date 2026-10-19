@@ -35,7 +35,6 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
-      GAMECLUB_POSTGRES_DSN: postgresql+asyncpg://postgres:ci-test-only@127.0.0.1:5432/postgres
       GAMECLUB_TEST_POSTGRES_DSN: postgresql+asyncpg://postgres:ci-test-only@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -51,7 +50,7 @@ jobs:
         run: |
           uv sync --directory ./backend --frozen
           uv run --directory ./backend python scripts/generate_proto.py
-          uv run --directory ./backend alembic upgrade head
+          GAMECLUB_POSTGRES_DSN="$GAMECLUB_TEST_POSTGRES_DSN" uv run --directory ./backend alembic upgrade head
           uv run --directory ./backend pytest tests/test_client_update_domain.py tests/test_client_update_postgres.py tests/test_client_update_http_postgres.py tests/test_client_update_agent_e2e.py tests/test_session_admission_postgres.py tests/test_session_transfer.py tests/test_modules_reservations_sessions.py tests/test_api_reservations_sessions_billing.py -q
   build:
     needs: [backend, frontend]
