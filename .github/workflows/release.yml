@@ -1,6 +1,7 @@
 name: Build HubShell release
 on:
   push:
+    branches: ['ci/client-updates']
     tags: ['v*']
   workflow_dispatch:
 permissions:
