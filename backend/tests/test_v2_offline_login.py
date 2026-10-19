@@ -789,3 +789,88 @@ async def test_new_package_after_login_is_signed_and_purchased_with_debt_once() 
     assert receipt.payload.tariffs[0].package_price_cents == 100
     assert repeated.purchased_package.payload.snapshot_id == receipt.payload.snapshot_id
     assert (await clients.get(client.id)).balance_cents == -600
+
+
+async def test_night_activation_and_refresh_return_signed_session_bound_package() -> None:
+    service, sessions, portal, clients, client = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, minute_rates=(100,)
+    )
+    now = datetime.datetime(2026, 10, 19, 23, tzinfo=datetime.UTC)
+
+    class FixedClock:
+        def now(self) -> datetime.datetime:
+            return now
+
+    for component in (service, portal, portal._tariffs, portal._entitlements):
+        component._clock = FixedClock()
+    tariff = await portal._tariffs.create_tariff(
+        "Night",
+        None,
+        660,
+        500,
+        now - datetime.timedelta(days=1),
+        None,
+        time_restricted=True,
+        sale_window_start_minute=22 * 60,
+        sale_window_end_minute=8 * 60,
+        usage_window_start_minute=22 * 60,
+        usage_window_end_minute=8 * 60,
+        window_timezone="Etc/UTC",
+    )
+    await clients.top_up(client.id, 1000, 0, "Opening", "owner", "night-opening")
+    package = await portal._entitlements.purchase(client.id, tariff.id, "test", "night-package")
+    login = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="night-login",
+    )
+    initial = next(item for item in login.payload.packages if item.package_id == str(package.id))
+    assert initial.usage_window_start_minute == 1320
+    assert initial.usage_window_end_minute == 480
+    assert initial.window_timezone == "Etc/UTC"
+    server = grpc.aio.server()
+    offline_session_service_pb2_grpc.add_OfflineSessionServiceServicer_to_server(
+        OfflineSessionGrpcService(service, service._token_service), server
+    )
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+    channel = grpc.aio.insecure_channel(f"127.0.0.1:{port}")
+    metadata = (("authorization", f"Bearer {login.portal_access_token}"),)
+    try:
+        stub = offline_session_service_pb2_grpc.OfflineSessionServiceStub(channel)
+        response = await stub.ActivateEntitlement(
+            offline_session_service_pb2.ActivateOfflineEntitlementRequest(
+                device_id="v2-device-01", entitlement_id=str(package.id)
+            ),
+            metadata=metadata,
+        )
+        receipt = response.active_package
+        assert receipt.payload.session_id == login.payload.session_id
+        assert receipt.payload.client_id == str(client.id)
+        assert receipt.payload.device_id == "v2-device-01"
+        assert len(receipt.payload.packages) == 1
+        active = receipt.payload.packages[0]
+        assert active.package_id == str(package.id)
+        assert active.remaining_minutes == 660
+        assert active.usage_window_closes_at.ToDatetime(tzinfo=datetime.UTC) == datetime.datetime(
+            2026, 10, 20, 8, tzinfo=datetime.UTC
+        )
+        public_key = Ed25519PublicKey.from_public_bytes(
+            base64.b64decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+        )
+        public_key.verify(receipt.signature, serialize_snapshot_payload(receipt.payload))
+        refreshed = await stub.GetPortalSnapshot(
+            offline_session_service_pb2.GetOfflinePortalSnapshotRequest(device_id="v2-device-01"),
+            metadata=metadata,
+        )
+        assert refreshed.active_package.payload.snapshot_id == receipt.payload.snapshot_id
+        assert (await clients.get(client.id)).balance_cents == 500
+        await sessions.stop(uuid.UUID(login.payload.session_id))
+        assert (
+            await service.get_active_package_snapshot(client_id=client.id, device_id="v2-device-01")
+            is None
+        )
+    finally:
+        await channel.close()
+        await server.stop(None)

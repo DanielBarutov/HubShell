@@ -1,5 +1,34 @@
 # Verification matrix
 
+### 2026-10-19 — ночная активация и расход пакетов V2
+
+- Постоянный `NightActivationMustSwitchLocalMinuteSource` до исправления
+  падал: ожидался `package_consumed`, фактически `per_minute_debit`. После
+  исправления проходят оба варианта: обычный ответ и потеря ответа с refresh.
+- `dotnet test win-client/tests/GameClub.Client.Tests.csproj -p:Platform=x64`:
+  **200 passed**. Включены signed purchase/activation, отсутствие повторной
+  оплаты, сохранение pending facts/checkpoint, запрет увеличения остатка,
+  midnight/timezone/start/end, закрытая очередь и stop/burn при закрытии окна.
+  Restart проверен повторным чтением реального JSON-файла Linux dev-store;
+  это не проверка Windows DPAPI. Есть прежнее предупреждение xUnit1031
+  в AvaloniaHostSmokeTests.cs:289.
+- `uv run --directory ./backend pytest tests/test_v2_snapshot_factory.py
+  tests/test_v2_snapshot_ed25519.py tests/test_v2_offline_login.py
+  tests/test_device_enrollment_portal.py -q`: **35 passed**. Новый gRPC-тест
+  использует настоящий localhost transport и Ed25519-подпись с in-memory
+  repository; проверяет срок окна и неизменный баланс при activation/refresh.
+- Windows host `dotnet build win-client/src/GameClub.Client.Windows/GameClub.Client.Windows.csproj
+  --configuration Release -p:Platform=x64`: **0 warnings/errors**, сборка на Linux.
+- Ruff check/format для изменённых Python-файлов и `git diff --check` проходят.
+
+Не проверены production-данные, PostgreSQL/Kafka доставка новых фактов,
+ручная Avalonia-покупка на игровом ПК и native Windows/DPAPI. Рабочие сессии,
+старые списания и pending facts не изменялись; автоматического возврата денег
+нет. Сначала обновить backend-gRPC, затем клиент, после чего проверить на
+Linux developer host реальную покупку/активацию, движение минут пакета и
+неизменный баланс, затем доставку фактов серверу.
+
+
 ### 2026-10-18 — план V2-переноса клиента/гостя
 
 Исследованы исходники и прежние требования; составлен

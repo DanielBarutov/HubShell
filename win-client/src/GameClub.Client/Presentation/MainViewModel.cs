@@ -463,7 +463,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 return "∞";
             }
             long? minutes = _activeV2Ledger is not null
-                ? V2LocalLedgerEngine.RemainingMinutes(_activeV2Ledger)
+                ? V2LocalLedgerEngine.RemainingMinutes(_activeV2Ledger, _clock())
                 : _sessionTimeProjection.GetRemainingMinutes(_clock());
             return minutes is long value
                 ? $"{Math.Max(0, value) / 60:00}:{Math.Max(0, value) % 60:00}"
@@ -496,7 +496,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             ? $"Использовано {_activeSession.Meter.BilledMinutes} мин"
             : "Время обновляется сервером";
     public string CurrentSessionModeSummary => _activeV2Ledger is not null
-        ? V2LocalLedgerEngine.CurrentSource(_activeV2Ledger) switch
+        ? V2LocalLedgerEngine.CurrentSource(_activeV2Ledger, _clock()) switch
         {
             V2TimeSource.LoginGrant => "Бесплатное время входа",
             V2TimeSource.Package => "Пакет времени",
@@ -1257,7 +1257,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 {
                     SetPortalSnapshot(_portalSnapshot is null
                         ? await ResumeV2PortalSnapshotAsync(_lifetime.Token)
-                        : await _v2ClientPortal.RefreshAsync(DeviceId, cancellationToken: _lifetime.Token));
+                        : await _v2ClientPortal.RefreshAsync(DeviceId, cancellationToken: _lifetime.Token, signatureVerifier: _v2SignatureVerifier));
                 }
                 catch (RpcException error) when (error.StatusCode == StatusCode.Unauthenticated)
                 {
@@ -1277,6 +1277,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 return;
             }
             await RetryPendingV2PackagePurchaseAsync(_lifetime.Token);
+            await ApplyPortalActivePackageAsync();
             if (_activeSession is not null && _activeSession.ActivePackage is null)
             {
                 await ActivateQueuedPortalEntitlementQuietlyAsync();
@@ -1382,7 +1383,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             return _v2ClientPortal is null
                 ? Task.FromException<ClientPortalSnapshot>(
                     new InvalidOperationException("Client portal transport is not configured."))
-                : _v2ClientPortal.RefreshAsync(deviceId, cancellationToken: cancellationToken);
+                : _v2ClientPortal.RefreshAsync(deviceId, cancellationToken: cancellationToken, signatureVerifier: _v2SignatureVerifier);
         }
         return _clientPortal.RefreshAsync(deviceId, cancellationToken: cancellationToken);
     }
@@ -1401,7 +1402,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             DeviceId,
             _activeV2Ledger.SessionId.ToString(),
             _activeV2Ledger.ClientId.ToString(),
-            cancellationToken);
+            cancellationToken, signatureVerifier: _v2SignatureVerifier);
     }
 
     private Task<ClientPortalSnapshot> ActivatePortalEntitlementAsync(
@@ -1414,7 +1415,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             return _v2ClientPortal is null
                 ? Task.FromException<ClientPortalSnapshot>(
                     new InvalidOperationException("Client portal transport is not configured."))
-                : _v2ClientPortal.ActivateEntitlementAsync(deviceId, entitlementId, cancellationToken);
+                : _v2ClientPortal.ActivateEntitlementAsync(deviceId, entitlementId, cancellationToken, signatureVerifier: _v2SignatureVerifier);
         }
         return _clientPortal.ActivateEntitlementAsync(deviceId, entitlementId, cancellationToken);
     }
@@ -1438,6 +1439,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             deviceId, tariffId, idempotencyKey, cancellationToken);
     }
 
+    private async Task ApplyPortalActivePackageAsync(bool required = false)
+    {
+        if (_activeV2Ledger is null || _v2Ledger is null) return;
+        if (_portalSnapshot?.ActivePackage is not { } package)
+        {
+            if (required) throw new InvalidOperationException("Server did not confirm the active package for this ledger");
+            return;
+        }
+        if (await _v2Ledger.ReadPendingPortalPackagePurchaseAsync(_lifetime.Token) is not null) return;
+        var transition = await _v2Ledger.ApplyActivePackageAsync(package, _lifetime.Token);
+        _activeV2Ledger = transition.Ledger;
+        PublishSessionState();
+    }
+
     private async Task ActivateQueuedPortalEntitlementQuietlyAsync()
     {
         var queued = _portalSnapshot?.Entitlements
@@ -1454,6 +1469,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         try
         {
             SetPortalSnapshot(await ActivatePortalEntitlementAsync(DeviceId, queued.Id, _lifetime.Token));
+            await ApplyPortalActivePackageAsync(required: true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -1479,6 +1495,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         try
         {
             SetPortalSnapshot(await ActivatePortalEntitlementAsync(DeviceId, entitlement.Id, _lifetime.Token));
+            await ApplyPortalActivePackageAsync(required: true);
             await RefreshActiveSessionSnapshotQuietlyAsync();
             _portalMessage = string.Empty;
             OnPropertyChanged(nameof(AccessMessage));
@@ -2752,20 +2769,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         return $"{tariff.Name}{rate}{free}";
     }
 
-    private static string V2ActiveTimeSummary(V2LocalSessionLedger ledger) =>
+    private string V2ActiveTimeSummary(V2LocalSessionLedger ledger) =>
         ledger.Status == V2LocalSessionStatus.Active
             ? V2LocalLedgerEngine.HasFreePerMinuteTime(ledger)
                 ? "Бесплатно"
-                : $"Осталось {FormatDuration(V2LocalLedgerEngine.RemainingMinutes(ledger))}"
+                : $"Осталось {FormatDuration(V2LocalLedgerEngine.RemainingMinutes(ledger, _clock()))}"
             : "Сессия завершена";
 
-    private static string V2TariffSummary(V2LocalSessionLedger ledger) =>
-        V2LocalLedgerEngine.CurrentSource(ledger) switch
+    private string V2TariffSummary(V2LocalSessionLedger ledger) =>
+        V2LocalLedgerEngine.CurrentSource(ledger, _clock()) switch
         {
             V2TimeSource.LoginGrant =>
                 $"Бесплатные минуты · осталось {FormatDuration(ledger.LoginGrantRemainingMinutes)}",
-            V2TimeSource.Package => ledger.Packages.FirstOrDefault(item =>
-                item.Status is V2LocalPackageStatus.Active or V2LocalPackageStatus.Queued)
+            V2TimeSource.Package => (ledger.Packages.FirstOrDefault(item => item.Status == V2LocalPackageStatus.Active)
+                ?? ledger.Packages.FirstOrDefault(item => item.Status == V2LocalPackageStatus.Queued
+                    && item.RemainingMinutes > 0 && item.IsAvailableAt(_clock())
+                    && V2LocalSessionLedger.IsZoneCompatible(item.ZoneId, ledger.ZoneId)))
                 is { } package
                     ? $"Пакет «{V2PackageName(ledger, package)}» · {package.RemainingMinutes} мин"
                     : "Пакет завершён",

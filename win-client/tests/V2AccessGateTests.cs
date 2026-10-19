@@ -10,6 +10,33 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2AccessGateTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NightActivationMustSwitchLocalMinuteSource(bool loseActivationReply)
+    {
+        var now = DateTimeOffset.Parse("2026-10-19T23:00:00Z");
+        var saved = CreateLedger(loginGrantMinutes: 0,
+            tariffs: [new("minute", "Minute", null, 0, 0, 100, false, true)]);
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        var portal = new MinuteBonusPortal(saved) { NightProbe = true, LoseActivationReply = loseActivationReply };
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: saved.DeviceId,
+            clock: () => now,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator), v2Ledger: coordinator,
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier(), v2ClientPortal: portal);
+        await vm.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+        await vm.RefreshPortalAsync();
+        await vm.ActivateFirstPortalEntitlementAsync();
+        Assert.True(portal.NightActivated);
+        if (loseActivationReply) await vm.RefreshPortalAsync();
+        var transition = await coordinator.ConsumeOneMinuteAsync(Guid.NewGuid(), now);
+        Assert.Equal("package_consumed", Assert.Single(transition.OutboxFacts).EventType);
+        Assert.Equal(saved.BalanceCents, transition.Ledger.BalanceCents);
+        Assert.Equal(659, Assert.Single(transition.Ledger.Packages).RemainingMinutes);
+    }
+
     [Fact]
     public async Task MinuteBonusToggleCancelsLostEnableAndRefreshNeverReenablesIt()
     {
@@ -77,15 +104,30 @@ public sealed class V2AccessGateTests
 
     private sealed class MinuteBonusPortal(V2LocalSessionLedger ledger) : IV2ClientPortalGateway
     {
+        public bool NightProbe { get; set; }
+        public bool NightActivated { get; private set; }
+        public bool LoseActivationReply { get; set; }
         public int EnableCalls { get; private set; }
         public long AvailableBonusCents { get; set; }
         public bool LoseFirstResponse { get; set; } = true;
         private int _cancelCalls;
         private ClientPortalSnapshot Snapshot() => new(ledger.ClientId.ToString(), "Test", "", ledger.BalanceCents,
-            0, 0, [], [], [], [], [], [], [], BonusWallet: new(AvailableBonusCents, AvailableBonusCents, 0, 0));
-        public Task<ClientPortalSnapshot> ResumePortalAsync(string deviceId, string sessionId, string clientId, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
-        public Task<ClientPortalSnapshot> RefreshAsync(string deviceId, int limit = 50, CancellationToken cancellationToken = default) => Task.FromResult(Snapshot());
-        public Task<ClientPortalSnapshot> ActivateEntitlementAsync(string deviceId, string entitlementId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            0, 0, [], [], [], [], NightProbe ? [new("night-package", "night", null, NightActivated ? "active" : "queued", 660, 660, 10000, 1, "Night", "2026-10-19T22:00:00Z", null, true, 0, 1439, 1320, 480, "Etc/UTC", "registered")] : [], [], [], BonusWallet: new(AvailableBonusCents, AvailableBonusCents, 0, 0),
+            ActivePackage: NightActivated ? ledger with
+            {
+                SnapshotId = Guid.Parse("00000000-0000-0000-0000-000000000099"),
+                Packages = [new("night-package", "night", null, 660, V2LocalPackageStatus.Active,
+                    1320, 480, "Etc/UTC", DateTimeOffset.Parse("2026-10-20T08:00:00Z"))],
+            } : null);
+        public Task<ClientPortalSnapshot> ResumePortalAsync(string deviceId, string sessionId, string clientId, CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null) => Task.FromResult(Snapshot());
+        public Task<ClientPortalSnapshot> RefreshAsync(string deviceId, int limit = 50, CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null) => Task.FromResult(Snapshot());
+        public Task<ClientPortalSnapshot> ActivateEntitlementAsync(string deviceId, string entitlementId, CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null)
+        {
+            NightActivated = true;
+            return LoseActivationReply
+                ? Task.FromException<ClientPortalSnapshot>(new RpcException(new Status(StatusCode.Unavailable, "lost activation reply")))
+                : Task.FromResult(Snapshot());
+        }
         public Task<ClientPortalSnapshot> PurchaseEntitlementAsync(string deviceId, string tariffId, string idempotencyKey, IOfflineSnapshotSignatureVerifier signatureVerifier, CancellationToken cancellationToken = default, BonusPurchaseConfirmation? bonusConfirmation = null) => throw new NotSupportedException();
         public Task<BonusGameQuote> QuoteEntitlementAsync(string deviceId, string tariffId, bool useBonus, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<BonusGameQuote> QuoteMinuteBonusAsync(V2MinuteBonusRequest request, CancellationToken cancellationToken = default) => Task.FromResult(new BonusGameQuote(100, 20, 80, 4, 500, 2000, 1000, 0, true, true));
@@ -786,19 +828,19 @@ public sealed class V2AccessGateTests
             string deviceId,
             string sessionId,
             string clientId,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null) =>
             Task.FromResult(CreateSnapshot());
 
         public Task<ClientPortalSnapshot> RefreshAsync(
             string deviceId,
             int limit = 50,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null) =>
             Task.FromResult(CreateSnapshot());
 
         public Task<ClientPortalSnapshot> ActivateEntitlementAsync(
             string deviceId,
             string entitlementId,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null) =>
             throw new NotSupportedException();
 
         public Task<ClientPortalSnapshot> PurchaseEntitlementAsync(

@@ -228,7 +228,7 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
         string deviceId,
         string sessionId,
         string clientId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null)
     {
         var metadata = await CreateDeviceMetadataAsync(cancellationToken);
         var response = await _offlineSessionClient.ResumePortalAsync(
@@ -252,7 +252,7 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
             "v2.portal",
             $"resume accepted session_id={sessionId} client_id={clientId} " +
             $"token_expires_in={response.PortalAccessExpiresIn}");
-        return await RefreshAsync(deviceId, cancellationToken: cancellationToken);
+        return await RefreshAsync(deviceId, cancellationToken: cancellationToken, signatureVerifier: signatureVerifier);
     }
 
     public async Task StopSessionAsync(
@@ -339,7 +339,7 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
     public async Task<ClientPortalSnapshot> RefreshAsync(
         string deviceId,
         int limit = 50,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null)
     {
         var response = await _offlineSessionClient.GetPortalSnapshotAsync(
             new GameClub.Client.Contracts.Events.V2.GetOfflinePortalSnapshotRequest
@@ -350,13 +350,18 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
             headers: CreateClientPortalMetadata(),
             deadline: DateTime.UtcNow.AddSeconds(10),
             cancellationToken: cancellationToken);
-        return V2PortalSnapshotMapper.ToDomain(response);
+        return V2PortalSnapshotMapper.ToDomain(response) with
+        {
+            ActivePackage = response.ActivePackage is null ? null
+                : V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(response.ActivePackage,
+                    signatureVerifier ?? throw new InvalidOperationException("Active package signature verifier is required")),
+        };
     }
 
     public async Task<ClientPortalSnapshot> ActivateEntitlementAsync(
         string deviceId,
         string entitlementId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null)
     {
         var response = await _offlineSessionClient.ActivateEntitlementAsync(
             new GameClub.Client.Contracts.Events.V2.ActivateOfflineEntitlementRequest
@@ -367,7 +372,12 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
             headers: CreateClientPortalMetadata(),
             deadline: DateTime.UtcNow.AddSeconds(10),
             cancellationToken: cancellationToken);
-        return V2PortalSnapshotMapper.ToDomain(response);
+        return V2PortalSnapshotMapper.ToDomain(response) with
+        {
+            ActivePackage = response.ActivePackage is null ? null
+                : V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(response.ActivePackage,
+                    signatureVerifier ?? throw new InvalidOperationException("Active package signature verifier is required")),
+        };
     }
 
     public async Task<ClientPortalSnapshot> PurchaseEntitlementAsync(
@@ -458,6 +468,12 @@ public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGatew
         if (request.LastPayloadHash is not null) message.LastPayloadHash = request.LastPayloadHash;
         return message;
     }
+
+    Task<ClientPortalSnapshot> IClientPortalGateway.RefreshAsync(
+        string deviceId, int limit, CancellationToken cancellationToken) => Unsupported<ClientPortalSnapshot>();
+
+    Task<ClientPortalSnapshot> IClientPortalGateway.ActivateEntitlementAsync(
+        string deviceId, string entitlementId, CancellationToken cancellationToken) => Unsupported<ClientPortalSnapshot>();
 
     Task<ClientPortalSnapshot> IClientPortalGateway.PurchaseEntitlementAsync(
         string deviceId,

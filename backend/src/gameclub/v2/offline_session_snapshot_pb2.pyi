@@ -24,18 +24,26 @@ OFFLINE_PACKAGE_STATUS_EXHAUSTED: OfflinePackageStatus
 OFFLINE_PACKAGE_STATUS_BURNED: OfflinePackageStatus
 
 class OfflinePackageSnapshot(_message.Message):
-    __slots__ = ("package_id", "tariff_id", "zone_id", "remaining_minutes", "status")
+    __slots__ = ("package_id", "tariff_id", "zone_id", "remaining_minutes", "status", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "usage_window_closes_at")
     PACKAGE_ID_FIELD_NUMBER: _ClassVar[int]
     TARIFF_ID_FIELD_NUMBER: _ClassVar[int]
     ZONE_ID_FIELD_NUMBER: _ClassVar[int]
     REMAINING_MINUTES_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_START_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_END_MINUTE_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    USAGE_WINDOW_CLOSES_AT_FIELD_NUMBER: _ClassVar[int]
     package_id: str
     tariff_id: str
     zone_id: str
     remaining_minutes: int
     status: OfflinePackageStatus
-    def __init__(self, package_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., remaining_minutes: _Optional[int] = ..., status: _Optional[_Union[OfflinePackageStatus, str]] = ...) -> None: ...
+    usage_window_start_minute: int
+    usage_window_end_minute: int
+    window_timezone: str
+    usage_window_closes_at: _timestamp_pb2.Timestamp
+    def __init__(self, package_id: _Optional[str] = ..., tariff_id: _Optional[str] = ..., zone_id: _Optional[str] = ..., remaining_minutes: _Optional[int] = ..., status: _Optional[_Union[OfflinePackageStatus, str]] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., usage_window_closes_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class OfflineTariffSnapshot(_message.Message):
     __slots__ = ("tariff_id", "name", "zone_id", "package_minutes", "package_price_cents", "per_minute_price_cents", "is_purchasable", "usage_window_start_minute", "usage_window_end_minute", "window_timezone", "is_per_minute")

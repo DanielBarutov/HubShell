@@ -21,6 +21,7 @@ from gameclub_backend.modules.clients.application.portal import (
     ClientPortalService,
     ClientPortalSnapshot,
 )
+from gameclub_backend.modules.entitlements.domain import EntitlementStatus
 from gameclub_backend.modules.eventing_v2.application.bonus_budget import (
     BonusBudgetRequest,
     BonusBudgetService,
@@ -306,6 +307,48 @@ class V2OfflineLoginService:
             device_id,
             max(1, min(limit, 100)),
         )
+
+    async def get_active_package_snapshot(
+        self, *, client_id: uuid.UUID, device_id: str
+    ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot | None:
+        workstation = await self._workstations.get_by_device_id(device_id)
+        sessions = [
+            item
+            for item in await self._sessions.list_for_client(client_id)
+            if item.status is SessionStatus.ACTIVE
+            and item.source == "local_ledger"
+            and item.workstation_id == workstation.id
+        ]
+        if len(sessions) != 1 or not await self._snapshot_issues.has_active_lease(
+            sessions[0].id, client_id, device_id
+        ):
+            return None
+        source = await self._client_portal.v2_offline_snapshot_for_device(client_id, device_id)
+        active = [item for item in source.entitlements if item.status is EntitlementStatus.ACTIVE]
+        if not active:
+            return None
+        if len(active) != 1:
+            raise ApplicationError(ErrorCode.CONFLICT, "Multiple active packages")
+        package = active[0]
+        if not package.is_compatible(workstation.group_id):
+            raise ApplicationError(ErrorCode.CONFLICT, "Active package is incompatible with device")
+        payload = V2OfflineSnapshotFactory.create_payload(
+            V2OfflineSnapshotInput(
+                snapshot_id=uuid.uuid5(sessions[0].id, f"active-package:{package.id}"),
+                snapshot_version=1,
+                issued_at=self._clock.now(),
+                client=source.client,
+                session=sessions[0],
+                device_id=device_id,
+                workstation_zone_id=workstation.group_id,
+                debt_limit_cents=0,
+                login_grant_remaining_minutes=0,
+                entitlements=(package,),
+                tariffs=(),
+                policy_version=self._policy_version,
+            )
+        )
+        return sign_offline_session_snapshot(payload, self._signing_key_id, self._signer)
 
     async def purchase_entitlement(
         self,

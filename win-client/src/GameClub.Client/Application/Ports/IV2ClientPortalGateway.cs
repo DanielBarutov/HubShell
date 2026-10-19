@@ -16,17 +16,17 @@ public interface IV2ClientPortalGateway
         string deviceId,
         string sessionId,
         string clientId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null);
 
     Task<ClientPortalSnapshot> RefreshAsync(
         string deviceId,
         int limit = 50,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null);
 
     Task<ClientPortalSnapshot> ActivateEntitlementAsync(
         string deviceId,
         string entitlementId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, IOfflineSnapshotSignatureVerifier? signatureVerifier = null);
 
     Task<ClientPortalSnapshot> PurchaseEntitlementAsync(
         string deviceId,

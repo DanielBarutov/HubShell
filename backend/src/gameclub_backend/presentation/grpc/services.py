@@ -1088,7 +1088,14 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
                 device_id=request.device_id,
                 limit=request.limit or 50,
             )
-            return to_v2_portal_snapshot_proto(snapshot)
+            response = to_v2_portal_snapshot_proto(snapshot)
+            active_package = await self._service.get_active_package_snapshot(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+            )
+            if active_package is not None:
+                response.active_package.CopyFrom(active_package)
+            return response
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:
@@ -1115,7 +1122,14 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
                 device_id=request.device_id,
                 entitlement_id=parse_uuid(request.entitlement_id, "entitlement_id"),
             )
-            return to_v2_portal_snapshot_proto(snapshot)
+            response = to_v2_portal_snapshot_proto(snapshot)
+            active_package = await self._service.get_active_package_snapshot(
+                client_id=parse_uuid(principal.subject_id, "client_id"),
+                device_id=request.device_id,
+            )
+            if active_package is not None:
+                response.active_package.CopyFrom(active_package)
+            return response
         except ValueError as error:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except ApplicationError as error:

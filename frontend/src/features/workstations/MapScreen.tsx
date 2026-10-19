@@ -87,6 +87,24 @@ export function MapView({
     gridSetting("gameshell.map-grid-rows", 4, 12),
   );
   const [contextPcId, setContextPcId] = useState<string | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (contextPcId === null) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !contextMenuRef.current?.contains(event.target)) {
+        setContextPcId(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextPcId(null);
+    };
+    document.addEventListener("pointerdown", closeOutside, true);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside, true);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextPcId]);
   const [sessionTooltip, setSessionTooltip] = useState<{
     workstationId: string;
     left: number;
@@ -420,6 +438,7 @@ export function MapView({
               <div
                 className="map-context-menu menu menu-sm absolute left-2 top-10 z-20 w-48 rounded-xl border border-primary/25! bg-base-100! p-2 shadow-2xl"
                 role="menu"
+                ref={contextMenuRef}
                 onClick={(event) => event.stopPropagation()}
               >
                 <strong>{placed.pc.name}</strong>
