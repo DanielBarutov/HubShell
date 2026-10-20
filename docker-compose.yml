@@ -426,7 +426,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
         VITE_GAMECLUB_DATA_MODE: ${VITE_GAMECLUB_DATA_MODE:-live}
     ports:
-      - "127.0.0.1:${GAMECLUB_FRONTEND_PORT:-3100}:80"
+      - "0.0.0.0:${GAMECLUB_FRONTEND_PORT:-3100}:80"
     depends_on:
       backend-http:
         condition: service_healthy

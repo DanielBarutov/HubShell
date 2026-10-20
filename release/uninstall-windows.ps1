@@ -46,8 +46,10 @@ $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $removeMatchingWatchdog = $false
 $watchdog = Get-CimInstance -ClassName Win32_Service -Filter "Name='HubShell.Watchdog'"
 if ($null -ne $watchdog) {
-    $expectedCommand = '"{0}" --watchdog-service' -f (Join-Path $resolvedInstallPath "HubShell.exe")
-    if ([string]::Equals($watchdog.PathName, $expectedCommand, [StringComparison]::OrdinalIgnoreCase)) {
+    $legacyCommand = '"{0}" --watchdog-service' -f (Join-Path $resolvedInstallPath "HubShell.exe")
+    $serviceCommand = '"{0}"' -f (Join-Path $resolvedInstallPath "HubShell.Watchdog.exe")
+    if ([string]::Equals($watchdog.PathName, $legacyCommand, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($watchdog.PathName, $serviceCommand, [StringComparison]::OrdinalIgnoreCase)) {
         if (-not $RemoveWatchdogService) { throw "Для этой установки требуется -RemoveWatchdogService." }
         $removeMatchingWatchdog = $true
     }
