@@ -415,6 +415,13 @@ services:
     ports:
       - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_FRONTEND_PORT:-3100}:80"
 
+networks:
+  default:
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   gameclub-grafana-data:
