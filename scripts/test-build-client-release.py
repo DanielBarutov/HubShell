@@ -98,6 +98,10 @@ class ReleasePackagingTests(unittest.TestCase):
         self.build()
         with zipfile.ZipFile(self.output / "HubShell.Setup.zip") as archive:
             self.assertEqual(
+                archive.read("README.txt"),
+                (Path(__file__).resolve().parents[1] / "win-client" / "INSTALL.txt").read_bytes(),
+            )
+            self.assertEqual(
                 set(archive.namelist()),
                 {
                     "HubShell.exe",
@@ -107,6 +111,7 @@ class ReleasePackagingTests(unittest.TestCase):
                     "start-service.cmd",
                     "uninstall-windows.ps1",
                     "server.ini.example",
+                    "README.txt",
                 },
             )
             self.assertEqual(archive.read("HubShell.Watchdog.exe"), self.watchdog.read_bytes())

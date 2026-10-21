@@ -42,4 +42,16 @@ ref/
 
 
 /release/HubShell.Watchdog.zip
-/release/HubShell.Setup.zip
+
+# Generated CI release bundle metadata and standalone service.
+/release/HubShell.Watchdog.exe
+/release/BUILD-INFO.json
+/release/SHA256SUMS
+/release/commit.txt
+/release/images.env
+/release/release-public-key.pem
+/release/release.json
+/release/release.json.sig
+/release/server-release.json
+/release/server-release.json.sig
+/release/server.ini.example

@@ -59,6 +59,7 @@ def build_release(
         )
     )
     setup_files.append((scripts / "server.ini.example", "server.ini.example"))
+    setup_files.append((scripts / "INSTALL.txt", "README.txt"))
     packages = [
         ("HubShell.zip", [(client, "HubShell.exe")]),
         ("HubShell.Watchdog.zip", [(watchdog, "HubShell.Watchdog.exe")]),

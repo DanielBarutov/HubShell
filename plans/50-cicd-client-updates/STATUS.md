@@ -162,3 +162,10 @@ checkout-файлы перемещены в backups Dockhand. Тестовые �
 без unknown-tag ошибок (preflight error findings=[]); visual UI не проверен.
 Локальная папка release обновлена из того же CI, server.ini сохранён.
 Не проверены подключение пользовательских volumes, Windows pilot и full CD cron.
+
+### Инструкция Windows-комплекта
+
+win-client/INSTALL.txt — короткая инструкция двух EXE, остановки службы перед
+заменой, сохранения INI/идентичности и start-service.cmd. Packager включает её
+как README.txt в Setup ZIP; локальный архив обновлён без пересборки EXE, checksum
+и BUILD-INFO актуализированы. 5 packaging tests прошли, native Windows не проверен.
