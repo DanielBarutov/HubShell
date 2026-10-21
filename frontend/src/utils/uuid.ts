@@ -1,10 +1,5 @@
 export function generateUUID() {
-  // Если randomUUID доступен (HTTPS/localhost) — используем его
-  if (typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
 
-  // Иначе — генерируем вручную через getRandomValues
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
 
