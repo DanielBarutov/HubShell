@@ -1,13 +1,10 @@
 # Отдельная копия на TrueNAS
 
-Текущий запуск 2026-10-19: Git stack 1 hubshell, env 1, ветка
-ci/client-updates, compose.deploy.yml. CI 39296815640 success; deploy 59 success.
-22 running, два init exit 0, HTTP/auth/frontend proxy/gRPC проверены.
-Порты на loopback NAS; ожидается локальный IP для LAN. Auto-update/webhook off.
-Подробности и оставшиеся критерии: [STATUS.md](STATUS.md).
-
-Ниже первоначальный план и процедуры, исторические сведения об отсутствии
-стека относятся к инвентаризации до первого запуска.
+Текущая конфигурация 2026-10-21: Git stack 1 hubshell, env 1, ветка main,
+compose.deploy.yml. HUBSHELL_BIND_HOST=192.168.0.21. Старые тестовые данные не
+переносятся; пользователь подключит свою клиентскую базу и ПК отдельно.
+Auto-update/webhook выключены до Windows pilot. Сведения о первом запуске
+2026-10-19 ниже являются историей; текущее состояние: [STATUS.md](STATUS.md).
 
 Согласовано 2026-10-19: рабочий backend находится на другом ПК. На TrueNAS
 создаётся отдельная копия; перенос рабочих volumes пользователь выполнит позже.
@@ -34,7 +31,7 @@ GitHub Actions + GHCR и публичные образы согласованы.
   разрешению установки. Полная CD-интеграция ещё не завершена.
   HubShell.Setup.zip — отдельный bootstrap-комплект двух EXE, установщиков и
   server.ini.example. HubShell.zip по-прежнему содержит только HubShell.exe.
-- `compose.deploy.yml`: все сервисы исходного Compose через extends,
+- `compose.deploy.yml`: самостоятельный обычный YAML со всеми сервисами,
   без source build; отдельный project `hubshell` и отдельные именованные тома.
   Относительные observability mounts требуют полного checkout репозитория.
   Backend HTTP получает gameclub-client-releases volume read-only;
@@ -133,8 +130,8 @@ PostgreSQL backup/restore и тесты порядка команд.
 ## Локальный CD CLI
 
 `scripts/deploy-release.py` запускается на самом Docker host: Python 3.11+,
-OpenSSL, Git и Docker Compose 2.24.4+. Он получает host mountpoint тома
-`hubshell_gameclub-client-releases` через docker volume inspect. Удалённый
+OpenSSL, Git и Docker Compose v2+. Он получает host mountpoint зеркала из mount backend-контейнера
+`hubshell-backend-http-1` через docker inspect. Удалённый
 Docker daemon/Docker Desktop без доступа к этому host path здесь не поддерживается.
 Рабочая директория — отдельный checkout HubShell на NAS, не пользовательская
 папка разработки. После проверки подписей CLI fetch/checkout делает detached
@@ -154,6 +151,7 @@ python3 /mnt/POOL/hubshell/checkout/scripts/deploy-release.py \
   --public-key /mnt/POOL/hubshell/secrets/release-public-key.pem \
   --job-root /mnt/POOL/hubshell/cd-jobs \
   --env-file /mnt/POOL/hubshell/secrets/stack.env \
+  --backend http://192.168.0.21:8100 \
   --token-file /mnt/POOL/hubshell/secrets/backend-token.json \
   --dockhand http://127.0.0.1:9000 \
   --dockhand-token-file /mnt/POOL/hubshell/secrets/dockhand-token.json

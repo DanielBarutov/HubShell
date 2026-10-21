@@ -10,13 +10,13 @@
 
 Для запуска всего dev-стека из корня проекта (PostgreSQL, Redis, миграции,
 HTTP, gRPC, worker, scheduler и frontend) используйте [`DOCKER.md`](../DOCKER.md).
-Compose в этой папке оставлен как infra-only вариант для backend-разработки.
+Для infra-only запускайте postgres и redis из compose.local.yml в корне.
 
 ```text
 cd /home/daniel/HubShell
 cp .env.example .env
 export GAMECLUB_DB_PASSWORD='set-a-local-password'
-docker compose up -d
+docker compose -f compose.local.yml up -d postgres redis
 uv sync --project ./backend
 uv run --directory ./backend python scripts/generate_proto.py
 uv run --directory ./backend alembic upgrade head

@@ -142,3 +142,23 @@ volumes не переносятся: hubshell запускается с новы
 с клиентами и ПК пользователь подключит позднее. Старые контейнеры должны быть
 остановлены до запуска нового проекта (общие host ports).
 CI: main/tag builds, PR checks без публикации images. Auto-update парка остаётся off.
+
+## 2026-10-21 — результат смены проекта
+
+main 48fb647, CI 39576497937 success. Подписи client/server manifests,
+commit/hash/ZIP проверены; digest трёх images сохранены в Dockhand.
+Git stack 1 переименован в hubshell, branch main, compose.deploy.yml,
+HUBSHELL_BIND_HOST=192.168.0.21. Все 10 secret vars сохранены.
+Deploy 151 success: 24 контейнера созданы, 22 работают, migration/topics exit 0.
+HTTP страницы и /health/ready через frontend: 200; operator login: 200;
+/api/v1/clients и workstations: 200, пустые; current deployment=null.
+SystemService.GetHealth: ok/gameclub-backend. Имена контейнеров hubshell-*.
+Старые test-контейнеры остановлены и удалены без удаления volumes; старые
+checkout-файлы перемещены в backups Dockhand. Тестовые данные не переносились.
+Новые hubshell_* volumes пустые; пользователь позже подключит собственную БД/ПК.
+Секреты копии сохранены, это не production cutover существующего клуба.
+Оставлены только compose.local.yml и compose.deploy.yml; backend infra-only
+использует первый файл с сервисами postgres redis. Граф Dockhand принимает YAML
+без unknown-tag ошибок (preflight error findings=[]); visual UI не проверен.
+Локальная папка release обновлена из того же CI, server.ini сохранён.
+Не проверены подключение пользовательских volumes, Windows pilot и full CD cron.
