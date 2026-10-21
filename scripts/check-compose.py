@@ -74,20 +74,15 @@ def main() -> None:
         deployed = config["services"][name]
         for key in ("command", "depends_on", "healthcheck", "restart"):
             assert deployed.get(key) == service.get(key), (name, key)
-    migrated = config_for(
+    lan = config_for(
         "compose.deploy.yml",
         {
-            "HUBSHELL_VOLUME_PREFIX": "previous",
-            "HUBSHELL_VOLUMES_EXTERNAL": "true",
             "HUBSHELL_BIND_HOST": "192.168.0.21",
         },
     )
     assert all(
-        v["name"].startswith("previous_") and v["external"] for v in migrated["volumes"].values()
-    )
-    assert all(
         p["host_ip"] == "192.168.0.21"
-        for service in migrated["services"].values()
+        for service in lan["services"].values()
         for p in service.get("ports", [])
     )
     assert config["name"] == "hubshell"
@@ -113,7 +108,7 @@ def main() -> None:
     assert not config["services"]["kafka"].get("ports")
     print(
         "Local/deploy Compose: services, dependencies, digest images, "
-        "ports and retained volumes verified."
+        "ports and named volumes verified."
     )
 
 

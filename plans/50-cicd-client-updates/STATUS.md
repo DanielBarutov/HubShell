@@ -137,7 +137,8 @@ compose.local.yml — полный прежний Linux build-контур (proj
 без extends/!reset/!override, с digest images, закрытыми infra ports и обязательными
 server secrets. Это устраняет неизвестные теги у графа Dockhand.
 CD executor/persist_images используют проект hubshell, зеркало определяется по
-реальному mount backend, а не по угаданному имени volume. При миграции NAS
-HUBSHELL_VOLUME_PREFIX=hubshell-test и HUBSHELL_VOLUMES_EXTERNAL=true сохраняют
-имеющиеся тома. Старые контейнеры должны быть остановлены до запуска нового проекта.
+реальному mount backend, а не по угаданному имени volume. По уточнению пользователя старые тестовые
+volumes не переносятся: hubshell запускается с новыми пустыми volumes. Свои данные
+с клиентами и ПК пользователь подключит позднее. Старые контейнеры должны быть
+остановлены до запуска нового проекта (общие host ports).
 CI: main/tag builds, PR checks без публикации images. Auto-update парка остаётся off.

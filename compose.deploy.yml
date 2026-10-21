@@ -418,32 +418,12 @@ services:
 
 volumes:
   gameclub-grafana-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-grafana-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-kafka-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-kafka-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-loki-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-loki-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-postgres-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-postgres-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-pyroscope-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-pyroscope-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-prometheus-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-prometheus-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-redis-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-redis-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   steam-guest-postgres-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_steam-guest-postgres-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-client-releases:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-client-releases
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
   gameclub-tempo-data:
-    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-tempo-data
-    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
