@@ -1,5 +1,11 @@
 # GameClub / HubShell — сводка проекта
 
+### 2026-10-21 — main и Compose layout (50)
+
+Согласованы main для deploy, проект hubshell и два самостоятельных файла:
+compose.local.yml / compose.deploy.yml. Специальные YAML-теги убраны для графа Dockhand.
+Миграция контейнеров сохраняет старые volumes через explicit external mapping.
+
 ### 2026-10-19 — CI и отдельная копия NAS (50)
 
 Ветка ci/client-updates опубликована, CI 39296815640 success. Dockhand

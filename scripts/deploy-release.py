@@ -137,11 +137,11 @@ def mirror_directory() -> Path:
     result = subprocess.run(
         [
             "docker",
-            "volume",
             "inspect",
-            "hubshell-test_gameclub-client-releases",
+            "hubshell-backend-http-1",
             "--format",
-            "{{.Mountpoint}}",
+            '{{range .Mounts}}{{if eq .Destination "/var/lib/hubshell/client-releases"}}'
+            "{{.Source}}{{end}}{{end}}",
         ],
         check=True,
         capture_output=True,

@@ -1,7 +1,7 @@
 # Отдельная копия на TrueNAS
 
-Текущий запуск 2026-10-19: Git stack 1 hubshell-test, env 1, ветка
-ci/client-updates, compose.truenas.yaml. CI 39296815640 success; deploy 59 success.
+Текущий запуск 2026-10-19: Git stack 1 hubshell, env 1, ветка
+ci/client-updates, compose.deploy.yml. CI 39296815640 success; deploy 59 success.
 22 running, два init exit 0, HTTP/auth/frontend proxy/gRPC проверены.
 Порты на loopback NAS; ожидается локальный IP для LAN. Auto-update/webhook off.
 Подробности и оставшиеся критерии: [STATUS.md](STATUS.md).
@@ -34,8 +34,8 @@ GitHub Actions + GHCR и публичные образы согласованы.
   разрешению установки. Полная CD-интеграция ещё не завершена.
   HubShell.Setup.zip — отдельный bootstrap-комплект двух EXE, установщиков и
   server.ini.example. HubShell.zip по-прежнему содержит только HubShell.exe.
-- `compose.truenas.yaml`: все сервисы исходного Compose через extends,
-  без source build; отдельный project `hubshell-test` и отдельные именованные тома.
+- `compose.deploy.yml`: все сервисы исходного Compose через extends,
+  без source build; отдельный project `hubshell` и отдельные именованные тома.
   Относительные observability mounts требуют полного checkout репозитория.
   Backend HTTP получает gameclub-client-releases volume read-only;
   GAMECLUB_CLIENT_RELEASE_ROOT указывает внутрь этого тома.
@@ -58,16 +58,16 @@ Dockhand 1.0.53, environment 1 `Production`, локальный Docker socket.
 2. После первой сборки переключить три GHCR packages в public (согласовано
    пользователем). GITHUB_TOKEN workflow не делает их public автоматически.
    До этого анонимная загрузка на TrueNAS может не работать; проверить pull.
-3. Создать Git stack `hubshell-test`, environment 1, путь
-   `compose.truenas.yaml`. Отключить auto-update/webhook до реализации барьера.
+3. Создать Git stack `hubshell`, environment 1, путь
+   `compose.deploy.yml`. Отключить auto-update/webhook до реализации барьера.
 4. Указать три HUBSHELL_*_IMAGE из images.env одного выпуска, отдельные
    случайные секреты копии через Dockhand secret storage. Не копировать ключи
    и идентичности рабочих ПК. GAMECLUB_ENVIRONMENT=dev допустим только для
    изолированной пустой копии с её dev operator; перед переносом — отдельный
    production-check текущего config и секретов, не простая смена флага.
 5. По умолчанию порты копии привязаны к loopback TrueNAS. Для доступа из LAN
-   явно задать HUBSHELL_TEST_BIND_HOST приватным адресом TrueNAS. Порты:
-   HUBSHELL_TEST_FRONTEND_PORT=3100, HTTP_PORT=8100, GRPC_PORT=51051,
+   явно задать HUBSHELL_BIND_HOST приватным адресом TrueNAS. Порты:
+   HUBSHELL_FRONTEND_PORT=3100, HTTP_PORT=8100, GRPC_PORT=51051,
    STEAM_GUEST_PORT=8200. Не перенастраивать игровые ПК на копию.
 6. Запустить пустой стенд; проверить миграции, health, API, вход оператора,
    Kafka workers и frontend. Readiness и реальные запросы проверять отдельно:
@@ -77,8 +77,8 @@ Dockhand 1.0.53, environment 1 `Production`, локальный Docker socket.
    Простой запуск новой миграции на перенесённых данных не является проверкой
    совместимости. Никогда не применять down -v.
 
-Локальная проверка структуры без запуска: `python3 scripts/check-truenas-compose.py`.
-Нужен Compose 2.24.4+ для reset/override. CI не заменяет Windows pilot службы.
+Локальная проверка структуры без запуска: `python3 scripts/check-compose.py`.
+Оба файла используют стандартный YAML без reset/override и extends. CI не заменяет Windows pilot службы.
 
 ## Подключение службы на одном PC (проверка Windows ещё требуется)
 
@@ -122,7 +122,7 @@ JSON с публичными metadata. Незавершённая загрузк
 `client_update_cd.py` содержит advancement/report: prepare → серверный этап →
 server-ready → authorize → finish; 409 ждёт, failed не снимает барьер. Это ядро,
 пока не самостоятельный daemon. `server_deployment.py` обновляет только
-application services проекта hubshell-test без обновления infra/down -v:
+application services проекта hubshell без обновления infra/down -v:
 stop writers, backup обеих БД, полное pg_restore во временные БД с их удалением,
 миграция, app-only up --wait, GetHealth через настоящий SystemService и frontend
 smoke. При ошибке backup/migration разрешения GUI не выдаются; автоматического
@@ -134,7 +134,7 @@ PostgreSQL backup/restore и тесты порядка команд.
 
 `scripts/deploy-release.py` запускается на самом Docker host: Python 3.11+,
 OpenSSL, Git и Docker Compose 2.24.4+. Он получает host mountpoint тома
-`hubshell-test_gameclub-client-releases` через docker volume inspect. Удалённый
+`hubshell_gameclub-client-releases` через docker volume inspect. Удалённый
 Docker daemon/Docker Desktop без доступа к этому host path здесь не поддерживается.
 Рабочая директория — отдельный checkout HubShell на NAS, не пользовательская
 папка разработки. После проверки подписей CLI fetch/checkout делает detached

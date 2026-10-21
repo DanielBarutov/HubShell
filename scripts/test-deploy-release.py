@@ -15,6 +15,7 @@ runner = runpy.run_path(str(Path(__file__).with_name("deploy-release.py")))
 run_delivery = runner["run_delivery"]
 select_release = runner["select_release"]
 checkout_release = runner["checkout_release"]
+mirror_directory = runner["mirror_directory"]
 
 
 class FakeBackend:
@@ -189,6 +190,17 @@ class DeployReleaseTests(unittest.TestCase):
         self.assertEqual(
             json.loads((self.job / "active-release.json").read_bytes())["release_id"], "v-next"
         )
+
+    def test_mirror_uses_the_running_backend_mount_instead_of_guessing_volume_name(self):
+        result = subprocess.CompletedProcess([], 0, stdout=str(self.job) + "\n")
+        with patch("subprocess.run", return_value=result) as run:
+            self.assertEqual(mirror_directory(), self.job)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], ["docker", "inspect", "hubshell-backend-http-1"])
+        self.assertIn("/var/lib/hubshell/client-releases", command[-1])
+        with patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, stdout="")):
+            with self.assertRaises(ValueError):
+                mirror_directory()
 
     def test_checkout_fetches_only_signed_commit_from_approved_origin(self):
         calls = []

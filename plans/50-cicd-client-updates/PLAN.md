@@ -409,3 +409,10 @@ remote push не выполнялся. Перед сборкой исправл�
 release обновлён с backup прежнего комплекта. BUILD-INFO.json указывает source SHA.
 Это локальная поставка клиента: server images/manifest ожидают CI, автодоставка
 на NAS/PC не включалась. Native Windows остаётся отдельной обязательной проверкой.
+
+### 2026-10-21 — уточнение deployment layout
+
+main — ветка серверного Git stack; фичи через отдельные ветки.
+Имя проекта hubshell. Файлы compose.deploy.yml и compose.local.yml — самостоятельный
+обычный YAML; старые docker-compose.yml/compose.truenas.yaml удаляются.
+Сохранить все секреты и существующие NAS volumes при переименовании проекта.

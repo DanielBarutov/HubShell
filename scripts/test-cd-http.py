@@ -49,7 +49,7 @@ class CdHttpTests(unittest.TestCase):
                         "refresh_token": "refresh-new",
                         "expires_in": 900,
                     }
-                elif self.path == "/api/stacks/hubshell-test/env?env=1":
+                elif self.path == "/api/stacks/hubshell/env?env=1":
                     if self.command == "PUT":
                         fixture.variables = body["variables"]
                     result = {"variables": fixture.variables}

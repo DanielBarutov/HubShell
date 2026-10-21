@@ -22,11 +22,11 @@ class ComposeServer:
             "docker",
             "compose",
             "--project-name",
-            "hubshell-test",
+            "hubshell",
             "--env-file",
             str(env_file.resolve()),
             "-f",
-            str(self.repository / "compose.truenas.yaml"),
+            str(self.repository / "compose.deploy.yml"),
         ]
         self.images = images
 
@@ -111,7 +111,7 @@ class ComposeServer:
         if deployment["phase"] != "preparing":
             raise ValueError("Server update requires the durable fleet barrier")
         config = json.loads(self.run("config", "--format", "json").stdout)
-        if config["name"] != "hubshell-test" or any(
+        if config["name"] != "hubshell" or any(
             "build" in item for item in config["services"].values()
         ):
             raise ValueError("CD only supports the isolated image-based TrueNAS stack")

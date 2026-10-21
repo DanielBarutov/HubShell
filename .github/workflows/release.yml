@@ -1,8 +1,10 @@
 name: Build HubShell release
 on:
   push:
-    branches: ['ci/client-updates']
+    branches: ['main']
     tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -46,6 +48,8 @@ jobs:
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '8.0.x'
+      - name: Compose configuration checks
+        run: python3 scripts/check-compose.py
       - name: Backend deployment and admission checks
         run: |
           uv sync --directory ./backend --frozen
@@ -53,6 +57,7 @@ jobs:
           GAMECLUB_POSTGRES_DSN="$GAMECLUB_TEST_POSTGRES_DSN" uv run --directory ./backend alembic upgrade head
           uv run --directory ./backend pytest tests/test_client_update_domain.py tests/test_client_update_postgres.py tests/test_client_update_http_postgres.py tests/test_client_update_agent_e2e.py tests/test_session_admission_postgres.py tests/test_session_transfer.py tests/test_modules_reservations_sessions.py tests/test_api_reservations_sessions_billing.py -q
   build:
+    if: github.event_name != 'pull_request'
     needs: [backend, frontend]
     runs-on: ubuntu-24.04
     timeout-minutes: 45

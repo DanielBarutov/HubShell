@@ -1,0 +1,449 @@
+# Published images; no source builds or custom YAML tags.
+name: hubshell
+
+x-backend-environment: &backend-environment
+  GAMECLUB_ENVIRONMENT: ${GAMECLUB_ENVIRONMENT:-dev}
+  GAMECLUB_POSTGRES_DSN: ${GAMECLUB_POSTGRES_DSN:-postgresql+asyncpg://gameclub:${GAMECLUB_DB_PASSWORD:?Set GAMECLUB_DB_PASSWORD}@postgres:5432/gameclub}
+  GAMECLUB_REDIS_URL: ${GAMECLUB_REDIS_URL:-redis://redis:6379/0}
+  GAMECLUB_HTTP_HOST: 0.0.0.0
+  GAMECLUB_HTTP_PORT: 8100
+  GAMECLUB_GRPC_HOST: 0.0.0.0
+  GAMECLUB_GRPC_PORT: 51051
+  GAMECLUB_GRPC_TLS_CERT_FILE: ${GAMECLUB_GRPC_TLS_CERT_FILE:-}
+  GAMECLUB_GRPC_TLS_KEY_FILE: ${GAMECLUB_GRPC_TLS_KEY_FILE:-}
+  GAMECLUB_GRPC_TLS_CLIENT_CA_FILE: ${GAMECLUB_GRPC_TLS_CLIENT_CA_FILE:-}
+  GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE: ${GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE:-false}
+  GAMECLUB_JWT_SECRET: ${GAMECLUB_JWT_SECRET:?Set GAMECLUB_JWT_SECRET}
+  GAMECLUB_JWT_ISSUER: ${GAMECLUB_JWT_ISSUER:-gameclub-backend}
+  GAMECLUB_JWT_AUDIENCE: ${GAMECLUB_JWT_AUDIENCE:-gameclub-clients}
+  GAMECLUB_JWT_ACCESS_TTL_SECONDS: ${GAMECLUB_JWT_ACCESS_TTL_SECONDS:-900}
+  GAMECLUB_JWT_REFRESH_TTL_SECONDS: ${GAMECLUB_JWT_REFRESH_TTL_SECONDS:-7776000}
+  GAMECLUB_DEV_OPERATOR_USERNAME: ${GAMECLUB_DEV_OPERATOR_USERNAME:-operator}
+  GAMECLUB_DEV_OPERATOR_PASSWORD: ${GAMECLUB_DEV_OPERATOR_PASSWORD:?Set GAMECLUB_DEV_OPERATOR_PASSWORD}
+  GAMECLUB_DEVICE_BOOTSTRAP_TOKEN: ${GAMECLUB_DEVICE_BOOTSTRAP_TOKEN:?Set GAMECLUB_DEVICE_BOOTSTRAP_TOKEN}
+  GAMECLUB_WORKSTATION_STALE_AFTER_SECONDS: ${GAMECLUB_WORKSTATION_STALE_AFTER_SECONDS:-45}
+  GAMECLUB_WORKSTATION_OFFLINE_AFTER_SECONDS: ${GAMECLUB_WORKSTATION_OFFLINE_AFTER_SECONDS:-120}
+  GAMECLUB_WORKSTATION_COMMAND_TTL_SECONDS: ${GAMECLUB_WORKSTATION_COMMAND_TTL_SECONDS:-120}
+  GAMECLUB_LOGIN_GRANT_MINUTES: ${GAMECLUB_LOGIN_GRANT_MINUTES:-1}
+  GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES: ${GAMECLUB_RESERVATION_GRACE_PERIOD_MINUTES:-15}
+  GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS: ${GAMECLUB_RESERVATION_SWEEP_INTERVAL_SECONDS:-60}
+  GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS: ${GAMECLUB_BILLING_RECONCILIATION_INTERVAL_SECONDS:-60}
+  GAMECLUB_KAFKA_BOOTSTRAP_SERVERS: ${GAMECLUB_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+
+services:
+  kafka:
+    # Локальный single-node KRaft. Для production нужны несколько узлов и TLS/SASL/ACL.
+    image: apache/kafka:4.3.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_HOST://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - gameclub-kafka-data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+    restart: unless-stopped
+
+  kafka-v2-topics:
+    image: apache/kafka:4.3.1
+    command:
+      [
+        "bash",
+        "-ec",
+        "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.client-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.server-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.confirmed-domain-events --partitions 6 --replication-factor 1 && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic v2.failed-events --partitions 3 --replication-factor 1",
+      ]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+
+  steam-guest-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: steam_guest
+      POSTGRES_USER: steam_guest
+      POSTGRES_PASSWORD: ${STEAM_GUEST_DB_PASSWORD:?Set STEAM_GUEST_DB_PASSWORD}
+    volumes:
+      - steam-guest-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U steam_guest -d steam_guest"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  steam-guest-server:
+    image: ${HUBSHELL_STEAM_GUEST_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8200
+      STEAM_GUEST_POSTGRES_DSN: Host=steam-guest-postgres;Port=5432;Database=steam_guest;Username=steam_guest;Password=${STEAM_GUEST_DB_PASSWORD:?Set STEAM_GUEST_DB_PASSWORD}
+      STEAM_GUEST_MASTER_KEY: ${STEAM_GUEST_MASTER_KEY:?Set STEAM_GUEST_MASTER_KEY to base64-encoded 32 random bytes}
+      STEAM_GUEST_ADMIN_KEY: ${STEAM_GUEST_ADMIN_KEY:?Set STEAM_GUEST_ADMIN_KEY}
+      STEAM_GUEST_STATION_KEY_PEPPER: ${STEAM_GUEST_STATION_KEY_PEPPER:?Set STEAM_GUEST_STATION_KEY_PEPPER}
+    depends_on:
+      steam-guest-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8200/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    ports:
+      - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_STEAM_GUEST_PORT:-8200}:8200"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gameclub
+      POSTGRES_USER: gameclub
+      POSTGRES_PASSWORD: ${GAMECLUB_DB_PASSWORD:?Set GAMECLUB_DB_PASSWORD}
+    volumes:
+      - gameclub-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameclub -d gameclub"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - gameclub-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  backend-migrate:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  v2-server-outbox:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_event_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_METRICS_PORT: 9108
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  v2-client-facts:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_client_facts_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_CLIENT_FACTS_METRICS_PORT: 9109
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  v2-confirmed-analytics:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["faststream", "run", "gameclub_backend.jobs.v2_confirmed_analytics_transport:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_OBSERVABILITY_ENABLED: "true"
+      GAMECLUB_V2_CONFIRMED_ANALYTICS_METRICS_PORT: 9110
+      GAMECLUB_OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.122.1
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - gameclub-prometheus-data:/prometheus
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./deploy/observability/loki.yml:/etc/loki/config.yml:ro
+      - gameclub-loki-data:/loki
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    command: ["-config.file=/etc/tempo/config.yml"]
+    volumes:
+      - ./deploy/observability/tempo.yml:/etc/tempo/config.yml:ro
+      - gameclub-tempo-data:/var/tempo
+    restart: unless-stopped
+
+  pyroscope:
+    image: grafana/pyroscope:2.2.1
+    command: ["-pyroscopedb.data-path=/var/lib/pyroscope"]
+    volumes:
+      - gameclub-pyroscope-data:/var/lib/pyroscope
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.7.5
+    command: ["run", "/etc/alloy/config.river", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./deploy/observability/alloy.river:/etc/alloy/config.river:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.3.2
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GAMECLUB_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GAMECLUB_GRAFANA_ADMIN_PASSWORD:?Set GAMECLUB_GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - gameclub-grafana-data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      pyroscope:
+        condition: service_started
+    restart: unless-stopped
+
+  backend-http:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "gameclub_backend.presentation.http.app:app"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_CLIENT_RELEASE_ROOT: /var/lib/hubshell/client-releases
+      GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID: ${GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID:?Set GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID}
+      GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64: ${GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64:?Set GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64}
+      GAMECLUB_PYROSCOPE_SERVER_ADDRESS: ${GAMECLUB_PYROSCOPE_SERVER_ADDRESS:-http://pyroscope:4040}
+      GAMECLUB_PYROSCOPE_APPLICATION_NAME: ${GAMECLUB_PYROSCOPE_APPLICATION_NAME:-gameclub-backend-http}
+      GAMECLUB_PYROSCOPE_SAMPLE_RATE: ${GAMECLUB_PYROSCOPE_SAMPLE_RATE:-100}
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-v2-topics:
+        condition: service_completed_successfully
+      pyroscope:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    ports:
+      - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_HTTP_PORT:-8100}:8100"
+    volumes:
+      - gameclub-client-releases:/var/lib/hubshell/client-releases:ro
+
+  backend-grpc:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["python", "-m", "gameclub_backend.main"]
+    environment:
+      <<: *backend-environment
+      GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID: ${GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID:?Set GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID}
+      GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64: ${GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64:?Set GAMECLUB_V2_SNAPSHOT_SIGNING_PRIVATE_KEY_B64}
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 51051), 2).close()"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    ports:
+      - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_GRPC_PORT:-51051}:51051"
+
+  worker:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["dramatiq", "gameclub_backend.jobs.reservations", "gameclub_backend.jobs.billing", "gameclub_backend.jobs.cash_shifts", "--processes", "1", "--threads", "4", "--queues", "reservations", "billing", "cash-shifts"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  analytics-worker:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["dramatiq", "gameclub_backend.jobs.reports", "--processes", "1", "--threads", "2", "--queues", "analytics-projection", "analytics-reports"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  meter-worker:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["dramatiq", "gameclub_backend.jobs.billing", "--processes", "1", "--threads", "2", "--queues", "metering"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    command: ["python", "-m", "gameclub_backend.jobs.scheduler"]
+    environment:
+      <<: *backend-environment
+    depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: ${HUBSHELL_FRONTEND_IMAGE:?Set immutable image reference from images.env}
+    pull_policy: always
+    depends_on:
+      backend-http:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+    ports:
+      - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_FRONTEND_PORT:-3100}:80"
+
+
+volumes:
+  gameclub-grafana-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-grafana-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-kafka-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-kafka-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-loki-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-loki-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-postgres-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-postgres-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-pyroscope-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-pyroscope-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-prometheus-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-prometheus-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-redis-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-redis-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  steam-guest-postgres-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_steam-guest-postgres-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-client-releases:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-client-releases
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}
+  gameclub-tempo-data:
+    name: ${HUBSHELL_VOLUME_PREFIX:-hubshell}_gameclub-tempo-data
+    external: ${HUBSHELL_VOLUMES_EXTERNAL:-false}

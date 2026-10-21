@@ -127,3 +127,17 @@ CI artifacts скачаны в output/ci-e300b4b, подписи обоих mani
 HubShell.exe 108233738 bytes, EXE-only HubShell.zip 46550584 bytes,
 HubShell.Setup.zip 76326753 bytes. BUILD-INFO содержит provenance и hashes.
 Это первый запуск копии, не сквозная CD-проверка server-stage/cron/Windows update.
+
+## 2026-10-21 — упорядочивание Compose и веток
+
+Согласовано пользователем: серверный Git stack отслеживает main; последующие
+изменения идут feature-ветками. Нормальное имя стека/проекта — hubshell.
+compose.local.yml — полный прежний Linux build-контур (project gameshell для
+сохранения developer volumes). compose.deploy.yml — самостоятельный обычный YAML,
+без extends/!reset/!override, с digest images, закрытыми infra ports и обязательными
+server secrets. Это устраняет неизвестные теги у графа Dockhand.
+CD executor/persist_images используют проект hubshell, зеркало определяется по
+реальному mount backend, а не по угаданному имени volume. При миграции NAS
+HUBSHELL_VOLUME_PREFIX=hubshell-test и HUBSHELL_VOLUMES_EXTERNAL=true сохраняют
+имеющиеся тома. Старые контейнеры должны быть остановлены до запуска нового проекта.
+CI: main/tag builds, PR checks без публикации images. Auto-update парка остаётся off.

@@ -112,7 +112,7 @@ def persist_images(api: JsonApi, images: dict[str, str]) -> None:
     from client_release import validate_images
 
     validate_images(images)
-    path = "/api/stacks/hubshell-test/env?env=1"
+    path = "/api/stacks/hubshell/env?env=1"
     current = api.request("GET", path)
     variables = {item["key"]: item for item in current["variables"]}
     for key, image in images.items():

@@ -39,8 +39,8 @@ GAMECLUB_V2_DEV_LEDGER_PATH=/tmp/hubshell-v2-manual.json dotnet run --project wi
 
 ```bash
 cd /home/daniel/HubShell
-docker compose up -d --build
-docker compose ps
+docker compose -f compose.local.yml up -d --build
+docker compose -f compose.local.yml ps
 curl --fail --silent --show-error http://127.0.0.1:8100/health/ready
 ```
 

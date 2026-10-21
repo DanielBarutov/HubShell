@@ -21,7 +21,7 @@ class ServerDeploymentTests(unittest.TestCase):
         self.server = ComposeServer(self.root, self.root / "secrets.env", self.root, images)
         self.actions = []
         self.config = {
-            "name": "hubshell-test",
+            "name": "hubshell",
             "services": {
                 name: {"image": images[key]}
                 for name, key in {

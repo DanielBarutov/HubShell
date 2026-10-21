@@ -1,6 +1,6 @@
 # Docker Compose
 
-Корневой `docker-compose.yml` поднимает полный локальный стек модульного
+Корневой `compose.local.yml` поднимает полный локальный стек модульного
 монолита:
 
 - `postgres` — PostgreSQL 16;
@@ -27,8 +27,8 @@ Redis `56379`, HTTP `8100`, gRPC `51051`, frontend `3100`, Pyroscope `4040`.
 ```bash
 cd /home/daniel/HubShell
 cp .env.example .env
-docker compose up -d --build
-docker compose ps
+docker compose -f compose.local.yml up -d --build
+docker compose -f compose.local.yml ps
 ```
 
 После запуска:
@@ -59,8 +59,8 @@ GAMECLUB_GRPC_PORT=51051
 всего стека используйте:
 
 ```bash
-docker compose up -d --build
-docker compose ps
+docker compose -f compose.local.yml up -d --build
+docker compose -f compose.local.yml ps
 ```
 
 В `PORTS` должны появиться `0.0.0.0:8100->8100/tcp` и
@@ -74,21 +74,21 @@ Dev-оператор берётся из `.env`: по умолчанию `operat
 пересобираются одной командой из корня репозитория:
 
 ```bash
-docker compose up -d --build
+docker compose -f compose.local.yml up -d --build
 ```
 
 Логи и остановка:
 
 ```bash
-docker compose logs -f backend-http
-docker compose down
+docker compose -f compose.local.yml logs -f backend-http
+docker compose -f compose.local.yml down
 ```
 
-`docker compose down` сохраняет named volumes. Для полного сброса локальной базы
+`docker compose -f compose.local.yml down` сохраняет named volumes. Для полного сброса локальной базы
 и Redis используйте только осознанно:
 
 ```bash
-docker compose down -v
+docker compose -f compose.local.yml down -v
 ```
 
 Это dev-compose. Для закрытого private-LAN production нужны secret storage,
@@ -99,3 +99,34 @@ Windows-клиент подключается к опубликованному 
 `GAMECLUB_FRONTEND_PORT`, `GAMECLUB_BIND_HOST`, `GAMECLUB_HTTP_PORT`, `GAMECLUB_GRPC_PORT`,
 `GAMECLUB_POSTGRES_PORT`, `GAMECLUB_REDIS_PORT` и `GAMECLUB_PYROSCOPE_PORT` в
 `.env`.
+
+
+## Серверное развёртывание
+
+`compose.local.yml` собирает приложение из исходников для Linux-разработки;
+`compose.deploy.yml` запускает опубликованные образы, без build/extends/специальных YAML-тегов.
+Файл в Dockhand: `compose.deploy.yml`, ветка `main`, имя стека/проекта `hubshell`.
+Feature-ветки проходят проверки pull request; выпуск собирается после попадания в main.
+Три `HUBSHELL_*_IMAGE` берутся из подписанного images.env одного выпуска (digest-ссылки).
+Автообновление всего парка включается только после Windows pilot и общего CD barrier.
+
+```bash
+docker compose --env-file /path/to/secrets/stack.env -f compose.deploy.yml up -d
+docker compose --env-file /path/to/secrets/stack.env -f compose.deploy.yml ps
+python3 scripts/check-compose.py
+```
+
+`HUBSHELL_BIND_HOST` задаёт LAN IP, по умолчанию 127.0.0.1. Порты:
+`HUBSHELL_FRONTEND_PORT=3100`, `HUBSHELL_HTTP_PORT=8100`,
+`HUBSHELL_GRPC_PORT=51051`, `HUBSHELL_STEAM_GUEST_PORT=8200`.
+Базы, Redis, Kafka и observability наружу не публикуются.
+Секреты хранятся вне Git; локальные значения .env.example не являются серверными.
+
+При переименовании уже запущенного стека NAS сохраняются его прежние тома:
+`HUBSHELL_VOLUME_PREFIX=hubshell-test`, `HUBSHELL_VOLUMES_EXTERNAL=true`.
+Это только физические имена существующих данных; новые контейнеры называются hubshell-*.
+External-режим запрещает незаметно создать пустые тома при ошибке имени.
+Для нового сервера параметры не нужны: Compose создаёт обычные hubshell_* volumes.
+Перед сменой проекта остановить прежние контейнеры; не запускать два PostgreSQL
+на одном томе и не удалять volumes. Локальный проект gameshell оставлен для сохранения
+существующих Linux developer volumes.
