@@ -7,6 +7,7 @@ import { PanelHeader } from "../../shared/components/PanelHeader";
 import type { Client, Workstation } from "../../types";
 import type { DepositTarget } from "../workspace/uiSlice";
 import { findActiveDepositTargets } from "./depositTarget";
+import { generateUUID } from "../../utils/uuid";
 
 export function DepositPanel({
   initialClient,
@@ -129,7 +130,7 @@ export function DepositPanel({
       if (!pendingBonusAdjustment && amountCents < 0 && !window.confirm(
         `Списать ${(Math.abs(amountCents) / 100).toLocaleString("ru-RU")} бонусов у «${result.nickname}»?\nПричина: ${bonusReason.trim()}`,
       )) return;
-      const operation = pendingBonusAdjustment ?? { clientId: result.id, amountCents, reason: bonusReason.trim(), key: crypto.randomUUID() };
+      const operation = pendingBonusAdjustment ?? { clientId: result.id, amountCents, reason: bonusReason.trim(), key: generateUUID() };
       setPendingBonusAdjustment(operation);
       setSubmitting(true);
       setSearchError(null);
@@ -194,7 +195,7 @@ export function DepositPanel({
               ? cashShiftId
               : undefined,
           },
-          crypto.randomUUID(),
+          generateUUID(),
         );
         setDeliveryMessage(deposit.is_duplicate
           ? "Пополнение уже учтено. Повторно деньги не списаны."
@@ -210,7 +211,7 @@ export function DepositPanel({
           reason: "Пополнение через оператора",
           payment_parts: paymentParts,
         },
-        crypto.randomUUID(),
+        generateUUID(),
       );
       await onCompleted();
     } catch (error) {

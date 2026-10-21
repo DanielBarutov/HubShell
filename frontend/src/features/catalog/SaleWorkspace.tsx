@@ -30,6 +30,7 @@ import { BonusPackageConfirmation } from "./BonusPackageConfirmation";
 import { toUiClient } from "../../adapters";
 import { formatRussianPhone, getSearchField } from "../../shared/formatters";
 import type { Client, Workstation } from "../../types";
+import { generateUUID } from "../../utils/uuid";
 
 type SaleLine = {
   key: string;
@@ -214,7 +215,7 @@ export function SaleWorkspace({
     resolveBonusConfirmation.current = null;
   };
   const seededProduct = useRef(false);
-  const sessionIdempotencyKey = useRef(`sale-session-${crypto.randomUUID()}`);
+  const sessionIdempotencyKey = useRef(`sale-session-${generateUUID()}`);
   const tariffIdempotencyKeys = useRef(new Map<string, string[]>());
   const productIdempotencyKeys = useRef(new Map<string, string>());
   const activeShift = cashShifts.find((shift) => shift.status === "open");
@@ -661,7 +662,7 @@ export function SaleWorkspace({
           index < tariffLine.quantity;
           index += 1
         ) {
-          purchaseKeys.push(`sale-tariff-${crypto.randomUUID()}`);
+          purchaseKeys.push(`sale-tariff-${generateUUID}`);
         }
         tariffIdempotencyKeys.current.set(tariffLine.key, purchaseKeys);
         let remainingCashPartCents =
@@ -744,7 +745,7 @@ export function SaleWorkspace({
       for (const line of productLines) {
         const operationKey =
           productIdempotencyKeys.current.get(line.key) ??
-          `sale-product-${crypto.randomUUID()}`;
+          `sale-product-${generateUUID()}`;
         productIdempotencyKeys.current.set(line.key, operationKey);
         const lineTotalCents = line.priceCents * line.quantity;
         const lineCashCents = paymentMethod === "mixed" ? cashPartCents : 0;
