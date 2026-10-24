@@ -12,6 +12,7 @@ import { PanelHeader } from "../../shared/components/PanelHeader";
 import { statusMeta } from "../../shared/constants";
 import type { Client, Workstation } from "../../types";
 import type { DepositTarget } from "../workspace/uiSlice";
+import { generateUUID } from "../../utils/uuid";
 
 export function PcPanel({
   pc,
@@ -81,7 +82,7 @@ export function PcPanel({
     setOperationSuccess(false);
     setOperationState(null);
     try {
-      await api.dispatchDeviceCommand(pc.id, commandType, crypto.randomUUID());
+      await api.dispatchDeviceCommand(pc.id, commandType, generateUUID());
       setOperationSuccess(true);
       setOperationState(
         commandType === "system.restart"
@@ -118,7 +119,7 @@ export function PcPanel({
       if (!isXbox) await api.interruptSession(
         pc.sessionId,
         "Оператор прервал сессию из панели ПК",
-        crypto.randomUUID(),
+        generateUUID(),
       );
       setOperationSuccess(!stopped?.relay_off_pending);
       setOperationState(stopped?.relay_off_pending

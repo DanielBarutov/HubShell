@@ -1,3 +1,5 @@
+import { generateUUID } from "../utils/uuid";
+
 export function getSearchField(value: string): "nickname" | "phone" | null {
   const normalized = value.trim();
   if (!normalized) return null;
@@ -37,5 +39,5 @@ export function cashMoney(cents: number): string {
 }
 
 export function cashIdempotencyKey(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+  return `${prefix}-${generateUUID()}`;
 }

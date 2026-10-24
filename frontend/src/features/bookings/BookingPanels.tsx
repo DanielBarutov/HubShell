@@ -11,6 +11,7 @@ import {
 } from "../../shared/formatters";
 import { PanelHeader } from "../../shared/components/PanelHeader";
 import type { Client, Workstation } from "../../types";
+import { generateUUID } from "../../utils/uuid";
 
 export function BookingPanel({
   initialWorkstationId,
@@ -129,7 +130,7 @@ export function BookingPanel({
         );
         return;
       }
-      await api.createReservation(payload, crypto.randomUUID());
+      await api.createReservation(payload, generateUUID());
       onCreated();
     } catch (requestError) {
       setError(

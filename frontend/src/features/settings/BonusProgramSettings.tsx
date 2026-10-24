@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { GameClubApi } from "../../api";
 import type { BackendBonusProgram } from "../../api";
+import { generateUUID } from "../../utils/uuid";
 
 const fields = [
   ["game_rate_bps", "Начисление за игру"],
@@ -61,7 +62,7 @@ export function BonusProgramSettings({ api }: { api: GameClubApi }) {
     setSaving(true);
     setError(null);
     setSaved(false);
-    operationKey.current ??= crypto.randomUUID();
+    operationKey.current ??= generateUUID();
     try {
       const result = await api.updateBonusProgram({
         enabled, game_rate_bps: values.game_rate_bps!, product_rate_bps: values.product_rate_bps!, payment_limit_bps: values.payment_limit_bps!,
