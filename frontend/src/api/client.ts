@@ -489,6 +489,12 @@ export class GameClubApi {
     return this.request<BackendClientUpdateStatus>("/client-updates/current", { signal });
   }
 
+  async retryClientUpdateCurrent(deploymentId: string, operationId: string, signal?: AbortSignal): Promise<void> {
+    await this.request(`/client-updates/${encodeURIComponent(deploymentId)}/retry-current`, {
+      method: "POST", body: JSON.stringify({ operation_id: operationId }), signal,
+    });
+  }
+
   async getBonusProgram(): Promise<BackendBonusProgram> {
     return this.request<BackendBonusProgram>("/bonus-program");
   }

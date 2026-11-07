@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.sessions.application.ports import ClientReleaseAdmission
 from gameclub_backend.modules.sessions.domain import Session, SessionTransferOffer, TransferStatus
 from gameclub_backend.modules.sessions.infrastructure.postgres import (
     SessionModel,
@@ -83,8 +84,13 @@ class SessionTransferOfferModel(TransferBase):
 
 
 class PostgresSessionTransferRepository:
-    def __init__(self, engine_provider: EngineProvider) -> None:
+    def __init__(
+        self,
+        engine_provider: EngineProvider,
+        release_admission: ClientReleaseAdmission | None = None,
+    ) -> None:
         self._engine_provider = engine_provider
+        self._release_admission = release_admission
 
     async def get(self, offer_id: uuid.UUID) -> SessionTransferOffer | None:
         async with open_session(self._engine_provider) as session:
@@ -184,6 +190,8 @@ class PostgresSessionTransferRepository:
 
                 await require_session_admission(db, target_id)
                 await require_session_admission(db, offer.source_workstation_id)
+                if self._release_admission is not None:
+                    await self._release_admission.require_release(target_id)
                 for workstation_id in sorted({session.workstation_id, target_id}, key=str):
                     await db.execute(
                         text("SELECT id FROM workstations WHERE id = :workstation_id FOR UPDATE"),

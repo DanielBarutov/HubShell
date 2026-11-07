@@ -31,6 +31,7 @@ public sealed class WindowsClientHost : IClientHost
     private bool _started;
     private bool _updateRecoveryCompleted;
     private bool _updateStateFault;
+    private bool _releaseAllowed;
     private readonly V2LocalLedgerCoordinator _v2Ledger;
     private readonly ClientUpdateStateStore _updateState = new(AppContext.BaseDirectory);
 
@@ -102,7 +103,8 @@ public sealed class WindowsClientHost : IClientHost
         }
 
         _started = true;
-        try { ViewModel.ApplyDeploymentBlock(_updateState.Read()?.Blocked == true); }
+        _releaseAllowed = DeploymentSettings.V2EventsHttpAddress is null;
+        try { ViewModel.ApplyDeploymentBlock(!_releaseAllowed || _updateState.Read()?.Blocked == true); }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
         {
             _updateStateFault = true;
@@ -197,7 +199,7 @@ public sealed class WindowsClientHost : IClientHost
         if (request.Command == "prepare" && matches && journal!.Blocked)
             ViewModel.ApplyDeploymentBlock(true);
         if (request.Command == "release" && matches && !journal!.Blocked && !_updateStateFault)
-            ViewModel.ApplyDeploymentBlock(false);
+            ViewModel.ApplyDeploymentBlock(!_releaseAllowed);
         bool active;
         int pending;
         V2LocalLedgerStorageSnapshot? snapshot = null;
@@ -230,7 +232,8 @@ public sealed class WindowsClientHost : IClientHost
 
     private async Task RunGuiUpdateLoopAsync(CancellationToken token)
     {
-        var endpoint = new Uri(DeploymentSettings.V2EventsHttpAddress!, "/api/v1/client-updates/gui/current");
+        var endpoint = new Uri(DeploymentSettings.V2EventsHttpAddress!, "/api/v1/client-updates/gui/current?release_id="
+            + Uri.EscapeDataString(UpdateIpcProtocol.ReleaseId(typeof(Program).Assembly)));
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         do
         {
@@ -242,13 +245,15 @@ public sealed class WindowsClientHost : IClientHost
                 response.EnsureSuccessStatusCode();
                 using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
                 var deployment = document.RootElement.GetProperty("deployment");
+                _releaseAllowed = document.RootElement.GetProperty("release_allowed").GetBoolean();
+                var journalBlocked = true;
+                try { journalBlocked = _updateState.Read()?.Blocked == true; }
+                catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+                { _updateStateFault = true; }
+                ViewModel.ApplyDeploymentBlock(!_releaseAllowed || _updateStateFault || journalBlocked
+                    || (deployment.ValueKind != JsonValueKind.Null && deployment.GetProperty("block_gui").GetBoolean()));
                 if (deployment.ValueKind != JsonValueKind.Null)
                 {
-                    var journalBlocked = true;
-                    try { journalBlocked = _updateState.Read()?.Blocked == true; }
-                    catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
-                    { _updateStateFault = true; }
-                    ViewModel.ApplyDeploymentBlock(_updateStateFault || journalBlocked || deployment.GetProperty("block_gui").GetBoolean());
                     if (deployment.GetProperty("phase").GetString() == "authorized"
                         && deployment.GetProperty("release_id").GetString() == UpdateIpcProtocol.ReleaseId(typeof(Program).Assembly))
                     {
@@ -266,7 +271,8 @@ public sealed class WindowsClientHost : IClientHost
             }
             catch (Exception error) when (error is not OperationCanceledException)
             {
-                // A disconnected poll never clears a durable deployment block.
+                _releaseAllowed = false;
+                ViewModel.ApplyDeploymentBlock(true);
             }
         } while (await timer.WaitForNextTickAsync(token));
     }

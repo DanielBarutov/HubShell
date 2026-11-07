@@ -18,6 +18,7 @@ class Principal:
     permissions: frozenset[str]
     device_id: str | None = None
     password_reset_required: bool = False
+    installation_id: str | None = None
 
     def can(self, permission: str) -> bool:
         return permission in self.permissions or "*" in self.permissions

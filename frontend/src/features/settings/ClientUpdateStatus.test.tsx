@@ -95,4 +95,102 @@ describe("Статус доставки клиентов", () => {
     expect(screen.queryByText("1/2 ПК")).not.toBeInTheDocument();
     view.unmount();
   });
+  it("в независимом режиме ошибка одного ПК не закрывает весь парк", async () => {
+    const { api } = setup({ deployment: { ...delivery, mode: "independent", phase: "failed", devices: [
+      { ...delivery.devices[0], assigned_release_id: "v2.4.0" },
+      { ...delivery.devices[1], status: "rolled_back", assigned_release_id: "v-previous-job", error_code: "startup_failed" },
+    ] } });
+    render(<ClientUpdateStatus api={api} pcs={[]} />);
+    expect(await screen.findByText("Есть ошибки на ПК")).toBeInTheDocument();
+    expect(screen.getByText("Ошибка удерживает только соответствующий ПК.")).toBeInTheDocument();
+    expect(screen.getByText("К установке: v-previous-job")).toBeInTheDocument();
+    expect(screen.getByText("1/2 ПК")).toBeInTheDocument();
+    expect(screen.queryByText("Парк остаётся закрытым до устранения ошибки.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/задерживает обновление всего парка/)).not.toBeInTheDocument();
+  });
+
+  it("показывает ожидание службы и отключённый ПК отдельными состояниями", async () => {
+    const { api } = setup({ deployment: { ...delivery, mode: "independent", confirmed: 0, phase: "polling", devices: [
+      { ...delivery.devices[0], status: "awaiting_agent" },
+      { ...delivery.devices[1], status: "disabled" },
+    ] } });
+    render(<ClientUpdateStatus api={api} pcs={[]} />);
+    expect(await screen.findByText("Ожидаем службу обновления")).toBeInTheDocument();
+    expect(screen.getByText("Отключён оператором")).toBeInTheDocument();
+    expect(screen.getByText(/ПК обновляются независимо/)).toBeInTheDocument();
+    expect(screen.queryByText("Все ПК обновлены")).not.toBeInTheDocument();
+  });
+
+  it("пустой парк с назначенным выпуском не показывает успех 0/0", async () => {
+    const { api } = setup({ deployment: { ...delivery, mode: "independent", confirmed: 0, total: 0,
+      phase: "polling", devices: [],
+    } });
+    render(<ClientUpdateStatus api={api} pcs={[]} />);
+    expect(await screen.findByText("Управляемых ПК пока нет.")).toBeInTheDocument();
+    expect(screen.queryByText(/0\/0/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Все ПК обновлены")).not.toBeInTheDocument();
+  });
+
+  it("повторяет только выбранный ПК и сохраняет ключ после потери ответа", async () => {
+    const failed = { ...delivery, mode: "independent" as const, phase: "failed" as const, devices: [
+      delivery.devices[0], { ...delivery.devices[1], deployment_id: "job-2", status: "rolled_back" as const },
+    ] };
+    const { api, read } = setup({ deployment: failed });
+    const retry = vi.spyOn(api, "retryClientUpdateCurrent")
+      .mockRejectedValueOnce(new Error("Ответ потерян")).mockResolvedValueOnce(undefined);
+    render(<ClientUpdateStatus api={api} pcs={[]} />);
+    const button = await screen.findByRole("button", { name: "Повторить обновление на device-2" });
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ответ потерян");
+    expect(screen.getByText("1/2 ПК")).toBeInTheDocument();
+    read.mockResolvedValueOnce({ deployment: { ...failed, phase: "preparing", devices: [
+      delivery.devices[0], { ...failed.devices[1], status: "ready" },
+    ] } });
+    fireEvent.click(screen.getByRole("button", { name: "Повторить обновление на device-2" }));
+    expect(await screen.findByText("Готов")).toBeInTheDocument();
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(retry.mock.calls[0][0]).toBe("job-2");
+    expect(retry.mock.calls[1][1]).toBe(retry.mock.calls[0][1]);
+    expect(screen.queryByRole("button", { name: /Повторить обновление/ })).not.toBeInTheDocument();
+  });
+
+  it("отменяет зависший повтор при закрытии карточки", async () => {
+    const { api } = setup({ deployment: { ...delivery, mode: "independent", phase: "failed", devices: [
+      { ...delivery.devices[1], deployment_id: "job-2", status: "failed" },
+    ] } });
+    let requestSignal: AbortSignal | undefined;
+    vi.spyOn(api, "retryClientUpdateCurrent").mockImplementation((_id, _operation, signal) => {
+      requestSignal = signal;
+      return new Promise((_, reject) => signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    });
+    const view = render(<ClientUpdateStatus api={api} pcs={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Повторить обновление на device-2" }));
+    expect(screen.getByRole("button", { name: "Повторить обновление на device-2" })).toBeDisabled();
+    view.unmount();
+    expect(requestSignal?.aborted).toBe(true);
+    await act(async () => {});
+  });
+
+  it("новый неудачный раунд получает новый ключ после потерянного ответа прежнего", async () => {
+    const failed = { ...delivery, mode: "independent" as const, phase: "failed" as const, devices: [
+      { ...delivery.devices[1], deployment_id: "job-2", round_id: "round-1", status: "failed" as const },
+    ] };
+    const { api, read } = setup({ deployment: failed });
+    const retry = vi.spyOn(api, "retryClientUpdateCurrent")
+      .mockRejectedValueOnce(new Error("Ответ потерян")).mockResolvedValueOnce(undefined);
+    render(<ClientUpdateStatus api={api} pcs={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Повторить обновление на device-2" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ответ потерян");
+    read.mockResolvedValue({ deployment: { ...failed, devices: [
+      { ...failed.devices[0], round_id: "round-2", error_code: "next_attempt_failed" },
+    ] } });
+    fireEvent.click(screen.getByRole("button", { name: "Обновить статус доставки" }));
+    expect(await screen.findByText("Код: next_attempt_failed")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить обновление на device-2" }));
+    await act(async () => {});
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(retry.mock.calls[1][1]).not.toBe(retry.mock.calls[0][1]);
+  });
+
 });

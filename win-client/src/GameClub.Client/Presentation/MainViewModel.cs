@@ -55,13 +55,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _deploymentBlocked = blocked;
         if (blocked)
         {
-            _portalMessage = "Обновление клиентов клуба. Ожидайте завершения на всех ПК.";
+            _portalMessage = "Проверка версии или обновление этого ПК. Ожидайте завершения.";
             if (!HasActiveGameSession && !IsMaintenanceMode) _accessGate.Lock(_portalMessage);
         }
         else
         {
             AllowUpdateShutdown = false;
-            if (_portalMessage == "Обновление клиентов клуба. Ожидайте завершения на всех ПК.")
+            if (_portalMessage == "Проверка версии или обновление этого ПК. Ожидайте завершения.")
             {
                 _portalMessage = string.Empty;
                 if (!HasActiveGameSession && _accessGate.IsLocked)
@@ -860,7 +860,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task PollGuestAccessAsync()
     {
-        if (_deploymentBlocked) return;
+        if (_deploymentBlocked && _activeV2Ledger is not { IsGuest: true, Status: V2LocalSessionStatus.Active }) return;
         if (_v2GuestSession is null || _v2SignatureVerifier is null || string.IsNullOrWhiteSpace(DeviceId))
         {
             return;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -181,3 +182,29 @@ def download_release(version: str, mirror: Path, public_key: Path) -> dict:
             if existing != result:
                 raise ValueError("Release id already contains different signed artifacts") from None
         return result
+
+
+def publish_mirror_key(mirror: Path, public_key: Path) -> None:
+    """Expose only the operator-pinned key to the backend, never a downloaded key."""
+    destination = mirror / "trusted-public-key.pem"
+    trusted = public_key.read_bytes()
+    if not 0 < len(trusted) <= 16384:
+        raise ValueError("Invalid pinned public key size")
+    if mirror.is_symlink() or destination.is_symlink():
+        raise ValueError("Pinned mirror key cannot be a symlink")
+    with tempfile.NamedTemporaryFile(dir=mirror, prefix=".public-key-", delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            output.write(trusted)
+            output.flush()
+            os.fsync(output.fileno())
+            temporary.chmod(0o644)
+            try:
+                os.link(temporary, destination)
+            except FileExistsError:
+                if destination.is_symlink() or destination.read_bytes() != trusted:
+                    raise ValueError(
+                        "Mirror public key differs; key rotation requires maintenance"
+                    ) from None
+        finally:
+            temporary.unlink(missing_ok=True)

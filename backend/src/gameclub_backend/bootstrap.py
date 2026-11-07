@@ -78,6 +78,9 @@ from gameclub_backend.modules.client_groups.infrastructure.memory import (
 from gameclub_backend.modules.client_groups.infrastructure.postgres import (
     PostgresClientGroupRepository,
 )
+from gameclub_backend.modules.client_updates.application.admission import (
+    ClientReleaseAdmissionService,
+)
 from gameclub_backend.modules.client_updates.application.identity import UpdaterIdentityService
 from gameclub_backend.modules.client_updates.application.service import ClientUpdateService
 from gameclub_backend.modules.client_updates.infrastructure.credentials_postgres import (
@@ -86,6 +89,7 @@ from gameclub_backend.modules.client_updates.infrastructure.credentials_postgres
 from gameclub_backend.modules.client_updates.infrastructure.postgres import (
     PostgresDeploymentRepository,
 )
+from gameclub_backend.modules.client_updates.infrastructure.releases import LocalClientReleaseStore
 from gameclub_backend.modules.clients.application.guests import GuestService
 from gameclub_backend.modules.clients.application.portal import ClientPortalService
 from gameclub_backend.modules.clients.application.ports import ClientRepository, GuestRepository
@@ -314,7 +318,13 @@ def build_application_services(
         command_repository: WorkstationCommandRepository = PostgresWorkstationCommandRepository(
             postgres_engine_provider
         )
-        session_repository: SessionRepository = PostgresSessionRepository(postgres_engine_provider)
+        release_admission = ClientReleaseAdmissionService(
+            PostgresDeploymentRepository(postgres_engine_provider),
+            workstation_repository,
+        )
+        session_repository: SessionRepository = PostgresSessionRepository(
+            postgres_engine_provider, release_admission
+        )
         v2_session_leases = PostgresV2SessionLeaseRepository(postgres_engine_provider)
         billing_repository: ChargeRepository = PostgresChargeRepository(postgres_engine_provider)
         billing_reconciliation_repository: ChargeReconciliationRepository = (
@@ -341,7 +351,7 @@ def build_application_services(
         )
         guest_access_repository = PostgresGuestAccessGrantRepository(postgres_engine_provider)
         transfer_repository: SessionTransferRepository = PostgresSessionTransferRepository(
-            postgres_engine_provider
+            postgres_engine_provider, release_admission
         )
         offline_repository: OfflineReplayRepository = PostgresOfflineReplayRepository(
             postgres_engine_provider
@@ -567,7 +577,7 @@ def build_application_services(
             snapshot_issues=V2SnapshotIssueService(
                 PostgresV2SnapshotIssueRepository(
                     postgres_engine_provider,
-                    PostgresSessionTransactionWriter(),
+                    PostgresSessionTransactionWriter(release_admission),
                 )
             ),
             signing_key_id=signing_key_id,
@@ -592,6 +602,11 @@ def build_application_services(
             workstation_repository,
             PostgresWorkstationDeploymentFreeze(postgres_engine_provider),
             V2ClientUpdateReadiness(PostgresV2SessionChainRepository(postgres_engine_provider)),
+            LocalClientReleaseStore(
+                settings.client_release_root,
+                settings.client_release_public_key,
+                settings.server_release_id,
+            ),
         )
         if settings.jwt_secret:
             updater_identity = UpdaterIdentityService(

@@ -15,6 +15,7 @@ from client_release import (
     LIMITS,
     download_release,
     parse_images,
+    publish_mirror_key,
     verify_bundle,
 )
 
@@ -127,6 +128,29 @@ class ClientReleaseTests(unittest.TestCase):
                 parse_images(original + suffix)
         with self.assertRaises(ValueError):
             parse_images(original.replace("@sha256:" + "a" * 64, ":latest"))
+
+    def test_mirror_key_uses_only_pinned_source_and_refuses_rotation(self):
+        """Backend получает закреплённый ключ; повтор безопасен, тихая ротация запрещена."""
+        self.mirror.mkdir()
+        publish_mirror_key(self.mirror, self.key)
+        publish_mirror_key(self.mirror, self.key)
+        trusted = self.mirror / "trusted-public-key.pem"
+        self.assertEqual(trusted.read_bytes(), self.key.read_bytes())
+        original = trusted.read_bytes()
+        foreign = self.fixture.root / "foreign.pem"
+        foreign.write_bytes(b"another pinned key")
+        with self.assertRaises(ValueError):
+            publish_mirror_key(self.mirror, foreign)
+        self.assertEqual(trusted.read_bytes(), original)
+        self.assertEqual(set(path.name for path in self.mirror.iterdir()), {trusted.name})
+
+    def test_mirror_key_cannot_follow_existing_link(self):
+        """Ссылка вместо закреплённого ключа не читается и не заменяет чужой файл."""
+        self.mirror.mkdir()
+        destination = self.mirror / "trusted-public-key.pem"
+        destination.symlink_to(self.key)
+        with self.assertRaises(ValueError):
+            publish_mirror_key(self.mirror, self.key)
 
     def test_unsafe_release_or_linked_mirror_is_rejected_without_network(self):
         with patch("urllib.request.urlopen") as transport:

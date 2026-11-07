@@ -22,6 +22,11 @@ from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.client_updates.infrastructure.credentials_postgres import (
     UpdaterCredentialModel,
 )
+from gameclub_backend.modules.client_updates.infrastructure.postgres import (
+    ClientReleasePolicyModel,
+    DeploymentModel,
+    RunningClientReleaseModel,
+)
 from gameclub_backend.modules.sessions.infrastructure.postgres import SessionAdmissionBlockModel
 from gameclub_backend.modules.workstations.domain import Workstation
 from gameclub_backend.modules.workstations.infrastructure.postgres import WorkstationModel
@@ -45,6 +50,11 @@ async def second_update_pc(http_updates):
     finally:
         async with app.state.resources.engine.begin() as transaction:
             await transaction.execute(
+                delete(RunningClientReleaseModel).where(
+                    RunningClientReleaseModel.device_id == second.device_id
+                )
+            )
+            await transaction.execute(
                 delete(UpdaterCredentialModel).where(
                     UpdaterCredentialModel.device_id == second.device_id
                 )
@@ -55,14 +65,21 @@ async def second_update_pc(http_updates):
                 )
             )
             await transaction.execute(
+                delete(DeploymentModel).where(
+                    DeploymentModel.payload["targets"].op("?")(second.device_id),
+                    DeploymentModel.payload["independent"].as_boolean().is_(True),
+                )
+            )
+            await transaction.execute(
                 delete(WorkstationModel).where(WorkstationModel.id == second.id)
             )
 
 
+@pytest.mark.parametrize("independent", [False, True], ids=["fleet", "independent"])
 async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc(
-    http_updates, second_update_pc
+    http_updates, second_update_pc, independent, monkeypatch
 ):
-    """Два .NET агента проходят общий барьер, pilot, откат и retry через настоящий HTTP/БД."""
+    """Два .NET агента проходят общее либо независимое обновление, откат и retry через HTTP/БД."""
     _, operator, first, _, app, root = http_updates
     project = "win-client/tests/UpdateAgentHost/UpdateAgentHost.csproj"
     build = await asyncio.create_subprocess_exec(
@@ -100,6 +117,16 @@ async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc
     packager = runpy.run_path(str(ROOT / "scripts/build-client-release.py"))["build_release"]
     await asyncio.to_thread(packager, source, source, package, version, "a" * 40, key_file)
     target_hash = hashlib.sha256(executable).hexdigest()
+    fixed_version = version + "-fixed"
+    fixed_hash = None
+    fixed_package = root / fixed_version
+    if independent:
+        fixed_source = root / "fixed.exe"
+        fixed_source.write_bytes(executable + b"corrected release")
+        await asyncio.to_thread(
+            packager, fixed_source, fixed_source, fixed_package, fixed_version, "a" * 40, key_file
+        )
+        fixed_hash = hashlib.sha256(fixed_source.read_bytes()).hexdigest()
     old_hash = hashlib.sha256(b"old executable").hexdigest()
     configuration = root / "backend-settings.json"
     configuration.write_text(
@@ -111,6 +138,8 @@ async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc
                 "dev_operator_username": "operator",
                 "dev_operator_password": "test-password",
                 "client_release_root": str(root),
+                "client_release_public_key": str(package / "release-public-key.pem"),
+                "server_release_id": version,
             }
         )
     )
@@ -183,6 +212,7 @@ async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc
                         SubjectType.DEVICE,
                         frozenset({"device"}),
                         frozenset({"workstations.connect"}),
+                        installation_id=workstation.installation_id,
                     )
                 )
                 directory = root / f"pc-{index}"
@@ -204,6 +234,10 @@ async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc
                             "directory": str(directory),
                             "targetReleaseId": version,
                             "targetSha256": target_hash,
+                            "knownReleases": {
+                                target_hash: version,
+                                **({fixed_hash: fixed_version} if independent else {}),
+                            },
                         }
                     )
                 )
@@ -219,6 +253,144 @@ async def test_two_real_agents_wait_for_park_rollback_retry_and_confirm_every_pc
                         stderr=asyncio.subprocess.PIPE,
                     )
                 )
+            if independent:
+                publication = root / "sync-state"
+                publication.mkdir()
+                publication_directories = [publication]
+                try:
+                    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+                    from cd_http import JsonApi
+
+                    publisher = runpy.run_path(str(ROOT / "scripts/sync-client-release.py"))
+                    token_file = root / "sync-token.json"
+                    token_file.write_text(
+                        json.dumps(
+                            {"access_token": operator["Authorization"].removeprefix("Bearer ")}
+                        )
+                    )
+                    token_file.chmod(0o600)
+                    metadata = json.loads((package / "release.json").read_bytes())
+                    published = await asyncio.to_thread(
+                        publisher["publish_assignment"],
+                        JsonApi(backend, token_file),
+                        {"client": metadata},
+                        publication,
+                        ["v-old"],
+                    )
+                    assert published["release_id"] == version
+                    # No ticks from PC 2: PC 1 still installs and reopens independently.
+                    for _ in range(6):
+                        first_result = await command(0)
+                        if first_result["stage"] == "completed":
+                            break
+                    assert first_result["stage"] == "completed"
+                    assert first_result["hash"] == target_hash and not first_result["blocked"]
+                    assert (installations[1] / "HubShell.exe").read_bytes() == b"old executable"
+                    await command(1, "active")
+                    busy = await command(1)
+                    assert busy["hash"] == old_hash and busy["closes"] == 0
+                    assert not (await command(0))["blocked"]
+                    await command(1, "idle")
+                    await command(1, "unhealthy")
+                    for _ in range(6):
+                        failed_result = await command(1)
+                        if failed_result["stage"] == "rolled_back":
+                            break
+                    assert failed_result["stage"] == "rolled_back" and failed_result["blocked"]
+                    assert failed_result["hash"] == old_hash
+                    assert not (await command(0))["blocked"]
+                    async with app.state.resources.engine.connect() as connection:
+                        job_id = await connection.scalar(
+                            select(DeploymentModel.id).where(
+                                DeploymentModel.payload["targets"].op("?")(second.device_id)
+                            )
+                        )
+                    # Restart the corrected server with the same DB and port.
+                    changed_settings = json.loads(configuration.read_bytes())
+                    changed_settings["server_release_id"] = fixed_version
+                    configuration.write_text(json.dumps(changed_settings))
+                    server.terminate()
+                    await asyncio.wait_for(server.wait(), 10)
+                    server, restarted_port = await start_backend(port)
+                    assert restarted_port == port
+                    fixed_publication = root / "sync-state-fixed"
+                    fixed_publication.mkdir()
+                    publication_directories.append(fixed_publication)
+                    fixed_metadata = json.loads((fixed_package / "release.json").read_bytes())
+                    await asyncio.to_thread(
+                        publisher["publish_assignment"],
+                        JsonApi(backend, token_file),
+                        {"client": fixed_metadata},
+                        fixed_publication,
+                        [version, "v-old"],
+                    )
+                    await command(1, "healthy")
+                    retry_operation = str(uuid.uuid4())
+                    retry = await client.post(
+                        f"{PREFIX}/{job_id}/retry-current",
+                        headers=operator,
+                        json={"operation_id": retry_operation},
+                    )
+                    assert retry.status_code == 200, retry.text
+                    assert retry.json()["release_id"] == fixed_version
+                    assert retry.json()["previous_attempts"][0]["release_id"] == version
+                    repeated = await client.post(
+                        f"{PREFIX}/{job_id}/retry-current",
+                        headers=operator,
+                        json={"operation_id": retry_operation},
+                    )
+                    assert repeated.json()["round_id"] == retry.json()["round_id"]
+                    for _ in range(6):
+                        retried = await command(1)
+                        if retried["stage"] == "completed":
+                            break
+                    assert retried["stage"] == "completed" and not retried["blocked"]
+                    assert retried["hash"] == fixed_hash
+                    for _ in range(6):
+                        upgraded = await command(0)
+                        if upgraded["stage"] == "completed" and upgraded["hash"] == fixed_hash:
+                            break
+                    assert upgraded["stage"] == "completed" and upgraded["hash"] == fixed_hash
+                    # Reinstallation of an old EXE must not reuse an obsolete completed assignment.
+                    (installations[0] / "HubShell.exe").write_bytes(b"old executable")
+                    repair_token, _ = app.state.jwt_service.issue_access_token(
+                        Principal(
+                            first.device_id,
+                            SubjectType.DEVICE,
+                            frozenset(),
+                            frozenset({"workstations.connect"}),
+                            installation_id=first.installation_id,
+                        )
+                    )
+                    observed = await client.get(
+                        f"{PREFIX}/gui/current",
+                        params={"release_id": "v-old"},
+                        headers={"Authorization": "Bearer " + repair_token},
+                    )
+                    assert observed.status_code == 200, observed.text
+                    for _ in range(6):
+                        repaired = await command(0)
+                        if repaired["stage"] == "completed" and repaired["hash"] == fixed_hash:
+                            break
+                    assert repaired["stage"] == "completed" and repaired["hash"] == fixed_hash
+                    assert not repaired["blocked"]
+                    for directory in installations:
+                        assert (directory / "server.ini").read_text() == "preserved server config"
+                        assert (
+                            directory / "ledger.json"
+                        ).read_text() == "preserved financial facts"
+                finally:
+                    for publication_directory in publication_directories:
+                        state = publication_directory / "assignment.json"
+                        if state.exists():
+                            operation_id = uuid.UUID(json.loads(state.read_bytes())["operation_id"])
+                            async with app.state.resources.engine.begin() as connection:
+                                await connection.execute(
+                                    delete(ClientReleasePolicyModel).where(
+                                        ClientReleasePolicyModel.operation_id == operation_id
+                                    )
+                                )
+                return
             creation = await client.post(
                 PREFIX,
                 headers=operator,

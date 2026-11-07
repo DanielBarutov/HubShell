@@ -72,6 +72,20 @@ class DeviceUpdateReport:
             raise ValueError("Invalid running client release")
 
 
+@dataclasses.dataclass(frozen=True)
+class FailedUpdateAttempt:
+    operation_id: uuid.UUID
+    created_by: str
+    created_at: datetime.datetime
+    release_id: str
+    executable_sha256: str
+    round_id: uuid.UUID
+    reports: dict[str, DeviceUpdateReport]
+    gui_confirmations: dict[str, str]
+    next_release_id: str
+    next_executable_sha256: str
+
+
 @dataclasses.dataclass
 class Deployment:
     id: uuid.UUID
@@ -87,12 +101,16 @@ class Deployment:
     gui_confirmations: dict[str, str] = dataclasses.field(default_factory=dict)
     server_ready: bool = False
     old_releases: dict[str, str] = dataclasses.field(default_factory=dict)
+    independent: bool = False
+    previous_attempts: list[FailedUpdateAttempt] = dataclasses.field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", self.release_id):
             raise ValueError("Invalid release id")
         if not re.fullmatch("[a-f0-9]{64}", self.executable_sha256):
             raise ValueError("Invalid release executable hash")
+        if self.independent and len(self.targets) != 1:
+            raise ValueError("Independent deployment must target exactly one workstation")
         if not self.targets or len(set(self.targets.values())) != len(self.targets):
             raise ValueError("Deployment must target unique workstations")
         if any(not device_id or len(device_id) > 128 for device_id in self.targets):
@@ -185,6 +203,33 @@ class Deployment:
         self.gui_confirmations.clear()
         self.server_ready = False
 
+    def retry_current_release(
+        self,
+        policy: ClientReleasePolicy,
+        operation_id: uuid.UUID,
+        author: str,
+        now: datetime.datetime,
+    ) -> None:
+        if not self.independent or self.phase is not DeploymentPhase.FAILED:
+            raise ValueError("Only a failed independent deployment can change release")
+        self.previous_attempts.append(
+            FailedUpdateAttempt(
+                operation_id,
+                author,
+                now,
+                self.release_id,
+                self.executable_sha256,
+                self.round_id,
+                dict(self.reports),
+                dict(self.gui_confirmations),
+                policy.release_id,
+                policy.executable_sha256,
+            )
+        )
+        self.release_id = policy.release_id
+        self.executable_sha256 = policy.executable_sha256
+        self.retry_preparation()
+
     def authorize(self, now: datetime.datetime) -> None:
         if (
             self.phase is not DeploymentPhase.PREPARING
@@ -244,3 +289,36 @@ class Deployment:
         if report.stage == "installed":
             return "waiting_gui"
         return report.stage
+
+
+@dataclasses.dataclass(frozen=True)
+class ClientReleasePolicy:
+    operation_id: uuid.UUID
+    release_id: str
+    executable_sha256: str
+    accepted_release_ids: tuple[str, ...]
+    created_by: str
+    created_at: datetime.datetime
+
+    def __post_init__(self) -> None:
+        releases = (self.release_id, *self.accepted_release_ids)
+        if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", item) for item in releases):
+            raise ValueError("Invalid release id")
+        if (
+            not 1 <= len(self.accepted_release_ids) <= 32
+            or self.release_id not in self.accepted_release_ids
+            or len(set(self.accepted_release_ids)) != len(self.accepted_release_ids)
+            or not re.fullmatch("[a-f0-9]{64}", self.executable_sha256)
+            or not self.created_by
+            or self.created_at.tzinfo is None
+        ):
+            raise ValueError("Invalid client release policy")
+
+
+@dataclasses.dataclass(frozen=True)
+class ClientReleaseObservation:
+    device_id: str
+    workstation_id: uuid.UUID
+    installation_id: str
+    release_id: str
+    observed_at: datetime.datetime

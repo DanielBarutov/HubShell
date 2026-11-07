@@ -290,3 +290,36 @@ async def test_barrier_waits_for_transfer_and_observes_moved_active_session(
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def test_independent_barriers_do_not_block_or_release_other_pcs(admission_context):
+    """Два ПК обновляются отдельно; снятие одного барьера не открывает другой."""
+    provider, first, ids = admission_context
+    second = uuid.uuid4()
+    gate = PostgresSessionAdmission(provider)
+    sessions = PostgresSessionRepository(provider)
+    try:
+        await gate.block(first, (ids[0],))
+        await gate.block(second, (ids[1],))
+        with pytest.raises(ApplicationError, match="Another deployment"):
+            await gate.block(uuid.uuid4(), (ids[1],))
+        await gate.unblock(first)
+        await sessions.save(new_session(ids[0]))
+        with pytest.raises(ApplicationError):
+            await sessions.save(new_session(ids[1]))
+        await gate.unblock(second)
+        await sessions.save(new_session(ids[1]))
+    finally:
+        await gate.unblock(second)
+
+
+async def test_new_access_grant_uses_its_pc_instead_of_unrelated_barrier(admission_context):
+    """Барьер первого ПК не запрещает snapshot новой сессии второго ПК."""
+    provider, deployment, ids = admission_context
+    await PostgresSessionAdmission(provider).block(deployment, (ids[0],))
+    writer = PostgresSessionTransactionWriter()
+    async with application_transaction(provider) as transaction:
+        await writer.require_access(transaction, uuid.uuid4(), ids[1])
+    with pytest.raises(ApplicationError, match="blocks new sessions"):
+        async with application_transaction(provider) as transaction:
+            await writer.require_access(transaction, uuid.uuid4(), ids[0])

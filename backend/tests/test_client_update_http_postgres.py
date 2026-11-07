@@ -14,7 +14,10 @@ from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.client_updates.infrastructure.credentials_postgres import (
     UpdaterCredentialModel,
 )
-from gameclub_backend.modules.client_updates.infrastructure.postgres import DeploymentModel
+from gameclub_backend.modules.client_updates.infrastructure.postgres import (
+    DeploymentModel,
+    RunningClientReleaseModel,
+)
 from gameclub_backend.modules.sessions.infrastructure.postgres import SessionAdmissionBlockModel
 from gameclub_backend.modules.workstations.domain import Workstation
 from gameclub_backend.modules.workstations.infrastructure.deployment_freeze import (
@@ -85,6 +88,7 @@ async def http_updates(tmp_path):
         dev_operator_username="operator",
         dev_operator_password="test-password",
         client_release_root=str(tmp_path),
+        client_release_public_key=str(tmp_path / "trusted.pem"),
     )
     app = create_app(settings)
     engine = app.state.resources.engine
@@ -130,6 +134,11 @@ async def http_updates(tmp_path):
             await transaction.execute(
                 delete(DeploymentModel).where(
                     DeploymentModel.payload["targets"].op("?")(workstation.device_id)
+                )
+            )
+            await transaction.execute(
+                delete(RunningClientReleaseModel).where(
+                    RunningClientReleaseModel.device_id == workstation.device_id
                 )
             )
             await transaction.execute(
@@ -611,4 +620,58 @@ async def test_archived_pc_with_active_session_cannot_bypass_fleet_idle_check(ht
             )
             await transaction.execute(
                 delete(WorkstationModel).where(WorkstationModel.id == archived.id)
+            )
+
+
+async def test_release_policy_is_verified_and_creates_job_when_pc_polls(http_updates):
+    """Проверенный выпуск назначается при опросе; подмена пакета не меняет политику."""
+    from gameclub_backend.modules.client_updates.infrastructure.postgres import (
+        ClientReleasePolicyModel,
+    )
+    from test_client_release_store import signed_release
+
+    client, operator, workstation, _, app, root = http_updates
+    metadata, _ = signed_release(root)
+    operation_id = uuid.uuid4()
+    body = {
+        "operation_id": str(operation_id),
+        "release_id": "signed-v1",
+        "accepted_release_ids": ["previous-v1"],
+    }
+    try:
+        response = await client.post(f"{PREFIX}/policy", headers=operator, json=body)
+        assert response.status_code == 200, response.text
+        policy = response.json()
+        assert policy["executable_sha256"] == metadata["executableSha256"]
+        assert policy["accepted_release_ids"] == ["previous-v1", "signed-v1"]
+        assert (await client.post(f"{PREFIX}/policy", headers=operator, json=body)).json() == policy
+        _, updater = await enroll_agent(client, operator, workstation.device_id)
+        assert (
+            await client.post(f"{PREFIX}/policy", headers=updater, json=body)
+        ).status_code == 403
+        instance = str(uuid.uuid4())
+        command = await client.get(
+            f"{PREFIX}/agent/current", headers=updater, params={"instance_id": instance}
+        )
+        assert command.status_code == 200, command.text
+        assignment = command.json()["deployment"]
+        assert assignment["release_id"] == "signed-v1"
+        assert assignment["phase"] == "polling"
+        repeated = await client.get(
+            f"{PREFIX}/agent/current", headers=updater, params={"instance_id": instance}
+        )
+        assert repeated.json()["deployment"]["id"] == assignment["id"]
+        (root / "signed-v1" / "HubShell.zip").write_bytes(b"corrupt")
+        body["operation_id"] = str(uuid.uuid4())
+        assert (
+            await client.post(f"{PREFIX}/policy", headers=operator, json=body)
+        ).status_code == 409
+        current = (await client.get(f"{PREFIX}/policy", headers=operator)).json()["policy"]
+        assert current == policy
+    finally:
+        async with app.state.resources.engine.begin() as transaction:
+            await transaction.execute(
+                delete(ClientReleasePolicyModel).where(
+                    ClientReleasePolicyModel.operation_id == operation_id
+                )
             )

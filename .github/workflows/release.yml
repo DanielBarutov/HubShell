@@ -55,7 +55,7 @@ jobs:
           uv sync --directory ./backend --frozen
           uv run --directory ./backend python scripts/generate_proto.py
           GAMECLUB_POSTGRES_DSN="$GAMECLUB_TEST_POSTGRES_DSN" uv run --directory ./backend alembic upgrade head
-          uv run --directory ./backend pytest tests/test_client_update_domain.py tests/test_client_update_postgres.py tests/test_client_update_http_postgres.py tests/test_client_update_agent_e2e.py tests/test_session_admission_postgres.py tests/test_session_transfer.py tests/test_modules_reservations_sessions.py tests/test_api_reservations_sessions_billing.py -q
+          uv run --directory ./backend pytest tests/test_client_release_store.py tests/test_client_release_admission_postgres.py tests/test_client_update_fleet_status_postgres.py tests/test_client_update_recovery_postgres.py tests/test_v2_device_control.py tests/test_client_update_domain.py tests/test_client_update_postgres.py tests/test_client_update_http_postgres.py tests/test_client_update_agent_e2e.py tests/test_session_admission_postgres.py tests/test_session_transfer.py tests/test_modules_reservations_sessions.py tests/test_api_reservations_sessions_billing.py -q
   build:
     if: github.event_name != 'pull_request'
     needs: [backend, frontend]
@@ -77,6 +77,7 @@ jobs:
           python3 scripts/test-server-deployment.py
           python3 scripts/test-cd-http.py
           python3 scripts/test-deploy-release.py
+          python3 scripts/test-sync-client-release.py
       - name: Client tests
         run: dotnet test win-client/tests/GameClub.Client.Tests.csproj -c Release -p:Platform=x64
       - name: Publish Windows GUI and standalone service
@@ -103,12 +104,15 @@ jobs:
           set -euo pipefail
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           image_root="ghcr.io/${GITHUB_REPOSITORY,,}"
+          release_id=$(python3 -c 'import json; print(json.load(open("output/release/release.json"))["releaseId"])')
           for component in backend frontend steam-guest; do
             image="$image_root/$component:$GITHUB_SHA"
             if [ "$component" = steam-guest ]; then
-              docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$GITHUB_SHA" -f steam-guest/src/HubShell.SteamGuest.Server/Dockerfile -t "$image" steam-guest
+              docker build --label "io.hubshell.release-id=$release_id" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$GITHUB_SHA" -f steam-guest/src/HubShell.SteamGuest.Server/Dockerfile -t "$image" steam-guest
             else
-              docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" "$component"
+              build_args=()
+              if [ "$component" = backend ]; then build_args+=(--build-arg "HUBSHELL_RELEASE_ID=$release_id"); fi
+              docker build "${build_args[@]}" --label "io.hubshell.release-id=$release_id" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" "$component"
             fi
             docker push "$image"
             docker pull "$image"
@@ -134,8 +138,11 @@ jobs:
           name: hubshell-${{ github.sha }}
           path: output/release/
           if-no-files-found: error
-      - name: Create draft GitHub Release
-        if: github.ref_type == 'tag'
+      - name: Publish immutable GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" output/release/* --verify-tag --draft --title "$GITHUB_REF_NAME" --notes "HubShell build $GITHUB_SHA. Client installation still requires the coordinated deployment barrier."
+        run: |
+          set -euo pipefail
+          release_id=$(python3 -c 'import json; print(json.load(open("output/release/release.json"))["releaseId"])')
+          gh release create "$release_id" output/release/* --target "$GITHUB_SHA" --title "$release_id" --notes "HubShell build $GITHUB_SHA. Client updates follow the installed server release through its LAN mirror."

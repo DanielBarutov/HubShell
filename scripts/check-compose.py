@@ -92,6 +92,9 @@ def main() -> None:
     assert config["services"]["backend-http"]["environment"]["GAMECLUB_CLIENT_RELEASE_ROOT"] == (
         "/var/lib/hubshell/client-releases"
     )
+    assert config["services"]["backend-http"]["environment"][
+        "GAMECLUB_CLIENT_RELEASE_PUBLIC_KEY"
+    ] == ("/var/lib/hubshell/client-releases/trusted-public-key.pem")
     assert any(
         mount["source"] == "gameclub-client-releases" and mount.get("read_only") is True
         for mount in config["services"]["backend-http"]["volumes"]

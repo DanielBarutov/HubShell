@@ -81,7 +81,11 @@ class PostgresV2SnapshotIssueRepository:
         async with open_session(self._engine_provider) as session:
             async with session.begin():
                 if self._session_writer is not None:
-                    await self._session_writer.require_access(session, lease.session_id)
+                    await self._session_writer.require_access(
+                        session,
+                        lease.session_id,
+                        session_to_start.workstation_id if session_to_start is not None else None,
+                    )
                 for lock_key in (
                     f"v2-lease-client:{lease.client_id}",
                     f"v2-lease-device:{lease.device_id}",

@@ -7,6 +7,49 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2BillingLogicTests
 {
+    [Fact]
+    public async Task NightPackageFrom1937Uses233KopecksUntil2100ThenStopsAt0700()
+    {
+        var start = DateTimeOffset.Parse("2026-10-25T19:37:00+03:00");
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(CreateLedger(0, 24_000, 233, activatedAt: start,
+            packages: [new("night", "night-tariff", "vip", 660, V2LocalPackageStatus.Queued,
+                21 * 60, 7 * 60, "Europe/Moscow")]));
+        var runner = new V2MinuteLedgerRunner(coordinator);
+        Assert.Equal(103, V2LocalLedgerEngine.RemainingMinutes(await coordinator.ReadLedgerAsync(), start));
+
+        var before = await runner.ConsumeDueMinutesAsync(start.AddMinutes(82)); // 20:59
+        var ledger = await coordinator.ReadLedgerAsync();
+        Assert.Equal(82, before.SelectMany(item => item.OutboxFacts)
+            .Count(item => item.EventType == "per_minute_debit"));
+        Assert.Equal(4_894, ledger.BalanceCents);
+        Assert.Equal(660, ledger.Packages.Single().RemainingMinutes);
+        Assert.Equal(V2LocalPackageStatus.Queued, ledger.Packages.Single().Status);
+        Assert.Equal(21, V2LocalLedgerEngine.RemainingMinutes(ledger, start.AddMinutes(82)));
+
+        var opened = await runner.ConsumeDueMinutesAsync(start.AddMinutes(83)); // 21:00
+        Assert.Equal("package_consumed", Assert.Single(Assert.Single(opened).OutboxFacts).EventType);
+        ledger = await coordinator.ReadLedgerAsync();
+        Assert.Equal(4_894, ledger.BalanceCents);
+        Assert.Equal(659, ledger.Packages.Single().RemainingMinutes);
+        Assert.Equal(V2LocalPackageStatus.Active, ledger.Packages.Single().Status);
+        Assert.Equal(600, V2LocalLedgerEngine.RemainingMinutes(ledger, start.AddMinutes(83)));
+        Assert.Empty(await runner.ConsumeDueMinutesAsync(start.AddMinutes(83)));
+
+        var overnight = await runner.ConsumeDueMinutesAsync(start.AddMinutes(682)); // 06:59
+        Assert.DoesNotContain(overnight.SelectMany(item => item.OutboxFacts),
+            item => item.EventType == "per_minute_debit");
+        Assert.Equal(60, (await coordinator.ReadLedgerAsync()).Packages.Single().RemainingMinutes);
+        var closed = Assert.Single(await runner.ConsumeDueMinutesAsync(start.AddMinutes(683)));
+        Assert.True(closed.LockWorkstation);
+        Assert.Equal(new[] { "package_burned", "session_stopped" },
+            closed.OutboxFacts.Select(item => item.EventType));
+        Assert.Equal(V2LocalSessionStatus.Stopped, closed.Ledger.Status);
+        Assert.Equal(V2LocalPackageStatus.Burned, closed.Ledger.Packages.Single().Status);
+        Assert.Equal(4_894, closed.Ledger.BalanceCents);
+        Assert.Empty(await runner.ConsumeDueMinutesAsync(start.AddMinutes(684)));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-500)]

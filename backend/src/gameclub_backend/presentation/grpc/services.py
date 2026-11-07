@@ -756,6 +756,7 @@ class DeviceControlGrpcService(device_control_service_pb2_grpc.DeviceControlServ
                 subject_type=SubjectType.DEVICE,
                 roles=frozenset({"device"}),
                 permissions=frozenset({"workstations.connect"}),
+                installation_id=workstation.installation_id,
             )
         )
         return device_control_service_pb2.DeviceEnrollmentResponse(

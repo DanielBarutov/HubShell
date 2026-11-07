@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from client_release import download_release
+from client_release import download_release, publish_mirror_key
 
 
 def main() -> None:
@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--public-key", type=Path, required=True)
     args = parser.parse_args()
     result = download_release(args.release_id, args.mirror_root, args.public_key)
+    publish_mirror_key(args.mirror_root, args.public_key)
     print(json.dumps(result, sort_keys=True))
 
 

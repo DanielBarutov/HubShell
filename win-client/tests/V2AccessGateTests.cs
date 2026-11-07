@@ -438,7 +438,28 @@ public sealed class V2AccessGateTests
     }
 
     [Fact]
-    public async Task GuestRecoveryAndRefreshDoNotUseTheAccountPortal()
+    public async Task UpdateBlockDoesNotRedeemNewGuestAccess()
+    {
+        // Во время проверки версии новое гостевое право не открывает игровую сессию.
+        var saved = CreateLedger() with { ClientId = Guid.Empty, GuestName = "Guest", GuestPaymentId = Guid.NewGuid() };
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(),
+            deviceId: saved.DeviceId, v2Ledger: coordinator,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator),
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier(),
+            v2GuestSession: new GuestStopGateway(false) { PendingLedger = saved });
+        vm.ApplyDeploymentBlock(true);
+        var poll = typeof(MainViewModel).GetMethod("PollGuestAccessAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await (Task)poll.Invoke(vm, [])!;
+        Assert.False(vm.HasActiveGameSession);
+        Assert.Null(await coordinator.ReadSnapshotAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GuestRecoveryAndRefreshDoNotUseTheAccountPortal(bool blockNewAccess)
     {
         // Проверяет восстановление гостевого ledger без кабинета и клиентского счёта.
         var saved = CreateLedger(loginGrantMinutes: 0,
@@ -475,6 +496,8 @@ public sealed class V2AccessGateTests
             .Invoke(viewModel, [cachedProfile]);
         await viewModel.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(ledger));
         await viewModel.RefreshPortalAsync();
+        // Запрет новых входов не должен отключать продление уже активного гостя.
+        viewModel.ApplyDeploymentBlock(blockNewAccess);
 
         Assert.False(viewModel.IsAccessLocked);
         Assert.True(viewModel.IsActiveSessionVisible);

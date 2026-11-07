@@ -928,11 +928,13 @@ export type BackendBonusGameQuote = {
 };
 
 export type ClientUpdateDeviceStatus = "confirmed" | "unreachable" | "failed" | "rolled_back"
-  | "active_session" | "pending_facts" | "not_ready" | "waiting_gui" | "ready" | "installing" | "verifying";
+  | "active_session" | "pending_facts" | "not_ready" | "waiting_gui" | "ready" | "installing" | "verifying"
+  | "awaiting_agent" | "disabled";
 
 export interface BackendClientUpdateStatus {
   deployment: null | {
     id: string;
+    mode?: "independent";
     release_id: string;
     phase: "polling" | "preparing" | "authorized" | "failed" | "completed";
     created_at: string;
@@ -947,6 +949,9 @@ export interface BackendClientUpdateStatus {
       running_release_id: string | null;
       received_at: string | null;
       error_code: string | null;
+      assigned_release_id?: string;
+      deployment_id?: string | null;
+      round_id?: string | null;
     }>;
   };
 }

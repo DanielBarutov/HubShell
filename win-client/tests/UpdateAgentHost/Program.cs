@@ -38,7 +38,7 @@ while (await Console.In.ReadLineAsync() is { } command && command != "exit")
 
 internal sealed record HostSettings(string Backend, string DeviceId, string InstallationId,
     string CredentialSecret, string GuiToken, string PublicKeyPath, string Directory,
-    string TargetReleaseId, string TargetSha256);
+    string TargetReleaseId, string TargetSha256, Dictionary<string, string>? KnownReleases = null);
 
 // Linux protocol host: process/IPC are simulated; HTTP, signatures and file replacement are real.
 internal sealed class DeveloperGui(HostSettings settings) : IUpdateGuiPlatform
@@ -49,8 +49,16 @@ internal sealed class DeveloperGui(HostSettings settings) : IUpdateGuiPlatform
     private bool _paused;
     private bool _running = true;
     private readonly ClientUpdateStateStore _state = new(settings.Directory);
-    private string Release => ClientExecutableInstaller.Hash(Path.Combine(settings.Directory, "HubShell.exe"))
-        == settings.TargetSha256 ? (Healthy ? settings.TargetReleaseId : "unhealthy") : "v-old";
+    private string Release
+    {
+        get
+        {
+            var hash = ClientExecutableInstaller.Hash(Path.Combine(settings.Directory, "HubShell.exe"));
+            var release = settings.KnownReleases?.GetValueOrDefault(hash)
+                ?? (hash == settings.TargetSha256 ? settings.TargetReleaseId : null);
+            return release is null ? "v-old" : Healthy ? release : "unhealthy";
+        }
+    }
 
     public Task PauseRecoveryAsync(CancellationToken token) { _paused = true; return Task.CompletedTask; }
     public Task ResumeRecoveryAsync(CancellationToken token) { _paused = false; return Task.CompletedTask; }
@@ -85,12 +93,13 @@ internal sealed class DeveloperGui(HostSettings settings) : IUpdateGuiPlatform
     }
     private async Task ConfirmAsync(CancellationToken token)
     {
-        if (Active || !_running || Release != settings.TargetReleaseId || _state.Read()?.Blocked != true) return;
+        if (Active || !_running || Release == "v-old" || Release == "unhealthy" || _state.Read()?.Blocked != true) return;
         using var gui = new HttpClient { BaseAddress = new Uri(settings.Backend) };
         gui.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.GuiToken);
-        var current = await gui.GetFromJsonAsync<JsonElement>("/api/v1/client-updates/gui/current", token);
+        var current = await gui.GetFromJsonAsync<JsonElement>("/api/v1/client-updates/gui/current?release_id=" + Uri.EscapeDataString(Release), token);
         var item = current.GetProperty("deployment");
-        if (item.ValueKind == JsonValueKind.Null || item.GetProperty("phase").GetString() != "authorized") return;
+        if (item.ValueKind == JsonValueKind.Null || item.GetProperty("phase").GetString() != "authorized"
+            || item.GetProperty("release_id").GetString() != Release) return;
         using var response = await gui.PostAsJsonAsync($"/api/v1/client-updates/{item.GetProperty("id").GetString()}/gui-confirm",
             new { release_id = Release }, token);
         response.EnsureSuccessStatusCode();

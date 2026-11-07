@@ -1416,3 +1416,76 @@ PostgreSQL/API, frontend build, Chrome и 167 тестов клиента про
 Изменение ожидания на асинхронное не устраняет ошибку; пробное изменение
 откачено. Новые бонусные UI-тесты проходят. Graphify обновлён (прежние
 предупреждения парсинга/метаданных сохраняются).
+
+2026-10-25: добавлены backend/client тесты ночного окна 21:00–07:00
+со стартом 19:37, балансом 240 ₽ и ставкой 2,33 ₽. Проверены автоматический
+переход в пакет и stop в 07:00; воспроизведён неизменный серверный баланс
+при отсутствии V2-фактов. Linux: 66 backend / 59 .NET tests.
+Подробности и границы доказательства — в плане 46 и VERIFICATION.md.
+
+2026-10-25: подготовлен [план актуальности серверных V2-данных](46-v2-offline-event-platform/BACKEND-FRESHNESS-PLAN.md).
+Включены доставка/сверка, безопасный replay, финансовая свежесть snapshot и
+проверки Kafka/PostgreSQL/операторской карточки. Реализация не начата.
+
+### 2026-11-06 — независимое обновление ПК, первый этап (50)
+
+Согласована замена ожидания всего парка обновлением каждого ПК отдельно.
+Контракты обновлены; [новый план](50-cicd-client-updates/INDEPENDENT-UPDATES.md).
+Реализованы отдельные задания, миграция 0087, независимые Sessions barriers
+и автоматическое продвижение задания при опросе службы. 46 PostgreSQL/domain/HTTP
+тестов прошли. Назначение версий, совместимость при входе, автодоставка и UI
+ещё не завершены. NAS/Windows недоступны; подключения не выполнялись.
+
+2026-11-06 — план 50: постоянное назначение release policy, миграция 0088,
+проверка подписи/архива на backend и автоматические задания при опросе службы.
+59 scoped backend tests + 2 .NET/TCP HTTP/PostgreSQL E2E прошли. Независимый
+E2E проверяет выключенный/занятый второй ПК, rollback, изоляцию ошибки и retry.
+0088 downgrade/re-upgrade и scoped Ruff/format/diff-check прошли.
+Допуск по списку совместимых версий, CD-публикация назначения и UI ещё не готовы.
+NAS/Windows недоступны; GUI/process/IPC E2E моделируются на Linux.
+
+2026-11-06 — план 50: допуск по свежей GUI-версии/installation JWT подключён
+к созданию/реактивации сессии, восстановлению доступа и целевому ПК переноса.
+Policy/наблюдения атомарны с новым входом; активная игра и Kafka-подтверждение
+ранее подписанных фактов сохраняют прежний контур. Новый snapshot проверяет
+конкретный workstation_id вместо барьеров всех ПК. HTTP и V2 gRPC enrollment
+выдают installation_id; JWT предыдущей установки не подтверждает новую.
+Проверки: 77 release/auth/admission tests, затем 45 admission/V2 login/guest
+после исправления неизвестной новой сессии; 38 enrollment/V2 login/guest/transfer,
+11 HTTP/gRPC enrollment, 13 PostgreSQL reconciliation (1 Kafka/Redis skipped),
+2 .NET TCP E2E с repair старого EXE, 62 .NET gate/visibility/update tests.
+Наборы пересекаются, их числа не складываются. Windows host собран на Linux
+без warnings/errors; 0089 downgrade/re-upgrade, scoped Ruff и diff-check прошли.
+Полный CD, UI всех независимых заданий, поставка и native NAS/Windows не доказаны.
+
+2026-11-06 — план 50: sync-client-release.py связывает подписанное зеркало
+и backend policy с версией реально запущенного сервера, без ожидания всех ПК.
+CI добавляет release labels, server release env и публикацию main/v-tag Release;
+Compose задаёт read-only доступ к закреплённому ключу. 9 sync, 8 mirror,
+14 backend/package/.NET E2E, 9 legacy CD и 4 server-order tests прошли; Compose
+validator и actionlint 1.7.7 прошли. Docker boundary sync в unit моделируется;
+настоящий JsonApi publisher проверен TCP/HTTP/PostgreSQL E2E. GitHub CI/новые
+образы/NAS cron ещё не запускались. Инструкция: план 50 CLIENT-UPDATE-RUNBOOK.md.
+
+2026-11-07 — план 50: /current и карточка настроек показывают весь независимый
+парк, версии и статусы без ложного общего закрытия. 18 scoped backend/E2E tests,
+17 frontend tests, production build и scoped Ruff прошли. Frontend lint: прежние
+unused imports ChevronDown (AppShell.tsx), MoreHorizontal (MapScreen.tsx). Браузерная
+fixture карточки проверена при 1100/390 px: 5 строк, нет overflow страницы;
+скриншоты в output/client-update-ui. Живой NAS/backend в браузере не использовался.
+
+2026-11-07 — план 50: локальная win-x64 поставка d0b82e6e602d (dirty snapshot),
+PE/RSA/ZIP/hash проверены; старый release сохранён. 103 backend workflow tests,
+241 .NET tests, 47 standalone tests прошли. Аудит исправил guest polling при
+блоке версии и исключение старых migration/oneoff контейнеров. Остаток: operator
+retry на исправленный policy release после failed старого выпуска.
+Матрица и границы доказательства: 50-cicd-client-updates/INDEPENDENT-AUDIT.md.
+
+2026-11-07 — план 50: recovery на исправленный release завершён локально,
+105 backend workflow tests, 21 frontend tests, production build/actionlint/Ruff
+прошли. E2E: настоящий JsonApi/backend restart/PG/два .NET agents/два signed EXE;
+failed v1 → explicit retry-current → confirmed v2 без снятия барьера до успеха.
+История и идемпотентность сохранены; UI key привязан к failed round.
+Кандидат 2302d734f484: Setup ZIP 76 325 733 bytes, подпись/PE/ZIP/hash проверены.
+241 .NET и 47 standalone — предыдущий актуальный срез того же runtime-кода.
+Новые CI/NAS/Windows gates не выполнены; итоговая граница — INDEPENDENT-AUDIT.md.

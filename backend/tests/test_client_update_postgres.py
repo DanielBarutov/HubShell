@@ -209,3 +209,149 @@ async def test_updater_cannot_forge_independent_gui_confirmation(deployment_cont
     device = next(iter(value.targets))
     with pytest.raises(ApplicationError, match="Device identity"):
         await service.confirm_gui(agent(device), value.id, value.release_id)
+
+
+async def test_independent_polling_finishes_one_pc_while_other_is_offline(deployment_context):
+    """Служба обновляет один ПК; выключенный второй ПК не мешает и не блокируется."""
+    provider, repository, service, fleet = deployment_context
+    async with provider().begin() as transaction:
+        await transaction.execute(delete(DeploymentModel).where(DeploymentModel.id == fleet.id))
+    first = await service.create(OPERATOR, uuid.uuid4(), "independent-v1", HASH, "pc-0")
+    second = await service.create(OPERATOR, uuid.uuid4(), "independent-v1", HASH, "pc-1")
+    updater = Principal(
+        "pc-0",
+        SubjectType.UPDATER,
+        frozenset(),
+        frozenset({"client_updates.poll", "client_updates.report"}),
+    )
+    try:
+        value = await report_ready(service, first, "pc-0")
+        instance = value.reports["pc-0"].instance_id
+        command = await service.agent_command(updater, instance)
+        assert command["deployment"]["phase"] == "preparing"
+        assert command["deployment"]["block_gui"]
+        assert not command["deployment"]["may_install"]
+        value = await repository.get(first.id)
+        value = await report_ready(service, value, "pc-0")
+        command = await service.agent_command(updater, instance)
+        # The final round requires a fresh answer; its instance may differ before authorization.
+        instance = value.reports["pc-0"].instance_id
+        command = await service.agent_command(updater, instance)
+        assert command["deployment"]["phase"] == "authorized"
+        assert command["deployment"]["may_install"]
+        previous = value.reports["pc-0"]
+        await service.begin_install(
+            updater,
+            first.id,
+            dataclasses.replace(previous, sequence=previous.sequence + 1, stage="installing"),
+        )
+        value = await repository.get(first.id)
+        await report_ready(service, value, "pc-0", stage="installed", installed_hash=HASH)
+        gui = Principal(
+            "pc-0", SubjectType.DEVICE, frozenset(), frozenset({"workstations.connect"})
+        )
+        await service.confirm_gui(gui, first.id, first.release_id)
+        command = await service.agent_command(updater, instance)
+        assert command["deployment"]["phase"] == "completed"
+        assert not command["deployment"]["block_gui"]
+        assert (await repository.get(second.id)).phase is DeploymentPhase.POLLING
+        sessions = PostgresSessionRepository(provider)
+        for workstation in (*first.targets.values(), *second.targets.values()):
+            await sessions.save(new_session(workstation))
+    finally:
+        async with provider().begin() as transaction:
+            await transaction.execute(
+                delete(SessionAdmissionBlockModel).where(
+                    SessionAdmissionBlockModel.deployment_id.in_([first.id, second.id])
+                )
+            )
+            await transaction.execute(
+                delete(DeploymentModel).where(DeploymentModel.id.in_([first.id, second.id]))
+            )
+
+
+async def test_independent_jobs_reject_overlap_and_operation_target_reuse(deployment_context):
+    """Независимые задания не допускают двух установок на одном ПК и подмены цели повтора."""
+    provider, _, service, fleet = deployment_context
+    async with provider().begin() as transaction:
+        await transaction.execute(delete(DeploymentModel).where(DeploymentModel.id == fleet.id))
+    first = await service.create(OPERATOR, uuid.uuid4(), "independent-v1", HASH, "pc-0")
+    try:
+        repeated = await service.create(
+            OPERATOR, first.operation_id, first.release_id, HASH, "pc-0"
+        )
+        assert repeated.id == first.id
+        with pytest.raises(ApplicationError, match="unfinished"):
+            await service.create(OPERATOR, uuid.uuid4(), "independent-v2", HASH, "pc-0")
+        with pytest.raises(ApplicationError, match="target changed"):
+            await service.create(OPERATOR, first.operation_id, first.release_id, HASH, "pc-1")
+        with pytest.raises(ApplicationError, match="unfinished"):
+            await service.create(OPERATOR, uuid.uuid4(), "fleet-v2", HASH)
+    finally:
+        async with provider().begin() as transaction:
+            await transaction.execute(delete(DeploymentModel).where(DeploymentModel.id == first.id))
+
+
+async def test_policy_assignment_is_atomic_and_retains_unfinished_job(deployment_context):
+    """Одновременные опросы создают одно задание; новое назначение не вытесняет незавершённое."""
+    import asyncio
+
+    from gameclub_backend.modules.client_updates.domain import ClientReleasePolicy
+    from gameclub_backend.modules.client_updates.infrastructure.postgres import (
+        ClientReleasePolicyModel,
+    )
+
+    provider, repository, service, fleet = deployment_context
+    async with provider().begin() as transaction:
+        await transaction.execute(delete(DeploymentModel).where(DeploymentModel.id == fleet.id))
+    policy = ClientReleasePolicy(
+        uuid.uuid4(),
+        "policy-v1",
+        HASH,
+        ("policy-v1", "previous-v1"),
+        OPERATOR.subject_id,
+        datetime.datetime.now(datetime.UTC),
+    )
+    next_policy = dataclasses.replace(
+        policy,
+        operation_id=uuid.uuid4(),
+        release_id="policy-v2",
+        accepted_release_ids=("policy-v2",),
+    )
+    ids = []
+    try:
+        saved = await repository.publish_policy(policy)
+        assert (await repository.publish_policy(policy)) == saved
+        with pytest.raises(ApplicationError, match="operation id reused"):
+            await repository.publish_policy(
+                dataclasses.replace(policy, accepted_release_ids=("policy-v1",))
+            )
+        target = fleet.targets["pc-0"]
+        results = await asyncio.gather(
+            *(repository.assign_current("pc-0", target) for _ in range(3))
+        )
+        ids.extend(item.id for item in results)
+        assert len(set(ids)) == 1
+        first = results[0]
+        await repository.publish_policy(next_policy)
+        retained = await repository.assign_current("pc-0", target)
+        assert retained.id == first.id
+        assert retained.release_id == "policy-v1"
+        other = await repository.assign_current("pc-1", fleet.targets["pc-1"])
+        ids.append(other.id)
+        assert other.release_id == "policy-v2"
+        # A stored release id remains immutable even after a newer policy exists.
+        with pytest.raises(ApplicationError, match="identity cannot change"):
+            await repository.publish_policy(
+                dataclasses.replace(policy, operation_id=uuid.uuid4(), executable_sha256="b" * 64)
+            )
+    finally:
+        async with provider().begin() as transaction:
+            await transaction.execute(delete(DeploymentModel).where(DeploymentModel.id.in_(ids)))
+            await transaction.execute(
+                delete(ClientReleasePolicyModel).where(
+                    ClientReleasePolicyModel.operation_id.in_(
+                        [policy.operation_id, next_policy.operation_id]
+                    )
+                )
+            )

@@ -51,7 +51,12 @@ class V2SessionLeaseRevoker(typing.Protocol):
 
 
 class SessionTransactionWriter(typing.Protocol):
-    async def require_access(self, transaction: typing.Any, session_id: uuid.UUID) -> None:
+    async def require_access(
+        self,
+        transaction: typing.Any,
+        session_id: uuid.UUID,
+        workstation_id: uuid.UUID | None = None,
+    ) -> None:
         """Check durable admission before issuing or recovering a signed access grant."""
 
     async def save(self, transaction: typing.Any, session: Session) -> Session:
@@ -156,8 +161,16 @@ class TimeNotificationLookup(typing.Protocol):
 
 
 class SessionAdmission(typing.Protocol):
+    def policy_change(self) -> typing.AsyncContextManager[None]:
+        """Serialize release-policy writes with all session admission paths."""
+
     async def block(self, deployment_id: uuid.UUID, workstation_ids: tuple[uuid.UUID, ...]) -> None:
-        """Block starts atomically only when every target has no active session."""
+        """Block idle targets atomically; disjoint deployments may proceed independently."""
 
     async def unblock(self, deployment_id: uuid.UUID) -> None:
         """Release only this deployment's barrier after verified completion."""
+
+
+class ClientReleaseAdmission(typing.Protocol):
+    async def require_release(self, workstation_id: uuid.UUID) -> None:
+        """Require a compatible running GUI for new PC access, preserving active play."""

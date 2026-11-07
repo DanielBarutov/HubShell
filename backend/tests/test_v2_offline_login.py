@@ -7,7 +7,11 @@ import pytest
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from gameclub.v2 import offline_session_service_pb2, offline_session_service_pb2_grpc
+from gameclub.v2 import (
+    offline_session_service_pb2,
+    offline_session_service_pb2_grpc,
+    offline_session_snapshot_pb2,
+)
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
@@ -874,3 +878,55 @@ async def test_night_activation_and_refresh_return_signed_session_bound_package(
     finally:
         await channel.close()
         await server.stop(None)
+
+
+async def test_night_1937_login_signs_queued_package_and_240_rubles_at_233_rate() -> None:
+    service, _, portal, clients, client = await build_service(
+        WorkstationSessionMode.LOCAL_LEDGER, minute_rates=(233,)
+    )
+    now = datetime.datetime(2027, 1, 1, 16, 37, tzinfo=datetime.UTC)
+
+    class FixedClock:
+        def now(self) -> datetime.datetime:
+            return now
+
+    for component in (service, portal, portal._tariffs, portal._entitlements):
+        component._clock = FixedClock()
+    night = await portal._tariffs.create_tariff(
+        "Night 21-07",
+        None,
+        660,
+        1_000,
+        now - datetime.timedelta(days=1),
+        None,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=1439,
+        usage_window_start_minute=1260,
+        usage_window_end_minute=420,
+        window_timezone="Europe/Moscow",
+    )
+    await clients.top_up(client.id, 1_000, 0, "Package", "owner", "night-price")
+    package = await portal._entitlements.purchase(client.id, night.id, "owner", "night-early")
+    await clients.top_up(client.id, 24_000, 0, "Until night", "owner", "night-deposit")
+    login = await service.login(
+        device_id="v2-device-01",
+        identifier="V2 Player",
+        password="safe-password",
+        idempotency_key="night-1937",
+    )
+    payload = login.payload
+    assert payload.balance_cents == 24_000
+    assert payload.debt_limit_cents == 0
+    queued = next(item for item in payload.packages if item.package_id == str(package.id))
+    assert queued.remaining_minutes == 660
+    assert queued.status == offline_session_snapshot_pb2.OFFLINE_PACKAGE_STATUS_QUEUED
+    assert queued.usage_window_start_minute == 1260
+    assert queued.usage_window_end_minute == 420
+    assert queued.window_timezone == "Europe/Moscow"
+    assert not queued.HasField("usage_window_closes_at")
+    assert [item.per_minute_price_cents for item in payload.tariffs if item.is_per_minute] == [233]
+    public_key = Ed25519PublicKey.from_public_bytes(
+        base64.b64decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+    )
+    public_key.verify(login.signature, serialize_snapshot_payload(payload))

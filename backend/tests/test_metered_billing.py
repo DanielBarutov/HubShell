@@ -2429,3 +2429,73 @@ async def test_concurrent_cash_retries_do_not_bypass_required_review() -> None:
     assert (
         await service.get(pending.id)
     ).settlement_status is EntitlementSettlementStatus.NEEDS_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_v2_night_waiting_snapshot_does_not_spend_balance_without_client_facts() -> None:
+    """Polling не заменяет доставку V2-фактов: сервер хранит подтверждённый баланс."""
+    from dataclasses import replace
+
+    from gameclub_backend.jobs.billing import meter_sessions_once
+    from gameclub_backend.modules.workstations.domain import WorkstationSessionMode
+
+    clock = FixedClock()
+    clock.current = datetime.datetime(2026, 10, 25, 16, 37, tzinfo=datetime.UTC)
+    (
+        workstation,
+        client,
+        night,
+        sessions,
+        billing,
+        _,
+        clients,
+        entitlements,
+        catalog,
+    ) = await build_package_metered_services(
+        clock,
+        duration_minutes=660,
+        time_restricted=True,
+        sale_window_start_minute=0,
+        sale_window_end_minute=1439,
+        usage_window_start_minute=21 * 60,
+        usage_window_end_minute=7 * 60,
+        window_timezone="Europe/Moscow",
+        login_grant_minutes=0,
+        initial_balance_cents=25_000,
+        tariff_price_cents=1_000,
+        return_catalog=True,
+    )
+    await sessions._workstations.save(
+        replace(workstation, session_mode=WorkstationSessionMode.LOCAL_LEDGER)
+    )
+    await catalog.create_tariff(
+        "233 kopecks",
+        "vip",
+        1,
+        0,
+        clock.current,
+        None,
+        billing_mode=BillingMode.PER_MINUTE,
+        price_per_minute_cents=233,
+    )
+    package = await entitlements.purchase(client.id, night.id, "operator", "night-1937")
+    session = await sessions.start(
+        workstation.id,
+        created_by="device",
+        client_id=client.id,
+        source="local_ledger",
+        device_id=workstation.device_id,
+        idempotency_key="night-1937-session",
+    )
+    for elapsed in (0, 3, 82, 83):
+        clock.current = session.started_at + datetime.timedelta(minutes=elapsed)
+        assert await meter_sessions_once(billing, sessions, sessions, None) == 0
+        snapshot = await sessions.snapshot(session.id)
+        assert snapshot.server_time == clock.current
+        assert snapshot.balance_cents == 24_000
+        assert snapshot.balance_remaining_minutes == 103
+        assert snapshot.active_entitlement is None
+        queued = next(item for item in snapshot.entitlements if item.id == package.id)
+        assert queued.status is EntitlementStatus.QUEUED
+        assert queued.remaining_minutes == 660
+    assert (await clients.get(client.id)).balance_cents == 24_000

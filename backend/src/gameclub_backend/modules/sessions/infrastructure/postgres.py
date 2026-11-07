@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
 import datetime
+import typing
 import uuid
 
 from sqlalchemy import JSON, DateTime, Integer, String, delete, select, text
@@ -10,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
-from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
+from gameclub_backend.infrastructure.database import (
+    EngineProvider,
+    application_transaction,
+    begin_session,
+    open_session,
+)
+from gameclub_backend.modules.sessions.application.ports import ClientReleaseAdmission
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
@@ -132,8 +140,13 @@ class SessionModel(SessionBase):
 
 
 class PostgresSessionRepository:
-    def __init__(self, engine_provider: EngineProvider) -> None:
+    def __init__(
+        self,
+        engine_provider: EngineProvider,
+        release_admission: ClientReleaseAdmission | None = None,
+    ) -> None:
         self._engine_provider = engine_provider
+        self._release_admission = release_admission
 
     async def get(self, session_id: uuid.UUID) -> Session | None:
         async with open_session(self._engine_provider) as session:
@@ -206,17 +219,38 @@ class PostgresSessionRepository:
     async def save(self, session: Session) -> Session:
         async with open_session(self._engine_provider) as db_session:
             async with begin_session(db_session):
-                return await PostgresSessionTransactionWriter().save(db_session, session)
+                return await PostgresSessionTransactionWriter(self._release_admission).save(
+                    db_session, session
+                )
 
 
 class PostgresSessionTransactionWriter:
     """Public transaction writer; it hides gaming_sessions storage from V2."""
 
-    async def require_access(self, transaction: AsyncSession, session_id: uuid.UUID) -> None:
+    def __init__(self, release_admission: ClientReleaseAdmission | None = None) -> None:
+        self._release_admission = release_admission
+
+    async def require_access(
+        self,
+        transaction: AsyncSession,
+        session_id: uuid.UUID,
+        workstation_id: uuid.UUID | None = None,
+    ) -> None:
         await lock_session_admission(transaction)
         model = await transaction.get(SessionModel, session_id)
-        if model is not None:
-            await require_session_admission(transaction, model.workstation_id)
+        if (
+            model is not None
+            and workstation_id is not None
+            and model.workstation_id != workstation_id
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Session access target changed")
+        target = model.workstation_id if model is not None else workstation_id
+        if target is not None:
+            await require_session_admission(transaction, target)
+            if self._release_admission is not None and (
+                model is None or model.status != SessionStatus.ACTIVE.value
+            ):
+                await self._release_admission.require_release(target)
         elif (
             await transaction.scalar(select(SessionAdmissionBlockModel.workstation_id).limit(1))
             is not None
@@ -236,6 +270,8 @@ class PostgresSessionTransactionWriter:
             or model.workstation_id != session.workstation_id
         ):
             await require_session_admission(transaction, session.workstation_id)
+            if self._release_admission is not None:
+                await self._release_admission.require_release(session.workstation_id)
         if model is None and session.idempotency_key:
             await transaction.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
@@ -320,6 +356,14 @@ class PostgresSessionAdmission:
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
 
+    @contextlib.asynccontextmanager
+    async def policy_change(self) -> typing.AsyncIterator[None]:
+        async with application_transaction(self._engine_provider) as transaction:
+            await transaction.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMISSION_LOCK}
+            )
+            yield
+
     async def block(self, deployment_id: uuid.UUID, workstation_ids: tuple[uuid.UUID, ...]) -> None:
         if not workstation_ids or len(set(workstation_ids)) != len(workstation_ids):
             raise ValueError("Deployment must contain unique workstations")
@@ -334,7 +378,10 @@ class PostgresSessionAdmission:
                     raise ApplicationError(
                         ErrorCode.CONFLICT, "Deployment workstation list changed"
                     )
-                if any(row.deployment_id != deployment_id for row in existing):
+                if any(
+                    row.deployment_id != deployment_id and row.workstation_id in workstation_ids
+                    for row in existing
+                ):
                     raise ApplicationError(ErrorCode.CONFLICT, "Another deployment blocks sessions")
                 active = await transaction.scalar(
                     select(SessionModel.id)

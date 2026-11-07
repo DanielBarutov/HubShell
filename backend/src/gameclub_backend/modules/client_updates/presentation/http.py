@@ -8,7 +8,7 @@ import typing
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, SecretStr, TypeAdapter
 
@@ -16,7 +16,11 @@ from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.client_updates.application.identity import UpdaterIdentityService
 from gameclub_backend.modules.client_updates.application.service import ClientUpdateService
-from gameclub_backend.modules.client_updates.domain import Deployment, DeviceUpdateReport
+from gameclub_backend.modules.client_updates.domain import (
+    ClientReleasePolicy,
+    Deployment,
+    DeviceUpdateReport,
+)
 from gameclub_backend.presentation.http.auth import get_current_principal
 
 Authenticated = typing.Annotated[Principal, Depends(get_current_principal)]
@@ -27,6 +31,13 @@ class CreateDeployment(BaseModel):
     operation_id: uuid.UUID
     release_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     executable_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    device_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class PublishReleasePolicy(BaseModel):
+    operation_id: uuid.UUID
+    release_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    accepted_release_ids: list[str] = Field(default_factory=list, max_length=31)
 
 
 class AgentTokenRequest(BaseModel):
@@ -55,6 +66,10 @@ class AgentReport(BaseModel):
 
 class BeginInstallation(AgentReport):
     stage: typing.Literal["installing"] = "installing"
+
+
+class RetryCurrentRelease(BaseModel):
+    operation_id: uuid.UUID
 
 
 class GuiConfirmation(BaseModel):
@@ -134,12 +149,18 @@ def create_router(
         return await updates().agent_command(principal, instance_id)
 
     @router.get("/gui/current")
-    async def current_gui(principal: Authenticated, response: Response) -> dict:
+    async def current_gui(
+        principal: Authenticated,
+        response: Response,
+        release_id: str | None = Query(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"),
+    ) -> dict:
         response.headers["Cache-Control"] = "no-store"
         if principal.subject_type is not SubjectType.DEVICE:
             raise ApplicationError(ErrorCode.PERMISSION_DENIED, "GUI device identity required")
+        release_allowed = await updates().observe_gui_release(principal, release_id)
         value = await updates().current(principal)
         return {
+            "release_allowed": release_allowed,
             "deployment": None
             if value is None
             else {
@@ -148,7 +169,7 @@ def create_router(
                 "release_id": value.release_id,
                 "phase": value.phase.value,
                 "block_gui": value.phase.value in {"preparing", "authorized", "failed"},
-            }
+            },
         }
 
     @router.get("/releases/{release_id}/{filename}")
@@ -172,12 +193,21 @@ def create_router(
     @router.post("")
     async def create(body: CreateDeployment, principal: Authenticated) -> dict:
         return await _result(
-            updates().create(principal, body.operation_id, body.release_id, body.executable_sha256)
+            updates().create(
+                principal,
+                body.operation_id,
+                body.release_id,
+                body.executable_sha256,
+                body.device_id,
+            )
         )
 
     @router.get("/current")
     async def latest(principal: Authenticated, response: Response) -> dict:
         response.headers["Cache-Control"] = "no-store"
+        fleet = await updates().fleet_status(principal)
+        if fleet is not None:
+            return {"deployment": fleet}
         value = await updates().latest(principal)
         if value is None:
             return {"deployment": None}
@@ -209,6 +239,29 @@ def create_router(
             }
         }
 
+    @router.get("/policy")
+    async def release_policy(principal: Authenticated, response: Response) -> dict:
+        response.headers["Cache-Control"] = "no-store"
+        policy = await updates().release_policy(principal)
+        return {
+            "policy": TypeAdapter(ClientReleasePolicy).dump_python(policy, mode="json")
+            if policy
+            else None
+        }
+
+    @router.post("/policy")
+    async def publish_policy(body: PublishReleasePolicy, principal: Authenticated) -> dict:
+        try:
+            policy = await updates().publish_policy(
+                principal,
+                body.operation_id,
+                body.release_id,
+                tuple(body.accepted_release_ids),
+            )
+            return TypeAdapter(ClientReleasePolicy).dump_python(policy, mode="json")
+        except ValueError as error:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, str(error)) from error
+
     @router.get("/{deployment_id}")
     async def get(deployment_id: uuid.UUID, principal: Authenticated) -> dict:
         return await _result(updates().get(principal, deployment_id))
@@ -232,6 +285,12 @@ def create_router(
     @router.post("/{deployment_id}/retry")
     async def retry(deployment_id: uuid.UUID, principal: Authenticated) -> dict:
         return await _result(updates().retry(principal, deployment_id))
+
+    @router.post("/{deployment_id}/retry-current")
+    async def retry_current(
+        deployment_id: uuid.UUID, body: RetryCurrentRelease, principal: Authenticated
+    ) -> dict:
+        return await _result(updates().retry_current(principal, deployment_id, body.operation_id))
 
     @router.post("/{deployment_id}/finish")
     async def finish(deployment_id: uuid.UUID, principal: Authenticated) -> dict:

@@ -152,6 +152,7 @@ async def test_v2_device_enrollment_issues_only_device_scoped_token() -> None:
         principal = token_service.validate_access_token(enrollment.access_token)
         assert principal.subject_type is SubjectType.DEVICE
         assert principal.subject_id == "v2-device-02"
+        assert principal.installation_id == "v2-installation"
         assert principal.permissions == frozenset({"workstations.connect"})
     finally:
         await channel.close()
@@ -236,9 +237,7 @@ async def test_v2_command_stream_delivers_only_v2_commands_and_acknowledges_them
 
     try:
         stream = client.WatchCommands(
-            device_control_service_pb2.DeviceCommandWatchRequest(
-                device_id="v2-command-device"
-            ),
+            device_control_service_pb2.DeviceCommandWatchRequest(device_id="v2-command-device"),
             metadata=(("authorization", f"Bearer {access_token}"),),
         )
         delivered = await stream.read()

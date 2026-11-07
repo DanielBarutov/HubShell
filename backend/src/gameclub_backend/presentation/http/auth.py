@@ -243,6 +243,7 @@ async def enroll_device(
         subject_type=SubjectType.DEVICE,
         roles=frozenset({"device"}),
         permissions=frozenset({"workstations.connect"}),
+        installation_id=workstation.installation_id,
     )
     token, expires_in = token_service.issue_access_token(principal)
     return DeviceEnrollmentResponse(

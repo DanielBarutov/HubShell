@@ -13,6 +13,12 @@ describe("GameClubApi", () => {
     expect(await new GameClubApi("http://backend/api/v1").getClientUpdateStatus()).toEqual({ deployment: null });
     expect(fetch).toHaveBeenCalledWith("http://backend/api/v1/client-updates/current", expect.anything());
   });
+  it("передаёт ключ повтора на текущий выпуск через защищённый API", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ phase: "preparing" }));
+    await new GameClubApi("http://backend/api/v1").retryClientUpdateCurrent("job-1", "operation-1");
+    expect(fetch).toHaveBeenCalledWith("http://backend/api/v1/client-updates/job-1/retry-current",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ operation_id: "operation-1" }) }));
+  });
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
   });
