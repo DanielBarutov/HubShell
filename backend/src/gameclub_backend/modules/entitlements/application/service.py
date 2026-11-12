@@ -5,7 +5,7 @@ import contextlib
 import dataclasses
 import datetime
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
@@ -64,6 +64,7 @@ class EntitlementService:
         cash: CashEntitlementSettlement | None = None,
         bonuses: BonusEarningsPort | None = None,
         transaction: Callable[[], contextlib.AbstractAsyncContextManager] | None = None,
+        lock_and_check_offline_lease: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -74,6 +75,7 @@ class EntitlementService:
         self._cash = cash
         self._bonuses = bonuses
         self._transaction = transaction or contextlib.nullcontext
+        self._lock_and_check_offline_lease = lock_and_check_offline_lease
         self._reconciliation_lock = asyncio.Lock()
 
     async def list_for_client(self, client_id: uuid.UUID) -> list[Entitlement]:
@@ -593,6 +595,32 @@ class EntitlementService:
             return updated
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def remove_queued(
+        self, entitlement_id: uuid.UUID, client_id: uuid.UUID, reason: str
+    ) -> Entitlement:
+        async with self._transaction():
+            item = await self.get(entitlement_id)
+            if item.client_id != client_id:
+                raise ApplicationError(ErrorCode.NOT_FOUND, "Пакет клиента не найден")
+            if item.removed_from_queue:
+                return item
+            if self._lock_and_check_offline_lease and await self._lock_and_check_offline_lease(
+                client_id
+            ):
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Сначала завершите и синхронизируйте игру"
+                )
+            if self._active_sessions and await self._active_sessions.get_active_for_client(
+                client_id
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Сначала завершите игру клиента")
+            try:
+                return await self._repository.burn_for_client(
+                    entitlement_id, client_id, reason, self._clock.now(), queued_only=True
+                )
+            except ValueError as error:
+                raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
     async def burn(
         self,

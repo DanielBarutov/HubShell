@@ -31,6 +31,13 @@ public sealed class ServerEventConsumerTests
         Assert.Single(persisted.ClientInbox);
         Assert.Equal(1, handler.AcknowledgementCount);
         Assert.EndsWith("/api/events/server/00000000-0000-0000-0000-000000000302/acknowledge", handler.LastPostPath);
+
+        var replay = await consumer.PollOnceAsync();
+        var afterReplay = Assert.IsType<V2LocalLedgerStorageSnapshot>(await store.ReadAsync());
+        Assert.Equal(new V2ServerEventPollResult(1, 1, 0), replay);
+        Assert.Equal(600, afterReplay.Ledger.BalanceCents);
+        Assert.Single(afterReplay.ClientInbox);
+        Assert.Equal(2, handler.AcknowledgementCount);
     }
 
     [Fact]

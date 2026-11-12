@@ -373,6 +373,21 @@ def create_router(
         )
         return BonusOperationResponse.from_domain(operation)
 
+    @router.get("/{client_id}/v2-deposits/{operation_id}/delivery")
+    async def get_v2_deposit_delivery(
+        client_id: uuid.UUID, operation_id: uuid.UUID, principal: Operator
+    ) -> dict[str, bool]:
+        del principal
+        if v2_deposit_credits is None:
+            raise ApplicationError(
+                ErrorCode.DEPENDENCY_UNAVAILABLE,
+                "V2 deposit service is not configured",
+            )
+        acknowledged = await v2_deposit_credits.delivery_acknowledged(client_id, operation_id)
+        if acknowledged is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Deposit not found")
+        return {"acknowledged": acknowledged}
+
     @router.post("/{client_id}/v2-deposits", response_model=V2DepositResponse)
     async def create_v2_deposit(
         client_id: uuid.UUID,

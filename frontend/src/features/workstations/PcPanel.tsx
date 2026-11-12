@@ -213,12 +213,10 @@ export function PcPanel({
                 ? "Нет связи; новые операции заблокированы"
                 : pc.lastSeen || "Готово к новой сессии"}
           </p>
+          {pc.tariff && pc.sessionId && <p className="mt-2 text-xs font-semibold">{pc.tariff}</p>}
           {sessionSnapshot?.meter && (
             <small className="meter-status mt-2 block text-xs text-primary!">
-              {sessionSnapshot.meter.package_minutes > 0
-                ? `Пакет · использовано ${sessionSnapshot.meter.package_minutes} мин`
-                : "Поминутно"}
-              {" · "}списано{" "}
+              Списано{" "}
               {(sessionSnapshot.meter.billed_cents / 100).toLocaleString(
                 "ru-RU",
               )}{" "}
@@ -255,8 +253,8 @@ export function PcPanel({
           <div className="detail-row flex items-center justify-between gap-3 py-2 text-sm">
             <span className="text-base-content/60!">Активный пакет</span>
             <strong>
-              {sessionSnapshot.active_entitlement.remaining_minutes} мин
-              осталось
+              {sessionSnapshot.active_entitlement.remaining_minutes} мин осталось
+              {" · "}{sessionSnapshot.active_entitlement.duration_minutes - sessionSnapshot.active_entitlement.remaining_minutes} мин использовано
             </strong>
           </div>
         )}

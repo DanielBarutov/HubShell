@@ -11,6 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
 from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.entitlements.domain import (
+    OPERATOR_QUEUE_REMOVAL_PREFIX,
     Entitlement,
     EntitlementSettlementStatus,
     EntitlementStatus,
@@ -19,6 +20,25 @@ from gameclub_backend.modules.payment_methods.domain import PaymentPart
 
 
 class PostgresEntitlementTransactionWriter:
+    async def contains_removed_packages(
+        self, transaction: AsyncSession, client_id: uuid.UUID, package_ids: tuple[uuid.UUID, ...]
+    ) -> bool:
+        return (
+            await transaction.scalar(
+                select(EntitlementModel.id)
+                .where(
+                    EntitlementModel.client_id == client_id,
+                    EntitlementModel.id.in_(package_ids),
+                    EntitlementModel.status == EntitlementStatus.BURNED,
+                    EntitlementModel.burn_reason.startswith(
+                        OPERATOR_QUEUE_REMOVAL_PREFIX, autoescape=True
+                    ),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
     async def apply_local_usage(
         self,
         transaction: AsyncSession,
@@ -432,6 +452,8 @@ class PostgresEntitlementRepository:
         client_id: uuid.UUID,
         reason: str,
         now: datetime.datetime,
+        *,
+        queued_only: bool = False,
     ) -> Entitlement:
         async with open_session(self._engine_provider) as session:
             async with begin_session(session):
@@ -445,7 +467,10 @@ class PostgresEntitlementRepository:
                 )
                 if model is None:
                     raise ValueError("Entitlement not found")
-                updated = model.to_domain().burn(reason, now)
+                item = model.to_domain()
+                updated = (
+                    item.remove_from_queue(reason, now) if queued_only else item.burn(reason, now)
+                )
                 model.status = updated.status.value
                 model.ended_at = updated.ended_at
                 model.burn_reason = updated.burn_reason

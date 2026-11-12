@@ -97,6 +97,25 @@ class PostgresV2DepositCreditRepository:
             )
             return lease_id is not None
 
+    async def delivery_acknowledged(
+        self, client_id: uuid.UUID, operation_id: uuid.UUID
+    ) -> bool | None:
+        async with open_session(self._engine_provider) as session:
+            status = await session.scalar(
+                select(V2ServerOutboxModel.status)
+                .join(
+                    V2DepositCreditModel,
+                    V2DepositCreditModel.client_delivery_event_id == V2ServerOutboxModel.event_id,
+                )
+                .where(
+                    V2DepositCreditModel.client_id == client_id,
+                    V2DepositCreditModel.payment_operation_id == operation_id,
+                )
+            )
+            return (
+                status == V2OutgoingEventStatus.ACKNOWLEDGED.value if status is not None else None
+            )
+
     async def apply(
         self,
         command: V2DepositCreditCommand,

@@ -8,6 +8,10 @@ export function toUiWorkstation(
   tariffName?: string,
 ): Workstation {
   const activeSession: BackendSession | undefined = workstation.session_snapshot?.session;
+  const snapshot = workstation.session_snapshot;
+  const activePackage = snapshot?.active_entitlement
+    ?? snapshot?.entitlements.find((item) => item.status === "active")
+    ?? snapshot?.guest_packages?.find((item) => item.status === "active");
   const technicalStatus = {
     online: "online",
     stale: "stale",
@@ -31,7 +35,9 @@ export function toUiWorkstation(
     status: activeSession ? "busy" : technicalStatus,
     client: activeSession?.guest_name ?? clientName ?? (activeSession?.client_id ? "Клиент" : undefined),
     clientId: activeSession?.client_id ?? undefined,
-    tariff: tariffName ?? activeSession?.tariff_id ?? undefined,
+    tariff: activePackage
+      ? activePackage.tariff_name ?? "Пакетный тариф"
+      : snapshot?.active_tariff?.name ?? tariffName ?? activeSession?.tariff_id ?? undefined,
     session: workstation.equipment_type === "xbox" && activeSession
       ? `Осталось ${workstation.session_snapshot?.active_tariff?.remaining_minutes ?? 0} мин`
       : sessionAge,

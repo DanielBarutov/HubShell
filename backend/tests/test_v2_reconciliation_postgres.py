@@ -43,7 +43,10 @@ from gameclub_backend.modules.eventing_v2.infrastructure.deposit_postgres import
 from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import (
     PostgresV2SessionLeaseRepository,
 )
-from gameclub_backend.modules.eventing_v2.infrastructure.postgres import PostgresV2InboxRepository
+from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
+    PostgresV2InboxRepository,
+    PostgresV2ServerOutboxRepository,
+)
 from gameclub_backend.modules.eventing_v2.infrastructure.protobuf import event_to_protobuf
 from gameclub_backend.modules.eventing_v2.infrastructure.reconciliation_postgres import (
     PostgresV2ClientFactReconciliationRepository,
@@ -627,6 +630,18 @@ async def test_postgres_v2_deposit_requires_matching_active_lease(postgres_dsn: 
 
         assert not accepted.is_duplicate
         assert duplicate.is_duplicate
+        assert await service.delivery_acknowledged(client_id, operation_id) is False
+        assert await service.delivery_acknowledged(uuid.uuid4(), operation_id) is None
+        outbox = PostgresV2ServerOutboxRepository(lambda: engine)
+        outgoing = next(
+            item
+            for item in await outbox.list_pending(100)
+            if item.event.event_id == accepted.client_delivery_event_id
+        )
+        await outbox.save(outgoing.record_published(now))
+        assert await service.delivery_acknowledged(client_id, operation_id) is False
+        await outbox.acknowledge(accepted.client_delivery_event_id, command.device_id)
+        assert await service.delivery_acknowledged(client_id, operation_id) is True
         async with engine.connect() as connection:
             counts = (
                 (
@@ -744,6 +759,19 @@ async def test_postgres_v2_snapshot_issue_persists_exact_snapshot_lease_and_outb
     postgres_dsn: str,
 ) -> None:
     """Проверяет заявленное поведение backend."""
+    from gameclub_backend.application.errors import ApplicationError
+    from gameclub_backend.infrastructure.database import application_transaction
+    from gameclub_backend.modules.catalog.application.service import CatalogService
+    from gameclub_backend.modules.catalog.infrastructure.memory import InMemoryCatalogRepository
+    from gameclub_backend.modules.clients.application.service import ClientService
+    from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+    from gameclub_backend.modules.entitlements.application.service import EntitlementService
+    from gameclub_backend.modules.entitlements.domain import Entitlement, EntitlementStatus
+    from gameclub_backend.modules.entitlements.infrastructure.postgres import (
+        PostgresEntitlementRepository,
+        PostgresEntitlementTransactionWriter,
+    )
+
     engine = create_async_engine(postgres_dsn, pool_pre_ping=True)
     now = datetime.datetime.now(datetime.UTC)
     lease = V2SessionLease(
@@ -775,11 +803,68 @@ async def test_postgres_v2_snapshot_issue_persists_exact_snapshot_lease_and_outb
         "test-key-2026-09",
         V2Ed25519SnapshotSigner("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="),
     )
+    packages = PostgresEntitlementRepository(lambda: engine)
+    lease_repository = PostgresV2SessionLeaseRepository(lambda: engine)
+    removal = EntitlementService(
+        packages,
+        CatalogService(InMemoryCatalogRepository()),
+        ClientService(InMemoryClientRepository()),
+        transaction=lambda: application_transaction(lambda: engine),
+        lock_and_check_offline_lease=lease_repository.lock_and_has_active_lease,
+    )
+    removed_id, queued_id, tariff_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     try:
-        service = V2SnapshotIssueService(PostgresV2SnapshotIssueRepository(lambda: engine))
-        issue = V2SignedSnapshotIssue(lease=lease, signed_snapshot=signed_snapshot)
+        for position, package_id in enumerate((removed_id, queued_id), 1):
+            await packages.create(
+                Entitlement(
+                    id=package_id,
+                    client_id=lease.client_id,
+                    tariff_id=tariff_id,
+                    zone_id=None,
+                    duration_minutes=30,
+                    remaining_minutes=30,
+                    price_cents=100,
+                    queue_position=position,
+                    status=EntitlementStatus.QUEUED,
+                    idempotency_key=str(package_id),
+                    purchased_at=now,
+                )
+            )
+        service = V2SnapshotIssueService(
+            PostgresV2SnapshotIssueRepository(
+                lambda: engine, entitlements=PostgresEntitlementTransactionWriter()
+            )
+        )
+        stale_payload = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload()
+        stale_payload.CopyFrom(payload)
+        stale_payload.packages.add(
+            package_id=str(removed_id),
+            tariff_id=str(tariff_id),
+            remaining_minutes=30,
+            status=offline_session_snapshot_pb2.OFFLINE_PACKAGE_STATUS_QUEUED,
+        )
+        stale = sign_offline_session_snapshot(
+            stale_payload,
+            "test-key-2026-09",
+            V2Ed25519SnapshotSigner("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="),
+        )
+        removed, retry = await asyncio.gather(
+            removal.remove_queued(removed_id, lease.client_id, "Зависший пакет"),
+            removal.remove_queued(removed_id, lease.client_id, "Повтор"),
+        )
+        assert removed == retry
+        assert removed.removed_from_queue
+        with pytest.raises(ValueError, match="Очередь тарифов изменилась"):
+            await service.issue(V2SignedSnapshotIssue(lease, stale))
 
+        issue = V2SignedSnapshotIssue(lease=lease, signed_snapshot=signed_snapshot)
         accepted = await service.issue(issue)
+        with pytest.raises(ApplicationError, match="завершите и синхронизируйте"):
+            await removal.remove_queued(queued_id, lease.client_id, "Игра ещё идёт")
+        assert (await removal.get(queued_id)).status is EntitlementStatus.QUEUED
+        assert (
+            await removal.remove_queued(removed_id, lease.client_id, "Повтор")
+        ).removed_from_queue
         duplicate = await service.issue(issue)
         retry_lease = dataclasses.replace(lease, snapshot_id=uuid.uuid4())
         retry_payload = offline_session_snapshot_pb2.OfflineSessionSnapshotPayload()
@@ -836,6 +921,10 @@ async def test_postgres_v2_snapshot_issue_persists_exact_snapshot_lease_and_outb
         assert dict(counts) == {"lease_rows": 1, "outbox_rows": 1, "audit_rows": 1}
     finally:
         async with engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM client_entitlements WHERE client_id = :client_id"),
+                {"client_id": lease.client_id},
+            )
             await connection.execute(
                 text("DELETE FROM audit_events WHERE request_id = :request_id"),
                 {"request_id": str(lease.snapshot_id)},

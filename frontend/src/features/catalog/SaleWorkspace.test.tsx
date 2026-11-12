@@ -206,7 +206,6 @@ describe("Окно продажи", () => {
     const startSession = vi.fn().mockResolvedValue({ id: "session-1" });
     const api = { confirmGuestSessionPayment, prepareGuestSessionAccess, startSession } as unknown as GameClubApi;
     const onSaved = vi.fn();
-    vi.stubGlobal("crypto", { randomUUID: () => "sale-key-test" });
 
     render(
       <SaleWorkspace
@@ -244,7 +243,7 @@ describe("Окно продажи", () => {
       workstation_id: pc.id,
       tariff_id: "global-hour",
       guest_name: "Гость",
-    }), "guest-payment-sale-session-sale-key-test");
+    }), expect.stringMatching(/^guest-payment-sale-session-[0-9a-f-]{36}$/));
     expect(prepareGuestSessionAccess).toHaveBeenCalledWith("payment-1");
     expect(startSession).not.toHaveBeenCalled();
   });
@@ -412,7 +411,7 @@ describe("Окно продажи", () => {
     expect(purchaseEntitlement).toHaveBeenCalledWith(
       client.id,
       "main-hour",
-      expect.any(String),
+      expect.stringMatching(/^sale-tariff-[0-9a-f-]{36}$/),
       [{ method: "cash", amount_cents: 400 }],
       "shift-1",
     );

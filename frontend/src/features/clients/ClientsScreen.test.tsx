@@ -24,6 +24,10 @@ function clientApi(updateClient = vi.fn().mockResolvedValue({})): GameClubApi {
   return {
     updateClient,
     getBonusWallet: vi.fn().mockResolvedValue({ total_cents: 0, reserved_cents: 0, available_cents: 0, pending_cents: 0 }),
+    listClientEntitlements: vi.fn().mockResolvedValue([
+      { id: "queued", tariff_id: "hour", status: "queued", queue_position: 1, remaining_minutes: 60 },
+      { id: "pending", tariff_id: "hour", status: "queued", queue_position: 2, remaining_minutes: 90, settlement_status: "pending" },
+    ]),
     listClientOperations: vi.fn().mockResolvedValue([]),
     listDiscountRules: vi.fn().mockResolvedValue([]),
     getClientAnalytics: vi.fn().mockResolvedValue(null),
@@ -37,6 +41,9 @@ describe("Группа клиента в карточке", () => {
 
     render(<ClientPanel client={client} clientGroups={groups} api={api} onClose={vi.fn()} onSaved={vi.fn()} onDeposit={vi.fn()} onBonusDeposit={vi.fn()} />);
 
+    expect(await screen.findByText("В очереди · осталось 60 мин")).toBeInTheDocument();
+    expect(screen.queryByText(/90 мин/)).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /Редактировать/ }));
     const groupSelector = screen.getByRole("combobox", { name: "Группа клиента" });
     expect(groupSelector).toHaveValue("regular");
@@ -45,6 +52,27 @@ describe("Группа клиента в карточке", () => {
     fireEvent.click(screen.getByRole("button", { name: "Сохранить клиента" }));
 
     await waitFor(() => expect(updateClient).toHaveBeenCalledWith("client-1", expect.objectContaining({ client_group_id: "vip" })));
+  });
+
+  it("снимает только оплаченный пакет после подтверждения и ответа сервера", async () => {
+    const remove = vi.fn().mockRejectedValueOnce(new Error("session active")).mockResolvedValue({});
+    const api = clientApi();
+    api.removeQueuedEntitlement = remove;
+    const confirm = vi.spyOn(window, "prompt").mockReturnValueOnce(null).mockReturnValue("Зависший пакет");
+    render(<ClientPanel client={client} clientGroups={groups} api={api} onClose={vi.fn()} onSaved={vi.fn()} onDeposit={vi.fn()} onBonusDeposit={vi.fn()} />);
+    const button = await screen.findByRole("button", { name: "Снять из очереди" });
+    fireEvent.click(button);
+    expect(remove).not.toHaveBeenCalled();
+
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось снять тариф");
+    expect(button).toBeInTheDocument();
+
+    fireEvent.click(button);
+    expect(await screen.findByText("Активных тарифов и тарифов в очереди нет")).toBeInTheDocument();
+    expect(remove).toHaveBeenLastCalledWith(client.id, "queued", "Зависший пакет");
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("без возврата оплаты"));
+    confirm.mockRestore();
   });
 
   it("передаёт выбранную группу при создании клиента", async () => {

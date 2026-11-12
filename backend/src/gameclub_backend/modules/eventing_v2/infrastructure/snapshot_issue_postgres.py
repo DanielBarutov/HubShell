@@ -11,6 +11,7 @@ from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.application.audit import AuditEvent
 from gameclub_backend.infrastructure.audit_postgres import AuditEventModel
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.modules.entitlements.application.ports import EntitlementTransactionWriter
 from gameclub_backend.modules.eventing_v2.application.lease import V2SessionLease
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import (
     V2SignedSnapshotIssue,
@@ -36,9 +37,11 @@ class PostgresV2SnapshotIssueRepository:
         self,
         engine_provider: EngineProvider,
         session_writer: SessionTransactionWriter | None = None,
+        entitlements: EntitlementTransactionWriter | None = None,
     ) -> None:
         self._engine_provider = engine_provider
         self._session_writer = session_writer
+        self._entitlements = entitlements
 
     async def has_active_lease(
         self,
@@ -148,6 +151,15 @@ class PostgresV2SnapshotIssueRepository:
                         has_live_lease = True
                 if has_live_lease:
                     raise ValueError("Client or device already has an active V2 lease")
+
+                packages = value.signed_snapshot.payload.packages
+                if self._entitlements is not None and packages:
+                    if await self._entitlements.contains_removed_packages(
+                        session,
+                        lease.client_id,
+                        tuple(uuid.UUID(item.package_id) for item in packages),
+                    ):
+                        raise ValueError("Очередь тарифов изменилась. Повторите вход.")
 
                 lease_model = V2SessionLeaseModel.from_domain(lease)
                 lease_model.signing_key_id = value.signed_snapshot.signing_key_id.strip()

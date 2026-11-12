@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toUiWorkstation } from "../../adapters";
 import { MapView } from "./MapScreen";
 import type { Workstation } from "../../types";
 
@@ -192,22 +193,21 @@ describe("Карта игровых мест", () => {
   });
 
   it("показывает hover-карточку server snapshot для занятого места", () => {
-    const busyPc: Workstation = {
+    const busyPc = toUiWorkstation({
       id: "pc-busy",
       name: "VIP-02",
-      group: "VIP",
-      groupId: "vip",
-      status: "busy",
-      client: "NightFox",
-      sessionSnapshot: {
+      status: "online",
+      group_id: "vip",
+      session_snapshot: {
+        session: { id: "session", client_id: "client", tariff_id: "per-minute", started_at: "2026-09-17T18:48:00Z" },
         server_time: "2026-09-17T20:00:00Z",
         balance_cents: 35000,
         balance_remaining_minutes: 150,
         entitlements: [{ status: "active", tariff_name: "Ночной VIP", remaining_minutes: 48, duration_minutes: 120 }],
         active_entitlement: null,
-        active_tariff: null,
-      } as never,
-    };
+        active_tariff: { name: "VIP · Поминутно", remaining_minutes: 0 },
+      },
+    } as Parameters<typeof toUiWorkstation>[0], "VIP", "NightFox", "VIP · Поминутно");
 
     render(
       <MapView
@@ -220,12 +220,15 @@ describe("Карта игровых мест", () => {
     );
 
     const workstation = screen.getByRole("button", { name: "VIP-02: Занят" });
+    expect(workstation).toHaveTextContent("Ночной VIP");
+    expect(workstation).not.toHaveTextContent("Поминутно");
     fireEvent.mouseEnter(workstation);
 
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("NightFox");
     expect(tooltip).toHaveTextContent("Ночной VIP · 2 ч");
     expect(tooltip).toHaveTextContent("осталось 48 мин");
+    expect(tooltip).toHaveTextContent("Использовано 1 ч 12 мин");
     expect(tooltip).toHaveTextContent("350");
     expect(tooltip).toHaveTextContent("Всего по пакетам");
     expect(tooltip).toHaveTextContent("Общее время");

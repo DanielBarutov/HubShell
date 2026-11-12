@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from gameclub_backend.modules.catalog.domain import TariffAudience
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
 
+OPERATOR_QUEUE_REMOVAL_PREFIX = "operator_queue_removal: "
+
 
 class EntitlementStatus(enum.StrEnum):
     QUEUED = "queued"
@@ -253,6 +255,23 @@ class Entitlement:
             ended_at=now,
             burn_reason=normalized_reason[:256],
         )
+
+    @property
+    def removed_from_queue(self) -> bool:
+        return self.status is EntitlementStatus.BURNED and (self.burn_reason or "").startswith(
+            OPERATOR_QUEUE_REMOVAL_PREFIX
+        )
+
+    def remove_from_queue(self, reason: str, now: datetime.datetime) -> "Entitlement":
+        if self.removed_from_queue:
+            return self
+        if self.status is not EntitlementStatus.QUEUED or (
+            self.settlement_status is not EntitlementSettlementStatus.SETTLED
+        ):
+            raise ValueError("Снять можно только оплаченный пакет в очереди")
+        if not reason.strip():
+            raise ValueError("Укажите причину снятия пакета")
+        return self.burn(f"{OPERATOR_QUEUE_REMOVAL_PREFIX}{reason.strip()}", now)
 
     def mark_settled(self, now: datetime.datetime) -> "Entitlement":
         if now.tzinfo is None:

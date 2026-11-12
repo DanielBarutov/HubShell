@@ -133,6 +133,8 @@ class InMemoryEntitlementRepository:
         client_id: uuid.UUID,
         reason: str,
         now: datetime.datetime,
+        *,
+        queued_only: bool = False,
     ) -> Entitlement:
         async with self._lock:
             item = self._items.get(entitlement_id)
@@ -140,7 +142,7 @@ class InMemoryEntitlementRepository:
                 raise ValueError("Entitlement not found")
             if item.client_id != client_id:
                 raise ValueError("Entitlement belongs to another client")
-            updated = item.burn(reason, now)
+            updated = item.remove_from_queue(reason, now) if queued_only else item.burn(reason, now)
             self._items[entitlement_id] = updated
             return updated
 

@@ -25,6 +25,10 @@ class PurchaseEntitlementRequest(BaseModel):
     payment_parts: list["PaymentPartRequest"] = Field(default_factory=list)
 
 
+class RemoveQueuedEntitlementRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=230)
+
+
 class QuoteEntitlementRequest(BaseModel):
     tariff_id: uuid.UUID
     use_bonus: bool = Field(default=False, strict=True)
@@ -175,6 +179,18 @@ def create_router(service: EntitlementService) -> APIRouter:
     ) -> EntitlementResponse:
         del principal
         return EntitlementResponse.from_domain(await service.activate(entitlement_id, client_id))
+
+    @router.post("/{entitlement_id}/remove", response_model=EntitlementResponse)
+    async def remove_queued_entitlement(
+        client_id: uuid.UUID,
+        entitlement_id: uuid.UUID,
+        body: RemoveQueuedEntitlementRequest,
+        principal: Operator,
+    ) -> EntitlementResponse:
+        del principal
+        return EntitlementResponse.from_domain(
+            await service.remove_queued(entitlement_id, client_id, body.reason)
+        )
 
     @router.post("/{entitlement_id}/reconcile", response_model=EntitlementResponse)
     async def reconcile_entitlement(

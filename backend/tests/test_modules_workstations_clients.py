@@ -1,5 +1,6 @@
 import datetime
 import typing
+import uuid
 
 import pytest
 
@@ -268,6 +269,25 @@ async def test_entitlement_queue_requires_explicit_activation_and_preserves_orde
     assert (await clients.get(client.id)).balance_cents == 400
     history = await clients.list_operations(client.id)
     assert history[0].reason == "Покупка тарифа «Two hours»"
+
+    with pytest.raises(ApplicationError, match="только оплаченный пакет в очереди"):
+        await service.remove_queued(first.id, client.id, "Исчерпанный")
+
+    third = await service.purchase(client.id, tariff.id, "operator", "package-003")
+    with pytest.raises(ApplicationError, match="только оплаченный пакет в очереди"):
+        await service.remove_queued(second.id, client.id, "Активный")
+    with pytest.raises(ApplicationError, match="Укажите причину"):
+        await service.remove_queued(third.id, client.id, " ")
+    with pytest.raises(ApplicationError, match="не найден"):
+        await service.remove_queued(third.id, uuid.uuid4(), "Чужой пакет")
+
+    removed = await service.remove_queued(third.id, client.id, "Зависший пакет")
+    assert removed.status.value == "burned"
+    assert removed.burn_reason == "operator_queue_removal: Зависший пакет"
+    assert await service.remove_queued(third.id, client.id, "Повтор") == removed
+    assert await service.next_compatible(client.id, "main") is None
+    assert (await clients.get(client.id)).balance_cents == 100
+    assert len(await clients.list_operations(client.id)) == len(history) + 1
 
 
 async def test_guest_tariff_requires_confirmed_direct_payment_before_session_start() -> None:

@@ -42,6 +42,7 @@ export function SessionHoverCard({ pc, id, style, endingProjection }: {
       {details.packages.map((item, index) => <div className="rounded-lg border border-primary/15! bg-base-200/55! p-2 text-xs" key={`${item.status}-${index}`}>
         <b className="block">{item.tariffName ? `${item.tariffName} · ${formatMinutes(item.durationMinutes)}` : formatMinutes(item.durationMinutes)}</b>
         <span className="mt-1 block text-base-content/60!">{item.status === "active" ? "Активный" : item.availableNow ? "В очереди" : "В очереди · недоступен до окна"} · осталось {formatMinutes(item.remainingMinutes)}</span>
+        {item.status === "active" && <span className="block text-base-content/60!">Использовано {formatMinutes(item.durationMinutes - item.remainingMinutes)}</span>}
       </div>)}
       </div>
     </div>}

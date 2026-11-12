@@ -5,6 +5,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
@@ -25,6 +26,14 @@ class DepositServiceStub:
 
     async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
         return client_id in self.active_clients
+
+    async def delivery_acknowledged(self, client_id, operation_id):
+        if self.command and (client_id, operation_id) == (
+            self.command.client_id,
+            self.command.payment_operation_id,
+        ):
+            return True
+        return None
 
     async def apply(self, command):
         self.command = command
@@ -76,6 +85,20 @@ async def test_operator_v2_deposit_uses_header_key_and_returns_pending_delivery(
                 "payment_parts": [{"method": "transfer", "amount_cents": 12_500}],
             },
         )
+        operation_id = response.json()["payment_operation_id"]
+        headers = {"Authorization": f"Bearer {token}"}
+        confirmed = await http_client.get(
+            f"/api/v1/clients/{client.id}/v2-deposits/{operation_id}/delivery",
+            headers=headers,
+        )
+        with pytest.raises(ApplicationError) as foreign:
+            await http_client.get(
+                f"/api/v1/clients/{uuid.uuid4()}/v2-deposits/{operation_id}/delivery",
+                headers=headers,
+            )
+
+    assert confirmed.json() == {"acknowledged": True}
+    assert foreign.value.code is ErrorCode.NOT_FOUND
 
     assert response.status_code == 200
     assert response.json()["delivery_status"] == "pending_delivery"

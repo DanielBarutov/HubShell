@@ -127,6 +127,7 @@ from gameclub_backend.modules.entitlements.infrastructure.memory import (
 )
 from gameclub_backend.modules.entitlements.infrastructure.postgres import (
     PostgresEntitlementRepository,
+    PostgresEntitlementTransactionWriter,
 )
 from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetService
 from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCreditService
@@ -438,6 +439,9 @@ def build_application_services(
         transaction=(lambda: application_transaction(postgres_engine_provider))
         if settings.postgres_dsn
         else None,
+        lock_and_check_offline_lease=v2_session_leases.lock_and_has_active_lease
+        if v2_session_leases is not None
+        else None,
     )
     reservations = ReservationService(
         reservation_repository,
@@ -578,6 +582,7 @@ def build_application_services(
                 PostgresV2SnapshotIssueRepository(
                     postgres_engine_provider,
                     PostgresSessionTransactionWriter(release_admission),
+                    PostgresEntitlementTransactionWriter(),
                 )
             ),
             signing_key_id=signing_key_id,

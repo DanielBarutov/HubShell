@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
 import { toUiClient } from "../../adapters";
@@ -44,13 +44,18 @@ export function DepositPanel({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submitInFlight = useRef(false);
+  const [pendingDeposit, setPendingDeposit] = useState<{
+    send: (signal: AbortSignal) => Promise<string>;
+    closeOnSuccess: boolean;
+  } | null>(null);
   const normalized = query.trim().toLowerCase();
   const normalizedDigits = normalized.replace(/\D/g, "");
   const searchField = getSearchField(normalized);
   const ready = searchField !== null;
 
   useEffect(() => {
-    if (pendingBonusAdjustment) return undefined;
+    if (pendingBonusAdjustment || pendingDeposit) return undefined;
     if (target) {
       setLiveResult(initialClient);
       return undefined;
@@ -81,7 +86,7 @@ export function DepositPanel({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [api, initialClient, normalized, searchField, target, pendingBonusAdjustment]);
+  }, [api, initialClient, normalized, searchField, target, pendingBonusAdjustment, pendingDeposit]);
 
   const result = api
     ? liveResult
@@ -102,17 +107,26 @@ export function DepositPanel({
   const requiresTargetSelection = !target
     && activeTargets.length > 1
     && !depositTarget;
+  const amountInput = useRef<HTMLInputElement>(null);
+  const selectedClientId = result?.id;
+  useEffect(() => {
+    if (selectedClientId && !bonusOnly) {
+      amountInput.current?.focus();
+      amountInput.current?.select();
+    }
+  }, [selectedClientId, bonusOnly]);
+
   const recipientChanged = !depositTarget && Boolean(initialClient && result && result.id !== initialClient.id);
 
   const submit = async () => {
-    if (!result) {
+    if (!result || submitInFlight.current || deliveryMessage) {
       return;
     }
-    if (requiresTargetSelection) {
+    if (!pendingDeposit && requiresTargetSelection) {
       setSearchError("Выберите игровое место для пополнения");
       return;
     }
-    if (recipientChanged && !recipientChangeConfirmed) {
+    if (!pendingDeposit && recipientChanged && !recipientChangeConfirmed) {
       setSearchError("Подтвердите смену получателя");
       return;
     }
@@ -167,56 +181,108 @@ export function DepositPanel({
       setSearchError("Укажите положительные части наличными и переводом, равные сумме пополнения");
       return;
     }
-    setSubmitting(true);
-    setSearchError(null);
-    try {
-      const paymentParts = depositPaymentMethod === "mixed"
-        ? [
-          { method: "cash", amount_cents: cashPartCents },
-          { method: "transfer", amount_cents: transferPartCents },
-        ]
-        : [{ method: depositPaymentMethod, amount_cents: amountCents }];
-      if (depositTarget) {
-        if (paymentParts.some((part) => part.method === "cash") && !cashShiftId) {
-          setSearchError("Чтобы принять наличные, откройте кассовую смену или выберите перевод.");
-          setSubmitting(false);
-          return;
-        }
-        const deposit = await api.createV2Deposit(
-          result.id,
-          {
-            session_id: depositTarget.sessionId,
-            device_id: depositTarget.deviceId,
-            amount_cents: amountCents,
-            currency: "RUB",
-            reason: "Пополнение через оператора",
-            payment_parts: paymentParts,
-            cash_shift_id: paymentParts.some((part) => part.method === "cash")
-              ? cashShiftId
-              : undefined,
-          },
-          generateUUID(),
-        );
-        setDeliveryMessage(deposit.is_duplicate
-          ? "Пополнение уже учтено. Повторно деньги не списаны."
-          : "Пополнение оформлено. Баланс обновится, когда компьютер будет на связи.");
-        await onCompleted(false);
+    const paymentParts = depositPaymentMethod === "mixed"
+      ? [
+        { method: "cash", amount_cents: cashPartCents },
+        { method: "transfer", amount_cents: transferPartCents },
+      ]
+      : [{ method: depositPaymentMethod, amount_cents: amountCents }];
+    const hasCash = paymentParts.some((part) => part.method === "cash");
+    if (!pendingDeposit && depositTarget && hasCash && !cashShiftId) {
+      setSearchError("Чтобы принять наличные, откройте кассовую смену или выберите перевод.");
+      return;
+    }
+    const payload = { amount_cents: amountCents, reason: "Пополнение через оператора", payment_parts: paymentParts };
+    let operation = pendingDeposit;
+    if (!operation) {
+      const depositPayload = depositTarget ? {
+        ...payload,
+        session_id: depositTarget.sessionId,
+        device_id: depositTarget.deviceId,
+        currency: "RUB",
+        cash_shift_id: hasCash ? cashShiftId : undefined,
+      } : null;
+      const topUpPayload = { ...payload, bonus_amount: parsedBonus };
+      const storageKey = `hubshell:pending-deposit:${result.id}:${JSON.stringify(depositPayload ?? topUpPayload)}`;
+      let existingKey: string | null;
+      let key: string;
+      try {
+        existingKey = sessionStorage.getItem(storageKey);
+        key = existingKey ?? generateUUID();
+        sessionStorage.setItem(storageKey, key);
+      } catch {
+        setSearchError("Браузер не сохранил ключ операции. Пополнение не отправлено.");
         return;
       }
-      await api.topUp(
-        result.id,
-        {
-          amount_cents: amountCents,
-          bonus_amount: parsedBonus,
-          reason: "Пополнение через оператора",
-          payment_parts: paymentParts,
+      let outcomeUnknown = Boolean(existingKey);
+      operation = {
+        closeOnSuccess: !depositPayload,
+        send: async (signal) => {
+          try {
+            if (!depositPayload) {
+              await api.topUp(result.id, topUpPayload, key, signal);
+              sessionStorage.removeItem(storageKey);
+              return "Пополнение оформлено.";
+            }
+            const deposit = await api.createV2Deposit(result.id, depositPayload, key, signal);
+            sessionStorage.removeItem(storageKey);
+            setDeliveryMessage("Пополнение зачислено на сервере. Ждём подтверждение ПК.");
+            const deliveryTimeout = AbortSignal.timeout(10_000);
+            while (!deliveryTimeout.aborted) {
+              try {
+                const delivery = await api.getV2DepositDelivery(result.id, deposit.payment_operation_id, deliveryTimeout);
+                if (delivery.acknowledged) return "Пополнение получено игровым ПК.";
+              } catch {
+                // Ошибка чтения статуса не отменяет зачисление.
+              }
+              if (!deliveryTimeout.aborted) await new Promise((resolve) => window.setTimeout(resolve, 1000));
+            }
+            return "Пополнение зачислено на сервере. ПК пока не подтвердил получение.";
+          } catch (error) {
+            if (!outcomeUnknown && error instanceof ApiError && [400, 404, 422].includes(error.status)) {
+              sessionStorage.removeItem(storageKey);
+              throw error;
+            }
+            outcomeUnknown = true;
+            if (error instanceof ApiError && error.status < 500) {
+              throw new Error("Deposit result still unknown", { cause: error });
+            }
+            throw error;
+          }
         },
-        generateUUID(),
-      );
-      await onCompleted();
+      };
+    }
+    submitInFlight.current = true;
+    setSubmitting(true);
+    setPendingDeposit(operation);
+    setSearchError(null);
+    try {
+      let message: string;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          message = await operation.send(AbortSignal.timeout(2500));
+          break;
+        } catch (error) {
+          if (attempt === 2 || (error instanceof ApiError && error.status < 500)) throw error;
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      }
+      setDeliveryMessage(message);
+      setPendingDeposit(null);
+      try {
+        await onCompleted(operation.closeOnSuccess);
+      } catch {
+        setSearchError("Пополнение оформлено. Не удалось обновить данные клиента.");
+      }
     } catch (error) {
-      setSearchError(error instanceof ApiError ? error.message : "Не удалось пополнить депозит");
+      if (!pendingDeposit && error instanceof ApiError && [400, 404, 422].includes(error.status)) {
+        setPendingDeposit(null);
+        setSearchError(error.message);
+      } else {
+        setSearchError("Нет подтверждения результата. Повторите это пополнение с сохранённым ключом.");
+      }
     } finally {
+      submitInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -230,13 +296,14 @@ export function DepositPanel({
         : depositTarget
           ? "Зачислим средства на баланс выбранного клиента."
           : "Введите имя или номер телефона."}</p>
-      <div className="search-box panel-search input input-sm flex items-center gap-2 border-primary/20! bg-base-200/55! shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]"><Search size={17} /><input className="grow input input-sm" aria-label="Ник или номер телефона" autoFocus={!depositTarget} value={query} disabled={Boolean(depositTarget) || Boolean(pendingBonusAdjustment)} onChange={(event) => { setQuery(event.target.value); setRecipientChangeConfirmed(false); }} placeholder="Ник или номер телефона" /></div>
+      <div className="search-box panel-search input input-sm flex items-center gap-2 border-primary/20! bg-base-200/55! shadow-[inset_0_0_16px_rgba(49,217,120,0.04)]"><Search size={17} /><input className="grow input input-sm" aria-label="Ник или номер телефона" autoFocus={!initialClient && !depositTarget} value={query} disabled={Boolean(depositTarget || pendingBonusAdjustment || pendingDeposit)} onChange={(event) => { setQuery(event.target.value); setRecipientChangeConfirmed(false); }} placeholder="Ник или номер телефона" /></div>
       {ready && result && <div className="client-result flex items-center gap-3 rounded-lg border border-primary/20! bg-base-200/55! p-3"><div className="client-avatar grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary! text-sm font-bold text-primary-content!">{result.nickname.slice(0, 2).toUpperCase()}</div><div><strong>{result.nickname}</strong><span>{formatRussianPhone(result.phone)}</span></div></div>}
       {ready && !result && <div className="empty-result rounded-lg border border-primary/20! bg-base-200/55! p-3 text-sm text-base-content/60!" role="status" aria-live="polite">{searchError || "Клиент не найден"}</div>}
     </section>
     {!target && activeTargets.length > 1 && <label className="amount-field deposit-target-field">Игровое место
         <select className="select select-sm"
         aria-label="Игровое место"
+        disabled={Boolean(pendingDeposit)}
         value={validSelectedSessionId}
         onChange={(event) => setSelectedV2SessionId(event.target.value)}
       >
@@ -249,13 +316,13 @@ export function DepositPanel({
       </select>
     </label>}
     {depositTarget && (target || activeTargets.length === 1) && <div className="deposit-session-route flex items-center justify-between gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-xs text-base-content/60!"><span>Игровое место</span><strong>{depositTarget.workstationName}</strong></div>}
-    {recipientChanged && <label className="settings-checkbox mt-2 flex cursor-pointer items-center gap-3 text-sm"><input className="toggle toggle-primary toggle-sm" type="checkbox" checked={recipientChangeConfirmed} onChange={(event) => setRecipientChangeConfirmed(event.target.checked)} /> Подтверждаю смену получателя с «{initialClient?.nickname}» на «{result?.nickname}»</label>}
+    {recipientChanged && <label className="settings-checkbox mt-2 flex cursor-pointer items-center gap-3 text-sm"><input className="toggle toggle-primary toggle-sm" type="checkbox" disabled={Boolean(pendingDeposit)} checked={recipientChangeConfirmed} onChange={(event) => setRecipientChangeConfirmed(event.target.checked)} /> Подтверждаю смену получателя с «{initialClient?.nickname}» на «{result?.nickname}»</label>}
     {result && !deliveryMessage && <div className="deposit-fields flex flex-col gap-3 border-t border-primary/15! pt-4">
       {!bonusOnly && <>
-        <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Сумма пополнения<input className="input input-sm" aria-label="Сумма пополнения в рублях" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /> <span>₽</span></label>
-        <label className="amount-field deposit-payment-field">Способ оплаты<select className="select select-sm" value={depositPaymentMethod} onChange={(event) => { const method = event.target.value as "cash" | "transfer" | "mixed"; setDepositPaymentMethod(method); if (method === "mixed") { const half = (Math.round(Number(amount.replace(",", ".")) * 100) / 200).toFixed(2); setCashPartAmount(half); setTransferPartAmount(half); } }}><option value="cash">Наличные</option><option value="transfer">Перевод</option><option value="mixed">Смешанная оплата</option></select></label>
-        {depositPaymentMethod === "mixed" && <div className="deposit-payment-parts grid grid-cols-1 gap-3 md:grid-cols-2"><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Наличными<input className="input input-sm" aria-label="Сумма наличными" inputMode="decimal" value={cashPartAmount} onChange={(event) => setCashPartAmount(event.target.value)} /> <span>₽</span></label><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Переводом<input className="input input-sm" aria-label="Сумма переводом" inputMode="decimal" value={transferPartAmount} onChange={(event) => setTransferPartAmount(event.target.value)} /> <span>₽</span></label></div>}
-        {!depositTarget && activeTargets.length === 0 && <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="numeric" value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>}
+        <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Сумма пополнения<input className="input input-sm" aria-label="Сумма пополнения в рублях" ref={amountInput} inputMode="decimal" disabled={Boolean(pendingDeposit)} value={amount} onChange={(event) => setAmount(event.target.value)} /> <span>₽</span></label>
+        <label className="amount-field deposit-payment-field">Способ оплаты<select className="select select-sm" disabled={Boolean(pendingDeposit)} value={depositPaymentMethod} onChange={(event) => { const method = event.target.value as "cash" | "transfer" | "mixed"; setDepositPaymentMethod(method); if (method === "mixed") { const half = (Math.round(Number(amount.replace(",", ".")) * 100) / 200).toFixed(2); setCashPartAmount(half); setTransferPartAmount(half); } }}><option value="cash">Наличные</option><option value="transfer">Перевод</option><option value="mixed">Смешанная оплата</option></select></label>
+        {depositPaymentMethod === "mixed" && <div className="deposit-payment-parts grid grid-cols-1 gap-3 md:grid-cols-2"><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Наличными<input className="input input-sm" aria-label="Сумма наличными" inputMode="decimal" disabled={Boolean(pendingDeposit)} value={cashPartAmount} onChange={(event) => setCashPartAmount(event.target.value)} /> <span>₽</span></label><label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Переводом<input className="input input-sm" aria-label="Сумма переводом" inputMode="decimal" disabled={Boolean(pendingDeposit)} value={transferPartAmount} onChange={(event) => setTransferPartAmount(event.target.value)} /> <span>₽</span></label></div>}
+        {!depositTarget && activeTargets.length === 0 && <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="numeric" disabled={Boolean(pendingDeposit)} value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /> <span>шт.</span></label>}
       </>}
       {bonusOnly && <div className="col-span-full flex flex-col gap-3">
         <label className="amount-field flex flex-col gap-1 text-xs text-base-content/60!">Бонусы<input className="input input-sm" aria-label="Количество бонусов" inputMode="decimal" disabled={Boolean(pendingBonusAdjustment)} value={bonusAmount} onChange={(event) => setBonusAmount(event.target.value)} /></label>
@@ -267,9 +334,9 @@ export function DepositPanel({
     {deliveryMessage && <div className="form-success rounded-lg border border-success/40! bg-success/10! p-3 text-sm text-success-content!" role="status" aria-live="polite">{deliveryMessage}</div>}
     {searchError && result && <div className="form-error rounded-lg border border-error/40! bg-error/10! p-3 text-sm text-error-content!" role="alert">{searchError}</div>}
     {deliveryMessage
-      ? <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" onClick={onClose}>Готово</button>
+      ? <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" disabled={submitting} onClick={onClose}>{submitting ? "Ждём подтверждение…" : "Готово"}</button>
       : <>
-        <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" disabled={!result || submitting || requiresTargetSelection || (recipientChanged && !recipientChangeConfirmed)} onClick={() => void submit()}>{submitting ? bonusOnly ? "Сохраняем..." : "Зачисляем..." : bonusOnly ? pendingBonusAdjustment ? "Повторить корректировку" : bonusAmount.trim().startsWith("-") ? "Списать бонусы" : "Начислить бонусы" : "Зачислить депозит"}</button>
+        <button className="primary-button btn btn-primary btn-block wide w-full bg-primary! text-primary-content!" disabled={!result || submitting || (!pendingDeposit && (requiresTargetSelection || (recipientChanged && !recipientChangeConfirmed)))} onClick={() => void submit()}>{submitting ? bonusOnly ? "Сохраняем..." : "Зачисляем..." : bonusOnly ? pendingBonusAdjustment ? "Повторить корректировку" : bonusAmount.trim().startsWith("-") ? "Списать бонусы" : "Начислить бонусы" : pendingDeposit ? "Повторить пополнение" : "Зачислить депозит"}</button>
         <button className="secondary-button btn btn-outline btn-block wide w-full" onClick={onClose}>Отмена</button>
       </>}
   </div>;

@@ -21,6 +21,8 @@ import type {
   BackendBalanceOperation,
   BackendClientAnalytics,
   BackendClientGroup,
+  BackendEntitlement,
+  BackendTariff,
 } from "../../api";
 import { toUiClient } from "../../adapters";
 import { BonusWalletSummary } from "./BonusWalletSummary";
@@ -296,6 +298,7 @@ export function ClientsView({
 export function ClientPanel({
   client,
   clientGroups,
+  tariffs = [],
   api,
   onClose,
   onSaved,
@@ -304,6 +307,7 @@ export function ClientPanel({
 }: {
   client: Client;
   clientGroups: BackendClientGroup[];
+  tariffs?: BackendTariff[];
   api?: GameClubApi;
   onClose: () => void;
   onSaved: () => void;
@@ -325,6 +329,52 @@ export function ClientPanel({
   const [discountRules, setDiscountRules] = useState<
     Awaited<ReturnType<GameClubApi["listDiscountRules"]>>
   >([]);
+  const [packageQueue, setPackageQueue] = useState<{
+    clientId: string;
+    items: BackendEntitlement[];
+    failed?: boolean;
+  } | null>(null);
+  const queue = packageQueue?.clientId === client.id ? packageQueue : null;
+  const [removingPackageId, setRemovingPackageId] = useState<string | null>(null);
+  const [removePackageError, setRemovePackageError] = useState<string | null>(null);
+
+  const removeQueuedPackage = async (item: BackendEntitlement) => {
+    if (!api || removingPackageId) return;
+    const reason = window.prompt("Снять тариф из очереди без возврата оплаты? Укажите причину.")?.trim();
+    if (!reason) return;
+    setRemovingPackageId(item.id);
+    setRemovePackageError(null);
+    try {
+      await api.removeQueuedEntitlement(client.id, item.id, reason);
+      setPackageQueue((current) => current && {
+        ...current,
+        items: current.items.filter((entry) => entry.id !== item.id),
+      });
+    } catch (requestError) {
+      setRemovePackageError(requestError instanceof ApiError ? requestError.message : "Не удалось снять тариф. Повторите запрос.");
+    } finally {
+      setRemovingPackageId(null);
+    }
+  };
+
+
+  useEffect(() => {
+    if (!api) return;
+    let active = true;
+    void api.listClientEntitlements(client.id).then((items) => {
+      if (active) setPackageQueue({
+        clientId: client.id,
+        items: items.filter((item) =>
+          (item.status === "active" || item.status === "queued")
+          && (item.settlement_status ?? "settled") === "settled"
+        ).sort((left, right) => left.queue_position - right.queue_position),
+      });
+    }).catch(() => {
+      if (active) setPackageQueue({ clientId: client.id, items: [], failed: true });
+    });
+    return () => { active = false; };
+  }, [api, client.id]);
+
   const [editing, setEditing] = useState(false);
   const [nickname, setNickname] = useState(client.nickname);
   const [phone, setPhone] = useState(formatRussianPhone(client.phone));
@@ -623,6 +673,25 @@ export function ClientPanel({
           </button>
         </div>
       </div>
+      {api && <section className="panel-section rounded-xl border border-primary/15! bg-base-200/40! p-4">
+        <h3 className="mb-2">Тарифы клиента</h3>
+        {!queue && <p role="status">Загружаем тарифы…</p>}
+        {queue?.failed && <p role="alert">Не удалось загрузить тарифы</p>}
+        {removePackageError && <p role="alert">{removePackageError}</p>}
+        {queue && !queue.failed && !queue.items.length && <p>Активных тарифов и тарифов в очереди нет</p>}
+        {queue?.items.map((item) => <div className="border-t border-primary/10! py-2 text-sm" key={item.id}>
+          <strong>{tariffs.find((tariff) => tariff.id === item.tariff_id)?.name ?? "Пакетный тариф"}</strong>
+          <p className="text-xs text-base-content/60!">
+            {item.status === "active" ? "Активный" : "В очереди"} · осталось {item.remaining_minutes} мин
+            {item.status === "active" && ` · использовано ${item.duration_minutes - item.remaining_minutes} мин`}
+          </p>
+          {item.status === "queued" && <button
+            className="btn btn-outline btn-xs mt-2"
+            disabled={removingPackageId !== null}
+            onClick={() => void removeQueuedPackage(item)}
+          >{removingPackageId === item.id ? "Снимаем…" : "Снять из очереди"}</button>}
+        </div>)}
+      </section>}
       {analytics && (
         <div className="panel-section client-analytics-section rounded-xl border border-primary/15! bg-base-200/40! p-4">
           <div className="operation-heading mb-2 flex items-center justify-between gap-3">

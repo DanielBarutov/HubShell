@@ -456,9 +456,11 @@ export class GameClubApi {
       payment_parts?: BackendPaymentPart[];
     },
     idempotencyKey: string,
+    signal?: AbortSignal,
   ): Promise<BackendClient> {
     const response = await this.request<{ client: BackendClient }>(`/clients/${clientId}/top-up`, {
       method: "POST",
+      signal,
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     });
@@ -477,12 +479,18 @@ export class GameClubApi {
       cash_shift_id?: string;
     },
     idempotencyKey: string,
+    signal?: AbortSignal,
   ): Promise<BackendV2Deposit> {
     return this.request<BackendV2Deposit>(`/clients/${clientId}/v2-deposits`, {
       method: "POST",
+      signal,
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     });
+  }
+
+  async getV2DepositDelivery(clientId: string, operationId: string, signal: AbortSignal): Promise<{ acknowledged: boolean }> {
+    return this.request(`/clients/${clientId}/v2-deposits/${operationId}/delivery`, { signal });
   }
 
   async getClientUpdateStatus(signal?: AbortSignal): Promise<BackendClientUpdateStatus> {
@@ -541,6 +549,13 @@ export class GameClubApi {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId, ...bonusConfirmation }),
+    });
+  }
+
+  async removeQueuedEntitlement(clientId: string, entitlementId: string, reason: string): Promise<BackendEntitlement> {
+    return this.request(`/clients/${clientId}/entitlements/${entitlementId}/remove`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     });
   }
 

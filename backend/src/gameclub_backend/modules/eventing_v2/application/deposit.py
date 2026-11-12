@@ -99,6 +99,11 @@ class V2DepositCreditRepository(typing.Protocol):
     async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
         """Return whether a client currently requires V2-aware deposit delivery."""
 
+    async def delivery_acknowledged(
+        self, client_id: uuid.UUID, operation_id: uuid.UUID
+    ) -> bool | None:
+        """Return the device acknowledgement, or None for an unknown deposit."""
+
     async def apply(
         self,
         command: V2DepositCreditCommand,
@@ -130,6 +135,11 @@ class V2DepositCreditService:
 
     async def has_active_lease_for_client(self, client_id: uuid.UUID) -> bool:
         return await self._repository.has_active_lease_for_client(client_id)
+
+    async def delivery_acknowledged(
+        self, client_id: uuid.UUID, operation_id: uuid.UUID
+    ) -> bool | None:
+        return await self._repository.delivery_acknowledged(client_id, operation_id)
 
     async def apply(self, command: V2DepositCreditCommand) -> V2DepositCreditResult:
         return await self._repository.apply(command, self._clock.now())

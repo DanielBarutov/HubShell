@@ -6,6 +6,11 @@ from gameclub_backend.modules.entitlements.domain import Entitlement, Entitlemen
 
 
 class EntitlementTransactionWriter(typing.Protocol):
+    async def contains_removed_packages(
+        self, transaction, client_id: uuid.UUID, package_ids: tuple[uuid.UUID, ...]
+    ) -> bool:
+        """Check that an entitlement snapshot did not race an operator removal."""
+
     async def apply_local_usage(
         self,
         transaction: typing.Any,
@@ -74,6 +79,8 @@ class EntitlementRepository(typing.Protocol):
         client_id: uuid.UUID,
         reason: str,
         now: datetime.datetime,
+        *,
+        queued_only: bool = False,
     ) -> Entitlement:
         """Atomically burn an already started entitlement."""
 

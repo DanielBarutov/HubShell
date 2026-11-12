@@ -662,7 +662,7 @@ export function SaleWorkspace({
           index < tariffLine.quantity;
           index += 1
         ) {
-          purchaseKeys.push(`sale-tariff-${generateUUID}`);
+          purchaseKeys.push(`sale-tariff-${generateUUID()}`);
         }
         tariffIdempotencyKeys.current.set(tariffLine.key, purchaseKeys);
         let remainingCashPartCents =

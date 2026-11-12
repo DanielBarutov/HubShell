@@ -76,6 +76,25 @@ class PostgresV2SessionLeaseRepository:
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
 
+    async def lock_and_has_active_lease(self, client_id: uuid.UUID) -> bool:
+        """Serialize queue removal with signed login inside the caller's transaction."""
+        async with open_session(self._engine_provider) as session:
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"v2-lease-client:{client_id}"},
+            )
+            return (
+                await session.scalar(
+                    select(V2SessionLeaseModel.session_id)
+                    .where(
+                        V2SessionLeaseModel.client_id == client_id,
+                        V2SessionLeaseModel.status == "active",
+                    )
+                    .limit(1)
+                )
+                is not None
+            )
+
     async def revoke(
         self,
         session_id: uuid.UUID,

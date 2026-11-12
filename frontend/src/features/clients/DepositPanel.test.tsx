@@ -122,7 +122,7 @@ describe("Пополнение депозита", () => {
       is_duplicate: false,
     });
     const onCompleted = vi.fn();
-    const api = { createV2Deposit } as unknown as GameClubApi;
+    const api = { createV2Deposit, getV2DepositDelivery: vi.fn().mockResolvedValue({ acknowledged: true }) } as unknown as GameClubApi;
 
     const { container } = render(<DepositPanel
       initialClient={client}
@@ -136,6 +136,7 @@ describe("Пополнение депозита", () => {
     />);
 
     expect(container.textContent).not.toContain("V2");
+    expect(screen.getByLabelText("Сумма пополнения в рублях")).toHaveFocus();
     expect(screen.getByRole("textbox", { name: "Ник или номер телефона" })).toBeDisabled();
     expect(screen.getByText("Игровое место").parentElement).toHaveTextContent("VIP-07");
     fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
@@ -150,14 +151,53 @@ describe("Пополнение депозита", () => {
         cash_shift_id: "cash-shift-1",
       }),
       expect.any(String),
+      expect.any(AbortSignal),
     ));
+    expect(await screen.findByText("Пополнение получено игровым ПК.")).toBeInTheDocument();
     expect(onCompleted).toHaveBeenCalledWith(false);
-    expect(screen.getByRole("status")).toHaveTextContent("Пополнение оформлено. Баланс обновится, когда компьютер будет на связи.");
+    expect(api.getV2DepositDelivery).toHaveBeenCalledOnce();
+  });
+
+  it.each(["topUp", "createV2Deposit"] as const)("повторяет %s с исходными данными и ключом после потери ответа", async (method) => {
+    const send = vi.fn().mockRejectedValueOnce(new Error("lost response")).mockResolvedValue({ is_duplicate: true });
+    const onCompleted = vi.fn().mockRejectedValue(new Error("refresh failed"));
+    render(<DepositPanel
+      initialClient={client}
+      target={method === "createV2Deposit" ? { sessionId: "session", deviceId: "device", workstationName: "VIP" } : undefined}
+      cashShiftId="shift"
+      api={{ [method]: send, searchClients: vi.fn().mockResolvedValue([]), getV2DepositDelivery: vi.fn().mockResolvedValue({ acknowledged: true }) } as unknown as GameClubApi}
+      clients={[client]} workstations={[]} onClose={vi.fn()} onCompleted={onCompleted}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
+    expect(screen.getByLabelText("Сумма пополнения в рублях")).toBeDisabled();
+    await screen.findByRole("button", { name: "Готово" });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1].slice(0, 3)).toEqual(send.mock.calls[0].slice(0, 3));
+    expect(screen.queryByRole("button", { name: "Повторить пополнение" })).not.toBeInTheDocument();
+    expect(onCompleted).toHaveBeenCalledOnce();
+  });
+
+  it("сохраняет ключ неопределённого пополнения при повторном открытии формы", async () => {
+    const send = vi.fn().mockRejectedValue(new Error("lost response"));
+    const api = { topUp: send, searchClients: vi.fn().mockResolvedValue([]) } as unknown as GameClubApi;
+    const panel = <DepositPanel initialClient={client} api={api}
+      clients={[client]} workstations={[]} onClose={vi.fn()} onCompleted={vi.fn()} />;
+    const first = render(panel);
+    fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
+    await screen.findByRole("button", { name: "Повторить пополнение" }, { timeout: 3000 });
+    first.unmount();
+
+    send.mockResolvedValue({});
+    render(panel);
+    fireEvent.click(screen.getByRole("button", { name: "Зачислить депозит" }));
+    await screen.findByText("Пополнение оформлено.");
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(send.mock.calls[3].slice(0, 3)).toEqual(send.mock.calls[0].slice(0, 3));
   });
 
   it("не отправляет V2 наличное пополнение без открытой кассовой смены", async () => {
     const createV2Deposit = vi.fn();
-    const api = { createV2Deposit } as unknown as GameClubApi;
+    const api = { createV2Deposit, getV2DepositDelivery: vi.fn().mockResolvedValue({ acknowledged: true }) } as unknown as GameClubApi;
     render(<DepositPanel
       initialClient={client}
       target={{ sessionId: "session-v2-1", deviceId: "device-v2-1", workstationName: "VIP-07" }}
@@ -193,7 +233,7 @@ describe("Пополнение депозита", () => {
       updated_at: "2026-10-01T00:00:00Z",
     };
     const searchClients = vi.fn().mockResolvedValue([backendClient]);
-    const api = { searchClients, createV2Deposit } as unknown as GameClubApi;
+    const api = { searchClients, createV2Deposit, getV2DepositDelivery: vi.fn().mockResolvedValue({ acknowledged: true }) } as unknown as GameClubApi;
     const activeWorkstation: Workstation = {
       id: "pc-1",
       name: "VIP-07",
@@ -227,6 +267,7 @@ describe("Пополнение депозита", () => {
         cash_shift_id: "cash-shift-1",
       }),
       expect.any(String),
+      expect.any(AbortSignal),
     ));
   });
 
@@ -235,7 +276,7 @@ describe("Пополнение депозита", () => {
       delivery_status: "pending_delivery",
       is_duplicate: false,
     });
-    const api = { createV2Deposit } as unknown as GameClubApi;
+    const api = { createV2Deposit, getV2DepositDelivery: vi.fn().mockResolvedValue({ acknowledged: true }) } as unknown as GameClubApi;
     const firstSession: Workstation = {
       id: "pc-1",
       name: "VIP-07",
@@ -278,6 +319,7 @@ describe("Пополнение депозита", () => {
         device_id: "device-v2-2",
       }),
       expect.any(String),
+      expect.any(AbortSignal),
     ));
   });
 });
