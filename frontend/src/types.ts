@@ -16,6 +16,7 @@ export type Workstation = {
   session?: string;
   sessionId?: string;
   lastSeen?: string;
+  clientVersion?: string;
   position?: number | null;
   groupId?: string | null;
   deviceId?: string;

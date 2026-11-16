@@ -213,6 +213,11 @@ export function PcPanel({
                 ? "Нет связи; новые операции заблокированы"
                 : pc.lastSeen || "Готово к новой сессии"}
           </p>
+          {!isXbox && (
+            <p className="mt-1 text-xs text-base-content/60!" title={pc.clientVersion}>
+              Версия клиента: {pc.clientVersion?.replace(/^commit-([a-f0-9]{7})[a-f0-9]{33}$/i, "$1") ?? "нет данных"}
+            </p>
+          )}
           {pc.tariff && pc.sessionId && <p className="mt-2 text-xs font-semibold">{pc.tariff}</p>}
           {sessionSnapshot?.meter && (
             <small className="meter-status mt-2 block text-xs text-primary!">

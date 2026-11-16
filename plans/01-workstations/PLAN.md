@@ -18,7 +18,7 @@
 - группы оборудования, зоны и позиция на карте;
 - состояния `unknown`, `online`, `stale`, `offline`, `disabled`;
 - heartbeat, last seen и последняя ошибка;
-- версия клиента и capabilities;
+- версия клиента и capabilities. Карточка ПК показывает версию последнего heartbeat;
 - команды, deadline, retry и acknowledgement;
 - аудит административных команд;
 - данные для карты и таблицы dashboard.

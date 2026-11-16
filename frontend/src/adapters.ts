@@ -43,6 +43,7 @@ export function toUiWorkstation(
       : sessionAge,
     sessionId: activeSession?.id,
     lastSeen: workstation.last_seen_at ?? undefined,
+    clientVersion: workstation.client_version?.trim() || undefined,
     position: workstation.position,
     groupId: effectiveGroupId,
     deviceId: workstation.device_id ?? undefined,
