@@ -264,6 +264,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GAMECLUB_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GAMECLUB_GRAFANA_ADMIN_PASSWORD:?Set GAMECLUB_GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${HUBSHELL_BIND_HOST:-127.0.0.1}:3300:3000"
     volumes:
       - gameclub-grafana-data:/var/lib/grafana
       - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro

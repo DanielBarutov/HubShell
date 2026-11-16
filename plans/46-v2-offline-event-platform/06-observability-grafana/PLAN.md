@@ -35,6 +35,8 @@
 
 ## Проверки
 
+- TrueNAS публикует Grafana на `HUBSHELL_BIND_HOST:3300`. Без настройки адреса
+  порт доступен только на самом сервере.
 - искусственный duplicate, broker outage и payment retry видны во всех трёх
   сигналах: metric, trace и log;
 - PII/secret scan telemetry payloads;

@@ -86,6 +86,9 @@ def main() -> None:
         for p in service.get("ports", [])
     )
     assert config["name"] == "hubshell"
+    for deployment, host in ((config, "127.0.0.1"), (lan, "192.168.0.21")):
+        (port,) = deployment["services"]["grafana"]["ports"]
+        assert (port["host_ip"], port["published"], port["target"]) == (host, "3300", 3000)
     assert all("build" not in service for service in config["services"].values())
     assert all(volume["name"].startswith("hubshell_") for volume in config["volumes"].values())
     assert config["services"]["backend-http"]["image"] == images["HUBSHELL_BACKEND_IMAGE"]
