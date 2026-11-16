@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -37,6 +38,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title = clientHost.WindowTitle;
         this.FindControl<TextBlock>("HostDisclaimer")!.Text = clientHost.HostDisclaimer;
+
+        var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "";
+        var commit = version[(version.LastIndexOf('+') + 1)..];
+        if (commit.Length == 40 && commit.All(Uri.IsHexDigit))
+        {
+            this.FindControl<TextBlock>("BuildCommitLabel")!.Text = commit[..7];
+        }
 
         this.FindControl<Button>("OpenDesktopButton")!.IsVisible = clientHost.WindowAdapter is not null;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];

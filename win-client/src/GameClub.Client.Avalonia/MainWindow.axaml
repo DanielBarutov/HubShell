@@ -125,6 +125,8 @@
           </Border>
           <TextBlock Text="HUBSHELL" Foreground="{DynamicResource AccentBrush}" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
         </StackPanel>
+        <TextBlock Name="BuildCommitLabel" HorizontalAlignment="Right" VerticalAlignment="Top"
+                   Foreground="#A0A0A0" FontSize="12" IsHitTestVisible="False"/>
         <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="0,20">
           <Grid Width="1380" ColumnDefinitions="420,540,30,*">
             <Border Name="AccessLoginCard" Grid.Column="1" Padding="18,24,18,18" Background="#E6091417" BorderBrush="#3C5960" BorderThickness="1" CornerRadius="20">
