@@ -1,4 +1,4 @@
-"""Controlled application-only Compose update under an existing fleet barrier."""
+"""Controlled application-only Compose deployment with verified database backups."""
 
 from __future__ import annotations
 
@@ -10,6 +10,10 @@ from pathlib import Path
 
 from client_release import digest, validate_images
 from client_update_cd import write_json
+
+
+class MaintenanceBlocked(ValueError):
+    """An actionable refusal with a fixed, safe-to-log message."""
 
 
 class ComposeServer:
@@ -110,6 +114,31 @@ class ComposeServer:
     def update(self, deployment: dict, smoke) -> None:
         if deployment["phase"] != "preparing":
             raise ValueError("Server update requires the durable fleet barrier")
+        self._update(smoke, {"deployment_id": deployment["id"], "round_id": deployment["round_id"]})
+
+    def update_idle(self, smoke) -> None:
+        self._update(smoke, {}, require_idle=True)
+
+    def _require_idle(self) -> None:
+        result = self.run(
+            "exec",
+            "-T",
+            "postgres",
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            "gameclub",
+            "-d",
+            "gameclub",
+            "-Atc",
+            "SELECT count(*) FROM gaming_sessions WHERE status = 'active'",
+        )
+        if result.stdout.strip() != b"0":
+            raise MaintenanceBlocked("В клубе есть активные сессии. Деплой не запущен.")
+
+    def _update(self, smoke, report: dict, *, require_idle: bool = False) -> None:
         config = json.loads(self.run("config", "--format", "json").stdout)
         if config["name"] != "hubshell" or any(
             "build" in item for item in config["services"].values()
@@ -132,10 +161,30 @@ class ComposeServer:
         ):
             raise ValueError("Resolved Compose images differ from the signed release")
         self.run("pull", *services, "backend-migrate")
-        # No infrastructure upgrades and no volume deletion. Stop every application writer first.
-        self.run("stop", "--timeout", "30", *services)
-        self.backup("postgres", "gameclub", "gameclub")
-        self.backup("steam-guest-postgres", "steam_guest", "steam_guest")
+        if require_idle:
+            self._require_idle()
+            running = set(
+                self.run("ps", "--status", "running", "--services").stdout.decode().split()
+            )
+            if running - config["services"].keys():
+                raise MaintenanceBlocked("У рабочего стека есть сервисы вне выбранного Compose.")
+            if not {"backend-http", "backend-grpc"}.issubset(running):
+                raise MaintenanceBlocked("Исходный backend должен работать перед обновлением.")
+        migration_started = self.job / "migration-started.json"
+        if require_idle and migration_started.exists():
+            raise MaintenanceBlocked("Предыдущая миграция требует ручной проверки перед повтором.")
+        try:
+            self.run("stop", "--timeout", "30", *services)
+            if require_idle:
+                self._require_idle()
+            self.backup("postgres", "gameclub", "gameclub")
+            self.backup("steam-guest-postgres", "steam_guest", "steam_guest")
+            if require_idle:
+                write_json(migration_started, {"images": self.images})
+        except Exception:
+            if require_idle:
+                self.run("start", *(name for name in services if name in running))
+            raise
         self.run("run", "--rm", "--no-deps", "backend-migrate")
         self.run(
             "up", "-d", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "180", *services
@@ -157,8 +206,7 @@ class ComposeServer:
         write_json(
             self.job / "server-stage.json",
             {
-                "deployment_id": deployment["id"],
-                "round_id": deployment["round_id"],
+                **report,
                 "images": self.images,
                 "backup_restore_verified": True,
                 "ready": True,

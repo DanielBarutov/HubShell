@@ -77,6 +77,7 @@ jobs:
           python3 scripts/test-server-deployment.py
           python3 scripts/test-cd-http.py
           python3 scripts/test-deploy-release.py
+          python3 scripts/test-requested-deployment.py
           python3 scripts/test-sync-client-release.py
       - name: Client tests
         run: dotnet test win-client/tests/GameClub.Client.Tests.csproj -c Release -p:Platform=x64

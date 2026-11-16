@@ -95,6 +95,57 @@ class ServerDeploymentTests(unittest.TestCase):
                 self.assertEqual([action[0] for action in self.actions], ["config"])
                 self.config = original
 
+    def configure_idle_checks(self, counts):
+        counts = iter(counts)
+
+        def run(*args, **kwargs):
+            response = self.compose_run(*args, **kwargs)
+            if args[0] == "ps":
+                response.stdout = b"backend-http\nbackend-grpc\nfrontend\nworker\n"
+            elif args[:3] == ("exec", "-T", "postgres"):
+                response.stdout = next(counts)
+            return response
+
+        self.server.run = run
+
+    def test_active_games_prevent_stopping_the_server(self):
+        self.configure_idle_checks([b"1\n"])
+        with self.assertRaisesRegex(ValueError, "активные сессии"):
+            self.server.update_idle(self.smoke)
+        self.assertNotIn("stop", [action[0] for action in self.actions])
+
+    def test_session_racing_shutdown_restores_previous_services(self):
+        self.configure_idle_checks([b"0\n", b"1\n"])
+        with self.assertRaisesRegex(ValueError, "активные сессии"):
+            self.server.update_idle(self.smoke)
+        self.assertEqual(
+            self.actions[-1], ("start", "backend-grpc", "backend-http", "frontend", "worker")
+        )
+        self.assertNotIn("run", [action[0] for action in self.actions])
+        self.assertFalse((self.root / "migration-started.json").exists())
+
+    def test_idle_deploy_records_migration_and_readiness(self):
+        self.configure_idle_checks([b"0\n", b"0\n"])
+        self.server.update_idle(self.smoke)
+        self.assertTrue((self.root / "migration-started.json").exists())
+        self.assertTrue(json.loads((self.root / "server-stage.json").read_bytes())["ready"])
+
+    def test_failed_migration_does_not_restart_old_services(self):
+        self.configure_idle_checks([b"0\n", b"0\n"])
+        run = self.server.run
+
+        def fail_migration(*args, **kwargs):
+            if args[0] == "run":
+                raise RuntimeError("migration failed")
+            return run(*args, **kwargs)
+
+        self.server.run = fail_migration
+        with self.assertRaisesRegex(RuntimeError, "migration failed"):
+            self.server.update_idle(self.smoke)
+        self.assertTrue((self.root / "migration-started.json").exists())
+        self.assertNotIn("start", [action[0] for action in self.actions])
+        self.assertFalse((self.root / "server-stage.json").exists())
+
     def test_without_barrier_no_compose_command_runs(self):
         self.value["phase"] = "polling"
         with self.assertRaises(ValueError):

@@ -1,0 +1,27 @@
+name: Развернуть релиз HubShell
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  request:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Поставить подписанный выпуск в очередь деплоя
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "commit-$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" >/dev/null
+          deployment_id=$(jq -n --arg sha "$GITHUB_SHA" \
+            '{ref: $sha, task: "hubshell:deploy", environment: "production", auto_merge: false,
+              production_environment: true, required_contexts: []}' |
+            gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" --input - --jq '.id')
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
+            -f state=queued -f description="TrueNAS deployment requested" >/dev/null
+          echo "Запрошен деплой commit-$GITHUB_SHA. Результат будет виден в GitHub Deployments."

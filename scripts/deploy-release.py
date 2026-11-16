@@ -10,6 +10,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.request
 import uuid
@@ -18,7 +19,7 @@ from pathlib import Path
 from cd_http import JsonApi, persist_images
 from client_release import download_release, release_id
 from client_update_cd import advance, save_report, write_json
-from server_deployment import ComposeServer
+from server_deployment import ComposeServer, MaintenanceBlocked
 
 PREFIX = "/api/v1/client-updates"
 
@@ -175,11 +176,76 @@ def checkout_release(repository: Path, commit: str) -> None:
         raise ValueError("Checkout does not match the signed release commit")
 
 
+def deploy_independent(args, root: Path) -> None:
+    version = release_id(args.release_id)
+    if any(
+        not (marker.parent / "server-stage.json").exists()
+        for marker in root.glob("*/migration-started.json")
+    ):
+        raise MaintenanceBlocked("Незавершённая миграция требует ручной проверки.")
+    bundle = download_release(version, mirror_directory(), args.public_key)
+    if version != f"commit-{bundle['server']['commit']}":
+        raise ValueError("Signed release does not match the requested commit.")
+    repository = Path(__file__).resolve().parents[1]
+    checkout_release(repository, bundle["server"]["commit"])
+    images = bundle["server"]["images"]
+    job = root / version
+    if job.is_symlink():
+        raise ValueError("CD job cannot be a symlink")
+    job.mkdir(exist_ok=True, mode=0o700)
+    api = JsonApi(args.backend, args.token_file, refresh=True)
+
+    def smoke():
+        if api.request("GET", "/health/ready").get("status") != "ready":
+            raise ValueError("Backend не готов после деплоя.")
+        reported = (
+            server.run("exec", "-T", "backend-http", "printenv", "GAMECLUB_SERVER_RELEASE_ID")
+            .stdout.decode()
+            .strip()
+        )
+        if reported != version:
+            raise MaintenanceBlocked("Рабочий backend не соответствует выбранному выпуску.")
+
+    server = ComposeServer(repository, args.env_file, job, images)
+    report = job / "server-stage.json"
+    if report.exists():
+        saved = json.loads(report.read_bytes())
+        if saved.get("ready") is not True or saved.get("images") != images:
+            raise ValueError("Ранее сохранённый отчёт не соответствует релизу.")
+        smoke()
+    else:
+        # New dumps are required after any failure that restored the previous services.
+        backups = job / "backups"
+        if backups.exists() and not (job / "migration-started.json").exists():
+            backups.rename(job / ("backups-aborted-" + uuid.uuid4().hex))
+        server.update_idle(smoke)
+    persist_images(JsonApi(args.dockhand, args.dockhand_token_file), images)
+    subprocess.run(
+        [
+            sys.executable,
+            str(repository / "scripts/sync-client-release.py"),
+            "--public-key",
+            str(args.public_key),
+            "--job-root",
+            str(root / "client-sync"),
+            "--backend",
+            args.backend,
+            "--token-file",
+            str(args.token_file),
+            "--expected-release-id",
+            version,
+        ],
+        check=True,
+    )
+    print(f"Развёрнут и назначен выпуск {version}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--release-id", help="Default: resume the active job, then GitHub latest release"
     )
+    parser.add_argument("--independent", action="store_true")
     parser.add_argument("--public-key", type=Path, required=True)
     parser.add_argument("--job-root", type=Path, required=True)
     parser.add_argument("--env-file", type=Path, required=True)
@@ -189,6 +255,8 @@ def main() -> int:
     parser.add_argument("--dockhand-token-file", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=7200)
     args = parser.parse_args()
+    if args.independent and not args.release_id:
+        parser.error("--independent requires an explicit --release-id")
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         raise ValueError("CD timeout must be positive")
     os.umask(0o077)
@@ -203,13 +271,16 @@ def main() -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("HubShell CD is already running")
+            return 1 if args.independent else 0
+        if args.env_file.is_symlink() or args.env_file.stat().st_mode & 0o077:
+            raise ValueError("The stack env file must be private (chmod 600)")
+        if args.independent:
+            deploy_independent(args, root)
             return 0
         version = select_release(root, args.release_id)
         bundle = download_release(version, mirror_directory(), args.public_key)
         repository = Path(__file__).resolve().parents[1]
         checkout_release(repository, bundle["client"]["commit"])
-        if args.env_file.is_symlink() or args.env_file.stat().st_mode & 0o077:
-            raise ValueError("The stack env file must be private (chmod 600)")
         job = root / version
         if job.is_symlink():
             raise ValueError("CD job cannot be a symlink")
@@ -228,6 +299,9 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except MaintenanceBlocked as error:
+        print(error)
+        raise SystemExit(3) from None
     except Exception as error:
         # No HTTP bodies, command stderr or credential values in cron/job logs.
         print(f"HubShell CD failed: {type(error).__name__}")

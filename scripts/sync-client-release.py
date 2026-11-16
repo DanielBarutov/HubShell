@@ -175,6 +175,7 @@ def main() -> int:
     parser.add_argument("--job-root", type=Path, required=True)
     parser.add_argument("--backend", default="http://127.0.0.1:8100")
     parser.add_argument("--token-file", type=Path, required=True)
+    parser.add_argument("--expected-release-id", type=release_id)
     parser.add_argument("--accepted-release-id", action="append", default=[])
     args = parser.parse_args()
     os.umask(0o077)
@@ -191,8 +192,10 @@ def main() -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("HubShell client sync is already running")
-            return 0
+            return 1 if args.expected_release_id else 0
         version, mirror, containers = running_server()
+        if args.expected_release_id and version != args.expected_release_id:
+            raise ValueError("Running backend does not match the selected deployment release")
         bundle = download_release(version, mirror, args.public_key)
         observed_version, observed_mirror, containers = running_server()
         if (observed_version, observed_mirror) != (version, mirror):
