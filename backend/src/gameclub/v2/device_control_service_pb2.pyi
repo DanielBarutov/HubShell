@@ -1,3 +1,6 @@
+import datetime
+
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -55,7 +58,7 @@ class DeviceHeartbeatRequest(_message.Message):
     def __init__(self, device_id: _Optional[str] = ..., client_version: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class DeviceHeartbeatResponse(_message.Message):
-    __slots__ = ("device_id", "workstation_id", "workstation_name", "group_id", "theme", "manager_password_verifier", "lockdown_policy")
+    __slots__ = ("device_id", "workstation_id", "workstation_name", "group_id", "theme", "manager_password_verifier", "lockdown_policy", "reservation_starts_at", "reservation_ends_at")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
     WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
     WORKSTATION_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -63,6 +66,8 @@ class DeviceHeartbeatResponse(_message.Message):
     THEME_FIELD_NUMBER: _ClassVar[int]
     MANAGER_PASSWORD_VERIFIER_FIELD_NUMBER: _ClassVar[int]
     LOCKDOWN_POLICY_FIELD_NUMBER: _ClassVar[int]
+    RESERVATION_STARTS_AT_FIELD_NUMBER: _ClassVar[int]
+    RESERVATION_ENDS_AT_FIELD_NUMBER: _ClassVar[int]
     device_id: str
     workstation_id: str
     workstation_name: str
@@ -70,7 +75,9 @@ class DeviceHeartbeatResponse(_message.Message):
     theme: str
     manager_password_verifier: str
     lockdown_policy: WorkstationLockdownPolicy
-    def __init__(self, device_id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., workstation_name: _Optional[str] = ..., group_id: _Optional[str] = ..., theme: _Optional[str] = ..., manager_password_verifier: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ...) -> None: ...
+    reservation_starts_at: _timestamp_pb2.Timestamp
+    reservation_ends_at: _timestamp_pb2.Timestamp
+    def __init__(self, device_id: _Optional[str] = ..., workstation_id: _Optional[str] = ..., workstation_name: _Optional[str] = ..., group_id: _Optional[str] = ..., theme: _Optional[str] = ..., manager_password_verifier: _Optional[str] = ..., lockdown_policy: _Optional[_Union[WorkstationLockdownPolicy, _Mapping]] = ..., reservation_starts_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., reservation_ends_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class DeviceCommandWatchRequest(_message.Message):
     __slots__ = ("device_id",)

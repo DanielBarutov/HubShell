@@ -101,6 +101,7 @@ def create_server(
             current_services.workstations,
             token_service,
             current_services.command_service,
+            current_services.reservations,
         ),
         server,
     )

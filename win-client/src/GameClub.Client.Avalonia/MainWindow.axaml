@@ -138,6 +138,10 @@
                   </StackPanel>
                 </Border>
                 <StackPanel Spacing="8" IsVisible="{Binding IsUserLoginVisible}">
+                  <TextBlock IsVisible="{Binding HasWorkstationReservation}"
+                             Text="{Binding WorkstationReservationMessage}"
+                             Foreground="{DynamicResource PrimaryTextBrush}"
+                             TextWrapping="Wrap" />
                   <TextBlock HorizontalAlignment="Center" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}">Добро <Run Text="пожаловать" Foreground="{DynamicResource AccentBrush}"/></TextBlock>
                   <TextBlock Text="Войдите в свой аккаунт, чтобы начать играть" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="15"/>
                 </StackPanel>

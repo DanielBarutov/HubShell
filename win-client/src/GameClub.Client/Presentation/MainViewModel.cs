@@ -217,6 +217,32 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public string WidgetAccountSummary => IsGuestWidgetVisible ? "Гость" : PortalAccountSummary;
     public bool IsPortalPasswordSetupVisible => _portalPasswordResetRequired;
     public bool IsPortalReadyVisible => !_portalPasswordResetRequired;
+    private WorkstationReservationWindow? _workstationReservation;
+
+    public string WorkstationReservationMessage { get; private set; } = "";
+    public bool HasWorkstationReservation => WorkstationReservationMessage.Length > 0;
+
+    private void ApplyWorkstationReservation(DateTimeOffset? startsAt, DateTimeOffset? endsAt)
+    {
+        var message = "";
+        _workstationReservation = startsAt is { } from && endsAt is { } to
+            ? new WorkstationReservationWindow(from, to)
+            : null;
+        if (_workstationReservation is { StartsAt: var start, EndsAt: var end })
+        {
+            var localStart = start.ToLocalTime();
+            var localEnd = end.ToLocalTime();
+            message = localStart.Date == localEnd.Date
+                ? $"Место забронировано с {localStart:HH:mm} по {localEnd:HH:mm}"
+                : $"Место забронировано с {localStart:dd.MM HH:mm} по {localEnd:dd.MM HH:mm}";
+        }
+
+        if (WorkstationReservationMessage == message) return;
+        WorkstationReservationMessage = message;
+        OnPropertyChanged(nameof(WorkstationReservationMessage));
+        OnPropertyChanged(nameof(HasWorkstationReservation));
+    }
+
     public string AccessMessage => string.IsNullOrWhiteSpace(_portalMessage)
         ? _accessGate.Snapshot.Message
         : _portalMessage;
@@ -932,9 +958,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         while (await timer.WaitForNextTickAsync(_lifetime.Token))
         {
-            if (_activeV2Ledger is not null && !_isV2ServerStopPending)
+            if (_activeV2Ledger is { } ledger && !_isV2ServerStopPending)
             {
-                await ConsumeV2DueMinutesAsync();
+                if (ledger.ActivatedAtUtc is { } activatedAt
+                    && _workstationReservation is { } reservation
+                    && reservation.RequiresStop(activatedAt, _clock()))
+                {
+                    await ConsumeV2DueMinutesAsync(reservation.StartsAt);
+                    if (_activeV2Ledger?.SessionId == ledger.SessionId
+                        && await StopV2SessionAsync(_lifetime.Token))
+                    {
+                        _portalMessage = WorkstationReservationMessage;
+                        PublishAccessState();
+                    }
+                }
+                else
+                {
+                    await ConsumeV2DueMinutesAsync();
+                }
             }
             if (_activeSession is not null)
             {
@@ -2234,7 +2275,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 onConnectionStateChanged,
                 onWorkstationDisabled,
                 RefreshActiveSessionSnapshotAsync,
-                _lifetime.Token);
+                _lifetime.Token,
+                ApplyWorkstationReservation);
 
     public void ApplyHeartbeatConnectionState(ClientConnectionState state)
     {
@@ -2610,7 +2652,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         PublishPortalState();
     }
 
-    private async Task ConsumeV2DueMinutesAsync()
+    private async Task ConsumeV2DueMinutesAsync(DateTimeOffset? until = null)
     {
         if (_isV2MinuteBillingPaused)
         {
@@ -2620,7 +2662,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         var stage = "consume_minutes";
         try
         {
-            var transitions = await _v2MinuteRunner!.ConsumeDueMinutesAsync(_clock(), _lifetime.Token);
+            var transitions = await _v2MinuteRunner!.ConsumeDueMinutesAsync(until ?? _clock(), _lifetime.Token);
             if (transitions.Count == 0)
             {
                 return;

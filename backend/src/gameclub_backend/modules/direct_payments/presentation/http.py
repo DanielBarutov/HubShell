@@ -20,6 +20,7 @@ class PaymentPartRequest(BaseModel):
 
 
 class GuestSessionPaymentRequest(BaseModel):
+    reservation_id: uuid.UUID | None = None
     session_id: uuid.UUID | None = None
     workstation_id: uuid.UUID
     tariff_id: uuid.UUID
@@ -113,6 +114,7 @@ def create_router(
         payment = await service.confirm(
             workstation_id=body.workstation_id,
             session_id=body.session_id,
+            reservation_id=body.reservation_id,
             tariff_id=body.tariff_id,
             tariff_quantity=body.tariff_quantity,
             guest_id=body.guest_id,

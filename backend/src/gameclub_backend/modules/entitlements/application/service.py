@@ -37,6 +37,7 @@ from gameclub_backend.modules.payment_methods.domain import (
     normalize_payment_parts,
     validate_mixed_cash_transfer,
 )
+from gameclub_backend.modules.reservations.application.ports import ReservationEntryLookup
 
 
 class UtcClock:
@@ -65,6 +66,7 @@ class EntitlementService:
         bonuses: BonusEarningsPort | None = None,
         transaction: Callable[[], contextlib.AbstractAsyncContextManager] | None = None,
         lock_and_check_offline_lease: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
+        reservations: ReservationEntryLookup | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -77,6 +79,7 @@ class EntitlementService:
         self._transaction = transaction or contextlib.nullcontext
         self._lock_and_check_offline_lease = lock_and_check_offline_lease
         self._reconciliation_lock = asyncio.Lock()
+        self._reservations = reservations
 
     async def list_for_client(self, client_id: uuid.UUID) -> list[Entitlement]:
         return await self._repository.list_for_client(client_id)
@@ -158,6 +161,7 @@ class EntitlementService:
         expected_money_cents: int | None = None,
         expected_earned_bonus_cents: int | None = None,
         principal: Principal | None = None,
+        workstation_id: uuid.UUID | None = None,
     ) -> Entitlement:
         if not isinstance(use_bonus, bool):
             raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Bonus choice must be a boolean")
@@ -209,6 +213,7 @@ class EntitlementService:
                 cash_shift_id,
                 use_bonus,
                 expected,
+                workstation_id,
             )
             if purchased.settlement_status is EntitlementSettlementStatus.PENDING:
                 return await self.retry_pending_settlement(purchased.id)
@@ -224,6 +229,7 @@ class EntitlementService:
         cash_shift_id: uuid.UUID | None,
         use_bonus: bool,
         expected: tuple[int | None, int | None, int | None, int | None],
+        workstation_id: uuid.UUID | None,
     ) -> Entitlement:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -243,6 +249,10 @@ class EntitlementService:
                 use_bonus,
                 expected,
             )
+        if workstation_id is not None and self._reservations is not None:
+            decision = await self._reservations.check_entry(workstation_id)
+            if not decision.allowed:
+                raise ApplicationError(ErrorCode.CONFLICT, "Продажа недоступна для этого места")
         tariff = await self._tariffs.get_tariff(tariff_id)
         if tariff is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Tariff not found")

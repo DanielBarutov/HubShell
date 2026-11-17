@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import uuid
 
 import pytest
 
@@ -477,11 +478,20 @@ async def test_entry_decision_protects_reservations_and_allows_assigned_client()
     )
     reservation = await reservations.create(
         workstation_ids=[workstation.id],
-        start_at=clock.current + datetime.timedelta(minutes=20),
+        start_at=clock.current + datetime.timedelta(minutes=50),
         end_at=clock.current + datetime.timedelta(minutes=80),
         created_by="operator",
         client_id=assigned.id,
     )
+
+    another = await WorkstationService(workstations).register("second-entry-device", "Entry PC 2")
+    with pytest.raises(ApplicationError, match="Выберите один ПК"):
+        await reservations.create(
+            workstation_ids=[workstation.id, another.id],
+            start_at=reservation.start_at,
+            end_at=reservation.end_at,
+            created_by="operator",
+        )
 
     anonymous = await reservations.check_entry(workstation.id, now=clock.current)
     assert not anonymous.allowed
@@ -493,8 +503,20 @@ async def test_entry_decision_protects_reservations_and_allows_assigned_client()
         client_id=assigned.id,
         now=clock.current,
     )
-    assert matching.allowed
-    assert matching.reason == "allowed"
+    assert not matching.allowed
+    assert matching.reason == "reservation_not_activated"
+    before = await reservations.check_entry(
+        workstation.id, now=clock.current - datetime.timedelta.resolution
+    )
+    assert before.allowed
+
+    await reservations.activate(reservation.id)
+    early = await reservations.check_entry(workstation.id, client_id=assigned.id, now=clock.current)
+    assert not early.allowed
+    arrived = await reservations.check_entry(
+        workstation.id, client_id=assigned.id, now=reservation.start_at
+    )
+    assert arrived.allowed
 
     mismatch = await reservations.check_entry(
         workstation.id,
@@ -503,6 +525,65 @@ async def test_entry_decision_protects_reservations_and_allows_assigned_client()
     )
     assert not mismatch.allowed
     assert mismatch.reason == "reservation_client_mismatch"
+
+    assert await reservations.complete_expired(reservation.end_at) == 1
+    assert await reservations.complete_expired(reservation.end_at) == 0
+    assert (await reservations.get(reservation.id)).status is ReservationStatus.COMPLETED
+
+    await reservations.delete(reservation.id)
+    with pytest.raises(ApplicationError, match="Reservation not found"):
+        await reservations.get(reservation.id)
+    assert not await reservations.list(reservation.start_at, reservation.end_at)
+
+
+async def test_guest_admission_requires_specific_active_reservation() -> None:
+    start = datetime.datetime(2030, 1, 15, 18, tzinfo=datetime.UTC)
+    workstations = InMemoryWorkstationRepository()
+    pc = await WorkstationService(workstations).register("guest-booking-pc", "PC-01")
+    reservations = ReservationService(
+        InMemoryReservationRepository(), workstations, InMemoryClientRepository()
+    )
+    booking = await reservations.create(
+        [pc.id], start, start + datetime.timedelta(hours=1), "operator"
+    )
+
+    assert not (
+        await reservations.check_entry(pc.id, now=start, guest_reservation_id=booking.id)
+    ).allowed
+    await reservations.activate(booking.id)
+    assert not (await reservations.check_entry(pc.id, now=start)).allowed
+    assert (
+        await reservations.check_entry(pc.id, now=start, guest_reservation_id=booking.id)
+    ).allowed
+    await reservations.cancel(booking.id)
+    assert not (
+        await reservations.check_entry(pc.id, now=start, guest_reservation_id=booking.id)
+    ).allowed
+
+
+async def test_reservation_rejects_paid_session_overlap_but_accepts_boundary() -> None:
+    paid_until = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=2)
+
+    class PaidSessions:
+        async def paid_session_ends_at(self, workstation_id: uuid.UUID) -> datetime.datetime:
+            return paid_until
+
+    workstations = InMemoryWorkstationRepository()
+    pc = await WorkstationService(workstations).register("paid-booking-pc", "Paid PC")
+    reservations = ReservationService(
+        InMemoryReservationRepository(),
+        workstations,
+        InMemoryClientRepository(),
+        paid_sessions=PaidSessions(),
+    )
+    end_at = paid_until + datetime.timedelta(hours=1)
+    overlapping = await reservations.check_availability(
+        [pc.id], paid_until - datetime.timedelta(minutes=1), end_at
+    )
+    assert not overlapping.available
+    assert overlapping.reason == "paid_session_overlap"
+    created = await reservations.create([pc.id], paid_until, end_at, "operator")
+    assert created.start_at == paid_until
 
 
 async def test_session_rejects_one_client_on_two_workstations() -> None:

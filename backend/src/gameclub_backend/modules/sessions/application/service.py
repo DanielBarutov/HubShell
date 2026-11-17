@@ -226,6 +226,7 @@ class SessionService:
                 ErrorCode.INVALID_ARGUMENT,
                 "Guest payment cannot be used for a client session",
             )
+        paid_reservation_id = None
         if client_id is None and tariff_id is not None:
             if guest_payment_id is None:
                 raise ApplicationError(
@@ -247,6 +248,11 @@ class SessionService:
                 or payment.guest_id != guest_id
             ):
                 raise ApplicationError(ErrorCode.CONFLICT, "Guest payment does not match session")
+            paid_reservation_id = payment.reservation_id
+            if paid_reservation_id != reservation_id:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Guest payment does not match reservation"
+                )
             if payment.status is not DirectPaymentStatus.CONFIRMED:
                 raise ApplicationError(
                     ErrorCode.CONFLICT,
@@ -294,6 +300,7 @@ class SessionService:
                 client_id=client_id,
                 guest_id=guest_id,
                 now=self._clock.now(),
+                **({"guest_reservation_id": paid_reservation_id} if paid_reservation_id else {}),
             )
             if not decision.allowed:
                 raise ApplicationError(
@@ -456,6 +463,22 @@ class SessionService:
         limit: int = 50,
     ) -> builtins.list[Session]:
         return await self._repository.list_for_client(client_id, max(1, min(limit, 100)))
+
+    async def paid_session_ends_at(self, workstation_id: uuid.UUID) -> datetime.datetime | None:
+        session = await self._repository.get_active_for_workstation(workstation_id)
+        if session is None:
+            return None
+        if session.client_id is not None and self._entitlements is not None:
+            entitlement = await self._entitlements.get_active_for_client(session.client_id)
+            if entitlement is not None and entitlement.remaining_minutes > 0:
+                return self._clock.now() + datetime.timedelta(minutes=entitlement.remaining_minutes)
+        if session.tariff_id is not None and self._tariffs is not None:
+            tariff = await self._tariffs.get_tariff(session.tariff_id)
+            if tariff is not None and tariff.billing_mode.value == "block":
+                return session.started_at + datetime.timedelta(
+                    minutes=tariff.duration_minutes * session.tariff_quantity
+                )
+        return None
 
     async def snapshot(
         self,

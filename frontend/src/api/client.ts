@@ -544,11 +544,12 @@ export class GameClubApi {
     paymentParts: BackendPaymentPart[] = [],
     cashShiftId?: string,
     bonusConfirmation?: BonusPurchaseConfirmation,
+    workstationId?: string,
   ): Promise<BackendEntitlement> {
     return this.request<BackendEntitlement>(`/clients/${clientId}/entitlements`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId, ...bonusConfirmation }),
+      body: JSON.stringify({ tariff_id: tariffId, payment_parts: paymentParts, cash_shift_id: cashShiftId, workstation_id: workstationId, ...bonusConfirmation }),
     });
   }
 
@@ -576,6 +577,7 @@ export class GameClubApi {
   async confirmGuestSessionPayment(
     payload: {
       session_id?: string;
+      reservation_id?: string;
       workstation_id: string;
       tariff_id: string;
       tariff_quantity?: number;
@@ -1023,6 +1025,10 @@ export class GameClubApi {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  }
+
+  async deleteReservation(reservationId: string): Promise<void> {
+    return this.request<void>(`/reservations/${reservationId}`, { method: "DELETE" });
   }
 
   async cancelReservation(reservationId: string): Promise<Reservation> {

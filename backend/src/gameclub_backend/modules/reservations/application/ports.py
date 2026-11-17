@@ -46,7 +46,15 @@ class ReservationRepository(typing.Protocol):
     ) -> Reservation | None:
         """Atomically mark a confirmed reservation as no-show when it is eligible."""
 
-    async def save(self, reservation: Reservation) -> Reservation:
+    async def complete_expired(self, now: datetime.datetime) -> int:
+        """End live reservations whose booked period has elapsed."""
+
+    async def delete(self, reservation_id: uuid.UUID) -> bool:
+        """Delete a reservation if it still exists."""
+
+    async def save(
+        self, reservation: Reservation, *, existing_required: bool = False
+    ) -> Reservation:
         """Persist a reservation."""
 
 
@@ -65,6 +73,10 @@ class GuestLookup(typing.Protocol):
         """Return a guest by ID."""
 
 
+class PaidSessionLookup(typing.Protocol):
+    async def paid_session_ends_at(self, workstation_id: uuid.UUID) -> datetime.datetime | None: ...
+
+
 class Clock(typing.Protocol):
     def now(self) -> datetime.datetime:
         """Return an aware UTC datetime."""
@@ -77,5 +89,7 @@ class ReservationEntryLookup(typing.Protocol):
         client_id: uuid.UUID | None = None,
         guest_id: uuid.UUID | None = None,
         now: datetime.datetime | None = None,
+        *,
+        guest_reservation_id: uuid.UUID | None = None,
     ) -> EntryDecision:
         """Return the authoritative workstation entry decision."""

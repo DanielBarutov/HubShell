@@ -7,4 +7,13 @@ public sealed record WorkstationHeartbeatSnapshot(
     string ManagerPasswordVerifier = "",
     WorkstationLockdownPolicySnapshot? LockdownPolicy = null,
     SessionSnapshot? SessionSnapshot = null,
-    string WorkstationName = "");
+    string WorkstationName = "",
+    DateTimeOffset? ReservationStartsAt = null,
+    DateTimeOffset? ReservationEndsAt = null);
+
+
+public sealed record WorkstationReservationWindow(DateTimeOffset StartsAt, DateTimeOffset EndsAt)
+{
+    public bool RequiresStop(DateTimeOffset activatedAt, DateTimeOffset now) =>
+        activatedAt < StartsAt && now >= StartsAt && now < EndsAt;
+}

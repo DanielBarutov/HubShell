@@ -15,6 +15,7 @@ Operator = typing.Annotated[Principal, Depends(require_permissions("clients.mana
 
 
 class PurchaseEntitlementRequest(BaseModel):
+    workstation_id: uuid.UUID | None = None
     tariff_id: uuid.UUID
     cash_shift_id: uuid.UUID | None = None
     use_bonus: bool = Field(default=False, strict=True)
@@ -162,6 +163,7 @@ def create_router(service: EntitlementService) -> APIRouter:
                 idempotency_key=idempotency_key,
                 payment_parts=[part.model_dump() for part in body.payment_parts],
                 cash_shift_id=body.cash_shift_id,
+                workstation_id=body.workstation_id,
                 use_bonus=body.use_bonus,
                 principal=principal,
                 expected_price_cents=body.expected_price_cents,

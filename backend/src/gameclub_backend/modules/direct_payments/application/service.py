@@ -27,6 +27,7 @@ from gameclub_backend.modules.payment_methods.domain import (
     normalize_payment_parts,
     validate_mixed_cash_transfer,
 )
+from gameclub_backend.modules.reservations.application.ports import ReservationEntryLookup
 from gameclub_backend.modules.workstations.domain import effective_workstation_group_id
 
 
@@ -45,6 +46,7 @@ class GuestSessionPaymentService:
         audit: AuditRepository | None = None,
         workstations: WorkstationLookup | None = None,
         active_sessions: ActiveSessionLookup | None = None,
+        reservations: ReservationEntryLookup | None = None,
     ) -> None:
         self._repository = repository
         self._tariffs = tariffs
@@ -53,6 +55,7 @@ class GuestSessionPaymentService:
         self._audit = audit
         self._workstations = workstations
         self._active_sessions = active_sessions
+        self._reservations = reservations
         self._reconciliation_lock = asyncio.Lock()
 
     async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
@@ -81,6 +84,7 @@ class GuestSessionPaymentService:
         session_id: uuid.UUID | None = None,
         xbox_sale: bool = False,
         before_confirm: Callable[[], Awaitable[None]] | None = None,
+        reservation_id: uuid.UUID | None = None,
     ) -> GuestSessionPayment:
         key = idempotency_key.strip()
         actor = actor_id.strip()
@@ -104,6 +108,7 @@ class GuestSessionPaymentService:
                 tariff_quantity=tariff_quantity,
                 guest_id=guest_id,
                 session_id=session_id,
+                reservation_id=reservation_id,
                 guest_name=guest_name,
                 cash_shift_id=cash_shift_id,
                 payment_parts=expected_parts,
@@ -160,6 +165,20 @@ class GuestSessionPaymentService:
                 "Guest tariff cannot be sold while the workstation has an active session",
             )
         now = self._clock.now()
+        if reservation_id is not None and (
+            xbox_sale or session_id is not None or self._reservations is None
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT, "Бронь доступна только для запуска гостя на ПК"
+            )
+        if not xbox_sale and self._reservations is not None:
+            decision = await self._reservations.check_entry(
+                workstation_id, guest_id=guest_id, now=now, guest_reservation_id=reservation_id
+            )
+            if not decision.allowed:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Продажа недоступна: место забронировано"
+                )
         if xbox_sale and not tariff.applies_at(
             now, zone_id, TariffAudience.GUEST, EquipmentType.XBOX
         ):
@@ -188,6 +207,7 @@ class GuestSessionPaymentService:
                 tariff_quantity=tariff_quantity,
                 guest_id=guest_id,
                 session_id=session_id,
+                reservation_id=reservation_id,
                 guest_name=guest_name,
                 total_price_cents=tariff.price_cents * tariff_quantity,
                 duration_minutes=tariff.duration_minutes,
@@ -347,6 +367,7 @@ class GuestSessionPaymentService:
         tariff_quantity: int,
         guest_id: uuid.UUID | None,
         session_id: uuid.UUID | None,
+        reservation_id: uuid.UUID | None,
         guest_name: str,
         cash_shift_id: uuid.UUID | None,
         payment_parts: tuple[PaymentPart, ...],
@@ -356,6 +377,7 @@ class GuestSessionPaymentService:
             and payment.tariff_id == tariff_id
             and payment.tariff_quantity == tariff_quantity
             and payment.session_id == session_id
+            and payment.reservation_id == reservation_id
             and payment.guest_id == guest_id
             and payment.guest_name == guest_name.strip()
             and payment.cash_shift_id == cash_shift_id

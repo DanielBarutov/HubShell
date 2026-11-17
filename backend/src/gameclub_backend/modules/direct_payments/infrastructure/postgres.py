@@ -24,6 +24,7 @@ class GuestSessionPaymentModel(DirectPaymentBase):
     workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     tariff_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    reservation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     tariff_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     tariff_quantity: Mapped[int] = mapped_column(Integer())
@@ -54,6 +55,7 @@ class GuestSessionPaymentModel(DirectPaymentBase):
             id=self.id,
             workstation_id=self.workstation_id,
             session_id=self.session_id,
+            reservation_id=self.reservation_id,
             duration_minutes=self.duration_minutes,
             tariff_name=self.tariff_name,
             equipment_type=self.equipment_type,
@@ -80,6 +82,7 @@ class GuestSessionPaymentModel(DirectPaymentBase):
             id=payment.id,
             workstation_id=payment.workstation_id,
             session_id=payment.session_id,
+            reservation_id=payment.reservation_id,
             duration_minutes=payment.duration_minutes,
             tariff_name=payment.tariff_name,
             equipment_type=payment.equipment_type,
@@ -148,6 +151,7 @@ class PostgresGuestSessionPaymentRepository:
                     if (
                         existing.workstation_id != payment.workstation_id
                         or existing.session_id != payment.session_id
+                        or existing.reservation_id != payment.reservation_id
                         or existing.tariff_id != payment.tariff_id
                         or existing.tariff_quantity != payment.tariff_quantity
                         or existing.guest_id != payment.guest_id

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -428,6 +430,19 @@ def build_application_services(
         workstation_group_repository,
         zone_rate_synchronizer=catalog,
     )
+
+    class PaidSessions:
+        async def paid_session_ends_at(self, workstation_id: uuid.UUID) -> datetime.datetime | None:
+            return await sessions.paid_session_ends_at(workstation_id)
+
+    reservations = ReservationService(
+        reservation_repository,
+        workstations=workstation_repository,
+        clients=client_repository,
+        guests=guest_repository,
+        paid_sessions=PaidSessions(),
+        grace_period_minutes=settings.reservation_grace_period_minutes,
+    )
     entitlements = EntitlementService(
         entitlement_repository,
         tariffs=catalog,
@@ -436,6 +451,7 @@ def build_application_services(
         workstations=workstation_repository,
         cash=CashShiftEntitlementSettlement(cash_shifts),
         bonuses=clients,
+        reservations=reservations,
         transaction=(lambda: application_transaction(postgres_engine_provider))
         if settings.postgres_dsn
         else None,
@@ -443,13 +459,7 @@ def build_application_services(
         if v2_session_leases is not None
         else None,
     )
-    reservations = ReservationService(
-        reservation_repository,
-        workstations=workstation_repository,
-        clients=client_repository,
-        guests=guest_repository,
-        grace_period_minutes=settings.reservation_grace_period_minutes,
-    )
+
     billing = BillingService(
         billing_repository,
         sessions=session_repository,
@@ -467,6 +477,7 @@ def build_application_services(
         audit=audit_repository,
         workstations=workstation_repository,
         active_sessions=session_repository,
+        reservations=reservations,
     )
     sessions = SessionService(
         session_repository,

@@ -35,6 +35,7 @@ class InMemoryGuestSessionPaymentRepository:
                 if (
                     existing.workstation_id != payment.workstation_id
                     or existing.session_id != payment.session_id
+                    or existing.reservation_id != payment.reservation_id
                     or existing.tariff_id != payment.tariff_id
                     or existing.tariff_quantity != payment.tariff_quantity
                     or existing.guest_id != payment.guest_id

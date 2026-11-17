@@ -179,6 +179,7 @@ class V2GuestAccessService:
                 tariff_id=payment.tariff_id,
                 tariff_quantity=payment.tariff_quantity,
                 guest_payment_id=payment.id,
+                reservation_id=payment.reservation_id,
                 persist=True,
             )
         payload = offline_session_snapshot_pb2.GuestSessionAccessPayload(

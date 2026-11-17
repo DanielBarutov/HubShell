@@ -30,7 +30,7 @@ def _parse_sweep_time(value: str | None) -> datetime.datetime:
 
 @dramatiq.actor(queue_name="reservations", max_retries=3)  # type: ignore[arg-type]
 async def sweep_reservation_no_shows(now_iso: str | None = None) -> None:
-    """Mark reservations past their grace period; safe to run repeatedly."""
+    """Complete expired reservations; retain the actor name for already queued messages."""
     settings = get_settings()
     if not settings.postgres_dsn:
         raise RuntimeError("GAMECLUB_POSTGRES_DSN is required for reservation workers")
@@ -52,7 +52,7 @@ async def sweep_reservation_no_shows(now_iso: str | None = None) -> None:
             clients=PostgresClientRepository(engine_provider),
             grace_period_minutes=settings.reservation_grace_period_minutes,
         )
-        updated = await reservation_service.sweep_no_shows(_parse_sweep_time(now_iso))
-        logger.info("reservation_no_show_sweep_completed updated_count=%s", len(updated))
+        updated = await reservation_service.complete_expired(_parse_sweep_time(now_iso))
+        logger.info("reservation_expiry_sweep_completed updated_count=%s", updated)
     finally:
         await resources.close()

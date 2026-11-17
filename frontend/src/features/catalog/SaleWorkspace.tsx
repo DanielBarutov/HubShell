@@ -158,6 +158,7 @@ export function SaleWorkspace({
   initialClient,
   initialProduct,
   initialTab = "time",
+  reservation,
   clients: clientList,
   cashShifts,
   tariffs: catalogTariffs,
@@ -171,6 +172,7 @@ export function SaleWorkspace({
   initialClient: Client | null;
   initialProduct: BackendProduct | null;
   initialTab?: "time" | "products";
+  reservation?: import("../../api").Reservation;
   clients: Client[];
   cashShifts: BackendCashShift[];
   tariffs: BackendTariff[];
@@ -185,7 +187,7 @@ export function SaleWorkspace({
   const [productCategory, setProductCategory] = useState("all");
   const [lines, setLines] = useState<SaleLine[]>([]);
   const [buyerMode, setBuyerMode] = useState<"guest" | "client">(() =>
-    !isXbox && (initialClient || (pc?.status === "busy" && pc.clientId))
+    !reservation && !isXbox && (initialClient || (pc?.status === "busy" && pc.clientId))
       ? "client"
       : "guest",
   );
@@ -295,7 +297,7 @@ export function SaleWorkspace({
   }, [initialClient?.id, isXbox]);
 
   useEffect(() => {
-    if (registeredSession && !initialClient) setBuyerMode("client");
+    if (registeredSession && !initialClient && !reservation) setBuyerMode("client");
   }, [initialClient, registeredSession]);
 
   useEffect(() => {
@@ -618,7 +620,9 @@ export function SaleWorkspace({
             session_id: activeGuestSession ? pc!.sessionId : undefined,
             tariff_id: timeLines[0].sourceId,
             tariff_quantity: timeLines[0].quantity,
-            guest_name: "Гость",
+            reservation_id: reservation?.id,
+            guest_id: reservation?.guest_id ?? undefined,
+            guest_name: reservation?.guest_name ?? "Гость",
             cash_shift_id:
               paymentMethod === "cash" || paymentMethod === "mixed"
                 ? activeShift?.id
@@ -701,7 +705,7 @@ export function SaleWorkspace({
               confirmedBonusPurchases.current.set(purchaseKey, confirmation);
             }
             try {
-              const purchase = await api.purchaseEntitlement(client.id, tariffLine.sourceId, purchaseKey, undefined, undefined, confirmation);
+              const purchase = await api.purchaseEntitlement(client.id, tariffLine.sourceId, purchaseKey, undefined, undefined, confirmation, pc?.id);
               if (!confirmTariffPurchase(purchaseKey, purchase)) return;
             } catch (purchaseError) {
               if (purchaseError instanceof ApiError && purchaseError.status === 409) confirmedBonusPurchases.current.delete(purchaseKey);
@@ -738,6 +742,8 @@ export function SaleWorkspace({
             paymentMethod === "cash" || paymentMethod === "mixed"
               ? activeShift?.id
               : undefined,
+            undefined,
+            pc?.id,
           );
           if (!confirmTariffPurchase(purchaseKey, purchase)) return;
         }
@@ -899,7 +905,7 @@ export function SaleWorkspace({
                   </span>
                 </button>
                 <button
-                  hidden={isXbox}
+                  hidden={isXbox || Boolean(reservation)}
                   type="button"
                   className={`sale-buyer-choice btn h-auto min-h-16 justify-start gap-3 text-left ${buyerMode === "client" ? "bg-primary! text-primary-content!" : "btn-dash"}`}
                   onClick={() => setBuyerMode("client")}
