@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import contextlib
 import datetime
 import uuid
+from collections.abc import AsyncIterator
 
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 
@@ -13,6 +15,11 @@ class InMemoryReservationRepository:
         self._items: dict[uuid.UUID, Reservation] = {}
         self._idempotency: dict[str, uuid.UUID] = {}
         self._lock = asyncio.Lock()
+
+    @contextlib.asynccontextmanager
+    async def lock_workstation(self, workstation_id: uuid.UUID) -> AsyncIterator[None]:
+        async with self._lock:
+            yield
 
     async def get(self, reservation_id: uuid.UUID) -> Reservation | None:
         return self._items.get(reservation_id)

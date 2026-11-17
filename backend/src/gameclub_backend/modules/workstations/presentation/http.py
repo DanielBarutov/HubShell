@@ -108,6 +108,7 @@ class WorkstationCommandResponse(BaseModel):
 
 class WorkstationResponse(BaseModel):
     relay_off_pending: bool = False
+    transfer_reserved: bool = False
     relay_settings: RelaySettingsRequest | None = None
     id: uuid.UUID
     device_id: str | None
@@ -135,9 +136,11 @@ class WorkstationResponse(BaseModel):
         workstation: Workstation,
         session_snapshot: SessionSnapshot | None = None,
         relay_off_pending: bool = False,
+        transfer_reserved: bool = False,
     ) -> "WorkstationResponse":
         return cls(
             relay_off_pending=relay_off_pending,
+            transfer_reserved=transfer_reserved,
             relay_settings=(
                 RelaySettingsRequest(
                     ip=workstation.relay_settings.ip,
@@ -180,6 +183,7 @@ def create_router(
     command_service: WorkstationCommandService | None = None,
     session_service: SessionService | None = None,
     pending_relay_workstations: typing.Callable[[], typing.Awaitable[set[uuid.UUID]]] | None = None,
+    reserved_transfer_targets: typing.Callable[[], typing.Awaitable[set[uuid.UUID]]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/workstations", tags=["workstations"])
     operator = Depends(require_permissions("workstations.manage"))
@@ -188,6 +192,7 @@ def create_router(
     async def list_workstations() -> list[WorkstationResponse]:
         workstations = await service.list()
         pending = await pending_relay_workstations() if pending_relay_workstations else set()
+        reserved = await reserved_transfer_targets() if reserved_transfer_targets else set()
         snapshots_by_workstation_id: dict[uuid.UUID, SessionSnapshot] = {}
         if session_service is not None:
             for active_session in await session_service.list(active_only=True):
@@ -199,6 +204,7 @@ def create_router(
                 item,
                 snapshots_by_workstation_id.get(item.id),
                 relay_off_pending=item.id in pending,
+                transfer_reserved=item.id in reserved,
             )
             for item in workstations
         ]

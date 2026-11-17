@@ -151,6 +151,7 @@ public sealed class WindowsClientHost : IClientHost
             _enrollment.WorkstationId,
             _enrollment.WorkstationName);
         await ViewModel.RecoverV2SessionAsync(_v2Recovery, ViewModel.LifetimeToken);
+        ViewModel.TrackBackgroundTask(ViewModel.RunV2TransferLoopAsync());
         _updateRecoveryCompleted = true;
         if (_v2EventsHttpClient is not null && DeploymentSettings.V2EventsHttpAddress is not null)
             ViewModel.TrackBackgroundTask(RunGuiUpdateLoopAsync(ViewModel.LifetimeToken));

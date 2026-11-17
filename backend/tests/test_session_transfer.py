@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 
 import pytest
 
@@ -22,7 +23,7 @@ from gameclub_backend.modules.workstations.infrastructure.memory import (
 )
 
 
-async def build_transfer_services():
+async def build_transfer_services(session_repository=None):
     workstation_repository = InMemoryWorkstationRepository()
     workstations = WorkstationService(workstation_repository)
     source = await workstations.register("transfer-source", "Source PC", group_id="vip")
@@ -31,7 +32,7 @@ async def build_transfer_services():
 
     client_repository = InMemoryClientRepository()
     client = await ClientService(client_repository).create("TransferFox")
-    session_repository = InMemorySessionRepository()
+    session_repository = session_repository or InMemorySessionRepository()
     sessions = SessionService(
         session_repository,
         workstations=workstation_repository,
@@ -171,3 +172,17 @@ async def test_pending_transfer_is_claimed_by_same_client_on_new_workstation() -
     assert offer.target_workstation_id is None
     assert confirmed.status.value == "confirmed"
     assert moved.workstation_id == target.id
+
+
+@pytest.mark.asyncio
+async def test_legacy_transfer_cannot_move_v2_session():
+    repository = InMemorySessionRepository()
+    transfer, sessions, session, target, _ = await build_transfer_services(repository)
+    old_offer = await transfer.create_offer(session.id, target.id, "old-transfer-offer")
+    await repository.save(dataclasses.replace(session, source=SessionService.LOCAL_LEDGER_SOURCE))
+
+    with pytest.raises(ApplicationError, match="require a V2 transfer"):
+        await transfer.create_offer(session.id, target.id, "new-transfer-offer")
+    with pytest.raises(ApplicationError, match="require a V2 transfer"):
+        await transfer.confirm(old_offer.id, "old-transfer-confirm")
+    assert not await sessions.list(target.id, active_only=True)

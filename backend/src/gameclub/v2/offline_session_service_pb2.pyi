@@ -11,6 +11,128 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class ListTransferTargetsRequest(_message.Message):
+    __slots__ = ("device_id", "session_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
+
+class TransferTarget(_message.Message):
+    __slots__ = ("workstation_id", "name", "group_id")
+    WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    workstation_id: str
+    name: str
+    group_id: str
+    def __init__(self, workstation_id: _Optional[str] = ..., name: _Optional[str] = ..., group_id: _Optional[str] = ...) -> None: ...
+
+class ListTransferTargetsResponse(_message.Message):
+    __slots__ = ("targets",)
+    TARGETS_FIELD_NUMBER: _ClassVar[int]
+    targets: _containers.RepeatedCompositeFieldContainer[TransferTarget]
+    def __init__(self, targets: _Optional[_Iterable[_Union[TransferTarget, _Mapping]]] = ...) -> None: ...
+
+class QuoteTransferRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "target_workstation_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    target_workstation_id: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., target_workstation_id: _Optional[str] = ...) -> None: ...
+
+class TransferQuote(_message.Message):
+    __slots__ = ("token", "per_minute_price_cents", "burned_package_id", "burned_package_name", "burned_package_minutes", "fallback_grant_minutes")
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    PER_MINUTE_PRICE_CENTS_FIELD_NUMBER: _ClassVar[int]
+    BURNED_PACKAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    BURNED_PACKAGE_NAME_FIELD_NUMBER: _ClassVar[int]
+    BURNED_PACKAGE_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    FALLBACK_GRANT_MINUTES_FIELD_NUMBER: _ClassVar[int]
+    token: str
+    per_minute_price_cents: int
+    burned_package_id: str
+    burned_package_name: str
+    burned_package_minutes: int
+    fallback_grant_minutes: int
+    def __init__(self, token: _Optional[str] = ..., per_minute_price_cents: _Optional[int] = ..., burned_package_id: _Optional[str] = ..., burned_package_name: _Optional[str] = ..., burned_package_minutes: _Optional[int] = ..., fallback_grant_minutes: _Optional[int] = ...) -> None: ...
+
+class BeginTransferRequest(_message.Message):
+    __slots__ = ("device_id", "session_id", "target_workstation_id", "operation_id", "quote_token")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
+    QUOTE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    session_id: str
+    target_workstation_id: str
+    operation_id: str
+    quote_token: str
+    def __init__(self, device_id: _Optional[str] = ..., session_id: _Optional[str] = ..., target_workstation_id: _Optional[str] = ..., operation_id: _Optional[str] = ..., quote_token: _Optional[str] = ...) -> None: ...
+
+class GetPendingTransferRequest(_message.Message):
+    __slots__ = ("device_id",)
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    def __init__(self, device_id: _Optional[str] = ...) -> None: ...
+
+class GetPendingTransferResponse(_message.Message):
+    __slots__ = ("operation",)
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    operation: TransferOperation
+    def __init__(self, operation: _Optional[_Union[TransferOperation, _Mapping]] = ...) -> None: ...
+
+class TransferOperationRequest(_message.Message):
+    __slots__ = ("device_id", "operation_id")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    operation_id: str
+    def __init__(self, device_id: _Optional[str] = ..., operation_id: _Optional[str] = ...) -> None: ...
+
+class TransferSourceCheckpoint(_message.Message):
+    __slots__ = ("sequence", "payload_hash")
+    SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    PAYLOAD_HASH_FIELD_NUMBER: _ClassVar[int]
+    sequence: int
+    payload_hash: str
+    def __init__(self, sequence: _Optional[int] = ..., payload_hash: _Optional[str] = ...) -> None: ...
+
+class ConfirmTransferSourceRequest(_message.Message):
+    __slots__ = ("device_id", "operation_id", "checkpoint")
+    DEVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
+    CHECKPOINT_FIELD_NUMBER: _ClassVar[int]
+    device_id: str
+    operation_id: str
+    checkpoint: TransferSourceCheckpoint
+    def __init__(self, device_id: _Optional[str] = ..., operation_id: _Optional[str] = ..., checkpoint: _Optional[_Union[TransferSourceCheckpoint, _Mapping]] = ...) -> None: ...
+
+class TransferOperation(_message.Message):
+    __slots__ = ("operation_id", "session_id", "source_workstation_id", "target_workstation_id", "status", "expires_at", "target_ready", "source_checkpoint")
+    OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_WORKSTATION_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    TARGET_READY_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_CHECKPOINT_FIELD_NUMBER: _ClassVar[int]
+    operation_id: str
+    session_id: str
+    source_workstation_id: str
+    target_workstation_id: str
+    status: str
+    expires_at: _timestamp_pb2.Timestamp
+    target_ready: bool
+    source_checkpoint: TransferSourceCheckpoint
+    def __init__(self, operation_id: _Optional[str] = ..., session_id: _Optional[str] = ..., source_workstation_id: _Optional[str] = ..., target_workstation_id: _Optional[str] = ..., status: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., target_ready: _Optional[bool] = ..., source_checkpoint: _Optional[_Union[TransferSourceCheckpoint, _Mapping]] = ...) -> None: ...
+
 class ResumeOfflinePortalRequest(_message.Message):
     __slots__ = ("device_id", "session_id", "client_id")
     DEVICE_ID_FIELD_NUMBER: _ClassVar[int]

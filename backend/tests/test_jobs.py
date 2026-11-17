@@ -69,6 +69,7 @@ def test_background_actors_share_one_broker() -> None:
         "reconcile_pending_settlements",
         "run_cash_shift_schedule",
         "sweep_reservation_no_shows",
+        "expire_v2_transfers",
         "backfill_v2_confirmed_per_minute_debits",
         "project_analytics_events",
     }
@@ -91,6 +92,7 @@ def test_scheduler_dispatches_read_only_analytics_projection(
 
     names = (
         "sweep_reservation_no_shows",
+        "expire_v2_transfers",
         "reconcile_billing_charges",
         "reconcile_pending_settlements",
         "meter_active_sessions",

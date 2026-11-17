@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
 import datetime
 import uuid
+from collections.abc import AsyncIterator
 
 from sqlalchemy import JSON, DateTime, String, select, text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.infrastructure.database import (
+    EngineProvider,
+    application_transaction,
+    begin_session,
+    open_session,
+)
 from gameclub_backend.modules.reservations.domain import Reservation, ReservationStatus
 
 
@@ -89,6 +97,19 @@ class ReservationModel(ReservationBase):
 class PostgresReservationRepository:
     def __init__(self, engine_provider: EngineProvider) -> None:
         self._engine_provider = engine_provider
+
+    @contextlib.asynccontextmanager
+    async def lock_workstation(self, workstation_id: uuid.UUID) -> AsyncIterator[None]:
+        async with application_transaction(self._engine_provider) as session:
+            await self._lock_workstation(session, str(workstation_id))
+            yield
+
+    @staticmethod
+    async def _lock_workstation(session: AsyncSession, workstation_id: str) -> None:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": f"reservation-resource:{workstation_id}"},
+        )
 
     async def get(self, reservation_id: uuid.UUID) -> Reservation | None:
         async with open_session(self._engine_provider) as session:
@@ -176,7 +197,7 @@ class PostgresReservationRepository:
 
     async def save(self, reservation: Reservation) -> Reservation:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
+            async with begin_session(session):
                 model = await session.get(ReservationModel, reservation.id)
                 if model is not None:
                     resource_ids = sorted(
@@ -184,10 +205,7 @@ class PostgresReservationRepository:
                         | {str(value) for value in reservation.workstation_ids}
                     )
                     for workstation_id in resource_ids:
-                        await session.execute(
-                            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                            {"lock_key": f"reservation-resource:{workstation_id}"},
-                        )
+                        await self._lock_workstation(session, workstation_id)
                     if reservation.status in {
                         ReservationStatus.CONFIRMED,
                         ReservationStatus.ACTIVE,
@@ -231,10 +249,7 @@ class PostgresReservationRepository:
 
                 resource_ids = sorted(str(value) for value in reservation.workstation_ids)
                 for workstation_id in resource_ids:
-                    await session.execute(
-                        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                        {"lock_key": f"reservation-resource:{workstation_id}"},
-                    )
+                    await self._lock_workstation(session, workstation_id)
 
                 active_statuses = [
                     ReservationStatus.CONFIRMED.value,

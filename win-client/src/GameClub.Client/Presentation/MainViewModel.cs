@@ -8,7 +8,7 @@ using GameClub.Client.Domain;
 
 namespace GameClub.Client.Presentation;
 
-public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
+public sealed partial class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 {
     private readonly ClientSessionCoordinator _session;
     private readonly AccessGateCoordinator _accessGate;
@@ -47,7 +47,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private bool _deploymentBlocked;
     public bool AllowUpdateShutdown { get; private set; }
     public bool IsDeploymentBlocked => _deploymentBlocked;
-    public bool HasActiveGameSession => _activeSession is not null
+    public bool HasActiveGameSession => _isV2TransferPending || _activeSession is not null
         || _activeV2Ledger is { Status: V2LocalSessionStatus.Active or V2LocalSessionStatus.NeedsReview };
 
     public void ApplyDeploymentBlock(bool blocked)
@@ -105,6 +105,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private bool _isTransferWaiting;
     private bool _v2ServerEventTransportFailed;
     private bool _isV2ServerStopPending;
+    private bool _isV2TransferPending;
     private int _v2ServerEventIssueCount;
     private string? _portalSessionIdempotencyKey;
     private CancellationTokenSource? _sessionNotificationLifetime;
@@ -124,7 +125,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         IOfflineSnapshotSignatureVerifier? v2SignatureVerifier = null,
         IV2OfflineSessionGateway? v2OfflineSession = null,
         IV2GuestSessionGateway? v2GuestSession = null,
-        IV2ClientPortalGateway? v2ClientPortal = null)
+        IV2ClientPortalGateway? v2ClientPortal = null,
+        IV2SessionTransferGateway? v2TransferGateway = null)
     {
         _session = session;
         _accessCredentials = accessCredentials;
@@ -133,6 +135,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         _v2ClientPortal = v2ClientPortal ?? session.V2ClientPortal;
         _v2OfflineSession = v2OfflineSession ?? session.V2OfflineSession;
         _v2GuestSession = v2GuestSession ?? session.BackendClient as IV2GuestSessionGateway;
+        _v2TransferGateway = v2TransferGateway ?? session.BackendClient as IV2SessionTransferGateway;
         _powerController = powerController;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _timeNotificationDispatcher = new TimeNotificationDispatcher(timeNotificationPresenter);
@@ -190,11 +193,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         && !_portalPasswordResetRequired
         && !IsGuestWidgetVisible;
     public bool IsUserLoginVisible => IsAccessLocked
+        && !_isV2TransferPending
         && _lockdownPolicy.UserSelfLoginEnabled
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
         && !_isPortalRegistrationRequested;
     public bool IsPortalRegistrationVisible => IsAccessLocked
+        && !_isV2TransferPending
         && _lockdownPolicy.UserSelfLoginEnabled
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
@@ -202,6 +207,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     public bool IsManagerLoginVisible => IsAccessLocked && _isManagerLoginRequested;
     public bool IsMaintenanceVisible => IsMaintenanceMode;
     public bool IsManagerEntryVisible => IsAccessLocked
+        && !_isV2TransferPending
         && !IsWaitingForAssignment
         && !_isManagerLoginRequested
         && !_isPortalRegistrationRequested;
@@ -221,14 +227,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         ? _accessGate.Snapshot.Message
         : _portalMessage;
     public bool IsAccessFeedbackVisible => !string.IsNullOrWhiteSpace(_portalMessage);
-    public string AccessTitle => IsMaintenanceMode
+    public string AccessTitle => _isV2TransferPending
+        ? "Перенос сессии"
+        : IsMaintenanceMode
         ? "Режим обслуживания"
         : IsWaitingForAssignment
             ? "Ожидание привязки ПК"
         : IsSessionLocked
             ? "Сессия завершена"
             : _lockdownPolicy.UserSelfLoginEnabled ? "Войдите и начните играть" : "Клиент заблокирован";
-    public string AccessSubtitle => IsMaintenanceMode
+    public string AccessSubtitle => _isV2TransferPending
+        ? "Ожидаем подтверждение сервера"
+        : IsMaintenanceMode
         ? "Системные действия доступны только менеджеру"
         : IsWaitingForAssignment
             ? "Администратор должен указать MAC-адрес этого ПК в админке"
@@ -239,12 +249,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 ? "Создайте аккаунт клуба — он будет привязан к этому месту"
                     : "Войдите по нику или телефону, чтобы начать сессию на этом ПК"
                 : "Вход пользователя отключён политикой зоны. Обратитесь к администратору клуба.";
-    public bool CanUnlockUser => !_deploymentBlocked && _userAccessCode.Trim().Length >= 4;
-    public bool CanEnterMaintenance => _managerPassword.Length >= 8;
-    public bool CanLoginPortal => !_deploymentBlocked && _portalIdentifier.Trim().Length >= 3
+    public bool CanUnlockUser => !_deploymentBlocked && !_isV2TransferPending && _userAccessCode.Trim().Length >= 4;
+    public bool CanEnterMaintenance => !_isV2TransferPending && _managerPassword.Length >= 8;
+    public bool CanLoginPortal => !_deploymentBlocked && !_isV2TransferPending && _portalIdentifier.Trim().Length >= 3
         && (_portalPassword.Length == 0 || _portalPassword.Length >= 4);
     public bool CanSetPortalPassword => _portalPasswordSetup.Length is >= 4 and <= 128;
-    public bool CanRegisterPortal => !_deploymentBlocked && _portalNickname.Trim().Length >= 3
+    public bool CanRegisterPortal => !_deploymentBlocked && !_isV2TransferPending && _portalNickname.Trim().Length >= 3
         && _portalPhone.Trim().Length >= 4
         && _portalRegistrationPassword.Length >= 4;
     public bool IsUserAccessConfigured => _accessCredentials.IsUserAccessConfigured;
@@ -701,6 +711,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(ConnectionMessage));
         OnPropertyChanged(nameof(BackendVersion));
         OnPropertyChanged(nameof(IsOnline));
+        OnPropertyChanged(nameof(CanOpenTransfer));
         OnPropertyChanged(nameof(ConnectionColor));
         OnPropertyChanged(nameof(IsWaitingForAssignment));
         OnPropertyChanged(nameof(IsUserLoginVisible));
@@ -773,6 +784,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
             _v2ServerEventIssueCount = result.ServerEventIssueCount;
             _v2ServerEventTransportFailed = false;
             PublishV2ServerEventState();
+            if (result.State == V2LedgerRecoveryState.TransferPending)
+            {
+                _isV2TransferPending = true;
+                LockClient("Ожидаем подтверждение переноса сессии");
+                if (result.Ledger is { Status: V2LocalSessionStatus.Active } pendingLedger)
+                {
+                    _activeV2Ledger = pendingLedger;
+                }
+                return;
+            }
             if (result.State != V2LedgerRecoveryState.Active || result.Ledger is null)
             {
                 return;
@@ -805,6 +826,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
                 }
             }
             if (await StopV2SessionIfServerCompletedAsync())
+            {
+                return;
+            }
+            if (result.Ledger.TransferOperationId is not null
+                && !await CanOpenTransferredLedgerAsync(result.Ledger, cancellationToken))
             {
                 return;
             }
@@ -860,6 +886,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     private async Task PollGuestAccessAsync()
     {
+        if (_isV2TransferPending) return;
         if (_deploymentBlocked && _activeV2Ledger is not { IsGuest: true, Status: V2LocalSessionStatus.Active }) return;
         if (_v2GuestSession is null || _v2SignatureVerifier is null || string.IsNullOrWhiteSpace(DeviceId))
         {
@@ -946,6 +973,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public void ShowManagerLogin()
     {
+        if (_isV2TransferPending) return;
         _accessGate.Lock("Введите пароль менеджера");
         _isManagerLoginRequested = true;
         _isPortalRegistrationRequested = false;
@@ -962,6 +990,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         if (!controlPressed
             || !altPressed
             || !pPressed
+            || _isV2TransferPending
             || !IsAccessLocked
             || IsWaitingForAssignment)
         {
@@ -1008,7 +1037,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> LoginPortalAsync()
     {
-        if (_deploymentBlocked) return false;
+        if (_deploymentBlocked || _isV2TransferPending) return false;
         ClientLog.Info("auth", $"login requested mode={(_v2OfflineLogin is not null ? "v2" : "legacy")} identifierLength={PortalIdentifier.Length}");
         if (!IsOnline)
         {
@@ -1173,7 +1202,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public async Task<bool> RegisterPortalAsync()
     {
-        if (_deploymentBlocked) return false;
+        if (_deploymentBlocked || _isV2TransferPending) return false;
         if (!IsOnline)
         {
             _portalMessage = _connection.State == ClientConnectionState.Reconnecting
@@ -1829,6 +1858,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public bool TryUnlockUser()
     {
+        if (_isV2TransferPending) return false;
         if (_deploymentBlocked) return false;
         var unlocked = _accessGate.TryUnlockUser(UserAccessCode);
         if (unlocked)
@@ -1841,6 +1871,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
 
     public bool TryEnterMaintenance()
     {
+        if (_isV2TransferPending) return false;
         var entered = _accessGate.TryEnterMaintenance(ManagerPassword);
         if (entered)
         {
@@ -2255,6 +2286,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         };
         OnPropertyChanged(nameof(ConnectionMessage));
         OnPropertyChanged(nameof(IsOnline));
+        OnPropertyChanged(nameof(CanOpenTransfer));
         OnPropertyChanged(nameof(ConnectionColor));
         OnPropertyChanged(nameof(IsUserLoginVisible));
         OnPropertyChanged(nameof(IsPortalRegistrationVisible));
@@ -2711,10 +2743,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
     private void PublishAccessState()
     {
         OnPropertyChanged(nameof(AccessMode));
+        OnPropertyChanged(nameof(CanUnlockUser));
+        OnPropertyChanged(nameof(CanLoginPortal));
+        OnPropertyChanged(nameof(CanRegisterPortal));
+        OnPropertyChanged(nameof(CanEnterMaintenance));
         OnPropertyChanged(nameof(IsAccessLocked));
         OnPropertyChanged(nameof(IsSessionLocked));
         OnPropertyChanged(nameof(IsMaintenanceMode));
         OnPropertyChanged(nameof(IsAccessGateVisible));
+        OnPropertyChanged(nameof(IsV2TransferPending));
+        OnPropertyChanged(nameof(CanStartV2Transfer));
+        OnPropertyChanged(nameof(CanOpenTransfer));
         OnPropertyChanged(nameof(IsSecuredContentVisible));
         OnPropertyChanged(nameof(IsUserLoginVisible));
         OnPropertyChanged(nameof(IsPortalRegistrationVisible));
@@ -2901,6 +2940,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IAsyncDisposable
         OnPropertyChanged(nameof(CanCreateTransferOffer));
         OnPropertyChanged(nameof(CanConfirmTransfer));
         OnPropertyChanged(nameof(IsTransferWaiting));
+        OnPropertyChanged(nameof(CanStartV2Transfer));
+        OnPropertyChanged(nameof(CanOpenTransfer));
         OnPropertyChanged(nameof(TransferToggleLabel));
     }
 

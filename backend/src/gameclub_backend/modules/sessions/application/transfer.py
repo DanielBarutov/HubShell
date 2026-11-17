@@ -90,6 +90,8 @@ class SessionTransferService:
         session = await self._sessions.get(session_id)
         if session is None:
             raise ApplicationError(ErrorCode.NOT_FOUND, "Session not found")
+        if session.source in SessionService.LOCAL_SOURCES:
+            raise ApplicationError(ErrorCode.CONFLICT, "V2 sessions require a V2 transfer")
         if session.status.value != "active" or session.client_id is None:
             raise ApplicationError(
                 ErrorCode.CONFLICT,
@@ -240,6 +242,8 @@ class SessionTransferService:
             session = await self._sessions.get(offer.session_id)
             if session is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND, "Session not found")
+            if session.source in SessionService.LOCAL_SOURCES:
+                raise ApplicationError(ErrorCode.CONFLICT, "V2 sessions require a V2 transfer")
             client_id = session.client_id
             if (
                 session.status.value != "active"

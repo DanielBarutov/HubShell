@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import hashlib
 import typing
 import uuid
@@ -55,6 +56,23 @@ class V2SignedSnapshotIssue:
     @property
     def payload_hash(self) -> str:
         return hashlib.sha256(self.payload_bytes).hexdigest()
+
+
+@dataclasses.dataclass(frozen=True)
+class V2TransferMinuteBonus:
+    grant_id: uuid.UUID
+    version: int
+    remaining_cents: int
+    payment_limit_bps: int
+
+
+@dataclasses.dataclass(frozen=True)
+class V2TransferSourceState:
+    lease: V2SessionLease
+    login_grant_remaining_minutes: int
+    last_billed_at: datetime.datetime
+    free_per_minute: bool
+    minute_bonus: V2TransferMinuteBonus | None = None
 
 
 @dataclasses.dataclass(frozen=True)

@@ -66,6 +66,29 @@ message OfflineSessionSnapshotPayload {
   // Только для signed receipt покупки; отсутствие сохраняет старую полную цену.
   optional sint64 purchase_money_cents = 33;
   sint64 purchase_bonus_cents = 34;
+  // Присутствует только в подписанном доступе на целевой ПК.
+  OfflineTransferHandoff transfer_handoff = 35;
+}
+
+message OfflineTransferHandoff {
+  string operation_id = 1;
+  uint32 last_sequence = 2;
+  string last_payload_hash = 3;
+  OfflineTransferMinuteBonus minute_bonus = 4;
+  OfflineTransferGuest guest = 5;
+}
+
+message OfflineTransferGuest {
+  string payment_id = 1;
+  string name = 2;
+  repeated string applied_grant_ids = 3;
+}
+
+message OfflineTransferMinuteBonus {
+  string grant_id = 1;
+  uint64 version = 2;
+  int64 remaining_cents = 3;
+  uint32 payment_limit_bps = 4;
 }
 
 // Клиент принимает snapshot только после проверки signature выбранным key id.

@@ -133,6 +133,36 @@ public sealed class AvaloniaHostSmokeTests
         Assert.False(window.FindControl<Button>("OpenDesktopButton")!.IsVisible);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TransferControlIsDisabledWhileAccessGateShowsWaiting(bool guest)
+    {
+        EnsureAvaloniaInitialized();
+        var window = new MainWindow();
+        var vm = (MainViewModel)window.DataContext!;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var ledger = GameClub.Client.Domain.V2LocalSessionLedger.Create(1, Guid.NewGuid(), Guid.NewGuid(),
+            "device-01", null, 0, 0, 5, [], []);
+        if (guest)
+            ledger = ledger with { ClientId = Guid.Empty, GuestPaymentId = Guid.NewGuid(), GuestName = "Гость" };
+        vm.ApplyHeartbeatConnectionState(GameClub.Client.Domain.ClientConnectionState.Online);
+        typeof(MainViewModel).GetMethod("OpenV2Session", flags)!.Invoke(vm, [ledger, "Сессия открыта"]);
+
+        var transfer = window.FindControl<Button>(guest ? "GuestTransferButton" : "ToggleTransferButton")!;
+        var wait = window.FindControl<StackPanel>("TransferWaitPanel")!;
+        Assert.True(transfer.IsEnabled);
+        Assert.False(wait.IsVisible);
+
+        typeof(MainViewModel).GetMethod("ShowTransferWait", flags)!.Invoke(vm, null);
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(transfer.IsEnabled);
+        Assert.True(vm.IsAccessLocked);
+        Assert.True(wait.IsVisible);
+        Assert.True(wait.Children.OfType<ProgressBar>().Single().IsIndeterminate);
+    }
+
     [Fact]
     public void NeonAccessGateLoadsItsBundledBackground()
     {

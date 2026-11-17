@@ -12,6 +12,21 @@ const workstations: Workstation[] = [
 afterEach(() => window.localStorage.clear());
 
 describe("Карта игровых мест", () => {
+  it("маршрутизирует закреплённую цель в карточку и блокирует продажу", () => {
+    const onPc = vi.fn();
+    const onSalePc = vi.fn();
+    const target = { ...workstations[0], transferReserved: true };
+    render(<MapView onPc={onPc} onSalePc={onSalePc} onBookPc={vi.fn()}
+      onEditPc={vi.fn()} pcs={[target]} />);
+
+    const seat = screen.getByRole("button", { name: "VIP-01: Цель переноса" });
+    fireEvent.click(seat);
+    expect(onPc).toHaveBeenCalledWith(target);
+    expect(onSalePc).not.toHaveBeenCalled();
+    fireEvent.contextMenu(seat);
+    expect(screen.getByRole("menuitem", { name: "Оформить продажу" })).toBeDisabled();
+  });
+
   it("маршрутизирует к продаже свободное место, а недоступное — в карточку ПК", () => {
     const onSalePc = vi.fn();
     const onPc = vi.fn();

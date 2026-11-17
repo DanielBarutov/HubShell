@@ -78,6 +78,15 @@ class ReservationService:
         )
         return availability
 
+    async def check_entry_for_transfer(
+        self,
+        workstation_id: uuid.UUID,
+        client_id: uuid.UUID | None = None,
+        guest_id: uuid.UUID | None = None,
+    ) -> EntryDecision:
+        async with self._repository.lock_workstation(workstation_id):
+            return await self.check_entry(workstation_id, client_id, guest_id)
+
     async def check_entry(
         self,
         workstation_id: uuid.UUID,
