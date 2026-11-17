@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 
 import httpx
@@ -49,6 +50,25 @@ async def test_dev_operator_can_issue_and_use_bearer_token() -> None:
     assert me_response.status_code == 200
     assert me_response.json()["subject_id"] == "dev-operator"
     assert token_response.json()["refresh_token"]
+
+
+async def test_operator_login_rate_limit_is_atomic_and_scoped_to_client_ip(api_context) -> None:
+    url = "/api/v1/auth/token"
+    wrong = {"username": "operator", "password": "wrong"}
+    correct = {"username": "operator", "password": "password"}
+
+    # The fixture already used one attempt. Extra requests cannot race past the cap.
+    responses = await asyncio.gather(*(api_context.client.post(url, json=wrong) for _ in range(10)))
+    assert sorted(response.status_code for response in responses) == [401] * 9 + [429]
+    blocked = await api_context.client.post(
+        url, json=correct, headers={"X-Forwarded-For": "198.51.100.3"}
+    )
+    assert blocked.status_code == 429
+    assert 1 <= int(blocked.headers["Retry-After"]) <= 900
+
+    transport = httpx.ASGITransport(app=api_context.application, client=("198.51.100.3", 123))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as other:
+        assert (await other.post(url, json=correct)).status_code == 200
 
 
 async def test_refresh_token_rotates_and_logout_revokes_current_token() -> None:

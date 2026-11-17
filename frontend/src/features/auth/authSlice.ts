@@ -1,11 +1,14 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import type { RootState } from "../../app/store";
 import { api } from "../../app/api";
+import { clearWorkspace } from "../workspace/workspaceSlice";
+import { closePanel } from "../workspace/uiSlice";
 
 type AuthState = {
   isAuthenticated: boolean;
   isRestoring: boolean;
   isSubmitting: boolean;
+  isLoggingOut: boolean;
   error: string | null;
 };
 
@@ -13,6 +16,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
   isRestoring: true,
   isSubmitting: false,
+  isLoggingOut: false,
   error: null,
 };
 
@@ -26,6 +30,15 @@ export const login = createAsyncThunk<void, { username: string; password: string
     }
   },
 );
+
+export const logout = createAsyncThunk("auth/logout", async (_, { dispatch }) => {
+  try {
+    await api.logout();
+  } finally {
+    dispatch(closePanel());
+    dispatch(clearWorkspace());
+  }
+});
 
 export const restoreSession = createAsyncThunk<boolean, void, { rejectValue: string }>(
   "auth/restoreSession",
@@ -53,6 +66,15 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(logout.pending, (state) => {
+        state.isLoggingOut = true;
+      })
+      .addCase(logout.fulfilled, () => ({ ...initialState, isRestoring: false }))
+      .addCase(logout.rejected, () => ({
+        ...initialState,
+        isRestoring: false,
+        error: "Вы вышли на этом устройстве. Сервер не подтвердил завершение сессии.",
+      }))
       .addCase(login.pending, (state) => {
         state.isSubmitting = true;
         state.error = null;

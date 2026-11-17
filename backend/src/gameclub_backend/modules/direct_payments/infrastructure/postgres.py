@@ -1,8 +1,10 @@
 import datetime
+import typing
 import uuid
 
-from sqlalchemy import DateTime, Integer, String, select, text
+from sqlalchemy import Boolean, DateTime, Integer, String, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from gameclub_backend.infrastructure.database import EngineProvider, begin_session, open_session
@@ -11,6 +13,12 @@ from gameclub_backend.modules.direct_payments.domain import (
     GuestSessionPayment,
 )
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
+
+
+class GuestSaleAdmission(typing.Protocol):
+    async def require_guest_sale(
+        self, transaction: AsyncSession, workstation_id: uuid.UUID, session_id: uuid.UUID | None
+    ) -> None: ...
 
 
 class DirectPaymentBase(DeclarativeBase):
@@ -44,6 +52,8 @@ class GuestSessionPaymentModel(DirectPaymentBase):
         DateTime(timezone=True), nullable=False, index=True
     )
     settlement_error: Mapped[str | None] = mapped_column(String(1_000), nullable=True)
+
+    transfer_hold: Mapped[bool] = mapped_column(Boolean(), default=False, server_default="false")
 
     equipment_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pc", server_default="pc"
@@ -105,8 +115,37 @@ class GuestSessionPaymentModel(DirectPaymentBase):
 
 
 class PostgresGuestSessionPaymentRepository:
-    def __init__(self, engine_provider: EngineProvider) -> None:
+    def __init__(
+        self, engine_provider: EngineProvider, admission: GuestSaleAdmission | None = None
+    ) -> None:
         self._engine_provider = engine_provider
+        self._admission = admission
+
+    async def has_transfer_hold(
+        self, workstation_id: uuid.UUID, session_id: uuid.UUID | None
+    ) -> bool:
+        async with open_session(self._engine_provider) as db:
+            return (
+                await db.scalar(
+                    select(GuestSessionPaymentModel.id)
+                    .where(
+                        GuestSessionPaymentModel.workstation_id == workstation_id,
+                        GuestSessionPaymentModel.session_id == session_id,
+                        GuestSessionPaymentModel.transfer_hold,
+                    )
+                    .limit(1)
+                )
+                is not None
+            )
+
+    async def release_transfer_hold(self, payment_id: uuid.UUID) -> None:
+        async with open_session(self._engine_provider) as db:
+            async with begin_session(db):
+                await db.execute(
+                    update(GuestSessionPaymentModel)
+                    .where(GuestSessionPaymentModel.id == payment_id)
+                    .values(transfer_hold=False)
+                )
 
     async def list_for_session(self, session_id: uuid.UUID) -> list[GuestSessionPayment]:
         async with open_session(self._engine_provider) as session:
@@ -167,7 +206,13 @@ class PostgresGuestSessionPaymentRepository:
                     model.next_attempt_at = payment.next_attempt_at
                     model.settlement_error = payment.settlement_error
                     return payment
-                session.add(GuestSessionPaymentModel.from_domain(payment))
+                model = GuestSessionPaymentModel.from_domain(payment)
+                if self._admission is not None and payment.equipment_type == "pc":
+                    await self._admission.require_guest_sale(
+                        session, payment.workstation_id, payment.session_id
+                    )
+                    model.transfer_hold = True
+                session.add(model)
                 return payment
 
     async def list_recoverable(

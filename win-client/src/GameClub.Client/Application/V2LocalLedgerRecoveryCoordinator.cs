@@ -34,7 +34,9 @@ public sealed class V2LocalLedgerRecoveryCoordinator
             throw new InvalidOperationException("V2 local ledger belongs to another device");
         }
 
-        var state = snapshot.Ledger.Status == V2LocalSessionStatus.Active
+        var state = snapshot.PendingSourceTransfer is not null
+            ? V2LedgerRecoveryState.TransferPending
+            : snapshot.Ledger.Status == V2LocalSessionStatus.Active
             ? V2LedgerRecoveryState.Active
             : snapshot.PendingOutbox.Count == 0
                 ? V2LedgerRecoveryState.Completed
@@ -43,7 +45,8 @@ public sealed class V2LocalLedgerRecoveryCoordinator
             state,
             snapshot.Ledger,
             snapshot.PendingOutbox.Count,
-            snapshot.ServerEventIssues?.Count ?? 0);
+            snapshot.ServerEventIssues?.Count ?? 0,
+            snapshot.PendingSourceTransfer);
     }
 }
 
@@ -51,6 +54,7 @@ public enum V2LedgerRecoveryState
 {
     Empty,
     Active,
+    TransferPending,
     Completed,
     CompletedPendingDelivery,
 }
@@ -59,7 +63,8 @@ public sealed record V2LedgerRecoveryResult(
     V2LedgerRecoveryState State,
     V2LocalSessionLedger? Ledger,
     int PendingOutboxCount,
-    int ServerEventIssueCount)
+    int ServerEventIssueCount,
+    V2PendingSourceTransfer? PendingSourceTransfer = null)
 {
     public static V2LedgerRecoveryResult Empty { get; } = new(
         V2LedgerRecoveryState.Empty,

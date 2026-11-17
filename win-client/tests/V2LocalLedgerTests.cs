@@ -11,6 +11,164 @@ namespace GameClub.Client.Tests;
 
 public sealed class V2LocalLedgerTests
 {
+    [Fact]
+    public void SignedTransferResumesTheSameChainOnlyOnItsTarget()
+    {
+        var source = CreateLedger();
+        var operationId = Guid.NewGuid();
+        var payload = new OfflineSessionSnapshotPayload
+        {
+            SnapshotId = Guid.NewGuid().ToString(),
+            SchemaVersion = 1,
+            SnapshotVersion = 2,
+            IssuedAt = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
+            ClientId = source.ClientId.ToString(),
+            SessionId = source.SessionId.ToString(),
+            DeviceId = "target",
+            TransferHandoff = new OfflineTransferHandoff
+            {
+                OperationId = operationId.ToString(),
+                LastSequence = 4,
+                LastPayloadHash = new string('a', 64),
+                MinuteBonus = new OfflineTransferMinuteBonus
+                {
+                    GrantId = Guid.NewGuid().ToString(),
+                    Version = 2,
+                    RemainingCents = 680,
+                    PaymentLimitBps = 5000,
+                },
+            },
+        };
+        var signed = new SignedOfflineSessionSnapshot
+        {
+            Payload = payload,
+            SigningKeyId = "club-key",
+            Signature = ByteString.CopyFrom([1]),
+        };
+        var verifier = new SnapshotVerifier(
+            V2OfflineSessionSnapshotReader.SerializeDeterministic(payload), accepts: true);
+
+        var resumed = V2OfflineSessionSnapshotReader.VerifyAndCreateTransferredLedger(
+            signed, verifier, operationId, source.SessionId, "target");
+        Assert.Equal(operationId, resumed.TransferOperationId);
+        Assert.Equal(5, resumed.NextSequence);
+        Assert.Equal(payload.TransferHandoff.LastPayloadHash, resumed.PreviousPayloadHash);
+        Assert.Equal(new V2MinuteBonusBudget(Guid.Parse(payload.TransferHandoff.MinuteBonus.GrantId),
+            2, 680, 5000), resumed.MinuteBonus);
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateLedger(signed, verifier));
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateTransferredLedger(
+                signed, verifier, operationId, source.SessionId, "other-device"));
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateTransferredLedger(
+                signed, verifier, Guid.NewGuid(), source.SessionId, "target"));
+
+        payload.TransferHandoff.LastSequence++;
+        Assert.Throws<InvalidOperationException>(() =>
+            V2OfflineSessionSnapshotReader.VerifyAndCreateTransferredLedger(
+                signed, verifier, operationId, source.SessionId, "target"));
+    }
+
+    [Fact]
+    public void SignedGuestTransferKeepsPaidQueueWithoutRepeatingGrantedTime()
+    {
+        var operationId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        var paymentId = Guid.NewGuid();
+        var spentGrantId = Guid.NewGuid();
+        var queuedGrantId = Guid.NewGuid();
+        var payload = new OfflineSessionSnapshotPayload
+        {
+            SnapshotId = Guid.NewGuid().ToString(),
+            SchemaVersion = 1,
+            SnapshotVersion = 2,
+            IssuedAt = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
+            ClientId = Guid.Empty.ToString(),
+            SessionId = sessionId.ToString(),
+            DeviceId = "target",
+            WorkstationZoneId = "standard",
+            LoginGrantRemainingMinutes = 1,
+            TransferHandoff = new OfflineTransferHandoff
+            {
+                OperationId = operationId.ToString(),
+                Guest = new OfflineTransferGuest { PaymentId = paymentId.ToString(), Name = "Гость" },
+            },
+        };
+        payload.TransferHandoff.Guest.AppliedGrantIds.Add([spentGrantId.ToString(), queuedGrantId.ToString()]);
+        payload.Packages.Add(new OfflinePackageSnapshot
+        {
+            PackageId = queuedGrantId.ToString(),
+            TariffId = "vip",
+            ZoneId = "vip",
+            RemainingMinutes = 20,
+            Status = OfflinePackageStatus.Queued,
+        });
+        var signed = new SignedOfflineSessionSnapshot
+        {
+            Payload = payload, SigningKeyId = "club-key", Signature = ByteString.CopyFrom([1]),
+        };
+        var verifier = new SnapshotVerifier(
+            V2OfflineSessionSnapshotReader.SerializeDeterministic(payload), accepts: true);
+
+        var ledger = V2OfflineSessionSnapshotReader.VerifyAndCreateTransferredLedger(
+            signed, verifier, operationId, sessionId, "target");
+        Assert.True(ledger.IsGuest);
+        Assert.Equal(paymentId, ledger.GuestPaymentId);
+        Assert.Equal(new[] { spentGrantId, queuedGrantId }, ledger.AppliedServerOperationIds);
+        Assert.Equal(queuedGrantId.ToString(), Assert.Single(ledger.Packages).Id);
+        var now = DateTimeOffset.UtcNow;
+        var grantUsed = V2LocalLedgerEngine.ConsumeOneMinute(ledger, Guid.NewGuid(), now).Ledger;
+        Assert.Equal(0, grantUsed.LoginGrantRemainingMinutes);
+        var exhausted = V2LocalLedgerEngine.ConsumeOneMinute(grantUsed, Guid.NewGuid(), now.AddMinutes(1));
+        Assert.True(exhausted.LockWorkstation);
+        Assert.Equal(20, Assert.Single(exhausted.Ledger.Packages).RemainingMinutes);
+    }
+
+    [Theory]
+    [InlineData(V2TransferStatus.Committed, V2LocalSessionStatus.Stopped)]
+    [InlineData(V2TransferStatus.Cancelled, V2LocalSessionStatus.Active)]
+    [InlineData(V2TransferStatus.Expired, V2LocalSessionStatus.Active)]
+    public async Task SourceTransferRecoveryKeepsTheAgreedCheckpoint(
+        V2TransferStatus outcome, V2LocalSessionStatus expected)
+    {
+        var now = DateTimeOffset.Parse("2026-11-16T21:20:00Z");
+        var ledger = CreateLedger(loginGrantMinutes: 5) with { ActivatedAtUtc = now };
+        var store = new InMemoryLedgerStore();
+        var coordinator = new V2LocalLedgerCoordinator(store);
+        await coordinator.InitializeAsync(ledger);
+        var request = new V2PendingSourceTransfer(Guid.NewGuid(), Guid.NewGuid(), "signed-terms");
+
+        await coordinator.BeginSourceTransferAsync(ledger.SessionId, request);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.ResolveSourceTransferAsync(request.OperationId, V2TransferStatus.Preparing));
+        var nextMinute = now.AddMinutes(1);
+        Assert.Null(await coordinator.FreezeSourceTransferAsync(request.OperationId, nextMinute));
+        var minute = await coordinator.ConsumeMinuteBoundaryAsync(Guid.NewGuid(), nextMinute);
+        var fact = Assert.Single(minute.OutboxFacts);
+        Assert.Null(await coordinator.FreezeSourceTransferAsync(request.OperationId, nextMinute));
+        await coordinator.AcknowledgeOutboxAsync([fact.EventId]);
+        var checkpoint = await coordinator.FreezeSourceTransferAsync(request.OperationId, nextMinute);
+        Assert.Equal(new V2TransferCheckpoint(1, fact.PayloadHash), checkpoint);
+
+        var restarted = new V2LocalLedgerCoordinator(store);
+        var recovery = await new V2LocalLedgerRecoveryCoordinator(restarted).RecoverAsync(ledger.DeviceId);
+        Assert.Equal(V2LedgerRecoveryState.TransferPending, recovery.State);
+        Assert.Equal(request with { Frozen = true }, recovery.PendingSourceTransfer);
+        Assert.Equal(checkpoint, await restarted.FreezeSourceTransferAsync(request.OperationId, nextMinute.AddMinutes(2)));
+        Assert.Empty(await new V2MinuteLedgerRunner(restarted).ConsumeDueMinutesAsync(nextMinute.AddMinutes(2)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            restarted.PurchasePackageAsync(Guid.NewGuid(), "package", nextMinute));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            restarted.ResolveSourceTransferAsync(Guid.NewGuid(), outcome));
+
+        var resolved = await restarted.ResolveSourceTransferAsync(request.OperationId, outcome);
+        Assert.Equal(expected, resolved.Status);
+        Assert.Equal(4, resolved.LoginGrantRemainingMinutes);
+        Assert.Empty(await restarted.ReadPendingOutboxAsync());
+        Assert.Null((await restarted.ReadSnapshotAsync())!.PendingSourceTransfer);
+    }
+
     [Theory]
     [InlineData(480)]
     [InlineData(0)]

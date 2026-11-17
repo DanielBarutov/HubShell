@@ -11,6 +11,13 @@ class InMemoryGuestAccessGrantRepository:
         self._by_payment: dict[uuid.UUID, uuid.UUID] = {}
         self._lock = asyncio.Lock()
 
+    async def list_redeemed_for_session(self, session_id: uuid.UUID) -> list[GuestAccessGrant]:
+        return [
+            grant
+            for grant in self._items.values()
+            if grant.session_id == session_id and grant.redeemed
+        ]
+
     async def get_by_payment(self, payment_id: uuid.UUID) -> GuestAccessGrant | None:
         grant_id = self._by_payment.get(payment_id)
         return self._items.get(grant_id) if grant_id else None

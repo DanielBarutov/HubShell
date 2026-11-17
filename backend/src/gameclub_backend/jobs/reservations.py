@@ -11,6 +11,9 @@ from gameclub_backend.modules.reservations.application.service import Reservatio
 from gameclub_backend.modules.reservations.infrastructure.postgres import (
     PostgresReservationRepository,
 )
+from gameclub_backend.modules.sessions.infrastructure.v2_transfers_postgres import (
+    PostgresV2TransferReservations,
+)
 from gameclub_backend.modules.workstations.infrastructure.postgres import (
     PostgresWorkstationRepository,
 )
@@ -54,5 +57,19 @@ async def sweep_reservation_no_shows(now_iso: str | None = None) -> None:
         )
         updated = await reservation_service.complete_expired(_parse_sweep_time(now_iso))
         logger.info("reservation_expiry_sweep_completed updated_count=%s", updated)
+    finally:
+        await resources.close()
+
+
+@dramatiq.actor(queue_name="reservations", max_retries=3, time_limit=30_000)  # type: ignore[arg-type]
+async def expire_v2_transfers() -> None:
+    """Persist expired V2 transfer reservations even if both devices are offline."""
+    resources = create_resources(get_settings())
+    try:
+        engine = resources.engine
+        if engine is None:
+            raise RuntimeError("PostgreSQL resources are not configured")
+        updated = await PostgresV2TransferReservations(lambda: engine).expire_due()
+        logger.info("v2_transfer_expiry_completed updated_count=%s", updated)
     finally:
         await resources.close()

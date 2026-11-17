@@ -25,6 +25,10 @@ public sealed class V2LocalLedgerCoordinator
         try
         {
             var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingSourceTransfer is not null)
+            {
+                throw new InvalidOperationException("The V2 session is preparing a transfer");
+            }
             if (current.MinuteBonusCancellationPending)
                 throw new InvalidOperationException("Minute bonus cancellation must synchronize first");
             var ledger = current.Ledger;
@@ -56,6 +60,10 @@ public sealed class V2LocalLedgerCoordinator
         try
         {
             var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingSourceTransfer is not null)
+            {
+                throw new InvalidOperationException("The V2 session is preparing a transfer");
+            }
             var transition = V2LocalLedgerEngine.DisableMinuteBonus(current.Ledger, actionId, occurredAt);
             await _store.WriteAsync(current with { Ledger = transition.Ledger,
                 PendingOutbox = current.PendingOutbox.Concat(transition.OutboxFacts).ToArray(),
@@ -138,7 +146,8 @@ public sealed class V2LocalLedgerCoordinator
                     cancellationToken);
                 return;
             }
-            if (existing.Ledger.Status == V2LocalSessionStatus.Active)
+            if (existing.PendingSourceTransfer is not null
+                || existing.Ledger.Status == V2LocalSessionStatus.Active)
             {
                 throw new InvalidOperationException("An active V2 local ledger cannot be replaced");
             }
@@ -160,13 +169,132 @@ public sealed class V2LocalLedgerCoordinator
         }
     }
 
+    public async Task BeginSourceTransferAsync(
+        Guid sessionId, V2PendingSourceTransfer request, CancellationToken cancellationToken = default)
+    {
+        if (request.OperationId == Guid.Empty || request.TargetWorkstationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.QuoteToken) || request.Frozen || request.RestartPending)
+        {
+            throw new ArgumentException("An unstarted transfer request is required", nameof(request));
+        }
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.Ledger.SessionId != sessionId || current.Ledger.Status != V2LocalSessionStatus.Active
+                || current.PendingPortalPackagePurchase is not null || current.PendingMinuteBonusRequest is not null
+                || current.MinuteBonusCancellationPending)
+            {
+                throw new InvalidOperationException("The V2 session is not ready for transfer");
+            }
+            if (current.PendingSourceTransfer is { } pending)
+            {
+                if ((pending with { Frozen = false }) != request)
+                {
+                    throw new InvalidOperationException("Another transfer is already pending");
+                }
+                return;
+            }
+            await _store.WriteAsync(current with { PendingSourceTransfer = request }, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<V2TransferCheckpoint?> FreezeSourceTransferAsync(
+        Guid operationId, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            var pending = RequireSourceTransfer(current, operationId);
+            if (current.Ledger.Status != V2LocalSessionStatus.Active)
+            {
+                throw new InvalidOperationException("The source session ended during transfer");
+            }
+            if (current.PendingOutbox.Any(fact => fact.SessionId == current.Ledger.SessionId))
+            {
+                return null;
+            }
+            var ledgerBoundary = current.Ledger.LastConsumedMinuteUtc ?? current.Ledger.ActivatedAtUtc;
+            if (!pending.Frozen && (ledgerBoundary is null
+                || V2LocalLedgerEngine.TruncateToMinuteUtc(ledgerBoundary.Value)
+                < V2LocalLedgerEngine.TruncateToMinuteUtc(now)))
+            {
+                return null;
+            }
+
+            if (!pending.Frozen)
+            {
+                await _store.WriteAsync(current with
+                {
+                    PendingSourceTransfer = pending with { Frozen = true },
+                }, cancellationToken);
+            }
+            return new(current.Ledger.NextSequence - 1, current.Ledger.PreviousPayloadHash);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<V2LocalSessionLedger> ResolveSourceTransferAsync(
+        Guid operationId, V2TransferStatus status, CancellationToken cancellationToken = default,
+        bool keepRestartPending = false)
+    {
+        if (status is not (V2TransferStatus.Committed or V2TransferStatus.Cancelled or V2TransferStatus.Expired))
+        {
+            throw new InvalidOperationException("The server has not resolved this transfer");
+        }
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await RequireSnapshotAsync(cancellationToken);
+            var pending = RequireSourceTransfer(current, operationId);
+            var ledger = current.Ledger;
+            if (status == V2TransferStatus.Committed)
+            {
+                if (!pending.Frozen || current.PendingOutbox.Any(fact => fact.SessionId == ledger.SessionId))
+                {
+                    throw new InvalidOperationException("A committed transfer has an unsettled source ledger");
+                }
+                // The server moved this session; stopping the local copy must not emit session_stopped.
+                ledger = ledger with { Status = V2LocalSessionStatus.Stopped };
+            }
+            await _store.WriteAsync(current with
+            {
+                Ledger = ledger,
+                PendingSourceTransfer = status == V2TransferStatus.Committed && keepRestartPending
+                    ? pending with { RestartPending = true }
+                    : null,
+            }, cancellationToken);
+            return ledger;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private static V2PendingSourceTransfer RequireSourceTransfer(
+        V2LocalLedgerStorageSnapshot snapshot, Guid operationId) =>
+        snapshot.PendingSourceTransfer is { } pending && pending.OperationId == operationId
+            ? pending
+            : throw new InvalidOperationException("The transfer does not match the local journal");
+
     public Task<V2LocalLedgerTransition> ConsumeOneMinuteAsync(
         Guid actionId,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken = default) =>
         ApplyClientActionAsync(
             ledger => V2LocalLedgerEngine.ConsumeOneMinute(ledger, actionId, occurredAt),
-            cancellationToken);
+            cancellationToken, allowPendingMinute: true);
 
     public Task<V2LocalLedgerTransition> ConsumeMinuteBoundaryAsync(
         Guid actionId,
@@ -177,7 +305,7 @@ public sealed class V2LocalLedgerCoordinator
                 ledger,
                 actionId,
                 minuteBoundaryUtc),
-            cancellationToken);
+            cancellationToken, allowPendingMinute: true);
 
     public Task<V2LocalLedgerTransition> PurchasePackageAsync(
         Guid actionId,
@@ -197,6 +325,10 @@ public sealed class V2LocalLedgerCoordinator
         try
         {
             var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingSourceTransfer is not null)
+            {
+                throw new InvalidOperationException("The V2 session is preparing a transfer");
+            }
             if (current.PendingPortalPackagePurchase is { } pending)
             {
                 if (!string.Equals(pending.TariffId, tariffId, StringComparison.Ordinal))
@@ -579,12 +711,23 @@ public sealed class V2LocalLedgerCoordinator
 
     private async Task<V2LocalLedgerTransition> ApplyClientActionAsync(
         Func<V2LocalSessionLedger, V2LocalLedgerTransition> action,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool allowPendingMinute = false)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
             var current = await RequireSnapshotAsync(cancellationToken);
+            if (current.PendingSourceTransfer is { } pending)
+            {
+                if (!allowPendingMinute)
+                {
+                    throw new InvalidOperationException("The V2 session is preparing a transfer");
+                }
+                if (pending.Frozen)
+                {
+                    return new(current.Ledger, Array.Empty<V2LocalFact>(), false, IsDuplicate: true);
+                }
+            }
             var transition = action(current.Ledger);
             if (!transition.IsDuplicate)
             {

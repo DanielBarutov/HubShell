@@ -200,14 +200,14 @@ export function PcPanel({
           {isXbox ? <Gamepad2 size={50} strokeWidth={1.2} /> : <Computer size={50} strokeWidth={1.2} />}
         </div>
         <div className="min-w-0">
-          <span className="pill-status badge badge-soft badge-success gap-1">
-            <i className="h-1.5 w-1.5 rounded-full bg-current" /> {meta.label}
+          <span className={`pill-status badge badge-soft gap-1 ${pc.transferReserved ? "badge-info" : "badge-success"}`}>
+            <i className="h-1.5 w-1.5 rounded-full bg-current" /> {pc.transferReserved ? "Цель переноса" : meta.label}
           </span>
           <h2 className="mt-2 text-lg font-bold">
-            {pc.client || "Место свободно"}
+            {pc.transferReserved ? "Место закреплено" : pc.client || "Место свободно"}
           </h2>
           <p className="text-xs text-base-content/60!">
-            {pc.session
+            {pc.transferReserved ? "Ожидается перенос игровой сессии" : pc.session
               ? isXbox ? pc.session : `Сессия началась ${pc.session} назад`
               : pc.status === "offline"
                 ? "Нет связи; новые операции заблокированы"
@@ -292,7 +292,7 @@ export function PcPanel({
             </div>
           </div>
         )}
-      {(pc.status === "online" || pc.status === "busy") && (
+      {!pc.transferReserved && (pc.status === "online" || pc.status === "busy") && (
         <button
           type="button"
           className="sale-entry-card btn btn-ghost flex w-full h-auto items-center gap-3 rounded-xl border border-primary/30! bg-primary/10! p-3 text-left"

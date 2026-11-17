@@ -11,6 +11,9 @@ from gameclub_backend.modules.workstations.domain import Workstation
 
 
 class ReservationRepository(typing.Protocol):
+    def lock_workstation(self, workstation_id: uuid.UUID) -> typing.AsyncContextManager[None]:
+        """Serialize the entry check with writes for this workstation."""
+
     async def get(self, reservation_id: uuid.UUID) -> Reservation | None:
         """Return a reservation by ID."""
 
@@ -93,3 +96,13 @@ class ReservationEntryLookup(typing.Protocol):
         guest_reservation_id: uuid.UUID | None = None,
     ) -> EntryDecision:
         """Return the authoritative workstation entry decision."""
+
+
+class TransferReservationEntryLookup(typing.Protocol):
+    async def check_entry_for_transfer(
+        self,
+        workstation_id: uuid.UUID,
+        client_id: uuid.UUID | None = None,
+        guest_id: uuid.UUID | None = None,
+    ) -> EntryDecision:
+        """Check entry while holding the booking lock until the transfer transaction ends."""

@@ -33,7 +33,23 @@ public static class V2OfflineSessionSnapshotReader
     }
     public static V2LocalSessionLedger VerifyAndCreateLedger(
         SignedOfflineSessionSnapshot snapshot,
-        IOfflineSnapshotSignatureVerifier verifier)
+        IOfflineSnapshotSignatureVerifier verifier) =>
+        VerifyAndCreateLedger(snapshot, verifier, expectedTransfer: null, null, null);
+
+    public static V2LocalSessionLedger VerifyAndCreateTransferredLedger(
+        SignedOfflineSessionSnapshot snapshot,
+        IOfflineSnapshotSignatureVerifier verifier,
+        Guid operationId,
+        Guid sessionId,
+        string deviceId) =>
+        VerifyAndCreateLedger(snapshot, verifier, operationId, sessionId, deviceId);
+
+    private static V2LocalSessionLedger VerifyAndCreateLedger(
+        SignedOfflineSessionSnapshot snapshot,
+        IOfflineSnapshotSignatureVerifier verifier,
+        Guid? expectedTransfer,
+        Guid? expectedSession,
+        string? expectedDevice)
     {
         if (snapshot.Payload is null
             || string.IsNullOrWhiteSpace(snapshot.SigningKeyId)
@@ -52,6 +68,67 @@ public static class V2OfflineSessionSnapshotReader
         {
             throw new InvalidOperationException("V2 offline snapshot version is invalid");
         }
+        var sessionId = ParseGuid(payload.SessionId, "session id");
+        var handoff = payload.TransferHandoff;
+        if (expectedTransfer is null && handoff is not null)
+        {
+            throw new InvalidOperationException("V2 transfer snapshot requires a committed operation");
+        }
+        if (expectedTransfer is not null && (
+            handoff is null
+            || ParseGuid(handoff.OperationId, "operation id") != expectedTransfer
+            || sessionId != expectedSession
+            || !string.Equals(payload.DeviceId, expectedDevice, StringComparison.Ordinal)
+            || handoff.LastSequence > int.MaxValue
+            || (handoff.LastSequence == 0 ? handoff.LastPayloadHash.Length != 0
+                : handoff.LastPayloadHash.Length != 64
+                  || !handoff.LastPayloadHash.All(char.IsAsciiHexDigitLower))
+            || !string.IsNullOrEmpty(payload.PurchaseIdempotencyKey)
+            || payload.HasPurchaseMoneyCents
+            || payload.PurchaseBonusCents != 0))
+        {
+            throw new InvalidOperationException("V2 transfer snapshot does not match the operation");
+        }
+
+        V2MinuteBonusBudget? minuteBonus = null;
+        if (handoff?.MinuteBonus is { } bonus)
+        {
+            if (bonus.Version is 0 or > long.MaxValue || bonus.RemainingCents < 0
+                || bonus.PaymentLimitBps is 0 or > 10000)
+            {
+                throw new InvalidOperationException("V2 transfer minute bonus is invalid");
+            }
+            minuteBonus = new(ParseGuid(bonus.GrantId, "bonus grant id"), (long)bonus.Version,
+                bonus.RemainingCents, (int)bonus.PaymentLimitBps);
+        }
+
+        var guest = handoff?.Guest;
+        var clientId = ParseGuid(payload.ClientId, "client id");
+        Guid? guestPaymentId = null;
+        var appliedGuestGrants = Array.Empty<Guid>();
+        if (guest is not null)
+        {
+            if (clientId != Guid.Empty || handoff!.LastSequence != 0 || minuteBonus is not null
+                || payload.BalanceCents != 0 || payload.DebtLimitCents != 0
+                || string.IsNullOrWhiteSpace(guest.Name))
+            {
+                throw new InvalidOperationException("V2 guest transfer snapshot is invalid");
+            }
+            guestPaymentId = ParseGuid(guest.PaymentId, "guest payment id");
+            appliedGuestGrants = guest.AppliedGrantIds.Select(id => ParseGuid(id, "guest grant id")).ToArray();
+            if (guestPaymentId == Guid.Empty || appliedGuestGrants.Any(id => id == Guid.Empty)
+                || appliedGuestGrants.Distinct().Count() != appliedGuestGrants.Length
+                || payload.Packages.Any(item => !Guid.TryParse(item.PackageId, out var grantId)
+                    || !appliedGuestGrants.Contains(grantId)))
+            {
+                throw new InvalidOperationException("V2 guest transfer grants are invalid");
+            }
+        }
+        else if (handoff is not null && clientId == Guid.Empty)
+        {
+            throw new InvalidOperationException("V2 transfer snapshot requires a client or guest");
+        }
+
         V2PackagePayment? purchasePayment = null;
         if (payload.HasPurchaseMoneyCents)
         {
@@ -71,8 +148,8 @@ public static class V2OfflineSessionSnapshotReader
         }
         return V2LocalSessionLedger.Create(
             snapshotVersion: checked((int)payload.SnapshotVersion),
-            clientId: ParseGuid(payload.ClientId, "client id"),
-            sessionId: ParseGuid(payload.SessionId, "session id"),
+            clientId: clientId,
+            sessionId: sessionId,
             deviceId: payload.DeviceId,
             zoneId: payload.HasWorkstationZoneId ? payload.WorkstationZoneId : null,
             balanceCents: payload.BalanceCents,
@@ -81,7 +158,18 @@ public static class V2OfflineSessionSnapshotReader
             packages: payload.Packages.Select(ToPackage).ToArray(),
             tariffs: payload.Tariffs.Select(ToTariff).ToArray(),
             snapshotId: ParseGuid(payload.SnapshotId, "snapshot id"),
-            activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime())) with { PurchasePayment = purchasePayment };
+            activatedAtUtc: new DateTimeOffset(payload.IssuedAt.ToDateTime()),
+            guestName: guest?.Name,
+            guestPaymentId: guestPaymentId,
+            retainIncompatibleQueuedPackages: guest is not null) with
+        {
+            PurchasePayment = purchasePayment,
+            TransferOperationId = expectedTransfer,
+            MinuteBonus = minuteBonus,
+            AppliedServerOperationIds = appliedGuestGrants,
+            NextSequence = handoff is null ? 1 : (long)handoff.LastSequence + 1,
+            PreviousPayloadHash = handoff is { LastSequence: > 0 } ? handoff.LastPayloadHash : null,
+        };
     }
 
     public static byte[] SerializeDeterministic(OfflineSessionSnapshotPayload payload)

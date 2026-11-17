@@ -88,6 +88,19 @@ export class GameClubApi {
     this.persistRefreshToken();
   }
 
+  async logout(): Promise<void> {
+    // Revoke the replacement token if a refresh was already rotating it.
+    await this.refreshInFlight;
+    const refreshToken = this.refreshToken;
+    this.clearSession();
+    if (!refreshToken) return;
+    await this.request<void>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(8_000),
+    }, false);
+  }
+
   async restoreSession(): Promise<boolean> {
     if (!this.refreshToken) {
       try {
@@ -1141,6 +1154,7 @@ export class GameClubApi {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ refresh_token: refreshToken }),
+            signal: AbortSignal.timeout(8_000),
           });
           if (response.status === 401) {
             this.clearSession(true);

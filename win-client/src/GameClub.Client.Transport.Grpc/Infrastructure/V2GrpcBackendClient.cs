@@ -14,7 +14,9 @@ namespace GameClub.Client.Infrastructure;
 /// Транспорт Windows-релиза V2. Он не содержит клиентов V1 protobuf;
 /// унаследованные порты V1 безопасно отказывают при ошибочном старом вызове.
 /// </summary>
-public sealed class V2GrpcBackendClient : IBackendClient, IV2OfflineSessionGateway, IV2GuestSessionGateway, IV2ClientPortalGateway
+public sealed partial class V2GrpcBackendClient :
+    IBackendClient, IV2OfflineSessionGateway, IV2GuestSessionGateway, IV2ClientPortalGateway,
+    IV2SessionTransferGateway
 {
     private readonly GrpcChannel _channel;
     private readonly OfflineSessionsV2.OfflineSessionServiceClient _offlineSessionClient;

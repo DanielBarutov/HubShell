@@ -137,6 +137,13 @@
                     <TextBlock Text="{Binding CurrentWorkstationLabel}" MaxWidth="330" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource AccentBrush}" FontSize="40" FontWeight="Bold"/>
                   </StackPanel>
                 </Border>
+                <StackPanel Name="TransferWaitPanel" IsVisible="{Binding IsV2TransferPending}" Spacing="8" HorizontalAlignment="Center">
+                  <TextBlock Text="{Binding AccessTitle}" FontSize="26" FontWeight="Bold"
+                             Foreground="{DynamicResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                  <TextBlock Text="{Binding AccessMessage}" Foreground="{DynamicResource SecondaryTextBrush}"
+                             HorizontalAlignment="Center"/>
+                  <ProgressBar IsIndeterminate="True" Width="176"/>
+                </StackPanel>
                 <StackPanel Spacing="8" IsVisible="{Binding IsUserLoginVisible}">
                   <TextBlock IsVisible="{Binding HasWorkstationReservation}"
                              Text="{Binding WorkstationReservationMessage}"
@@ -558,14 +565,14 @@
               <Button IsVisible="{Binding IsAccountWidgetReadyVisible}" Name="ActivatePortalEntitlementButton" Click="ActivateFirstPortalEntitlement" IsEnabled="{Binding CanActivatePortalEntitlement}" Classes="widget-secondary" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" MinHeight="38" Foreground="{DynamicResource PrimaryTextBrush}" Content="Активировать сохранённый пакет" FontSize="12"/>
             </StackPanel>
           </Border>
-          <Button Name="GuestTransferButton" IsVisible="{Binding IsGuestWidgetVisible}" IsEnabled="False" Classes="widget-secondary guest-transfer" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="54" ToolTip.Tip="Перенос гостевой сессии пока не поддерживается">
+          <Button Name="GuestTransferButton" Click="ToggleTransferPanel" IsVisible="{Binding IsGuestWidgetVisible}" IsEnabled="{Binding CanStartV2Transfer}" Classes="widget-secondary guest-transfer" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" MinHeight="54">
             <Grid ColumnDefinitions="26,*" ColumnSpacing="12">
               <Viewbox Width="24" Height="24"><Canvas Width="34" Height="34"><Path Data="M2,2 L30,2 L30,23 L2,23 Z M16,23 L16,31 M8,31 L24,31" Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2"/></Canvas></Viewbox>
               <TextBlock Grid.Column="1" Text="Перенести сессию на другой ПК" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"/>
             </Grid>
           </Button>
           <Grid Name="WidgetFooterActions" ColumnDefinitions="*,*" ColumnSpacing="6" IsVisible="{Binding IsAccountWidgetReadyVisible}">
-            <Button Name="ToggleTransferButton" Click="ToggleTransferPanel" Classes="widget-secondary" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" MinHeight="50" Padding="8,6">
+            <Button Name="ToggleTransferButton" Click="ToggleTransferPanel" IsEnabled="{Binding CanOpenTransfer}" Classes="widget-secondary" HorizontalAlignment="Stretch" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" MinHeight="50" Padding="8,6">
               <Grid ColumnDefinitions="22,*" ColumnSpacing="8">
 <Viewbox Width="22" Height="22" VerticalAlignment="Center"><Canvas Width="34" Height="34"><Path Data="M2,2 L30,2 L30,23 L2,23 Z M16,23 L16,31 M8,31 L24,31" Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2"/></Canvas></Viewbox>
                 <TextBlock Grid.Column="1" Text="{Binding TransferToggleLabel}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>

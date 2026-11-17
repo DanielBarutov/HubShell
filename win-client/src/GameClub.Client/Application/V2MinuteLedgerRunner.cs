@@ -24,7 +24,13 @@ public sealed class V2MinuteLedgerRunner
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        var current = await _ledger.ReadLedgerAsync(cancellationToken);
+        var snapshot = await _ledger.ReadSnapshotAsync(cancellationToken)
+            ?? throw new InvalidOperationException("V2 local ledger is not initialized");
+        if (snapshot.PendingSourceTransfer is { Frozen: true })
+        {
+            return Array.Empty<V2LocalLedgerTransition>();
+        }
+        var current = snapshot.Ledger;
         if (current.ActivatedAtUtc is null)
         {
             throw new InvalidOperationException("V2 ledger has no signed activation time");

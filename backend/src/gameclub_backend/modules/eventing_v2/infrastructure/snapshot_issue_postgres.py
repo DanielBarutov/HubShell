@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import datetime
+import json
 import uuid
 
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from gameclub.v2 import offline_session_snapshot_pb2
 from gameclub_backend.application.audit import AuditEvent
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
 from gameclub_backend.infrastructure.audit_postgres import AuditEventModel
 from gameclub_backend.infrastructure.database import EngineProvider, open_session
 from gameclub_backend.modules.entitlements.application.ports import EntitlementTransactionWriter
@@ -16,6 +19,8 @@ from gameclub_backend.modules.eventing_v2.application.lease import V2SessionLeas
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import (
     V2SignedSnapshotIssue,
     V2SnapshotIssueResult,
+    V2TransferMinuteBonus,
+    V2TransferSourceState,
 )
 from gameclub_backend.modules.eventing_v2.domain import (
     V2Event,
@@ -23,9 +28,23 @@ from gameclub_backend.modules.eventing_v2.domain import (
     V2OutgoingEventStatus,
     V2OutgoingServerEvent,
 )
+from gameclub_backend.modules.eventing_v2.infrastructure.bonus_budget_postgres import (
+    V2BonusBudgetModel,
+)
 from gameclub_backend.modules.eventing_v2.infrastructure.lease_postgres import V2SessionLeaseModel
-from gameclub_backend.modules.eventing_v2.infrastructure.postgres import V2ServerOutboxModel
+from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
+    PostgresV2SessionChainRepository,
+    V2ServerOutboxModel,
+    lock_v2_client_session,
+)
+from gameclub_backend.modules.eventing_v2.infrastructure.reconciliation_postgres import (
+    V2ConfirmedClientFactModel,
+)
 from gameclub_backend.modules.sessions.application.ports import SessionTransactionWriter
+from gameclub_backend.modules.sessions.application.v2_transfer import (
+    V2TransferReservation,
+    V2TransferStatus,
+)
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 from gameclub_backend.modules.sessions.infrastructure.postgres import SessionModel
 
@@ -75,11 +94,248 @@ class PostgresV2SnapshotIssueRepository:
         self._validate_new_session(value, session_to_start)
         return await self._issue(value, session_to_start)
 
+    async def transfer_source_state(
+        self,
+        operation: V2TransferReservation,
+        source_device_id: str,
+    ) -> V2TransferSourceState:
+        async with open_session(self._engine_provider) as db:
+            if not db.in_transaction():
+                raise RuntimeError("Transfer billing state requires the session commit transaction")
+            lease = await db.get(V2SessionLeaseModel, operation.session_id, with_for_update=True)
+            if lease is None or lease.status != "active" or lease.device_id != source_device_id:
+                raise ApplicationError(ErrorCode.CONFLICT, "Transfer source lease changed")
+            budget = await self._active_transfer_bonus(db, lease)
+
+            checkpoint = operation.source_checkpoint
+            if checkpoint is None:
+                raise ApplicationError(ErrorCode.CONFLICT, "Transfer source is not ready")
+            payload = self._signed_snapshot(lease).payload
+            query = (
+                select(V2ConfirmedClientFactModel)
+                .where(
+                    V2ConfirmedClientFactModel.session_id == operation.session_id,
+                    V2ConfirmedClientFactModel.device_id == source_device_id,
+                    V2ConfirmedClientFactModel.sequence <= checkpoint.sequence,
+                    V2ConfirmedClientFactModel.occurred_at >= lease.issued_at,
+                )
+                .order_by(V2ConfirmedClientFactModel.sequence.desc())
+                .limit(1)
+            )
+            grant = await db.scalar(
+                query.where(
+                    V2ConfirmedClientFactModel.event_type.in_(
+                        (
+                            V2EventType.LOGIN_GRANT_CONSUMED.value,
+                            V2EventType.LOGIN_GRANT_BURNED.value,
+                        )
+                    )
+                )
+            )
+            grant_minutes = payload.login_grant_remaining_minutes
+            if grant is not None:
+                grant_minutes = (
+                    json.loads(grant.payload_json).get("remaining_minutes")
+                    if grant.event_type == V2EventType.LOGIN_GRANT_CONSUMED.value
+                    else 0
+                )
+            if (
+                type(grant_minutes) is not int
+                or not 0 <= grant_minutes <= payload.login_grant_remaining_minutes
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Transfer login grant is inconsistent")
+
+            billed = await db.scalar(
+                query.where(
+                    V2ConfirmedClientFactModel.event_type.in_(
+                        (
+                            V2EventType.LOGIN_GRANT_CONSUMED.value,
+                            V2EventType.PACKAGE_CONSUMED.value,
+                            V2EventType.PER_MINUTE_DEBIT.value,
+                        )
+                    )
+                )
+            )
+            return V2TransferSourceState(
+                lease.to_domain(),
+                grant_minutes,
+                billed.occurred_at if billed is not None else lease.issued_at,
+                any(
+                    tariff.is_per_minute and tariff.per_minute_price_cents == 0
+                    for tariff in payload.tariffs
+                ),
+                V2TransferMinuteBonus(
+                    budget.id,
+                    budget.version,
+                    budget.budget_cents - budget.spent_cents,
+                    budget.payment_limit_bps,
+                )
+                if budget is not None
+                else None,
+            )
+
+    @staticmethod
+    async def _active_transfer_bonus(
+        db: AsyncSession, lease: V2SessionLeaseModel
+    ) -> V2BonusBudgetModel | None:
+        budget = await db.scalar(
+            select(V2BonusBudgetModel)
+            .where(
+                V2BonusBudgetModel.session_id == lease.session_id,
+                V2BonusBudgetModel.active,
+            )
+            .with_for_update()
+        )
+        if budget is not None and (
+            budget.cancelled
+            or budget.client_id != lease.client_id
+            or budget.device_id != lease.device_id
+            or budget.snapshot_id != lease.snapshot_id
+            or budget.snapshot_version != lease.snapshot_version
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT, "Transfer minute bonus no longer matches the lease"
+            )
+        return budget
+
+    async def transfer_lease(
+        self,
+        operation: V2TransferReservation,
+        source_device_id: str,
+        value: V2SignedSnapshotIssue,
+    ) -> None:
+        """Replace the lease inside the transaction committing a prepared transfer."""
+        lease = value.lease
+        checkpoint = operation.source_checkpoint
+        payload = value.signed_snapshot.payload
+        handoff = payload.transfer_handoff
+        if (
+            operation.status is not V2TransferStatus.PREPARING
+            or not operation.target_ready
+            or checkpoint is None
+            or not payload.HasField("transfer_handoff")
+            or handoff.operation_id != str(operation.operation_id)
+            or handoff.last_sequence != checkpoint.sequence
+            or (handoff.last_payload_hash or None) != checkpoint.payload_hash
+            or operation.session_id != lease.session_id
+            or source_device_id == lease.device_id
+            or payload.purchase_idempotency_key
+            or payload.HasField("purchase_money_cents")
+            or payload.purchase_bonus_cents
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT, "Signed snapshot does not match the transfer"
+            )
+
+        chains = PostgresV2SessionChainRepository(self._engine_provider)
+        async with open_session(self._engine_provider) as db:
+            if not db.in_transaction():
+                raise RuntimeError("Transfer lease requires the session commit transaction")
+            await lock_v2_client_session(db, lease.session_id)
+            for key in (
+                f"v2-lease-client:{lease.client_id}",
+                f"v2-lease-device:{lease.device_id}",
+                f"v2-lease-session:{lease.session_id}",
+            ):
+                await db.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"), {"lock_key": key}
+                )
+
+            current = await db.get(V2SessionLeaseModel, lease.session_id, with_for_update=True)
+            now = datetime.datetime.now(datetime.UTC)
+            if (
+                current is None
+                or current.status != "active"
+                or current.device_id != source_device_id
+                or current.client_id != lease.client_id
+                or lease.snapshot_version != current.snapshot_version + 1
+                or lease.snapshot_id == current.snapshot_id
+                or (current.expires_at is not None and current.expires_at <= now)
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Transfer source lease changed")
+            existing_target = await db.scalar(
+                select(V2SessionLeaseModel.session_id)
+                .where(
+                    V2SessionLeaseModel.device_id == lease.device_id,
+                    V2SessionLeaseModel.status == "active",
+                )
+                .limit(1)
+            )
+            if existing_target is not None:
+                raise ApplicationError(
+                    ErrorCode.CONFLICT, "Transfer target already has an active lease"
+                )
+            budget = await self._active_transfer_bonus(db, current)
+            bonus = handoff.minute_bonus
+            if handoff.HasField("minute_bonus") != (budget is not None) or (
+                budget is not None
+                and (
+                    bonus.grant_id != str(budget.id)
+                    or bonus.version != budget.version
+                    or bonus.remaining_cents != budget.budget_cents - budget.spent_cents
+                    or bonus.payment_limit_bps != budget.payment_limit_bps
+                )
+            ):
+                raise ApplicationError(ErrorCode.CONFLICT, "Signed transfer minute bonus changed")
+            if budget is not None:
+                budget.device_id = lease.device_id
+                budget.snapshot_id = lease.snapshot_id
+                budget.snapshot_version = lease.snapshot_version
+                budget.last_sequence = checkpoint.sequence
+                budget.last_payload_hash = checkpoint.payload_hash
+            await chains.transfer_checkpoint(
+                lease.session_id,
+                source_device_id,
+                lease.device_id,
+                checkpoint.sequence,
+                checkpoint.payload_hash,
+            )
+            current.device_id = lease.device_id
+            current.snapshot_id = lease.snapshot_id
+            current.snapshot_version = lease.snapshot_version
+            current.policy_version = lease.policy_version
+            current.issued_at = lease.issued_at
+            current.expires_at = lease.expires_at
+            self._store_signed_snapshot(current, value)
+
+    async def get_transfer_snapshot(
+        self, operation: V2TransferReservation, target_device_id: str
+    ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot | None:
+        if operation.status is not V2TransferStatus.COMMITTED:
+            return None
+        async with open_session(self._engine_provider) as db:
+            lease = await db.get(V2SessionLeaseModel, operation.session_id)
+            if (
+                lease is None
+                or lease.status != "active"
+                or lease.device_id != target_device_id
+                or (
+                    lease.expires_at is not None
+                    and lease.expires_at <= datetime.datetime.now(datetime.UTC)
+                )
+            ):
+                return None
+            signed = self._signed_snapshot(lease)
+            if signed.payload.transfer_handoff.operation_id != str(operation.operation_id):
+                return None
+            return signed
+
+    @staticmethod
+    def _store_signed_snapshot(
+        lease_model: V2SessionLeaseModel, value: V2SignedSnapshotIssue
+    ) -> None:
+        lease_model.signing_key_id = value.signed_snapshot.signing_key_id.strip()
+        lease_model.snapshot_payload = value.payload_bytes
+        lease_model.snapshot_signature = bytes(value.signed_snapshot.signature)
+        lease_model.snapshot_payload_hash = value.payload_hash
+
     async def _issue(
         self,
         value: V2SignedSnapshotIssue,
         session_to_start: Session | None = None,
     ) -> V2SnapshotIssueResult:
+        if value.signed_snapshot.payload.HasField("transfer_handoff"):
+            raise ValueError("Transfer snapshots require a committed transfer")
         lease = value.lease
         async with open_session(self._engine_provider) as session:
             async with session.begin():
@@ -162,10 +418,7 @@ class PostgresV2SnapshotIssueRepository:
                         raise ValueError("Очередь тарифов изменилась. Повторите вход.")
 
                 lease_model = V2SessionLeaseModel.from_domain(lease)
-                lease_model.signing_key_id = value.signed_snapshot.signing_key_id.strip()
-                lease_model.snapshot_payload = value.payload_bytes
-                lease_model.snapshot_signature = bytes(value.signed_snapshot.signature)
-                lease_model.snapshot_payload_hash = value.payload_hash
+                self._store_signed_snapshot(lease_model, value)
                 session.add(lease_model)
 
                 event = self._login_event(value)

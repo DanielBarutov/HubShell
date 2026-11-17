@@ -284,7 +284,12 @@ services:
   backend-http:
     image: ${HUBSHELL_BACKEND_IMAGE:?Set immutable image reference from images.env}
     pull_policy: always
-    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "gameclub_backend.presentation.http.app:app"]
+    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "--forwarded-allow-ips", "172.30.251.2", "gameclub_backend.presentation.http.app:app"]
+    networks:
+      default: {}
+      operator-proxy:
+        aliases: [operator-api]
+        ipv4_address: 172.30.251.3
     environment:
       <<: *backend-environment
       GAMECLUB_CLIENT_RELEASE_ROOT: /var/lib/hubshell/client-releases
@@ -415,9 +420,19 @@ services:
       retries: 6
       start_period: 5s
     restart: unless-stopped
+    networks:
+      default: {}
+      operator-proxy:
+        ipv4_address: 172.30.251.2
     ports:
       - "${HUBSHELL_BIND_HOST:-127.0.0.1}:${HUBSHELL_FRONTEND_PORT:-3100}:80"
 
+
+networks:
+  operator-proxy:
+    ipam:
+      config:
+        - subnet: 172.30.251.0/29
 
 volumes:
   gameclub-grafana-data:

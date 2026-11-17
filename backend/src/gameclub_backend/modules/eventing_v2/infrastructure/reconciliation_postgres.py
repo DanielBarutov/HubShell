@@ -39,6 +39,7 @@ from gameclub_backend.modules.eventing_v2.infrastructure.postgres import (
     V2EventingBase,
     V2ServerOutboxModel,
     V2SessionChainModel,
+    lock_v2_client_session,
 )
 from gameclub_backend.modules.sessions.application.ports import SessionTransactionWriter
 from gameclub_backend.modules.sessions.domain import SessionStatus
@@ -159,7 +160,7 @@ class PostgresV2ClientFactReconciliationRepository:
                     session,
                     f"v2-client-operation:{event.producer_id}:{event.operation_id}",
                 )
-                await self._lock(session, f"v2-client-session:{event.session_id}")
+                await lock_v2_client_session(session, event.session_id)
                 lease = await self._active_lease(session, event)
                 if lease is None:
                     return V2ClientFactResult(

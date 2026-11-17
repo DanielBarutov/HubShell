@@ -43,6 +43,20 @@ function renderPcPanel(pc = activePc) {
 }
 
 describe("панель игрового ПК", () => {
+  it("показывает закреплённую цель переноса и скрывает продажу", () => {
+    renderPcPanel({
+      id: "reserved-pc",
+      name: "Целевой ПК",
+      group: "Обычный зал",
+      status: "online",
+      transferReserved: true,
+    });
+
+    expect(screen.getByText("Цель переноса")).toBeInTheDocument();
+    expect(screen.getByText("Место закреплено")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /оформить продажу/i })).not.toBeInTheDocument();
+  });
+
   it.each([
     ["pc", "commit-c9af891dc4f8cc1fa0d277b02072d22559e8d10f", "c9af891"],
     ["pc", "v2.4.0", "v2.4.0"],

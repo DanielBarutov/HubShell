@@ -44,6 +44,8 @@ class GuestAccessGrant:
 
 
 class GuestAccessGrantRepository(typing.Protocol):
+    async def list_redeemed_for_session(self, session_id: uuid.UUID) -> list[GuestAccessGrant]: ...
+
     async def get_by_payment(self, payment_id: uuid.UUID) -> GuestAccessGrant | None: ...
 
     async def get_pending_for_workstation(
@@ -148,7 +150,11 @@ class V2GuestAccessService:
             raise ApplicationError(ErrorCode.NOT_FOUND, "No pending guest access grant")
         if grant.redeemed:
             existing_session = await self._sessions.get(grant.session_id)
-            if existing_session is None or existing_session.status is not SessionStatus.ACTIVE:
+            if (
+                existing_session is None
+                or existing_session.status is not SessionStatus.ACTIVE
+                or existing_session.workstation_id != workstation.id
+            ):
                 raise ApplicationError(ErrorCode.CONFLICT, "Guest access grant is no longer active")
             return self._decode(grant)
         payment = await self._payments.get(grant.payment_id)
