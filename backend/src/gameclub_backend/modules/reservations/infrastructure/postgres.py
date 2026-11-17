@@ -223,10 +223,8 @@ class PostgresReservationRepository:
         self, reservation: Reservation, *, existing_required: bool = False
     ) -> Reservation:
         async with open_session(self._engine_provider) as session:
-            async with session.begin():
-                model = await session.get(ReservationModel, reservation.id, with_for_update=True)
             async with begin_session(session):
-                model = await session.get(ReservationModel, reservation.id)
+                model = await session.get(ReservationModel, reservation.id, with_for_update=True)
                 if model is not None:
                     resource_ids = sorted(
                         set(model.workstation_ids)
