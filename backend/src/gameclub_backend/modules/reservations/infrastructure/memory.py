@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import dataclasses
 import contextlib
 import datetime
 import uuid
@@ -85,7 +86,32 @@ class InMemoryReservationRepository:
             self._items[reservation_id] = updated
             return updated
 
-    async def save(self, reservation: Reservation) -> Reservation:
+    async def complete_expired(self, now: datetime.datetime) -> int:
+        async with self._lock:
+            completed = 0
+            for item in self._items.values():
+                if item.end_at <= now and item.status in {
+                    ReservationStatus.CONFIRMED,
+                    ReservationStatus.ACTIVE,
+                }:
+                    self._items[item.id] = dataclasses.replace(
+                        item, status=ReservationStatus.COMPLETED
+                    )
+                    completed += 1
+            return completed
+
+    async def delete(self, reservation_id: uuid.UUID) -> bool:
+        async with self._lock:
+            reservation = self._items.pop(reservation_id, None)
+            if reservation is None:
+                return False
+            if reservation.idempotency_key:
+                self._idempotency.pop(reservation.idempotency_key, None)
+            return True
+
+    async def save(
+        self, reservation: Reservation, *, existing_required: bool = False
+    ) -> Reservation:
         async with self._lock:
             existing = self._items.get(reservation.id)
             if existing is not None:
@@ -95,6 +121,9 @@ class InMemoryReservationRepository:
                 if reservation.idempotency_key:
                     self._idempotency[reservation.idempotency_key] = reservation.id
                 return reservation
+
+            if existing_required:
+                raise ValueError("Reservation no longer exists")
 
             if reservation.idempotency_key:
                 repeated_id = self._idempotency.get(reservation.idempotency_key)

@@ -11,6 +11,7 @@ from gameclub_backend.modules.reservations.application.ports import (
     ClientLookup,
     Clock,
     GuestLookup,
+    PaidSessionLookup,
     ReservationRepository,
     WorkstationLookup,
 )
@@ -29,7 +30,7 @@ class UtcClock:
 
 
 class ReservationService:
-    ENTRY_PROTECTION_MINUTES = 30
+    ENTRY_PROTECTION_MINUTES = 50
 
     def __init__(
         self,
@@ -39,6 +40,7 @@ class ReservationService:
         clock: Clock | None = None,
         grace_period_minutes: int = 15,
         guests: GuestLookup | None = None,
+        paid_sessions: PaidSessionLookup | None = None,
     ) -> None:
         if grace_period_minutes < 0:
             raise ValueError("Grace period cannot be negative")
@@ -46,6 +48,7 @@ class ReservationService:
         self._workstations = workstations
         self._clients = clients
         self._guests = guests
+        self._paid_sessions = paid_sessions
         self._clock = clock or UtcClock()
         self._grace_period_minutes = grace_period_minutes
 
@@ -93,6 +96,8 @@ class ReservationService:
         client_id: uuid.UUID | None = None,
         guest_id: uuid.UUID | None = None,
         now: datetime.datetime | None = None,
+        *,
+        guest_reservation_id: uuid.UUID | None = None,
     ) -> EntryDecision:
         """Return the authoritative reservation decision for a workstation."""
         current_time = now or self._clock.now()
@@ -115,7 +120,9 @@ class ReservationService:
         protection_end = current_time + datetime.timedelta(minutes=self.ENTRY_PROTECTION_MINUTES)
         candidates = [
             item
-            for item in await self._repository.list(current_time, protection_end)
+            for item in await self._repository.list(
+                current_time, protection_end + datetime.timedelta.resolution
+            )
             if item.status in {ReservationStatus.CONFIRMED, ReservationStatus.ACTIVE}
             and workstation_id in item.workstation_ids
             and item.end_at > current_time
@@ -123,18 +130,31 @@ class ReservationService:
         ]
         candidates.sort(key=lambda item: (item.start_at, str(item.id)))
         for reservation in candidates:
+            if (
+                reservation.status is not ReservationStatus.ACTIVE
+                or current_time < reservation.start_at
+            ):
+                continue
             if reservation.client_id is not None:
-                if client_id == reservation.client_id:
-                    continue
-                reason = (
-                    "reservation_client_mismatch"
-                    if client_id is not None
-                    else "reservation_client_required"
-                )
-            else:
-                # Бронь гостя остаётся анонимной. Нельзя обходить защитное окно
-                # через идентификатор гостя.
+                if guest_reservation_id is None and client_id == reservation.client_id:
+                    return EntryDecision(True, "allowed")
+            elif (
+                reservation.id == guest_reservation_id
+                and client_id is None
+                and (reservation.guest_id is None or reservation.guest_id == guest_id)
+            ):
+                return EntryDecision(True, "allowed")
+
+        if candidates:
+            reservation = candidates[0]
+            if reservation.client_id is None:
                 reason = "guest_reservation_protected"
+            elif client_id is None:
+                reason = "reservation_client_required"
+            elif client_id != reservation.client_id:
+                reason = "reservation_client_mismatch"
+            else:
+                reason = "reservation_not_activated"
             return EntryDecision(
                 allowed=False,
                 reason=reason,
@@ -143,6 +163,8 @@ class ReservationService:
                 starts_at=reservation.start_at,
                 ends_at=reservation.end_at,
             )
+        if guest_reservation_id is not None:
+            return EntryDecision(False, "guest_reservation_unavailable")
         return EntryDecision(allowed=True, reason="allowed")
 
     async def create(
@@ -214,6 +236,8 @@ class ReservationService:
                 )
                 return existing
 
+        if len(resource_ids) != 1:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Выберите один ПК для брони")
         availability = await self._check_availability(resource_ids, start_at, end_at)
         self._raise_if_unavailable(availability)
 
@@ -297,6 +321,8 @@ class ReservationService:
                 ErrorCode.INVALID_ARGUMENT,
                 "At least one workstation is required",
             )
+        if len(resource_ids) != 1 and resource_ids != reservation.workstation_ids:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "Выберите один ПК для брони")
         availability = await self._check_availability(
             resource_ids,
             start_at,
@@ -320,9 +346,13 @@ class ReservationService:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
         try:
-            return await self._repository.save(updated)
+            return await self._repository.save(updated, existing_required=True)
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def delete(self, reservation_id: uuid.UUID) -> None:
+        if not await self._repository.delete(reservation_id):
+            raise ApplicationError(ErrorCode.NOT_FOUND, "Reservation not found")
 
     async def cancel(self, reservation_id: uuid.UUID) -> Reservation:
         reservation = await self.get(reservation_id)
@@ -330,19 +360,19 @@ class ReservationService:
             cancelled = reservation.cancel(self._clock.now())
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
-        return await self._repository.save(cancelled)
+        return await self._repository.save(cancelled, existing_required=True)
 
     async def activate(self, reservation_id: uuid.UUID) -> Reservation:
         reservation = await self.get(reservation_id)
         try:
-            return await self._repository.save(reservation.activate())
+            return await self._repository.save(reservation.activate(), existing_required=True)
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
     async def complete(self, reservation_id: uuid.UUID) -> Reservation:
         reservation = await self.get(reservation_id)
         try:
-            return await self._repository.save(reservation.complete())
+            return await self._repository.save(reservation.complete(), existing_required=True)
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
 
@@ -350,10 +380,14 @@ class ReservationService:
         reservation = await self.get(reservation_id)
         try:
             return await self._repository.save(
-                reservation.mark_no_show(self._clock.now(), self._grace_period_minutes)
+                reservation.mark_no_show(self._clock.now(), self._grace_period_minutes),
+                existing_required=True,
             )
         except ValueError as error:
             raise ApplicationError(ErrorCode.CONFLICT, str(error)) from error
+
+    async def complete_expired(self, now: datetime.datetime) -> int:
+        return await self._repository.complete_expired(now)
 
     async def sweep_no_shows(
         self,
@@ -405,6 +439,11 @@ class ReservationService:
                     reason="workstation_disabled",
                 )
 
+            if self._paid_sessions is not None:
+                paid_until = await self._paid_sessions.paid_session_ends_at(workstation_id)
+                if paid_until is not None and start_at < paid_until and end_at > self._clock.now():
+                    return ReservationAvailability(available=False, reason="paid_session_overlap")
+
         existing = await self._repository.list(start_at, end_at)
         conflicts = tuple(
             item.id
@@ -438,6 +477,7 @@ class ReservationService:
             return
         messages = {
             "workstation_disabled": "Workstation is disabled",
+            "paid_session_overlap": "Действующий пакет на ПК пересекается с периодом брони",
             "workstation_reserved": "Workstation is already reserved for this period",
         }
         raise ApplicationError(

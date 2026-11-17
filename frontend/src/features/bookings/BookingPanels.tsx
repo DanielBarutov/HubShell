@@ -250,6 +250,7 @@ export function BookingEditPanel({
   clients,
   onClose,
   onSaved,
+  onStartGuest,
   pcs,
   api,
 }: {
@@ -257,6 +258,7 @@ export function BookingEditPanel({
   clients: Client[];
   onClose: () => void;
   onSaved: () => void;
+  onStartGuest?: () => void;
   pcs: Workstation[];
   api?: GameClubApi;
 }) {
@@ -326,6 +328,20 @@ export function BookingEditPanel({
     }
   };
 
+  const remove = async () => {
+    if (!api || !window.confirm("Удалить бронь из расписания и истории?")) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.deleteReservation(reservation.id);
+      onSaved();
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : "Не удалось удалить бронь");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="panel-inner flex flex-col gap-4 p-5">
       <PanelHeader
@@ -337,9 +353,10 @@ export function BookingEditPanel({
         <div className="detail-row flex items-center justify-between gap-3 rounded-lg border border-primary/15! bg-base-200/55! p-3 text-sm">
           <span>Статус</span>
           <strong>
-            {reservation.status === "confirmed"
-              ? "Подтверждена"
-              : reservation.status}
+            {{
+              confirmed: "Активна", active: "Действует", completed: "Закончена",
+              cancelled: "Отменена", no_show: "Неявка",
+            }[reservation.status]}
           </strong>
         </div>
         <label>
@@ -413,6 +430,16 @@ export function BookingEditPanel({
             onClick={() => void submit()}
           >
             {submitting ? "Сохраняем..." : "Сохранить изменения"}
+          </button>
+        )}
+        {onStartGuest && reservation.status === "active" && !reservation.client_id && (
+          <button type="button" className="btn btn-primary" disabled={submitting} onClick={onStartGuest}>
+            Запустить гостя по брони
+          </button>
+        )}
+        {api && (
+          <button type="button" className="btn btn-outline btn-error" disabled={submitting} onClick={() => void remove()}>
+            Удалить бронь
           </button>
         )}
         <button

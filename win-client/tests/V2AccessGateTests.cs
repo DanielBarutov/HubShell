@@ -433,13 +433,13 @@ public sealed class V2AccessGateTests
         store.FailNextWrite = true;
 
         var consume = typeof(MainViewModel).GetMethod("ConsumeV2DueMinutesAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        await (Task)consume.Invoke(viewModel, [])!;
+        await (Task)consume.Invoke(viewModel, [null])!;
 
         Assert.True(viewModel.IsSessionLocked);
         Assert.True(viewModel.IsActiveSessionVisible);
         Assert.True(viewModel.CanStopActiveSession);
         Assert.Equal(V2LocalSessionStatus.Active, (await ledger.ReadLedgerAsync()).Status);
-        await (Task)consume.Invoke(viewModel, [])!;
+        await (Task)consume.Invoke(viewModel, [null])!;
         Assert.Equal(CreateLedger().LoginGrantRemainingMinutes, (await ledger.ReadLedgerAsync()).LoginGrantRemainingMinutes);
         Assert.Empty(await ledger.ReadPendingOutboxAsync());
         Assert.True(await viewModel.StopActiveSessionAsync());

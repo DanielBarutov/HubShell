@@ -22,6 +22,7 @@ type UiState = {
   selectedCashShift: BackendCashShift | null;
   selectedProduct: BackendProduct | null;
   saleInitialProduct: BackendProduct | null;
+  saleReservation: Reservation | null;
   saleInitialTab: "time" | "products";
   panel: Panel;
   bookingWorkstationId: string | undefined;
@@ -42,6 +43,7 @@ const initialState: UiState = {
   selectedCashShift: null,
   selectedProduct: null,
   saleInitialProduct: null,
+  saleReservation: null,
   saleInitialTab: "time",
   panel: null,
   bookingWorkstationId: undefined,
@@ -65,7 +67,7 @@ const uiSlice = createSlice({
     openNewClient(state) { state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.panel = "new-client"; },
     openDeposit(state, action: PayloadAction<{ clientId?: string | null; bonusOnly?: boolean; target?: DepositTarget } | undefined>) { state.panel = "deposit"; state.selectedPcId = null; state.selectedClientId = action.payload?.clientId ?? null; state.depositBonusOnly = Boolean(action.payload?.bonusOnly); state.depositTarget = action.payload?.target ?? null; },
     openBooking(state, action: PayloadAction<string | undefined>) { state.panel = "booking"; state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = null; state.bookingWorkstationId = action.payload; },
-    openSale(state, action: PayloadAction<{ pcId?: string | null; clientId?: string | null; product?: BackendProduct | null; initialTab?: "time" | "products" } | undefined>) { state.selectedPcId = action.payload?.pcId ?? null; state.selectedClientId = action.payload?.clientId ?? null; state.saleInitialProduct = action.payload?.product ?? null; state.saleInitialTab = action.payload?.initialTab ?? "time"; state.panel = "sale"; },
+    openSale(state, action: PayloadAction<{ pcId?: string | null; clientId?: string | null; product?: BackendProduct | null; reservation?: Reservation; initialTab?: "time" | "products" } | undefined>) { state.selectedPcId = action.payload?.pcId ?? null; state.selectedClientId = action.payload?.clientId ?? null; state.saleInitialProduct = action.payload?.product ?? null; state.saleReservation = action.payload?.reservation ?? null; state.saleInitialTab = action.payload?.initialTab ?? "time"; state.panel = "sale"; },
     openWorkstationEditor(state) { state.panel = "workstation"; },
     openNewWorkstation(state) { state.selectedPcId = null; state.panel = "workstation"; },
     openBookingEdit(state, action: PayloadAction<Reservation>) { state.panel = "booking-edit"; state.selectedPcId = null; state.selectedClientId = null; state.selectedBooking = action.payload; },

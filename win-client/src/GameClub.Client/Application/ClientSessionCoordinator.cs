@@ -165,7 +165,8 @@ public sealed class ClientSessionCoordinator
         Action<ClientConnectionState>? onConnectionStateChanged = null,
         Action? onWorkstationDisabled = null,
         Func<Task>? refreshSessionSnapshot = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<DateTimeOffset?, DateTimeOffset?>? onReservationReceived = null)
     {
         ClientConnectionState? lastLoggedHeartbeatState = null;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
@@ -184,6 +185,7 @@ public sealed class ClientSessionCoordinator
                     lastLoggedHeartbeatState = ClientConnectionState.Online;
                 }
                 onConnectionStateChanged?.Invoke(ClientConnectionState.Online);
+                onReservationReceived?.Invoke(heartbeat.ReservationStartsAt, heartbeat.ReservationEndsAt);
                 if (!string.IsNullOrWhiteSpace(heartbeat.Theme))
                 {
                     onThemeReceived?.Invoke(heartbeat.Theme);

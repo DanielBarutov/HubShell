@@ -6,7 +6,7 @@ import datetime
 import uuid
 from collections.abc import AsyncIterator
 
-from sqlalchemy import JSON, DateTime, String, select, text
+from sqlalchemy import JSON, DateTime, String, delete, select, text, update
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -195,10 +195,36 @@ class PostgresReservationRepository:
                 self._copy_values(model, updated)
                 return updated
 
-    async def save(self, reservation: Reservation) -> Reservation:
+    async def complete_expired(self, now: datetime.datetime) -> int:
+        async with open_session(self._engine_provider) as session, session.begin():
+            completed = await session.scalars(
+                update(ReservationModel)
+                .where(
+                    ReservationModel.end_at <= now,
+                    ReservationModel.status.in_(
+                        [ReservationStatus.CONFIRMED.value, ReservationStatus.ACTIVE.value]
+                    ),
+                )
+                .values(status=ReservationStatus.COMPLETED.value)
+                .returning(ReservationModel.id)
+            )
+            return len(completed.all())
+
+    async def delete(self, reservation_id: uuid.UUID) -> bool:
+        async with open_session(self._engine_provider) as session, session.begin():
+            deleted_id = await session.scalar(
+                delete(ReservationModel)
+                .where(ReservationModel.id == reservation_id)
+                .returning(ReservationModel.id)
+            )
+            return deleted_id is not None
+
+    async def save(
+        self, reservation: Reservation, *, existing_required: bool = False
+    ) -> Reservation:
         async with open_session(self._engine_provider) as session:
             async with begin_session(session):
-                model = await session.get(ReservationModel, reservation.id)
+                model = await session.get(ReservationModel, reservation.id, with_for_update=True)
                 if model is not None:
                     resource_ids = sorted(
                         set(model.workstation_ids)
@@ -233,6 +259,9 @@ class PostgresReservationRepository:
                             raise ValueError("Workstation is already reserved for this period")
                     self._copy_values(model, reservation)
                     return reservation
+
+                if existing_required:
+                    raise ValueError("Reservation no longer exists")
 
                 if reservation.idempotency_key:
                     await session.execute(

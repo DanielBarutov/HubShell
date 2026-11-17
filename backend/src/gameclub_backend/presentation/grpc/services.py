@@ -35,6 +35,7 @@ from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetRequest
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
+from gameclub_backend.modules.reservations.application.ports import ReservationEntryLookup
 from gameclub_backend.modules.eventing_v2.application.transfer_commit import V2TransferCommitService
 from gameclub_backend.modules.eventing_v2.application.transfer_start import V2TransferStartService
 from gameclub_backend.modules.sessions.application.v2_transfer import (
@@ -717,10 +718,12 @@ class DeviceControlGrpcService(device_control_service_pb2_grpc.DeviceControlServ
         service: WorkstationService,
         token_service: JwtTokenService | None,
         command_service: WorkstationCommandService | None = None,
+        reservations: ReservationEntryLookup | None = None,
     ) -> None:
         self._service = service
         self._token_service = token_service
         self._command_service = command_service
+        self._reservations = reservations
 
     async def GetHealth(
         self,
@@ -788,6 +791,11 @@ class DeviceControlGrpcService(device_control_service_pb2_grpc.DeviceControlServ
                 request.client_version or None,
                 request.capabilities,
             )
+            reservation = (
+                await self._reservations.check_entry(workstation.id)
+                if self._reservations is not None
+                else None
+            )
         except ApplicationError as error:
             await abort_application_error(context, error)
         policy = workstation.lockdown_policy
@@ -798,6 +806,8 @@ class DeviceControlGrpcService(device_control_service_pb2_grpc.DeviceControlServ
             group_id=workstation.group_id or "",
             theme=workstation.theme,
             manager_password_verifier=workstation.manager_password_verifier or "",
+            reservation_starts_at=to_timestamp(reservation.starts_at) if reservation else None,
+            reservation_ends_at=to_timestamp(reservation.ends_at) if reservation else None,
             lockdown_policy=device_control_service_pb2.WorkstationLockdownPolicy(
                 deployment_mode=policy.deployment_mode.value,
                 shell_enabled=policy.shell_enabled,

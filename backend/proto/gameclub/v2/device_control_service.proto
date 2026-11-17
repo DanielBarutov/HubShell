@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package gameclub.devices.v2;
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "GameClub.Client.Contracts.Devices.V2";
 
 // Граница устройства V2. Здесь передаётся только конфигурация рабочего места:
@@ -50,6 +52,8 @@ message DeviceHeartbeatResponse {
   string theme = 5;
   string manager_password_verifier = 6;
   WorkstationLockdownPolicy lockdown_policy = 7;
+  google.protobuf.Timestamp reservation_starts_at = 8;
+  google.protobuf.Timestamp reservation_ends_at = 9;
 }
 
 // Безопасные команды оператора для оболочки клиента V2. Для создания и

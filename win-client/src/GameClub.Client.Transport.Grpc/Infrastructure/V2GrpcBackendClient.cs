@@ -210,7 +210,9 @@ public sealed partial class V2GrpcBackendClient :
             response.ManagerPasswordVerifier,
             ToLockdownPolicySnapshot(response.LockdownPolicy),
             SessionSnapshot: null,
-            WorkstationName: response.WorkstationName);
+            WorkstationName: response.WorkstationName,
+            ReservationStartsAt: response.ReservationStartsAt?.ToDateTimeOffset(),
+            ReservationEndsAt: response.ReservationEndsAt?.ToDateTimeOffset());
     }
 
     public Task<EntryDecisionSnapshot> CheckEntryAsync(string workstationId, string? clientId, string? guestId, string deviceId, CancellationToken cancellationToken = default) => Unsupported<EntryDecisionSnapshot>();

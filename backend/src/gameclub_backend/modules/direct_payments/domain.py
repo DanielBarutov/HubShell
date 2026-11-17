@@ -35,6 +35,7 @@ class GuestSessionPayment:
     tariff_name: str | None = None
     equipment_type: str = "pc"
     zone_id: str | None = None
+    reservation_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
         if not self.guest_name.strip():

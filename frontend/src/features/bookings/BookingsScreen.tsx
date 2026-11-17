@@ -8,7 +8,6 @@ import {
   Play,
   Plus,
   UserRound,
-  UserX,
   X,
 } from "lucide-react";
 import { ApiError, GameClubApi } from "../../api";
@@ -278,15 +277,14 @@ export function LiveBookingsView({
       : "Гость");
   const transition = async (
     reservation: Reservation,
-    action: "activate" | "complete" | "no-show" | "cancel",
+    action: "activate" | "complete" | "cancel",
   ) => {
     const actionLabels = {
       activate: "активировать",
       complete: "завершить",
-      "no-show": "отметить как неявку",
       cancel: "отменить",
     } as const;
-    if (action === "no-show" || action === "cancel") {
+    if (action === "cancel") {
       if (
         !window.confirm(
           `${actionLabels[action].replace(/^./, (value) => value.toUpperCase())} бронь ${clientLabel(reservation)}?`,
@@ -302,9 +300,7 @@ export function LiveBookingsView({
         ? api.activateReservation(reservation.id)
         : action === "complete"
           ? api.completeReservation(reservation.id)
-          : action === "no-show"
-            ? api.markNoShowReservation(reservation.id)
-            : api.cancelReservation(reservation.id));
+          : api.cancelReservation(reservation.id));
       dispatch(refreshBookings(reservationRange(selectedDate)));
     } catch (requestError) {
       setActionError(
@@ -461,7 +457,6 @@ export function LiveBookingsView({
                   </span>
                   <div className="booking-actions mt-1 flex gap-1">
                     {reservation.status === "confirmed" && (
-                      <>
                         <button
                           className="booking-action btn btn-ghost btn-xs"
                           aria-label={`Активировать бронь ${clientLabel(reservation)}`}
@@ -474,19 +469,6 @@ export function LiveBookingsView({
                         >
                           <Play size={10} />
                         </button>
-                        <button
-                          className="booking-action btn btn-ghost btn-xs"
-                          aria-label={`Отметить неявку ${clientLabel(reservation)}`}
-                          title="No-show"
-                          disabled={transitioningId === reservation.id}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void transition(reservation, "no-show");
-                          }}
-                        >
-                          <UserX size={11} />
-                        </button>
-                      </>
                     )}
                     {reservation.status === "active" && (
                       <button
@@ -528,6 +510,20 @@ export function LiveBookingsView({
           </div>
         )}
       </div>
+      {reservations.some((reservation) => reservation.status === "cancelled") && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm">Отменённые брони</summary>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {reservations.filter((reservation) => reservation.status === "cancelled").map((reservation) => (
+              <li key={reservation.id}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => onEditBooking(reservation)}>
+                  {clientLabel(reservation)} · {new Date(reservation.start_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <BookingFooter
         total={visibleReservations.length}
         free={Math.max(0, capacity - occupiedSlotCount)}

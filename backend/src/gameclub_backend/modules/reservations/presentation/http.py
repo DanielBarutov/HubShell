@@ -160,6 +160,11 @@ def create_router(service: ReservationService) -> APIRouter:
         del principal
         return ReservationResponse.from_domain(await service.get(reservation_id))
 
+    @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_reservation(reservation_id: uuid.UUID, principal: Operator) -> None:
+        del principal
+        await service.delete(reservation_id)
+
     @router.patch("/{reservation_id}", response_model=ReservationResponse)
     async def update_reservation(
         reservation_id: uuid.UUID,

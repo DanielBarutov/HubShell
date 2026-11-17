@@ -52,7 +52,11 @@ export function PanelHost() {
       {ui.panel === "new-client" && LIVE_MODE && <NewClientPanel api={api} clientGroups={workspace.clientGroups} onClose={close} onSaved={refresh} />}
       {ui.panel === "deposit" && <DepositPanel initialClient={selectedClient ?? undefined} bonusOnly={ui.depositBonusOnly} target={ui.depositTarget ?? undefined} cashShiftId={cashShiftId} workstations={workspace.workstations} onClose={close} onCompleted={refresh} clients={workspace.clients} api={LIVE_MODE ? api : undefined} />}
       {ui.panel === "booking" && <BookingPanel initialWorkstationId={ui.bookingWorkstationId} onClose={close} pcs={workspace.workstations.filter((place) => place.equipmentType !== "xbox")} clients={workspace.clients} api={LIVE_MODE ? api : undefined} onCreated={refresh} />}
-      {ui.panel === "booking-edit" && ui.selectedBooking && <BookingEditPanel reservation={ui.selectedBooking} clients={workspace.clients} onClose={close} pcs={workspace.workstations.filter((place) => place.equipmentType !== "xbox")} api={LIVE_MODE ? api : undefined} onSaved={refresh} />}
+      {ui.panel === "booking-edit" && ui.selectedBooking && <BookingEditPanel reservation={ui.selectedBooking} clients={workspace.clients} onClose={close} pcs={workspace.workstations.filter((place) => place.equipmentType !== "xbox")} api={LIVE_MODE ? api : undefined} onSaved={refresh}
+        onStartGuest={LIVE_MODE ? () => {
+          const reservation = ui.selectedBooking!;
+          dispatch(openSale({ pcId: reservation.workstation_ids[0], reservation }));
+        } : undefined} />}
       {ui.panel === "tariff" && LIVE_MODE && <TariffPanel api={api} groups={workspace.groups} onClose={close} onSaved={refresh} />}
       {ui.panel === "product" && LIVE_MODE && <ProductPanel api={api} product={ui.selectedProduct ?? undefined} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
       {ui.panel === "discount" && LIVE_MODE && <DiscountPanel api={api} onClose={close} onSaved={refresh} />}
@@ -64,6 +68,6 @@ export function PanelHost() {
       {ui.panel === "cash-close" && LIVE_MODE && ui.selectedCashShift && <CashClosePanel api={api} shift={ui.selectedCashShift} onClose={close} onSaved={refresh} />}
       </div>
     </aside>}
-    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialClient={selectedClient} initialProduct={ui.saleInitialProduct} initialTab={ui.saleInitialTab} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
+    {ui.panel === "sale" && <SaleWorkspace api={LIVE_MODE ? api : undefined} pc={selectedPc} initialClient={selectedClient} initialProduct={ui.saleInitialProduct} initialTab={ui.saleInitialTab} reservation={ui.saleReservation ?? undefined} clients={workspace.clients} cashShifts={workspace.cashShifts} tariffs={workspace.tariffs} products={workspace.products} categories={workspace.productCategories} onClose={close} onSaved={refresh} />}
   </>;
 }

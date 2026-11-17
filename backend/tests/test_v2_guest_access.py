@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
 from gameclub_backend.modules.direct_payments.domain import DirectPaymentStatus, GuestSessionPayment
 from gameclub_backend.modules.eventing_v2.application.guest_access import (
     GUEST_SOURCE,
@@ -16,7 +17,13 @@ from gameclub_backend.modules.eventing_v2.infrastructure.guest_access_memory imp
     InMemoryGuestAccessGrantRepository,
 )
 from gameclub_backend.modules.payment_methods.domain import PaymentPart
+from gameclub_backend.modules.reservations.application.service import ReservationService
+from gameclub_backend.modules.reservations.infrastructure.memory import (
+    InMemoryReservationRepository,
+)
+from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
+from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.workstations.domain import (
     Workstation,
     WorkstationSessionMode,
@@ -198,6 +205,53 @@ async def test_guest_v2_access_is_prepared_redeemed_and_idempotent() -> None:
     assert foreign.value.code is ErrorCode.PERMISSION_DENIED
 
 
+async def test_paid_guest_redeems_only_after_operator_activates_the_linked_reservation() -> None:
+    pc = Workstation(
+        id=uuid.uuid4(),
+        device_id="guest-booking-device",
+        name="PC-01",
+        status=WorkstationStatus.ONLINE,
+        session_mode=WorkstationSessionMode.LOCAL_LEDGER,
+    )
+    workstations = FakeWorkstations(pc)
+    clients = InMemoryClientRepository()
+    reservations = ReservationService(InMemoryReservationRepository(), workstations, clients)
+    start = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=1)
+    booking = await reservations.create([pc.id], start, start + datetime.timedelta(hours=1), "op")
+    payment = dataclasses.replace(
+        make_payment(pc.id, uuid.uuid4()), reservation_id=booking.id, duration_minutes=60
+    )
+
+    class Payments:
+        async def get(self, payment_id: uuid.UUID) -> GuestSessionPayment:
+            assert payment_id == payment.id
+            return payment
+
+    payments = Payments()
+    sessions = SessionService(
+        InMemorySessionRepository(),
+        workstations,
+        clients,
+        reservations=reservations,
+        guest_payments=payments,
+    )
+    service = V2GuestAccessService(
+        payments=payments,
+        workstations=workstations,
+        sessions=sessions,
+        grants=InMemoryGuestAccessGrantRepository(),
+        signing_key_id="test-key",
+        signer=FakeSigner(),
+    )
+    await service.prepare(payment.id)
+    with pytest.raises(ApplicationError, match="guest_reservation_protected"):
+        await service.redeem(pc.device_id)
+    await reservations.activate(booking.id)
+    access = await service.redeem(pc.device_id)
+    session = await sessions.get(uuid.UUID(access.payload.session_id))
+    assert session.reservation_id == booking.id
+
+
 @pytest.mark.asyncio
 async def test_guest_additions_keep_session_queue_order_and_cannot_survive_exit() -> None:
     workstation = Workstation(
@@ -233,6 +287,7 @@ async def test_guest_additions_keep_session_queue_order_and_cannot_survive_exit(
         session_id=session_id,
         duration_minutes=90,
         tariff_name="Полтора часа",
+        reservation_id=uuid.uuid4(),
         tariff_quantity=2,
     )
     payments[addition.id] = addition
@@ -301,6 +356,7 @@ async def test_postgres_guest_payment_and_queue_persist_across_repository_restar
         idempotency_key=f"guest-queue-{uuid.uuid4()}",
         duration_minutes=90,
         tariff_name="Полтора часа",
+        reservation_id=uuid.uuid4(),
     )
     grant = GuestAccessGrant(
         id=uuid.uuid4(),

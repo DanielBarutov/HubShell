@@ -1,4 +1,5 @@
 import datetime
+import uuid
 
 import httpx
 import pytest
@@ -123,6 +124,12 @@ async def test_operator_can_move_reservation_through_lifecycle_over_http() -> No
                 f"/api/v1/reservations/{reservation_id}/complete",
                 headers=headers,
             )
+            delete_response = await client.delete(
+                f"/api/v1/reservations/{reservation_id}", headers=headers
+            )
+            deleted_response = await client.get(
+                f"/api/v1/reservations/{reservation_id}", headers=headers
+            )
             no_show_start = datetime.datetime(2026, 8, 26, 18, tzinfo=datetime.UTC)
             no_show_payload = {
                 **payload,
@@ -149,9 +156,42 @@ async def test_operator_can_move_reservation_through_lifecycle_over_http() -> No
     assert activate_response.json()["status"] == "active"
     assert complete_response.status_code == 200
     assert complete_response.json()["status"] == "completed"
+    assert delete_response.status_code == 204
+    assert deleted_response.status_code == 404
     assert no_show_reservation_response.status_code == 201
     assert no_show_response.status_code == 200
     assert no_show_response.json()["status"] == "no_show"
+
+
+async def test_sale_from_booked_workstation_is_blocked_before_payment(api_context) -> None:
+    client = api_context.client
+    headers = api_context.headers
+    pc = await client.post(
+        "/api/v1/workstations",
+        headers=headers,
+        json={"device_id": "reservation-sale-device", "name": "Reservation PC"},
+    )
+    pc.raise_for_status()
+    workstation_id = pc.json()["id"]
+    start = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=20)
+    booking = await client.post(
+        "/api/v1/reservations",
+        headers={**headers, "Idempotency-Key": "protected-place-booking"},
+        json={
+            "workstation_ids": [workstation_id],
+            "start_at": start.isoformat(),
+            "end_at": (start + datetime.timedelta(hours=1)).isoformat(),
+        },
+    )
+    booking.raise_for_status()
+
+    response = await client.post(
+        f"/api/v1/clients/{uuid.uuid4()}/entitlements",
+        headers={**headers, "Idempotency-Key": "protected-place-sale"},
+        json={"workstation_id": workstation_id, "tariff_id": str(uuid.uuid4())},
+    )
+    assert response.status_code == 409
+    assert "Продажа недоступна" in response.text
 
 
 async def test_operator_can_start_and_stop_session_over_http() -> None:

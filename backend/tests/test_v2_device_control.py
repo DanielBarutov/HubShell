@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 
 import grpc
 import pytest
@@ -7,6 +8,11 @@ from gameclub.v2 import device_control_service_pb2, device_control_service_pb2_g
 from gameclub_backend.config import Settings
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
+from gameclub_backend.modules.clients.infrastructure.memory import InMemoryClientRepository
+from gameclub_backend.modules.reservations.application.service import ReservationService
+from gameclub_backend.modules.reservations.infrastructure.memory import (
+    InMemoryReservationRepository,
+)
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.application.service import WorkstationService
 from gameclub_backend.modules.workstations.domain import (
@@ -50,6 +56,12 @@ async def test_v2_device_heartbeat_returns_configuration_without_session_state()
             ),
         )
     )
+    reservations = ReservationService(
+        InMemoryReservationRepository(), repository, InMemoryClientRepository()
+    )
+    start = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=20)
+    end = start + datetime.timedelta(hours=1)
+    reservation = await reservations.create([saved.id], start, end, "operator")
     token_service = JwtTokenService(Settings(jwt_secret="test-secret-with-at-least-32-bytes-long"))
     access_token, _ = token_service.issue_access_token(
         Principal(
@@ -61,7 +73,7 @@ async def test_v2_device_heartbeat_returns_configuration_without_session_state()
     )
     server = grpc.aio.server()
     device_control_service_pb2_grpc.add_DeviceControlServiceServicer_to_server(
-        DeviceControlGrpcService(workstations, token_service), server
+        DeviceControlGrpcService(workstations, token_service, reservations=reservations), server
     )
     port = server.add_insecure_port("127.0.0.1:0")
     await server.start()
@@ -86,6 +98,18 @@ async def test_v2_device_heartbeat_returns_configuration_without_session_state()
         assert response.lockdown_policy.version == 7
         assert "session_snapshot" not in response.DESCRIPTOR.fields_by_name
         assert "active_session_id" not in response.DESCRIPTOR.fields_by_name
+
+        assert response.reservation_starts_at.ToDatetime(datetime.UTC) == start
+        assert response.reservation_ends_at.ToDatetime(datetime.UTC) == end
+        await reservations.cancel(reservation.id)
+        cleared = await client.Heartbeat(
+            device_control_service_pb2.DeviceHeartbeatRequest(
+                device_id="v2-device-01", capabilities=("v2.local-ledger",)
+            ),
+            metadata=(("authorization", f"Bearer {access_token}"),),
+        )
+        assert not cleared.HasField("reservation_starts_at")
+        assert not cleared.HasField("reservation_ends_at")
 
         with pytest.raises(grpc.aio.AioRpcError) as error:
             await client.Heartbeat(
