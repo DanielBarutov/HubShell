@@ -1,3 +1,4 @@
+using GameClub.Client.Avalonia.Development;
 using System.Reflection;
 using Grpc.Core;
 using GameClub.Client.Application;
@@ -27,6 +28,213 @@ public sealed class V2AccessGateTests
         Assert.True(vm.HasActiveGameSession);
         Assert.Throws<InvalidOperationException>(vm.AuthorizeUpdateShutdown);
         Assert.Equal(saved, await coordinator.ReadLedgerAsync());
+    }
+
+    [Fact]
+    public async Task RestartWithPendingTransferKeepsClientLockedUntilServerResolution()
+    {
+        var saved = CreateLedger();
+        var coordinator = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+        await coordinator.InitializeAsync(saved);
+        var request = new V2PendingSourceTransfer(Guid.NewGuid(), Guid.NewGuid(), "quote");
+        await coordinator.BeginSourceTransferAsync(saved.SessionId, request);
+        await using var vm = new MainViewModel(new ClientSessionCoordinator(CreateBackend()), new Credentials(),
+            deviceId: saved.DeviceId, v2Ledger: coordinator,
+            v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(saved), coordinator),
+            v2MinuteRunner: new V2MinuteLedgerRunner(coordinator),
+            v2SignatureVerifier: new AcceptingVerifier());
+
+        await vm.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(coordinator));
+
+        Assert.True(vm.IsAccessLocked);
+        Assert.True(vm.HasActiveGameSession);
+        Assert.False(vm.IsUserLoginVisible);
+        Assert.False(vm.TryOpenManagerLoginShortcut(true, true, true));
+        Assert.False(await vm.LoginPortalAsync());
+        Assert.False(await vm.RegisterPortalAsync());
+        Assert.Throws<InvalidOperationException>(vm.AuthorizeUpdateShutdown);
+        Assert.Equal(request, (await coordinator.ReadSnapshotAsync())!.PendingSourceTransfer);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SourceAndTargetRecoverAfterLostTransferCommitResponse(bool guest)
+    {
+        var sourceLedger = CreateLedger();
+        if (guest)
+            sourceLedger = sourceLedger with { ClientId = Guid.Empty, GuestPaymentId = Guid.NewGuid(), GuestName = "Гость" };
+        var directory = Directory.CreateTempSubdirectory();
+        var path = Path.Combine(directory.FullName, "source.json");
+        try
+        {
+            var sourceLedgerStore = new V2LocalLedgerCoordinator(new JsonV2LocalLedgerStore(path));
+            var targetLedgerStore = new V2LocalLedgerCoordinator(new InMemoryLedgerStore());
+            await sourceLedgerStore.InitializeAsync(sourceLedger);
+            var gateway = new TransferGateway(sourceLedger);
+            var power = new TransferRestart();
+            var now = sourceLedger.ActivatedAtUtc!.Value;
+
+            MainViewModel CreateView(V2LocalLedgerCoordinator ledger, string deviceId, IWorkstationPowerController? workstationPower = null) =>
+                new(new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: deviceId,
+                    clock: () => now, powerController: workstationPower, v2Ledger: ledger,
+                    v2OfflineLogin: new V2OfflineLoginCoordinator(new V2Gateway(sourceLedger), ledger),
+                    v2MinuteRunner: new V2MinuteLedgerRunner(ledger),
+                    v2SignatureVerifier: new AcceptingVerifier(), v2TransferGateway: gateway);
+
+            await using var target = CreateView(targetLedgerStore, "target");
+            target.SetDeviceIdentity("target", gateway.TargetId.ToString(), "Target");
+            target.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+            Assert.True(target.IsAccessLocked);
+            target.TrackBackgroundTask(target.RunV2TransferLoopAsync());
+
+            await using (var original = CreateView(sourceLedgerStore, sourceLedger.DeviceId, power))
+            {
+                original.SetDeviceIdentity(sourceLedger.DeviceId, gateway.SourceId.ToString(), "Source");
+                await original.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(sourceLedgerStore));
+                original.ApplyHeartbeatConnectionState(ClientConnectionState.Online);
+                Assert.False(original.IsAccessLocked);
+
+                await original.BeginV2TransferAsync(gateway.TargetId, new V2TransferQuote("quote", 0, null, null, null));
+                Assert.True(original.IsAccessLocked);
+                Assert.True(original.IsV2TransferPending);
+                original.TrackBackgroundTask(original.RunV2TransferLoopAsync());
+                await gateway.CommitReplyLost.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(0, power.Calls);
+            }
+
+            sourceLedgerStore = new V2LocalLedgerCoordinator(new JsonV2LocalLedgerStore(path));
+            await using var source = CreateView(sourceLedgerStore, sourceLedger.DeviceId, power);
+            source.SetDeviceIdentity(sourceLedger.DeviceId, gateway.SourceId.ToString(), "Source");
+            await source.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(sourceLedgerStore));
+            Assert.True(source.IsAccessLocked);
+            Assert.True(source.IsV2TransferPending);
+            gateway.RestoreConnection();
+            source.TrackBackgroundTask(source.RunV2TransferLoopAsync());
+
+            await power.Scheduled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            while (target.IsAccessLocked || (await sourceLedgerStore.ReadSnapshotAsync())?.PendingSourceTransfer is not null)
+                await Task.Delay(20, timeout.Token);
+            Assert.True(source.IsAccessLocked);
+            Assert.False(target.IsAccessLocked);
+            Assert.Equal(1, power.Calls);
+            Assert.Equal(1, gateway.Commits);
+            Assert.Equal(V2LocalSessionStatus.Stopped, (await sourceLedgerStore.ReadLedgerAsync()).Status);
+            Assert.Empty(await sourceLedgerStore.ReadPendingOutboxAsync());
+            Assert.Equal(sourceLedger.SessionId, (await targetLedgerStore.ReadLedgerAsync()).SessionId);
+            Assert.Equal("target", (await targetLedgerStore.ReadLedgerAsync()).DeviceId);
+            Assert.Equal(guest, (await targetLedgerStore.ReadLedgerAsync()).IsGuest);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(0, 0, V2LocalSessionStatus.Stopped)]
+    [InlineData(1, 2, V2LocalSessionStatus.Exhausted)]
+    [InlineData(1, 1, V2LocalSessionStatus.Active)]
+    public async Task RestartAfterTargetLedgerWriteChecksTimeBeforeOpening(
+        int grantMinutes, int elapsedMinutes, V2LocalSessionStatus expectedStatus)
+    {
+        var opens = expectedStatus == V2LocalSessionStatus.Active;
+        var saved = CreateLedger(grantMinutes) with { TransferOperationId = Guid.NewGuid() };
+        var path = Path.GetTempFileName();
+        File.Delete(path);
+        try
+        {
+            var writer = new V2LocalLedgerCoordinator(new JsonV2LocalLedgerStore(path));
+            await writer.InitializeNextSessionAsync(saved);
+            var reader = new V2LocalLedgerCoordinator(new JsonV2LocalLedgerStore(path));
+            var gateway = new V2Gateway(saved);
+            var now = saved.ActivatedAtUtc!.Value.AddMinutes(elapsedMinutes);
+            await using var target = new MainViewModel(
+                new ClientSessionCoordinator(CreateBackend()), new Credentials(), deviceId: saved.DeviceId,
+                clock: () => now, v2Ledger: reader, v2OfflineSession: gateway,
+                v2MinuteRunner: new V2MinuteLedgerRunner(reader),
+                v2OfflineLogin: new V2OfflineLoginCoordinator(gateway, reader),
+                v2SignatureVerifier: new AcceptingVerifier());
+
+            await target.RecoverV2SessionAsync(new V2LocalLedgerRecoveryCoordinator(reader));
+
+            Assert.Equal(opens, !target.IsAccessLocked);
+            var durable = await reader.ReadLedgerAsync();
+            Assert.Equal(saved.TransferOperationId, durable.TransferOperationId);
+            Assert.Equal(expectedStatus, durable.Status);
+            Assert.Equal(opens ? 0 : 1, gateway.StoppedSessions.Count);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class TransferRestart : IWorkstationPowerController
+    {
+        public TaskCompletionSource Scheduled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        public CommandExecutionResult ScheduleRestart()
+        {
+            Calls++;
+            Scheduled.TrySetResult();
+            return new(true, "restart");
+        }
+    }
+
+    private sealed class TransferGateway(V2LocalSessionLedger source) : IV2SessionTransferGateway
+    {
+        private V2TransferOperation? _operation;
+        public Guid SourceId { get; } = Guid.NewGuid();
+        public Guid TargetId { get; } = Guid.NewGuid();
+        public int Commits { get; private set; }
+        public TaskCompletionSource CommitReplyLost { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private volatile bool _reconnected;
+
+        public void RestoreConnection() => _reconnected = true;
+
+        public Task<IReadOnlyList<V2TransferTarget>> ListTransferTargetsAsync(string deviceId, Guid sessionId, CancellationToken token) =>
+            Task.FromResult<IReadOnlyList<V2TransferTarget>>([new(TargetId, "Target", null)]);
+
+        public Task<V2TransferQuote> QuoteTransferAsync(string deviceId, Guid sessionId, Guid targetId, CancellationToken token) =>
+            Task.FromResult(new V2TransferQuote("quote", 0, null, null, null));
+
+        public Task<V2TransferOperation> BeginTransferAsync(string deviceId, Guid sessionId, V2PendingSourceTransfer request, CancellationToken token) =>
+            CommitReplyLost.Task.IsCompleted && !_reconnected
+                ? Task.FromException<V2TransferOperation>(new RpcException(new Status(StatusCode.Unavailable, "Offline")))
+                : Task.FromResult(_operation ??= new(request.OperationId, sessionId, SourceId, TargetId,
+                    V2TransferStatus.Preparing, DateTimeOffset.UtcNow.AddMinutes(1), false, null));
+
+        public Task<V2TransferOperation?> GetPendingTransferAsync(string deviceId, CancellationToken token) =>
+            Task.FromResult(_operation);
+
+        public Task<V2TransferOperation> GetTransferOperationAsync(string deviceId, Guid operationId, CancellationToken token) =>
+            Task.FromResult(_operation!);
+
+        public Task<V2TransferOperation> ReadyTransferTargetAsync(string deviceId, Guid operationId, CancellationToken token) =>
+            Task.FromResult(_operation = _operation! with { TargetReady = true });
+
+        public Task<V2TransferOperation> ConfirmTransferSourceAsync(string deviceId, Guid operationId, V2TransferCheckpoint checkpoint, CancellationToken token) =>
+            Task.FromResult(_operation = _operation! with { SourceCheckpoint = checkpoint });
+
+        public Task<V2TransferOperation> CancelTransferAsync(string deviceId, Guid operationId, CancellationToken token) =>
+            throw new InvalidOperationException("A committed transfer must not be cancelled after a lost reply");
+
+        public Task<V2TransferOperation> CommitTransferAsync(string deviceId, Guid operationId, CancellationToken token)
+        {
+            Assert.True(_operation!.TargetReady);
+            Assert.NotNull(_operation.SourceCheckpoint);
+            _operation = _operation with { Status = V2TransferStatus.Committed };
+            Commits++;
+            CommitReplyLost.SetResult();
+            throw new RpcException(new Status(StatusCode.Unavailable, "Reply was lost"));
+        }
+
+        public Task<V2LocalSessionLedger> GetTransferredLedgerAsync(string deviceId, V2TransferOperation operation,
+            IOfflineSnapshotSignatureVerifier verifier, CancellationToken token) =>
+            Task.FromResult(source with { DeviceId = deviceId, SnapshotId = Guid.NewGuid(), SnapshotVersion = 2 });
     }
 
     [Theory]
@@ -917,6 +1125,10 @@ public sealed class V2AccessGateTests
     {
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
+            if (targetMethod?.Name == nameof(IClientPortalGateway.Logout))
+            {
+                return null;
+            }
             if (targetMethod?.ReturnType == typeof(ValueTask))
             {
                 return ValueTask.CompletedTask;

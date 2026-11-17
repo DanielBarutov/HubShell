@@ -12,13 +12,14 @@ from gameclub_backend.jobs.reports import (
     backfill_v2_confirmed_per_minute_debits,
     project_analytics_events,
 )
-from gameclub_backend.jobs.reservations import sweep_reservation_no_shows
+from gameclub_backend.jobs.reservations import expire_v2_transfers, sweep_reservation_no_shows
 
 
 def dispatch_periodic_jobs() -> None:
     """Поставить независимые периодические задачи без решений в scheduler."""
 
     sweep_reservation_no_shows.send()
+    expire_v2_transfers.send()
     reconcile_billing_charges.send()
     reconcile_pending_settlements.send()
     meter_active_sessions.send()

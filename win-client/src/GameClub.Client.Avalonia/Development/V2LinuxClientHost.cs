@@ -133,6 +133,7 @@ public sealed class V2LinuxClientHost : IClientHost
             _enrollment.WorkstationName);
         ClientLog.Info("enrollment", "device enrollment activated");
         await ViewModel.RecoverV2SessionAsync(_recovery, ViewModel.LifetimeToken);
+        ViewModel.TrackBackgroundTask(ViewModel.RunV2TransferLoopAsync());
         ViewModel.TrackBackgroundTask(_outboxWorker.RunAsync(ViewModel.LifetimeToken));
         ViewModel.TrackBackgroundTask(_serverEventWorker.RunAsync(ViewModel.LifetimeToken));
         ViewModel.TrackBackgroundTask(

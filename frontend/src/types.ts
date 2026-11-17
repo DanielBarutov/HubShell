@@ -4,6 +4,7 @@ export type Section = "dashboard" | "map" | "bookings" | "clients" | "catalog" |
 
 export type Workstation = {
   relayOffPending?: boolean;
+  transferReserved?: boolean;
   relaySettings?: import("./api/types").RelaySettings | null;
   equipmentType?: "pc" | "xbox";
   id: string;

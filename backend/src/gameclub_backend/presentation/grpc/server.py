@@ -93,6 +93,10 @@ def create_server(
             current_services.v2_offline_login,
             token_service,
             current_services.v2_guest_access,
+            current_services.v2_transfer_targets,
+            current_services.v2_transfer_preparation,
+            current_services.v2_transfer_start,
+            current_services.v2_transfer_commit,
         ),
         server,
     )

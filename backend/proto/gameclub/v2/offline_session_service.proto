@@ -11,6 +11,16 @@ option java_multiple_files = true;
 
 // Управляет границей входа V2 и завершением локальной сессии. Минуты не подтверждает.
 service OfflineSessionService {
+  rpc ListTransferTargets(ListTransferTargetsRequest) returns (ListTransferTargetsResponse);
+  rpc QuoteTransfer(QuoteTransferRequest) returns (TransferQuote);
+  rpc BeginTransfer(BeginTransferRequest) returns (TransferOperation);
+  rpc GetPendingTransfer(GetPendingTransferRequest) returns (GetPendingTransferResponse);
+  rpc GetTransferOperation(TransferOperationRequest) returns (TransferOperation);
+  rpc ReadyTransferTarget(TransferOperationRequest) returns (TransferOperation);
+  rpc ConfirmTransferSource(ConfirmTransferSourceRequest) returns (TransferOperation);
+  rpc CancelTransfer(TransferOperationRequest) returns (TransferOperation);
+  rpc CommitTransfer(TransferOperationRequest) returns (TransferOperation);
+  rpc GetTransferredSnapshot(TransferOperationRequest) returns (SignedOfflineSessionSnapshot);
   rpc Login(LoginOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
   rpc Register(RegisterOfflineSessionRequest) returns (SignedOfflineSessionSnapshot);
   rpc ResumePortal(ResumeOfflinePortalRequest) returns (ResumeOfflinePortalResponse);
@@ -25,6 +35,79 @@ service OfflineSessionService {
   rpc EnableMinuteBonus(EnableMinuteBonusRequest) returns (SignedMinuteBonusBudget);
   rpc QuoteMinuteBonus(EnableMinuteBonusRequest) returns (OfflineBonusGameQuote);
   rpc CancelMinuteBonus(EnableMinuteBonusRequest) returns (google.protobuf.Empty);
+}
+
+message ListTransferTargetsRequest {
+  string device_id = 1;
+  string session_id = 2;
+}
+
+message TransferTarget {
+  string workstation_id = 1;
+  string name = 2;
+  string group_id = 3;
+}
+
+message ListTransferTargetsResponse {
+  repeated TransferTarget targets = 1;
+}
+
+message QuoteTransferRequest {
+  string device_id = 1;
+  string session_id = 2;
+  string target_workstation_id = 3;
+}
+
+message TransferQuote {
+  string token = 1;
+  optional int64 per_minute_price_cents = 2;
+  string burned_package_id = 3;
+  string burned_package_name = 4;
+  optional uint32 burned_package_minutes = 5;
+  optional uint32 fallback_grant_minutes = 6;
+}
+
+message BeginTransferRequest {
+  string device_id = 1;
+  string session_id = 2;
+  string target_workstation_id = 3;
+  string operation_id = 4;
+  string quote_token = 5;
+}
+
+message GetPendingTransferRequest {
+  string device_id = 1;
+}
+
+message GetPendingTransferResponse {
+  TransferOperation operation = 1;
+}
+
+message TransferOperationRequest {
+  string device_id = 1;
+  string operation_id = 2;
+}
+
+message TransferSourceCheckpoint {
+  int32 sequence = 1;
+  string payload_hash = 2;
+}
+
+message ConfirmTransferSourceRequest {
+  string device_id = 1;
+  string operation_id = 2;
+  TransferSourceCheckpoint checkpoint = 3;
+}
+
+message TransferOperation {
+  string operation_id = 1;
+  string session_id = 2;
+  string source_workstation_id = 3;
+  string target_workstation_id = 4;
+  string status = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  bool target_ready = 7;
+  TransferSourceCheckpoint source_checkpoint = 8;
 }
 
 message ResumeOfflinePortalRequest {

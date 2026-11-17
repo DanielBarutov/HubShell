@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -132,8 +133,11 @@ from gameclub_backend.modules.entitlements.infrastructure.postgres import (
 from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetService
 from gameclub_backend.modules.eventing_v2.application.deposit import V2DepositCreditService
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
+from gameclub_backend.modules.eventing_v2.application.guest_transfer_time import GuestTransferClock
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
 from gameclub_backend.modules.eventing_v2.application.snapshot_issue import V2SnapshotIssueService
+from gameclub_backend.modules.eventing_v2.application.transfer_commit import V2TransferCommitService
+from gameclub_backend.modules.eventing_v2.application.transfer_start import V2TransferStartService
 from gameclub_backend.modules.eventing_v2.application.update_readiness import (
     V2ClientUpdateReadiness,
 )
@@ -203,6 +207,11 @@ from gameclub_backend.modules.sessions.application.ports import (
 )
 from gameclub_backend.modules.sessions.application.service import SessionService
 from gameclub_backend.modules.sessions.application.transfer import SessionTransferService
+from gameclub_backend.modules.sessions.application.v2_transfer import (
+    ReservedTransferTargets,
+    V2TransferPreparationService,
+    V2TransferTargetService,
+)
 from gameclub_backend.modules.sessions.infrastructure.memory import InMemorySessionRepository
 from gameclub_backend.modules.sessions.infrastructure.postgres import (
     PostgresSessionAdmission,
@@ -214,6 +223,9 @@ from gameclub_backend.modules.sessions.infrastructure.transfers_memory import (
 )
 from gameclub_backend.modules.sessions.infrastructure.transfers_postgres import (
     PostgresSessionTransferRepository,
+)
+from gameclub_backend.modules.sessions.infrastructure.v2_transfers_postgres import (
+    PostgresV2TransferReservations,
 )
 from gameclub_backend.modules.workstations.application.commands import WorkstationCommandService
 from gameclub_backend.modules.workstations.application.groups import WorkstationGroupService
@@ -285,6 +297,11 @@ class ApplicationServices:
     audit_repository: AuditRepository
     client_updates: ClientUpdateService | None = None
     updater_identity: UpdaterIdentityService | None = None
+    transfer_reservations: ReservedTransferTargets | None = None
+    v2_transfer_targets: V2TransferTargetService | None = None
+    v2_transfer_start: V2TransferStartService | None = None
+    v2_transfer_commit: V2TransferCommitService | None = None
+    v2_transfer_preparation: V2TransferPreparationService | None = None
 
 
 def build_application_services(
@@ -347,10 +364,21 @@ def build_application_services(
         entitlement_repository: EntitlementRepository = PostgresEntitlementRepository(
             postgres_engine_provider
         )
-        guest_payment_repository: GuestSessionPaymentRepository = (
-            PostgresGuestSessionPaymentRepository(postgres_engine_provider)
+        postgres_guest_payments = PostgresGuestSessionPaymentRepository(
+            postgres_engine_provider, PostgresSessionTransactionWriter()
         )
-        guest_access_repository = PostgresGuestAccessGrantRepository(postgres_engine_provider)
+        guest_payment_repository: GuestSessionPaymentRepository = postgres_guest_payments
+        postgres_guest_access = PostgresGuestAccessGrantRepository(
+            postgres_engine_provider, postgres_guest_payments.release_transfer_hold
+        )
+        guest_access_repository = postgres_guest_access
+
+        async def guest_sale_hold(workstation_id: uuid.UUID, session_id: uuid.UUID | None) -> bool:
+            return await postgres_guest_payments.has_transfer_hold(workstation_id, session_id) or (
+                session_id is None
+                and await postgres_guest_access.has_initial_access_pending(workstation_id)
+            )
+
         transfer_repository: SessionTransferRepository = PostgresSessionTransferRepository(
             postgres_engine_provider, release_admission
         )
@@ -623,6 +651,46 @@ def build_application_services(
                     )
                 ),
             )
+    transfer_operations = (
+        PostgresV2TransferReservations(
+            postgres_engine_provider, release_admission, sale_hold=guest_sale_hold
+        )
+        if v2_offline_login is not None
+        else None
+    )
+    transfer_targets = (
+        V2TransferTargetService(sessions, workstations, reservations, transfer_operations)
+        if transfer_operations is not None
+        else None
+    )
+    transfer_start = None
+    transfer_commit = None
+    if transfer_targets is not None and transfer_operations is not None:
+        transfer_start = V2TransferStartService(
+            sessions,
+            workstations,
+            transfer_targets,
+            transfer_operations,
+            client_portal,
+            catalog,
+            settings.login_grant_minutes,
+            guest_clock=GuestTransferClock(guest_access_repository, guest_access_repository),
+        )
+        transfer_commit = V2TransferCommitService(
+            workstations=workstations,
+            reservations=reservations,
+            operations=transfer_operations,
+            chains=PostgresV2SessionChainRepository(postgres_engine_provider),
+            snapshots=PostgresV2SnapshotIssueRepository(postgres_engine_provider),
+            start=transfer_start,
+            portal=client_portal,
+            client_groups=client_groups,
+            entitlements=entitlements,
+            signing_key_id=signing_key_id,
+            signer=signer,
+            guest_transfers=guest_access_repository,
+            sessions=sessions,
+        )
     return ApplicationServices(
         client_updates=client_updates,
         updater_identity=updater_identity,
@@ -653,6 +721,19 @@ def build_application_services(
         client_portal=client_portal,
         v2_offline_login=v2_offline_login,
         v2_guest_access=v2_guest_access,
+        transfer_reservations=transfer_operations,
+        v2_transfer_targets=transfer_targets,
+        v2_transfer_start=transfer_start,
+        v2_transfer_commit=transfer_commit,
+        v2_transfer_preparation=(
+            V2TransferPreparationService(
+                workstations,
+                transfer_operations,
+                V2ClientUpdateReadiness(PostgresV2SessionChainRepository(postgres_engine_provider)),
+            )
+            if transfer_operations is not None
+            else None
+        ),
         v2_deposit_credits=v2_deposit_credits,
         command_service=command_service,
         audit_repository=audit_repository,

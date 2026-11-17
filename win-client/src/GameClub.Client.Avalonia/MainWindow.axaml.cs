@@ -366,8 +366,68 @@ public partial class MainWindow : Window
     private async void ActivateFirstPortalEntitlement(object? sender, RoutedEventArgs args) =>
         await ViewModel.ActivateFirstPortalEntitlementAsync();
 
-    private void ToggleTransferPanel(object? sender, RoutedEventArgs args) =>
-        ViewModel.ToggleTransferPanel();
+    private async void ToggleTransferPanel(object? sender, RoutedEventArgs args)
+    {
+        if (!ViewModel.UsesV2Transfer)
+        {
+            ViewModel.ToggleTransferPanel();
+            return;
+        }
+        if (!ViewModel.CanStartV2Transfer)
+            return;
+
+        try
+        {
+            var targets = await ViewModel.ListV2TransferTargetsAsync();
+            if (targets.Count == 0)
+            {
+                ViewModel.ReportV2TransferProblem("Сейчас нет свободных ПК для переноса.");
+                return;
+            }
+
+            var places = new ComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                ItemsSource = targets.Select(target => target.Name).ToArray(),
+                SelectedIndex = 0,
+            };
+            var selection = CreateConfirmationDialog(
+                "Выберите ПК", "На новом ПК сессия откроется автоматически.", "Далее");
+            if (selection.Content is Border { Child: StackPanel panel })
+                panel.Children.Insert(panel.Children.Count - 1, places);
+            bool confirmed;
+            try { confirmed = await selection.ShowDialog<bool>(this); }
+            finally { selection.Close(); }
+            if (!confirmed || places.SelectedIndex < 0)
+                return;
+
+            var target = targets[places.SelectedIndex];
+            var quote = await ViewModel.QuoteV2TransferAsync(target.WorkstationId);
+            if (quote is null)
+                return;
+            var conditions = new List<string>();
+            if (quote.PerMinutePriceCents is { } rate)
+                conditions.Add($"Ставка {rate / 100m:0.##} ₽/мин.");
+            if (quote.BurnedPackageName is { } package && quote.BurnedPackageMinutes is { } minutes)
+                conditions.Add($"Пакет «{package}» с остатком {minutes} мин сгорит после успешного переноса.");
+            if (quote.FallbackGrantMinutes is { } grant)
+                conditions.Add($"Стартовое время на новом месте — {grant} мин.");
+            conditions.Add("После переноса этот ПК перезапустится.");
+            if (await ShowConfirmationAsync($"Пересесть на «{target.Name}»?",
+                    string.Join("\n", conditions), "Пересесть"))
+            {
+                await ViewModel.BeginV2TransferAsync(target.WorkstationId, quote);
+            }
+        }
+        catch (OperationCanceledException) when (ViewModel.LifetimeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (error is Grpc.Core.RpcException or InvalidOperationException)
+        {
+            GameClub.Client.Application.ClientLog.Exception("v2.transfer", error, "select transfer target");
+            ViewModel.ReportV2TransferProblem("Перенос недоступен. Обновите список мест и попробуйте снова.");
+        }
+    }
 
     private async void CreateTransferOffer(object? sender, RoutedEventArgs args)
     {

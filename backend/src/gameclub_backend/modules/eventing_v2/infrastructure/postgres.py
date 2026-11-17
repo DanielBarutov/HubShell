@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
+import typing
 import uuid
 
 from sqlalchemy import DateTime, Integer, String, Text, select, text, update
 from sqlalchemy.dialects.postgresql import UUID, insert
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from gameclub_backend.infrastructure.database import EngineProvider, open_session
+from gameclub_backend.application.errors import ApplicationError, ErrorCode
+from gameclub_backend.infrastructure.database import (
+    EngineProvider,
+    application_transaction,
+    open_session,
+)
 from gameclub_backend.modules.eventing_v2.domain import (
     V2Event,
     V2EventType,
@@ -15,6 +23,13 @@ from gameclub_backend.modules.eventing_v2.domain import (
     V2OutgoingServerEvent,
     V2SessionChain,
 )
+
+
+async def lock_v2_client_session(session: AsyncSession, session_id: uuid.UUID) -> None:
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+        {"lock_key": f"v2-client-session:{session_id}"},
+    )
 
 
 class V2EventingBase(DeclarativeBase):
@@ -393,6 +408,37 @@ class PostgresV2SessionChainRepository:
                 select(V2SessionChainModel).where(V2SessionChainModel.session_id == session_id)
             )
             return item.to_domain() if item else None
+
+    @contextlib.asynccontextmanager
+    async def transfer_transaction(self, session_id: uuid.UUID) -> typing.AsyncIterator[None]:
+        """Serialize the handoff with reconciliation, including the first client fact."""
+        async with application_transaction(self._engine_provider) as session:
+            await lock_v2_client_session(session, session_id)
+            yield
+
+    async def transfer_checkpoint(
+        self,
+        session_id: uuid.UUID,
+        source_device_id: str,
+        target_device_id: str,
+        last_sequence: int,
+        last_payload_hash: str | None,
+    ) -> None:
+        async with self.transfer_transaction(session_id), open_session(self._engine_provider) as db:
+            current = await db.get(V2SessionChainModel, session_id, with_for_update=True)
+            if current is None:
+                if last_sequence == 0 and last_payload_hash is None:
+                    return
+            elif (
+                current.device_id == source_device_id
+                and current.last_sequence == last_sequence
+                and current.last_payload_hash == last_payload_hash
+            ):
+                current.device_id = target_device_id
+                current.producer_id = f"workstation:{target_device_id}"
+                current.updated_at = datetime.datetime.now(datetime.UTC)
+                return
+            raise ApplicationError(ErrorCode.CONFLICT, "Transfer checkpoint is no longer current")
 
     async def save_if_current(
         self,

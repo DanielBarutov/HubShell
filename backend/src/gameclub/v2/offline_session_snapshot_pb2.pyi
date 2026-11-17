@@ -72,7 +72,7 @@ class OfflineTariffSnapshot(_message.Message):
     def __init__(self, tariff_id: _Optional[str] = ..., name: _Optional[str] = ..., zone_id: _Optional[str] = ..., package_minutes: _Optional[int] = ..., package_price_cents: _Optional[int] = ..., per_minute_price_cents: _Optional[int] = ..., is_purchasable: _Optional[bool] = ..., usage_window_start_minute: _Optional[int] = ..., usage_window_end_minute: _Optional[int] = ..., window_timezone: _Optional[str] = ..., is_per_minute: _Optional[bool] = ...) -> None: ...
 
 class OfflineSessionSnapshotPayload(_message.Message):
-    __slots__ = ("snapshot_id", "schema_version", "snapshot_version", "issued_at", "client_id", "session_id", "device_id", "workstation_zone_id", "balance_cents", "debt_limit_cents", "login_grant_remaining_minutes", "packages", "tariffs", "policy_version", "purchase_idempotency_key", "purchase_money_cents", "purchase_bonus_cents")
+    __slots__ = ("snapshot_id", "schema_version", "snapshot_version", "issued_at", "client_id", "session_id", "device_id", "workstation_zone_id", "balance_cents", "debt_limit_cents", "login_grant_remaining_minutes", "packages", "tariffs", "policy_version", "purchase_idempotency_key", "purchase_money_cents", "purchase_bonus_cents", "transfer_handoff")
     SNAPSHOT_ID_FIELD_NUMBER: _ClassVar[int]
     SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     SNAPSHOT_VERSION_FIELD_NUMBER: _ClassVar[int]
@@ -90,6 +90,7 @@ class OfflineSessionSnapshotPayload(_message.Message):
     PURCHASE_IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     PURCHASE_MONEY_CENTS_FIELD_NUMBER: _ClassVar[int]
     PURCHASE_BONUS_CENTS_FIELD_NUMBER: _ClassVar[int]
+    TRANSFER_HANDOFF_FIELD_NUMBER: _ClassVar[int]
     snapshot_id: str
     schema_version: int
     snapshot_version: int
@@ -107,7 +108,44 @@ class OfflineSessionSnapshotPayload(_message.Message):
     purchase_idempotency_key: str
     purchase_money_cents: int
     purchase_bonus_cents: int
-    def __init__(self, snapshot_id: _Optional[str] = ..., schema_version: _Optional[int] = ..., snapshot_version: _Optional[int] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., client_id: _Optional[str] = ..., session_id: _Optional[str] = ..., device_id: _Optional[str] = ..., workstation_zone_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., debt_limit_cents: _Optional[int] = ..., login_grant_remaining_minutes: _Optional[int] = ..., packages: _Optional[_Iterable[_Union[OfflinePackageSnapshot, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflineTariffSnapshot, _Mapping]]] = ..., policy_version: _Optional[str] = ..., purchase_idempotency_key: _Optional[str] = ..., purchase_money_cents: _Optional[int] = ..., purchase_bonus_cents: _Optional[int] = ...) -> None: ...
+    transfer_handoff: OfflineTransferHandoff
+    def __init__(self, snapshot_id: _Optional[str] = ..., schema_version: _Optional[int] = ..., snapshot_version: _Optional[int] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., client_id: _Optional[str] = ..., session_id: _Optional[str] = ..., device_id: _Optional[str] = ..., workstation_zone_id: _Optional[str] = ..., balance_cents: _Optional[int] = ..., debt_limit_cents: _Optional[int] = ..., login_grant_remaining_minutes: _Optional[int] = ..., packages: _Optional[_Iterable[_Union[OfflinePackageSnapshot, _Mapping]]] = ..., tariffs: _Optional[_Iterable[_Union[OfflineTariffSnapshot, _Mapping]]] = ..., policy_version: _Optional[str] = ..., purchase_idempotency_key: _Optional[str] = ..., purchase_money_cents: _Optional[int] = ..., purchase_bonus_cents: _Optional[int] = ..., transfer_handoff: _Optional[_Union[OfflineTransferHandoff, _Mapping]] = ...) -> None: ...
+
+class OfflineTransferHandoff(_message.Message):
+    __slots__ = ("operation_id", "last_sequence", "last_payload_hash", "minute_bonus", "guest")
+    OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    LAST_PAYLOAD_HASH_FIELD_NUMBER: _ClassVar[int]
+    MINUTE_BONUS_FIELD_NUMBER: _ClassVar[int]
+    GUEST_FIELD_NUMBER: _ClassVar[int]
+    operation_id: str
+    last_sequence: int
+    last_payload_hash: str
+    minute_bonus: OfflineTransferMinuteBonus
+    guest: OfflineTransferGuest
+    def __init__(self, operation_id: _Optional[str] = ..., last_sequence: _Optional[int] = ..., last_payload_hash: _Optional[str] = ..., minute_bonus: _Optional[_Union[OfflineTransferMinuteBonus, _Mapping]] = ..., guest: _Optional[_Union[OfflineTransferGuest, _Mapping]] = ...) -> None: ...
+
+class OfflineTransferGuest(_message.Message):
+    __slots__ = ("payment_id", "name", "applied_grant_ids")
+    PAYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    APPLIED_GRANT_IDS_FIELD_NUMBER: _ClassVar[int]
+    payment_id: str
+    name: str
+    applied_grant_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, payment_id: _Optional[str] = ..., name: _Optional[str] = ..., applied_grant_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class OfflineTransferMinuteBonus(_message.Message):
+    __slots__ = ("grant_id", "version", "remaining_cents", "payment_limit_bps")
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    REMAINING_CENTS_FIELD_NUMBER: _ClassVar[int]
+    PAYMENT_LIMIT_BPS_FIELD_NUMBER: _ClassVar[int]
+    grant_id: str
+    version: int
+    remaining_cents: int
+    payment_limit_bps: int
+    def __init__(self, grant_id: _Optional[str] = ..., version: _Optional[int] = ..., remaining_cents: _Optional[int] = ..., payment_limit_bps: _Optional[int] = ...) -> None: ...
 
 class SignedOfflineSessionSnapshot(_message.Message):
     __slots__ = ("payload", "signing_key_id", "signature", "password_reset_required", "password_reset_token", "portal_access_token", "portal_access_expires_in")

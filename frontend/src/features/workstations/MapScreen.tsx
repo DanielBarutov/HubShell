@@ -276,16 +276,18 @@ export function MapView({
   const activeSessionCount = isDemo ? 5 : occupiedCount;
   const onlineCount = isDemo
     ? 18
-    : mapPcs.filter((pc) => pc.status === "online").length;
+    : mapPcs.filter((pc) => pc.status === "online" && !pc.transferReserved).length;
   const offlineCount = isDemo
     ? 2
     : mapPcs.filter((pc) => pc.status === "offline").length;
   const maintenanceCount = isDemo
     ? 1
     : mapPcs.filter((pc) => pc.status === "maintenance").length;
-  const capacity =
-    occupiedCount + onlineCount + offlineCount + maintenanceCount;
-  const occupancy = Math.round((occupiedCount / capacity) * 100);
+  const transferringCount = isDemo
+    ? 0
+    : mapPcs.filter((pc) => pc.status === "online" && pc.transferReserved).length;
+  const capacity = occupiedCount + onlineCount + offlineCount + maintenanceCount + transferringCount;
+  const occupancy = capacity ? Math.round((occupiedCount / capacity) * 100) : 0;
   const seatGridClass =
     viewMode === "grid" ? "grid gap-3" : "grid grid-cols-1 gap-2";
   const seatGridStyle =
@@ -358,7 +360,7 @@ export function MapView({
                   return;
                 }
                 if (editMode) onEditPc(placed.pc);
-                else if (placed.pc.status === "online") onSalePc(placed.pc);
+                else if (placed.pc.status === "online" && !placed.pc.transferReserved) onSalePc(placed.pc);
                 else onPc(placed.pc);
               }}
               onContextMenu={(event) => {
@@ -370,7 +372,7 @@ export function MapView({
                   ? `session-tooltip-${placed.pc.id}`
                   : undefined
               }
-              aria-label={`${placed.pc.name}: ${statusMeta[placed.pc.status].label}`}
+              aria-label={`${placed.pc.name}: ${placed.pc.transferReserved ? "Цель переноса" : statusMeta[placed.pc.status].label}`}
             >
               <div className="map-seat-top flex items-center justify-between gap-2 text-xs font-semibold">
                 <span className="min-w-0 truncate">{placed.pc.equipmentType === "xbox" && <Gamepad2 size={12} className="inline mr-1" aria-label="Xbox" />}{placed.pc.name}</span>
@@ -390,9 +392,9 @@ export function MapView({
                 </span>
               </div>
               <span
-                className={`badge badge-xs text-[8px] absolute top-[18%] left-[2%] font-semibold self-start ${placed.pc.status === "busy" ? "badge-error" : placed.pc.status === "maintenance" ? "badge-warning" : placed.pc.status === "offline" ? "badge-neutral" : placed.pc.group === "VIP-зона" ? "badge-warning" : "badge-success"}`}
+                className={`badge badge-xs text-[8px] absolute top-[18%] left-[2%] font-semibold self-start ${placed.pc.transferReserved ? "badge-info" : placed.pc.status === "busy" ? "badge-error" : placed.pc.status === "maintenance" ? "badge-warning" : placed.pc.status === "offline" ? "badge-neutral" : placed.pc.group === "VIP-зона" ? "badge-warning" : "badge-success"}`}
               >
-                {statusMeta[placed.pc.status].label}
+                {placed.pc.transferReserved ? "Перенос" : statusMeta[placed.pc.status].label}
               </span>
               {placed.pc.relayOffPending && (
                 <span className="text-warning text-[10px]" title="Реле не подтвердило выключение; сервер повторит OFF. Проверьте TV.">
@@ -445,7 +447,7 @@ export function MapView({
                 <button
                   className="btn btn-ghost btn-sm justify-start"
                   role="menuitem"
-                  disabled={placed.pc.status !== "online" && !(placed.pc.equipmentType === "xbox" && placed.pc.status === "busy")}
+                  disabled={placed.pc.transferReserved || (placed.pc.status !== "online" && !(placed.pc.equipmentType === "xbox" && placed.pc.status === "busy"))}
                   onClick={() => {
                     setContextPcId(null);
                     onSalePc(placed.pc);
@@ -466,7 +468,7 @@ export function MapView({
                 {placed.pc.equipmentType !== "xbox" && <button
                   className="btn btn-ghost btn-sm justify-start"
                   role="menuitem"
-                  disabled={placed.pc.status !== "online"}
+                  disabled={placed.pc.transferReserved || placed.pc.status !== "online"}
                   onClick={() => {
                     setContextPcId(null);
                     onBookPc(placed.pc.id);

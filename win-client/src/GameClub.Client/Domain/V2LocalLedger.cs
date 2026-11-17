@@ -131,6 +131,7 @@ public sealed record V2LocalSessionLedger(
     V2MinuteBonusBudget? MinuteBonus = null)
 {
     public bool IsGuest => GuestPaymentId is not null;
+    public Guid? TransferOperationId { get; init; }
 
     public static V2LocalSessionLedger Create(
         int snapshotVersion,
@@ -146,7 +147,8 @@ public sealed record V2LocalSessionLedger(
         Guid? snapshotId = null,
         DateTimeOffset? activatedAtUtc = null,
         string? guestName = null,
-        Guid? guestPaymentId = null)
+        Guid? guestPaymentId = null,
+        bool retainIncompatibleQueuedPackages = false)
     {
         if (snapshotVersion < 1)
         {
@@ -172,7 +174,8 @@ public sealed record V2LocalSessionLedger(
         {
             throw new ArgumentException("Package minutes cannot be negative", nameof(packages));
         }
-        if (packages.Any(item => !IsZoneCompatible(item.ZoneId, zoneId)))
+        if (packages.Any(item => !IsZoneCompatible(item.ZoneId, zoneId)
+            && !(retainIncompatibleQueuedPackages && item.Status == V2LocalPackageStatus.Queued)))
         {
             throw new ArgumentException("Package is incompatible with workstation zone", nameof(packages));
         }
@@ -234,7 +237,25 @@ public sealed record V2LocalLedgerStorageSnapshot(
     IReadOnlyList<V2ServerEventIssue>? ServerEventIssues = null,
     V2PendingPortalPackagePurchase? PendingPortalPackagePurchase = null,
     V2MinuteBonusRequest? PendingMinuteBonusRequest = null,
-    bool MinuteBonusCancellationPending = false);
+    bool MinuteBonusCancellationPending = false,
+    V2PendingSourceTransfer? PendingSourceTransfer = null);
+
+public sealed record V2PendingSourceTransfer(
+    Guid OperationId,
+    Guid TargetWorkstationId,
+    string QuoteToken,
+    bool Frozen = false,
+    bool RestartPending = false);
+
+public enum V2TransferStatus
+{
+    Preparing,
+    Committed,
+    Cancelled,
+    Expired,
+}
+
+public sealed record V2TransferCheckpoint(long Sequence, string? PayloadHash);
 
 public sealed record V2PendingPortalPackagePurchase(
     Guid ActionId,

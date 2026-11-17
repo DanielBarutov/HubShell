@@ -392,6 +392,20 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
                 updated_at=now,
             )
         )
+        await PostgresSessionRepository(lambda: engine).save(
+            Session(
+                id=session_id,
+                workstation_id=uuid.uuid4(),
+                client_id=client_id,
+                guest_name=None,
+                status=SessionStatus.ACTIVE,
+                started_at=now,
+                ended_at=None,
+                source=SessionService.LOCAL_LEDGER_SOURCE,
+                created_by="v2-kafka-test",
+                created_at=now,
+            )
+        )
         async with engine.begin() as connection:
             await connection.execute(
                 text("""
@@ -553,6 +567,10 @@ async def test_faststream_client_facts_worker_reconciles_kafka_event(
             await connection.execute(
                 text("DELETE FROM balance_operations WHERE client_id = :client_id"),
                 {"client_id": client_id},
+            )
+            await connection.execute(
+                text("DELETE FROM gaming_sessions WHERE id = :session_id"),
+                {"session_id": session_id},
             )
             await clear_client_bonus_records(connection, client_id)
             await connection.execute(

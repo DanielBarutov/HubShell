@@ -6,7 +6,7 @@ import datetime
 import typing
 import uuid
 
-from sqlalchemy import JSON, DateTime, Integer, String, delete, select, text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, delete, func, select, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -19,6 +19,12 @@ from gameclub_backend.infrastructure.database import (
     open_session,
 )
 from gameclub_backend.modules.sessions.application.ports import ClientReleaseAdmission
+from gameclub_backend.modules.sessions.application.service import SessionService
+from gameclub_backend.modules.sessions.application.v2_transfer import (
+    V2TransferCheckpoint,
+    V2TransferReservation,
+    V2TransferStatus,
+)
 from gameclub_backend.modules.sessions.domain import Session, SessionStatus
 
 
@@ -37,15 +43,60 @@ class SessionAdmissionBlockModel(SessionBase):
     deployment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
 
 
+class V2TransferReservationModel(SessionBase):
+    __tablename__ = "v2_transfer_reservations"
+
+    operation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    source_workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    target_workstation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(16))
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+
+    quote_token: Mapped[str | None] = mapped_column(String(64))
+    target_ready: Mapped[bool] = mapped_column(Boolean(), default=False)
+    source_sequence: Mapped[int | None] = mapped_column(Integer())
+    source_payload_hash: Mapped[str | None] = mapped_column(String(64))
+
+    def to_domain(self) -> V2TransferReservation:
+        return V2TransferReservation(
+            self.operation_id,
+            self.session_id,
+            self.source_workstation_id,
+            self.target_workstation_id,
+            V2TransferStatus(self.status),
+            self.expires_at,
+            self.target_ready,
+            V2TransferCheckpoint(self.source_sequence, self.source_payload_hash)
+            if self.source_sequence is not None
+            else None,
+            self.quote_token,
+        )
+
+
 async def lock_session_admission(transaction: AsyncSession) -> None:
     await transaction.execute(
         text("SELECT pg_advisory_xact_lock_shared(:key)"), {"key": _ADMISSION_LOCK}
     )
 
 
-async def require_session_admission(transaction: AsyncSession, workstation_id: uuid.UUID) -> None:
+async def require_session_admission(
+    transaction: AsyncSession,
+    workstation_id: uuid.UUID,
+    *,
+    transfer_id: uuid.UUID | None = None,
+) -> None:
     if await transaction.get(SessionAdmissionBlockModel, workstation_id) is not None:
         raise ApplicationError(ErrorCode.CONFLICT, "Client update blocks new sessions")
+    reserved = await transaction.scalar(
+        select(V2TransferReservationModel.operation_id).where(
+            V2TransferReservationModel.target_workstation_id == workstation_id,
+            V2TransferReservationModel.status == V2TransferStatus.PREPARING,
+            V2TransferReservationModel.expires_at > func.clock_timestamp(),
+        )
+    )
+    if reserved is not None and reserved != transfer_id:
+        raise ApplicationError(ErrorCode.CONFLICT, "A pending transfer reserves this workstation")
 
 
 class SessionModel(SessionBase):
@@ -230,6 +281,45 @@ class PostgresSessionTransactionWriter:
     def __init__(self, release_admission: ClientReleaseAdmission | None = None) -> None:
         self._release_admission = release_admission
 
+    async def require_guest_sale(
+        self, transaction: AsyncSession, workstation_id: uuid.UUID, session_id: uuid.UUID | None
+    ) -> None:
+        await lock_session_admission(transaction)
+        await require_session_admission(transaction, workstation_id)
+        await transaction.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": f"gaming-session-workstation:{workstation_id}"},
+        )
+        active = await transaction.scalar(
+            select(SessionModel).where(
+                SessionModel.workstation_id == workstation_id,
+                SessionModel.status == SessionStatus.ACTIVE.value,
+            )
+        )
+        if session_id is None:
+            if active is not None:
+                raise ApplicationError(ErrorCode.CONFLICT, "Guest sale requires a free workstation")
+            return
+        if (
+            active is None
+            or active.id != session_id
+            or active.source != SessionService.GUEST_LOCAL_LEDGER_SOURCE
+        ):
+            raise ApplicationError(
+                ErrorCode.CONFLICT, "Active guest session does not match payment"
+            )
+        if (
+            await transaction.scalar(
+                select(V2TransferReservationModel.operation_id).where(
+                    V2TransferReservationModel.session_id == session_id,
+                    V2TransferReservationModel.status == V2TransferStatus.PREPARING,
+                    V2TransferReservationModel.expires_at > func.clock_timestamp(),
+                )
+            )
+            is not None
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Guest session is preparing a transfer")
+
     async def require_access(
         self,
         transaction: AsyncSession,
@@ -315,6 +405,11 @@ class PostgresSessionTransactionWriter:
             transaction.add(SessionModel.from_domain(session))
             return session
 
+        if (
+            model.source in SessionService.LOCAL_SOURCES
+            and model.workstation_id != session.workstation_id
+        ):
+            raise ApplicationError(ErrorCode.CONFLICT, "Session workstation changed")
         self._copy_values(model, session)
         return session
 

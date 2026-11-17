@@ -238,6 +238,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             services.command_service,
             services.sessions,
             services.xbox.pending_relay_workstations,
+            services.transfer_reservations.list_reserved_targets
+            if services.transfer_reservations is not None
+            else None,
         )
     )
     application.include_router(create_workstation_commands_router(services.command_service))

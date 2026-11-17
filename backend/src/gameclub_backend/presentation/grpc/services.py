@@ -35,6 +35,14 @@ from gameclub_backend.modules.clients.domain import Client
 from gameclub_backend.modules.eventing_v2.application.bonus_budget import BonusBudgetRequest
 from gameclub_backend.modules.eventing_v2.application.guest_access import V2GuestAccessService
 from gameclub_backend.modules.eventing_v2.application.login import V2OfflineLoginService
+from gameclub_backend.modules.eventing_v2.application.transfer_commit import V2TransferCommitService
+from gameclub_backend.modules.eventing_v2.application.transfer_start import V2TransferStartService
+from gameclub_backend.modules.sessions.application.v2_transfer import (
+    V2TransferCheckpoint,
+    V2TransferPreparationService,
+    V2TransferReservation,
+    V2TransferTargetService,
+)
 from gameclub_backend.modules.workstations.application.commands import (
     WorkstationCommandService,
 )
@@ -874,10 +882,256 @@ class OfflineSessionGrpcService(offline_session_service_pb2_grpc.OfflineSessionS
         service: V2OfflineLoginService | None,
         token_service: JwtTokenService | None,
         guest_access: V2GuestAccessService | None = None,
+        transfer_targets: V2TransferTargetService | None = None,
+        transfer_preparation: V2TransferPreparationService | None = None,
+        transfer_start: V2TransferStartService | None = None,
+        transfer_commit: V2TransferCommitService | None = None,
     ) -> None:
         self._service = service
         self._token_service = token_service
         self._guest_access = guest_access
+        self._transfer_targets = transfer_targets
+        self._transfer_preparation = transfer_preparation
+        self._transfer_start = transfer_start
+        self._transfer_commit = transfer_commit
+
+    async def ListTransferTargets(
+        self,
+        request: offline_session_service_pb2.ListTransferTargetsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.ListTransferTargetsResponse:
+        await require_device(context, self._token_service, request.device_id)
+        if self._transfer_targets is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE, "V2 transfer target lookup is not configured"
+            )
+            raise AssertionError("context.abort must not return")
+        try:
+            targets = await self._transfer_targets.list_targets(
+                request.device_id, parse_uuid(request.session_id, "session_id")
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return offline_session_service_pb2.ListTransferTargetsResponse(
+            targets=[
+                offline_session_service_pb2.TransferTarget(
+                    workstation_id=str(item.workstation_id),
+                    name=item.name,
+                    group_id=item.group_id or "",
+                )
+                for item in targets
+            ]
+        )
+
+    async def _require_transfer_commit(
+        self, device_id: str, context: grpc.aio.ServicerContext
+    ) -> V2TransferCommitService:
+        await require_device(context, self._token_service, device_id)
+        if self._transfer_commit is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 transfer commit is not configured")
+            raise AssertionError("context.abort must not return")
+        return self._transfer_commit
+
+    async def CommitTransfer(
+        self,
+        request: offline_session_service_pb2.TransferOperationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_commit(request.device_id, context)
+        try:
+            operation = await service.commit(
+                request.device_id, parse_uuid(request.operation_id, "operation_id")
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return self._transfer_operation_response(operation)
+
+    async def GetTransferredSnapshot(
+        self,
+        request: offline_session_service_pb2.TransferOperationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_snapshot_pb2.SignedOfflineSessionSnapshot:
+        service = await self._require_transfer_commit(request.device_id, context)
+        try:
+            return await service.get_snapshot(
+                request.device_id, parse_uuid(request.operation_id, "operation_id")
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def _require_transfer_start(
+        self, device_id: str, context: grpc.aio.ServicerContext
+    ) -> V2TransferStartService:
+        await require_device(context, self._token_service, device_id)
+        if self._transfer_start is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "V2 transfer start is not configured")
+            raise AssertionError("context.abort must not return")
+        return self._transfer_start
+
+    async def QuoteTransfer(
+        self,
+        request: offline_session_service_pb2.QuoteTransferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferQuote:
+        service = await self._require_transfer_start(request.device_id, context)
+        try:
+            quote = await service.quote(
+                request.device_id,
+                parse_uuid(request.session_id, "session_id"),
+                parse_uuid(request.target_workstation_id, "target_workstation_id"),
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return offline_session_service_pb2.TransferQuote(
+            token=quote.token,
+            per_minute_price_cents=quote.per_minute_price_cents,
+            burned_package_id=str(quote.burned_package_id) if quote.burned_package_id else "",
+            burned_package_name=quote.burned_package_name or "",
+            burned_package_minutes=quote.burned_package_minutes,
+            fallback_grant_minutes=quote.fallback_grant_minutes,
+        )
+
+    async def BeginTransfer(
+        self,
+        request: offline_session_service_pb2.BeginTransferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_start(request.device_id, context)
+        try:
+            operation = await service.begin(
+                request.device_id,
+                parse_uuid(request.session_id, "session_id"),
+                parse_uuid(request.target_workstation_id, "target_workstation_id"),
+                parse_uuid(request.operation_id, "operation_id"),
+                request.quote_token,
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return self._transfer_operation_response(operation)
+
+    async def _require_transfer_preparation(
+        self, device_id: str, context: grpc.aio.ServicerContext
+    ) -> V2TransferPreparationService:
+        await require_device(context, self._token_service, device_id)
+        if self._transfer_preparation is None:
+            await context.abort(
+                grpc.StatusCode.UNAVAILABLE, "V2 transfer preparation is not configured"
+            )
+            raise AssertionError("context.abort must not return")
+        return self._transfer_preparation
+
+    @staticmethod
+    def _transfer_operation_response(
+        operation: V2TransferReservation,
+    ) -> offline_session_service_pb2.TransferOperation:
+        response = offline_session_service_pb2.TransferOperation(
+            operation_id=str(operation.operation_id),
+            session_id=str(operation.session_id),
+            source_workstation_id=str(operation.source_workstation_id),
+            target_workstation_id=str(operation.target_workstation_id),
+            status=operation.status.value,
+            target_ready=operation.target_ready,
+        )
+        response.expires_at.FromDatetime(operation.expires_at)
+        if operation.source_checkpoint is not None:
+            response.source_checkpoint.sequence = operation.source_checkpoint.sequence
+            response.source_checkpoint.payload_hash = operation.source_checkpoint.payload_hash or ""
+        return response
+
+    async def GetPendingTransfer(
+        self,
+        request: offline_session_service_pb2.GetPendingTransferRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.GetPendingTransferResponse:
+        service = await self._require_transfer_preparation(request.device_id, context)
+        try:
+            operation = await service.pending_for_target(request.device_id)
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+        return offline_session_service_pb2.GetPendingTransferResponse(
+            operation=self._transfer_operation_response(operation)
+            if operation is not None
+            else None
+        )
+
+    async def GetTransferOperation(
+        self,
+        request: offline_session_service_pb2.TransferOperationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_preparation(request.device_id, context)
+        try:
+            operation_id = parse_uuid(request.operation_id, "operation_id")
+            return self._transfer_operation_response(
+                await service.get(request.device_id, operation_id)
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def ReadyTransferTarget(
+        self,
+        request: offline_session_service_pb2.TransferOperationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_preparation(request.device_id, context)
+        try:
+            operation_id = parse_uuid(request.operation_id, "operation_id")
+            return self._transfer_operation_response(
+                await service.ready_target(request.device_id, operation_id)
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def ConfirmTransferSource(
+        self,
+        request: offline_session_service_pb2.ConfirmTransferSourceRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_preparation(request.device_id, context)
+        if not request.HasField("checkpoint"):
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "Transfer checkpoint is required")
+        try:
+            operation_id = parse_uuid(request.operation_id, "operation_id")
+            checkpoint = V2TransferCheckpoint(
+                request.checkpoint.sequence, request.checkpoint.payload_hash or None
+            )
+            return self._transfer_operation_response(
+                await service.record_source_checkpoint(request.device_id, operation_id, checkpoint)
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
+
+    async def CancelTransfer(
+        self,
+        request: offline_session_service_pb2.TransferOperationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> offline_session_service_pb2.TransferOperation:
+        service = await self._require_transfer_preparation(request.device_id, context)
+        try:
+            operation_id = parse_uuid(request.operation_id, "operation_id")
+            return self._transfer_operation_response(
+                await service.cancel(request.device_id, operation_id)
+            )
+        except ValueError as error:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ApplicationError as error:
+            await abort_application_error(context, error)
 
     async def Login(
         self,

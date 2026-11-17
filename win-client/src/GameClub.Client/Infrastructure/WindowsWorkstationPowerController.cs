@@ -21,9 +21,11 @@ public sealed class WindowsWorkstationPowerController : IWorkstationPowerControl
                 UseShellExecute = false,
                 CreateNoWindow = true,
             });
-            return process is null
-                ? new CommandExecutionResult(false, "Windows не запустила перезапуск")
-                : new CommandExecutionResult(true, "Перезапуск Windows запланирован через 5 секунд");
+            if (process is null || !process.WaitForExit(2000) || process.ExitCode != 0)
+            {
+                return new CommandExecutionResult(false, "Windows не подтвердила перезапуск");
+            }
+            return new CommandExecutionResult(true, "Перезапуск Windows запланирован через 5 секунд");
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
