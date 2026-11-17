@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from redis.exceptions import RedisError
 
 from gameclub_backend.modules.auth.application.ports import RefreshTokenRepository
 from gameclub_backend.modules.auth.domain import Principal, SubjectType
@@ -151,10 +152,28 @@ async def issue_token(request: Request, credentials: TokenRequest) -> TokenRespo
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Auth is not configured",
         )
-    if (
-        credentials.username != settings.dev_operator_username
-        or credentials.password != settings.dev_operator_password
-    ):
+    try:
+        retry_after = await request.app.state.login_rate_limit.reserve(
+            request.client.host if request.client else "unknown"
+        )
+    except RedisError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Вход временно недоступен. Попробуйте позже.",
+        ) from error
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много попыток входа. Попробуйте позже.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    username_matches = secrets.compare_digest(
+        credentials.username.encode(), settings.dev_operator_username.encode()
+    )
+    password_matches = secrets.compare_digest(
+        credentials.password.encode(), settings.dev_operator_password.encode()
+    )
+    if not (username_matches and password_matches):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     principal = Principal(

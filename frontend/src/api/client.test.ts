@@ -79,6 +79,27 @@ describe("GameClubApi", () => {
     );
   });
 
+  it("при выходе отзывает токен, который обновлялся параллельно", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ access_token: "access-1", refresh_token: "refresh-1" }));
+    const api = new GameClubApi("http://backend/api/v1");
+    await api.login("operator", "secret");
+
+    let finishRefresh!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const refresh = api.restoreSession();
+    const logout = api.logout();
+    finishRefresh(jsonResponse({ access_token: "access-2", refresh_token: "refresh-2" }));
+    await refresh;
+    await logout;
+
+    expect(fetchMock).toHaveBeenLastCalledWith("http://backend/api/v1/auth/logout",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ refresh_token: "refresh-2" }) }));
+    expect(api.isAuthenticated).toBe(false);
+    expect(await new GameClubApi("http://backend/api/v1").restoreSession()).toBe(false);
+  });
+
   it("преобразует публичную ошибку API в ApiError с кодом сервера", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
