@@ -31,6 +31,7 @@ from gameclub_backend.modules.analytics.presentation.reports_http import (
     create_reports_router,
 )
 from gameclub_backend.modules.auth.infrastructure.jwt import JwtTokenService
+from gameclub_backend.modules.auth.infrastructure.login_rate_limit import LoginRateLimit
 from gameclub_backend.modules.auth.infrastructure.refresh_memory import (
     InMemoryRefreshTokenRepository,
 )
@@ -229,6 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.session_transfers = services.session_transfers
     application.state.audit_repository = services.audit_repository
     application.state.refresh_tokens = refresh_tokens
+    application.state.login_rate_limit = LoginRateLimit(resources.redis)
 
     application.include_router(auth_router)
     application.include_router(create_audit_router(services.audit_repository))

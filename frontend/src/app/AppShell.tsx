@@ -5,6 +5,7 @@ import {
   ChevronRight,
   CircleHelp,
   MoreHorizontal,
+  LogOut,
   Plus,
   Search,
   Settings,
@@ -12,7 +13,7 @@ import {
 import { useAppDispatch, useAppSelector } from "./hooks";
 import { useReduxApi } from "./reduxApi";
 import { LIVE_MODE } from "./config";
-import { selectAuth } from "../features/auth/authSlice";
+import { logout, selectAuth } from "../features/auth/authSlice";
 import {
   refreshWorkspace,
   persistWorkstationPositions,
@@ -64,7 +65,7 @@ export function AppShell() {
   const api = useReduxApi();
 
   useEffect(() => {
-    if (!LIVE_MODE || !auth.isAuthenticated) return undefined;
+    if (!LIVE_MODE || !auth.isAuthenticated || auth.isLoggingOut) return undefined;
     let active = true;
     let inFlight = false;
     const refresh = () => {
@@ -80,7 +81,7 @@ export function AppShell() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [auth.isAuthenticated, dispatch]);
+  }, [auth.isAuthenticated, auth.isLoggingOut, dispatch]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -234,6 +235,19 @@ export function AppShell() {
                   <span className="grow text-left">Помощь</span>
                 </button>
               </li>
+              {LIVE_MODE && (
+                <li>
+                  <button
+                    type="button"
+                    className="nav-item btn btn-ghost mt-1 mx-2 btn-md min-h-9 justify-start text-sm"
+                    disabled={auth.isLoggingOut}
+                    onClick={() => void dispatch(logout())}
+                  >
+                    <LogOut size={18} aria-hidden="true" />
+                    <span className="grow text-left">{auth.isLoggingOut ? "Выходим…" : "Выйти"}</span>
+                  </button>
+                </li>
+              )}
             </ul>
           </nav>
           <div className="operator-card mt-3 flex items-center gap-2 rounded-xl border border-primary/15! bg-base-100/35! p-3 shadow-[inset_0_0_18px_rgba(49,217,120,0.04)]">

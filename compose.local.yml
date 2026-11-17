@@ -299,7 +299,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "gameclub_backend.presentation.http.app:app"]
+    command: ["uvicorn", "--host", "0.0.0.0", "--port", "8100", "--forwarded-allow-ips", "172.30.250.2", "gameclub_backend.presentation.http.app:app"]
+    networks:
+      default: {}
+      operator-proxy:
+        aliases: [operator-api]
+        ipv4_address: 172.30.250.3
     environment:
       <<: *backend-environment
       GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID: ${GAMECLUB_V2_SNAPSHOT_SIGNING_KEY_ID:-}
@@ -425,6 +430,10 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
         VITE_GAMECLUB_DATA_MODE: ${VITE_GAMECLUB_DATA_MODE:-live}
+    networks:
+      default: {}
+      operator-proxy:
+        ipv4_address: 172.30.250.2
     ports:
       - "0.0.0.0:${GAMECLUB_FRONTEND_PORT:-3100}:80"
     depends_on:
@@ -437,6 +446,12 @@ services:
       retries: 6
       start_period: 5s
     restart: unless-stopped
+
+networks:
+  operator-proxy:
+    ipam:
+      config:
+        - subnet: 172.30.250.0/29
 
 volumes:
   gameclub-grafana-data:

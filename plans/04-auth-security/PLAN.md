@@ -64,6 +64,11 @@ gRPC в private LAN может работать без TLS во всех окр�
 `GAMECLUB_GRPC_TLS_CERT_FILE` и `GAMECLUB_GRPC_TLS_KEY_FILE`; mTLS включается
 отдельно через client CA и `GAMECLUB_GRPC_TLS_REQUIRE_CLIENT_CERTIFICATE`.
 
+Вход оператора ограничен на backend до 10 запросов на IP за 15 минут с первой
+попытки. В Compose счётчик и срок хранятся в Redis; если Redis недоступен, вход
+возвращает HTTP 503. Локальный запуск без Redis хранит счётчики в одном процессе.
+Админка отзывает текущий refresh-токен при выходе и очищает локальное состояние.
+
 ## Критерии готовности
 
 - invalid/expired/wrong issuer/audience/subject отклоняются;
