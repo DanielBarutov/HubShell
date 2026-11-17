@@ -73,7 +73,17 @@ def main() -> None:
     for name, service in local["services"].items():
         deployed = config["services"][name]
         for key in ("command", "depends_on", "healthcheck", "restart"):
-            assert deployed.get(key) == service.get(key), (name, key)
+            local_value = service.get(key)
+            deploy_value = deployed.get(key)
+            if (name, key) == ("backend-http", "command"):
+                local_value, deploy_value = local_value.copy(), deploy_value.copy()
+                for stack, command in ((local, local_value), (config, deploy_value)):
+                    frontend = stack["services"]["frontend"]
+                    proxy_ip = frontend["networks"]["operator-proxy"]["ipv4_address"]
+                    option = command.index("--forwarded-allow-ips")
+                    assert command[option + 1] == proxy_ip, (stack["name"], proxy_ip)
+                    del command[option : option + 2]
+            assert deploy_value == local_value, (name, key)
     lan = config_for(
         "compose.deploy.yml",
         {
